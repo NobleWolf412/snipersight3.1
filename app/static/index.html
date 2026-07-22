@@ -237,6 +237,19 @@
   .trace-why{padding:9px 11px;font-size:11px;line-height:1.5;color:#bfccd6}.trace-why b{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;color:var(--cyan)}
   .trace-diagnosis{padding:8px 11px;border-top:1px solid var(--line);font-size:10px;color:var(--txt-dim);background:rgba(0,0,0,.12)}
   .trace-diagnosis strong{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;color:var(--amber)}
+  .evaluation-gate{display:none;padding:8px 14px;border-bottom:1px solid #713839;background:rgba(74,20,24,.72);font-family:var(--mono);font-size:10px;color:#ffd4d4;letter-spacing:.04em}
+  .evaluation-gate.show{display:flex;align-items:center;gap:9px}.evaluation-gate b{color:#fff}.evaluation-gate span{margin-left:auto;color:#ff9f9f}
+  .pipeline-verdict{margin:10px;padding:12px;border:1px solid var(--line-hi);border-radius:9px;background:#101923}
+  .pipeline-verdict strong{display:block;font-family:var(--mono);font-size:13px;letter-spacing:.08em}.pipeline-verdict p{margin-top:5px;font-size:11px;color:var(--txt-dim)}
+  .pipeline-verdict.blocked{border-color:#713839;background:rgba(74,20,24,.28)}.pipeline-verdict.blocked strong{color:var(--red)}
+  .pipeline-verdict.degraded{border-color:#705627}.pipeline-verdict.degraded strong{color:var(--amber)}
+  .pipeline-verdict.pass strong{color:var(--green)}
+  .pipeline-stage{margin:0 10px 8px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0f1721}
+  .pipeline-stage-head{display:flex;align-items:center;padding:9px 10px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em}
+  .pipeline-stage-head b{margin-left:auto;font-size:8.5px;padding:2px 6px;border-radius:5px}.pipeline-stage-head b.PASS{color:var(--green);background:rgba(61,220,132,.09)}
+  .pipeline-stage-head b.DEGRADED{color:var(--amber);background:rgba(255,181,71,.09)}.pipeline-stage-head b.BLOCKED{color:var(--red);background:rgba(255,93,93,.09)}
+  .pipeline-check{padding:7px 10px;border-top:1px solid var(--line);font-size:10px;line-height:1.45;color:var(--txt-dim)}
+  .pipeline-check strong{font-family:var(--mono);font-size:8.5px;color:var(--amber);letter-spacing:.06em}.pipeline-check.blocked strong{color:var(--red)}
 
   @media(max-width:1180px){.app{grid-template-columns:210px minmax(480px,1fr) 330px}.sessbar-w,.rp span:first-child{display:none}}
   @media(max-width:900px){
@@ -316,6 +329,7 @@
       <div class="regime" id="regime">REGIME <b>—</b></div>
       <div id="mtfContext" style="margin-left:auto;display:flex;gap:5px;font-family:var(--mono);font-size:9.5px"></div>
     </div>
+    <div class="evaluation-gate" id="evaluationGate"><b>PERFORMANCE INVALID FOR EVALUATION</b>Upstream quality blockers are present.<span>Open PIPELINE</span></div>
     <div class="chartwrap">
       <div id="chart"></div>
       <div id="inspector">
@@ -354,6 +368,7 @@
       <div class="ftab rt on" data-rt="feed" style="font-size:10px;letter-spacing:.16em">SETUP FEED <span class="cnt" id="feedcnt">—</span></div>
       <div class="ftab rt" data-rt="acct" style="font-size:10px;letter-spacing:.16em">ACCOUNT</div>
       <div class="ftab rt" data-rt="trace" style="font-size:10px;letter-spacing:.12em">SETUP TRACE</div>
+      <div class="ftab rt" data-rt="pipeline" style="font-size:10px;letter-spacing:.1em">PIPELINE</div>
     </div>
     <div id="feedView" style="display:flex;flex-direction:column;min-height:0;flex:1">
       <div class="ftabs">
@@ -385,6 +400,11 @@
       <div id="telemetryCohorts"></div>
       <div class="phead">VALIDATED ENTRIES <span class="cnt">ENTRY · WHY · RESULT</span></div>
       <div class="trace-list" id="telemetryRecords"></div>
+    </div>
+    <div id="pipelineView" aria-label="Pipeline quality and lineage" style="display:none;flex-direction:column;min-height:0;flex:1;overflow-y:auto">
+      <div class="phead">A–Z QUALITY CONTRACT <span class="cnt">FAIL CLOSED</span></div>
+      <div id="pipelineVerdict"></div>
+      <div id="pipelineStages"></div>
     </div>
   </aside>
 
@@ -774,7 +794,7 @@ document.querySelectorAll('.ftab:not(.rt)').forEach(t=>t.onclick=()=>{
   t.classList.add('on');feedState=t.dataset.fs;renderFeed();
 });
 
-/* ---------- right-rail view switch: FEED / ACCOUNT / SETUP TRACE ---------- */
+/* ---------- right-rail view switch: FEED / ACCOUNT / TRACE / PIPELINE ---------- */
 document.querySelectorAll('.ftab.rt').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.ftab.rt').forEach(x=>x.classList.remove('on'));
   t.classList.add('on');
@@ -782,9 +802,30 @@ document.querySelectorAll('.ftab.rt').forEach(t=>t.onclick=()=>{
   document.getElementById('feedView').style.display=view==='feed'?'flex':'none';
   document.getElementById('acctView').style.display=view==='acct'?'flex':'none';
   document.getElementById('traceView').style.display=view==='trace'?'flex':'none';
+  document.getElementById('pipelineView').style.display=view==='pipeline'?'flex':'none';
   if(view==='acct')loadAccount();
   if(view==='trace')loadTelemetry();
+  if(view==='pipeline')loadPipelineHealth();
 });
+
+async function loadPipelineHealth(){
+  const report=await api('/api/pipeline-health');
+  document.getElementById('evaluationGate').classList.toggle('show',!report.evaluation_allowed);
+  const verdict=document.getElementById('pipelineVerdict');
+  const cls=report.status.toLowerCase();
+  verdict.innerHTML=`<div class="pipeline-verdict ${cls}"><strong>${report.status} · ${report.evaluation_allowed?'EVALUATION ALLOWED':'EVALUATION BLOCKED'}</strong>`+
+    `<p>${report.evaluation_allowed?'All critical contracts pass. Warnings remain visible below.':`${report.blockers.length} critical blocker${report.blockers.length===1?'':'s'} invalidate downstream performance until repaired.`}`+
+    ` Strategy rules changed by audit: NO.</p></div>`;
+  document.getElementById('pipelineStages').innerHTML=report.stages.map(stage=>{
+    const issues=stage.checks||[];
+    return `<section class="pipeline-stage"><div class="pipeline-stage-head">${stage.stage}<b class="${stage.status}">${stage.status}</b></div>`+
+      (issues.length?issues.map(c=>`<div class="pipeline-check ${c.status==='BLOCKED'?'blocked':''}"><strong>${c.code.replaceAll('_',' ')}</strong>`+
+        `${c.symbol?` · ${c.symbol}${c.tf?' '+c.tf:''}`:''}<br>${c.details}</div>`).join(''):
+        '<div class="pipeline-check">All current invariants passed.</div>')+'</section>';
+  }).join('');
+  const healthState=document.getElementById('healthState');
+  if(!report.evaluation_allowed){healthState.textContent='BLOCKED';healthState.style.color='var(--red)';}
+}
 
 async function loadTelemetry(){
   const data=await api('/api/setup-telemetry?limit=100');
@@ -970,7 +1011,9 @@ async function tickPrices(){
 setInterval(tickPrices,10000);tickPrices();
 
 loadOverview().catch(()=>{/* api() reported */});load().catch(()=>{/* api() reported */});
+loadPipelineHealth().catch(()=>{/* api() reported */});
 setInterval(loadOverview,30000);
+setInterval(()=>loadPipelineHealth().catch(()=>{}),60000);
 </script>
 </body>
 </html>

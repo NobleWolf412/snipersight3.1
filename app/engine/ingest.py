@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 
 from . import (store, importer, aggregator, swings, structure, zones,
-               liquidity, regime, setups, execsim, scalein, cycles)
+               liquidity, regime, setups, execsim, scalein, cycles, quality)
 
 DAILY_SINCE = "2022-01-01"
 HOURS_DAYS = 180
@@ -34,6 +34,7 @@ def backfill_history(con, symbol: str) -> dict:
 
 def run_engines(con, symbol: str) -> None:
     """Run every per-symbol fact engine across all timeframes."""
+    quality.assert_market_ready(con, symbol)
     for mod in PER_SYMBOL_ENGINES:
         if mod is scalein:
             scalein.run(con, symbol)

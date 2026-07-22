@@ -47,6 +47,25 @@ new immutable manifest and engine version. It must never be a hidden config edit
   are reported when a sample exists; PBO is marked unavailable until multiple
   independently retained strategy paths exist.
 
+## A-to-Z quality contract
+
+Observability does not change strategy constants. Before downstream engines run,
+native and aggregated candles are checked for alignment, OHLC validity, gaps,
+developing bars, and exact higher-timeframe reconciliation. A critical market
+input failure raises a fail-closed blocker instead of producing more facts.
+
+The full audit then checks fact causality, setup brackets and lineage, rejected
+risk exposure, order availability, orphan orders/exits, exit-before-fill errors,
+and authoritative equity reconciliation. Performance is marked invalid whenever
+any stage is blocked. Every engine invocation records a unique run ID, input
+watermark, input fingerprint, output fingerprint, status, counts, and duration;
+new facts automatically retain that producer run ID. Legacy unattributed facts
+remain visible as a warning until the baseline is rebuilt.
+
+The cockpit's **PIPELINE** view is the operational source of truth. Its stages
+are DATA → AGGREGATION → FACTS → SETUP → RISK → EXECUTION → ACCOUNTING. A red
+evaluation banner means downstream performance must not be interpreted.
+
 ## Research gates that code cannot honestly “fix”
 
 No refactor can turn 30 hindsight-influenced trades into proof of edge. The

@@ -53,7 +53,7 @@ class TestManifestsAndCosts(TempStore):
             versions = [r[0] for r in migrated.execute(
                 "SELECT version FROM schema_migrations ORDER BY version").fetchall()]
             self.assertIn("n_bad", columns)
-            self.assertEqual(versions, [1, 2])
+            self.assertEqual(versions, [1, 2, 3, 4])
         finally:
             migrated.close()
 
@@ -253,6 +253,9 @@ class TestCockpitHierarchy(unittest.TestCase):
         self.assertIn('id="activePositions"', html)
         self.assertIn('aria-label="Validated setup telemetry"', html)
         self.assertIn('id="telemetryRecords"', html)
+        self.assertIn('aria-label="Pipeline quality and lineage"', html)
+        self.assertIn('id="pipelineStages"', html)
+        self.assertIn('id="evaluationGate"', html)
         self.assertLess(html.index('id="activePositions"'),
                         html.index('data-rt="feed"'))
 

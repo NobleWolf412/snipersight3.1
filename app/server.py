@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from engine import store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry
+from engine import store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality
 
 KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "structure": structure.STRUCTURE_VERSION,
@@ -571,6 +571,16 @@ def health():
                 "database": integrity, "bad_candles_rejected": bad,
                 "gaps_logged": gaps, "series": series,
                 "stale_series": [s for s in series if s["stale"]]}
+    finally:
+        con.close()
+
+
+@app.get("/api/pipeline-health")
+def pipeline_health(symbol: str | None = None):
+    """Run the read-only A-to-Z contract audit used to qualify performance."""
+    con = store.connect()
+    try:
+        return quality.audit(con, symbol=symbol, persist=False)
     finally:
         con.close()
 

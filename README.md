@@ -68,5 +68,6 @@ python -m unittest discover -s tests -v
 - `app/server.py` — read-only FastAPI over the fact store
 - `app/static/` — cockpit UI
 - `app/tests/` — deterministic engine tests
+- `app/engine/quality.py` — fail-closed market-data and A-to-Z workflow audits
 - `app/BUILDLOG.md` — append-only build journal (every decision, including the duds)
 - `sources/` — product constitution and design blueprints

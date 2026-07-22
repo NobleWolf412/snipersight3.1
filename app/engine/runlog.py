@@ -6,7 +6,11 @@ facts, in what order. The file log (data/engine.log) carries the same trail in
 human-readable form.
 """
 import logging
+import hashlib
+import json
 import time
+import uuid
+from contextvars import ContextVar
 from pathlib import Path
 
 LOG_PATH = Path(__file__).resolve().parent.parent / "data" / "engine.log"
@@ -23,10 +27,20 @@ CREATE TABLE IF NOT EXISTS engine_runs (
     duration_ms  INTEGER NOT NULL,
     run_at       INTEGER NOT NULL,
     notes        TEXT NOT NULL DEFAULT ''
+    ,run_id       TEXT NOT NULL DEFAULT ''
+    ,status       TEXT NOT NULL DEFAULT 'PASS'
+    ,input_watermark INTEGER
+    ,input_fingerprint TEXT NOT NULL DEFAULT ''
+    ,output_fingerprint TEXT NOT NULL DEFAULT ''
 );
 """
 
 _logger = None
+_CURRENT_RUN_ID = ContextVar("snipersight_run_id", default=None)
+
+
+def current_run_id():
+    return _CURRENT_RUN_ID.get()
 
 
 def get_logger() -> logging.Logger:
@@ -58,22 +72,55 @@ class RunRecorder:
 
     def __enter__(self):
         self.con.executescript(RUNS_SCHEMA)
+        columns = {r[1] for r in self.con.execute("PRAGMA table_info(engine_runs)")}
+        for name, definition in (
+                ("run_id", "TEXT NOT NULL DEFAULT ''"),
+                ("status", "TEXT NOT NULL DEFAULT 'PASS'"),
+                ("input_watermark", "INTEGER"),
+                ("input_fingerprint", "TEXT NOT NULL DEFAULT ''"),
+                ("output_fingerprint", "TEXT NOT NULL DEFAULT ''")):
+            if name not in columns:
+                self.con.execute(f"ALTER TABLE engine_runs ADD COLUMN {name} {definition}")
+        self.run_id = uuid.uuid4().hex
+        self._run_token = _CURRENT_RUN_ID.set(self.run_id)
+        self.input_watermark, self.input_fingerprint = self._fingerprint()
         self.t0 = time.monotonic()
         return self
+
+    def _fingerprint(self):
+        candle_where, fact_where, args = "", "", []
+        if self.symbol != "PORTFOLIO":
+            candle_where = " WHERE symbol=?" + (" AND tf=?" if self.tf != "ALL" else "")
+            fact_where = candle_where
+            args = [self.symbol] + ([self.tf] if self.tf != "ALL" else [])
+        candles = self.con.execute(
+            "SELECT COUNT(*),COALESCE(MAX(open_ts),0),COALESCE(MAX(imported_at),0) "
+            "FROM candles" + candle_where, args).fetchone()
+        facts = self.con.execute(
+            "SELECT COUNT(*),COALESCE(MAX(id),0),COALESCE(MAX(confirmed_at),0) "
+            "FROM facts" + fact_where, args).fetchone()
+        snapshot = {"candles": list(candles), "facts": list(facts)}
+        digest = hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest()
+        return max(candles[1], facts[2]), digest
 
     def __exit__(self, exc_type, exc, tb):
         ms = int((time.monotonic() - self.t0) * 1000)
         if exc:
             self.notes = f"ERROR: {exc}"[:500]
+        _, output_fingerprint = self._fingerprint()
+        status = "ERROR" if exc else "PASS"
         self.con.execute(
             "INSERT INTO engine_runs "
-            "(engine, algo_version, symbol, tf, n_inputs, n_new_facts, duration_ms, run_at, notes) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
+            "(engine, algo_version, symbol, tf, n_inputs, n_new_facts, duration_ms, run_at, notes,"
+            "run_id,status,input_watermark,input_fingerprint,output_fingerprint) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (self.engine, self.version, self.symbol, self.tf, self.n_inputs,
-             self.n_new_facts, ms, int(time.time()), self.notes))
+             self.n_new_facts, ms, int(time.time()), self.notes, self.run_id,
+             status, self.input_watermark, self.input_fingerprint, output_fingerprint))
         self.con.commit()
         get_logger().log(
             logging.ERROR if exc else logging.DEBUG,
             f"{self.engine:10s} {self.version:22s} {self.symbol:8s} {self.tf:3s} "
             f"in={self.n_inputs:6d} new={self.n_new_facts:5d} {ms}ms {self.notes}")
+        _CURRENT_RUN_ID.reset(self._run_token)
         return False

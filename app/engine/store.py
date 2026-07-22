@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS facts (
     algo_version  TEXT NOT NULL,
     payload       TEXT NOT NULL,         -- canonical JSON (sorted keys)
     content_hash  TEXT NOT NULL,
+    producer_run_id TEXT,
     UNIQUE (content_hash)
 );
 CREATE INDEX IF NOT EXISTS ix_facts_query
@@ -70,6 +71,28 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     name        TEXT NOT NULL,
     applied_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS quality_runs (
+    id          INTEGER PRIMARY KEY,
+    observed_at INTEGER NOT NULL,
+    status      TEXT NOT NULL,
+    evaluation_allowed INTEGER NOT NULL,
+    summary     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS quality_checks (
+    id          INTEGER PRIMARY KEY,
+    quality_run_id INTEGER NOT NULL,
+    stage       TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    code        TEXT NOT NULL,
+    symbol      TEXT,
+    tf          TEXT,
+    details     TEXT NOT NULL,
+    FOREIGN KEY (quality_run_id) REFERENCES quality_runs(id)
+);
+CREATE INDEX IF NOT EXISTS ix_quality_checks_run
+    ON quality_checks (quality_run_id, stage, status);
 """
 
 
@@ -100,6 +123,17 @@ def _migrate(con: sqlite3.Connection) -> None:
         con.execute(
             "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
             (2, "manifests_and_feed_index"))
+    if 3 not in applied:
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (3, "pipeline_quality_contract"))
+    if 4 not in applied:
+        columns = {r[1] for r in con.execute("PRAGMA table_info(facts)").fetchall()}
+        if "producer_run_id" not in columns:
+            con.execute("ALTER TABLE facts ADD COLUMN producer_run_id TEXT")
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (4, "fact_producer_run_lineage"))
     con.commit()
 
 
@@ -135,11 +169,13 @@ def insert_fact(con, *, symbol: str, tf: str, kind: str, market_time: int,
     """Append a fact. Returns True if newly inserted, False if it already existed."""
     p = canonical_payload(payload)
     h = fact_hash(symbol, tf, kind, market_time, algo_version, p)
+    from .runlog import current_run_id
     cur = con.execute(
         "INSERT OR IGNORE INTO facts "
-        "(symbol, tf, kind, market_time, confirmed_at, algo_version, payload, content_hash) "
-        "VALUES (?,?,?,?,?,?,?,?)",
-        (symbol, tf, kind, market_time, confirmed_at, algo_version, p, h))
+        "(symbol, tf, kind, market_time, confirmed_at, algo_version, payload, "
+        "content_hash, producer_run_id) VALUES (?,?,?,?,?,?,?,?,?)",
+        (symbol, tf, kind, market_time, confirmed_at, algo_version, p, h,
+         current_run_id()))
     return cur.rowcount == 1
 
 
