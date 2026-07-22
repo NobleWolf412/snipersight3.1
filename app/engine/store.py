@@ -42,6 +42,14 @@ CREATE TABLE IF NOT EXISTS facts (
 );
 CREATE INDEX IF NOT EXISTS ix_facts_query
     ON facts (symbol, tf, kind, algo_version, confirmed_at);
+CREATE INDEX IF NOT EXISTS ix_facts_feed
+    ON facts (kind, algo_version, confirmed_at, id);
+
+CREATE TABLE IF NOT EXISTS manifests (
+    manifest_hash TEXT PRIMARY KEY,
+    kind          TEXT NOT NULL,
+    payload       TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS import_log (
     id          INTEGER PRIMARY KEY,
@@ -72,6 +80,23 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
 
 def canonical_payload(obj: dict) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"))
+
+
+def record_manifest(con, kind: str, payload: dict) -> str:
+    """Persist an immutable, content-addressed run/config manifest."""
+    canonical = canonical_payload(payload)
+    digest = hashlib.sha256(f"{kind}|{canonical}".encode()).hexdigest()
+    con.execute(
+        "INSERT OR IGNORE INTO manifests (manifest_hash, kind, payload) VALUES (?,?,?)",
+        (digest, kind, canonical))
+    return digest
+
+
+def get_manifest(con, manifest_hash: str) -> dict | None:
+    row = con.execute(
+        "SELECT kind, payload FROM manifests WHERE manifest_hash=?", (manifest_hash,)
+    ).fetchone()
+    return None if row is None else {"kind": row[0], **json.loads(row[1])}
 
 
 def fact_hash(symbol: str, tf: str, kind: str, market_time: int,

@@ -47,6 +47,20 @@ Then open http://localhost:8422.
 v0 engine complete; forward paper-trade record accumulating. Live execution is
 deliberately gated behind a proven forward record and does not exist in this code.
 
+The current hardening branch enforces Coinbase spot constraints, conservative
+maker/taker costs, post-confirmation order availability, missed-limit handling,
+point-in-time universe eligibility, and immutable strategy/cost manifests. Older
+validation reports are not comparable across engine generations. See
+`docs/HARDENING.md`.
+
+## Verify
+
+```
+cd app
+python -m compileall -q .
+python -m unittest discover -s tests -v
+```
+
 ## Layout
 
 - `app/engine/` — fact engines (store, importer, swings, structure, zones, liquidity,

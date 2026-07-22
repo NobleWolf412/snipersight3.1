@@ -1,0 +1,55 @@
+# Hardening contract
+
+This branch remediates the 2026-07-21 full audit. It intentionally changes
+historical results. Older validation reports are retained as historical
+artifacts and are not comparable with the current engine chain.
+
+## Current venue contract
+
+- Venue/instrument: Coinbase Advanced **spot**.
+- Shorts: rejected by the risk authority.
+- Leverage: capped at 1× cash notional.
+- Execution: paper research only; no live order route exists.
+- Default cost profile: conservative lowest-volume maker/taker schedule.
+
+Changing venue, margin availability, fee tier, or execution policy requires a
+new immutable manifest and engine version. It must never be a hidden config edit.
+
+## Engine chain
+
+- swing-v0.8: Decimal-native logarithmic volume scoring.
+- structure-v0.8 / regime-v0.8: version chain follows swing inputs.
+- zone-v0.9: formation quality is separate from decaying freshness.
+- liq-v0.8: overlapping clusters do not create duplicate pools; a sweep no
+  longer erases the later broken state.
+- setup-v0.6: a reversal requires both transition structure and a recent
+  directionally relevant liquidity sweep; costs come from a manifest.
+- exec-v0.7: signals are unavailable until confirmation; limit entries may be
+  missed; maker/taker fees differ; MAE/MFE and order facts are recorded.
+- risk-v0.5: start-of-day loss baseline, zero risk on rejection, point-in-time
+  universe gate, Coinbase-spot short rejection, 1× cash cap.
+
+## Research gates that code cannot honestly “fix”
+
+No refactor can turn 30 hindsight-influenced trades into proof of edge. The
+system remains paper-only until all of these are met:
+
+1. A frozen manifest is forward-tested for at least 90 calendar days and 50
+   closed, filled trades.
+2. Real fee tier, spread, and shadow-fill observations are reconciled against
+   simulation.
+3. Performance remains positive under stressed costs and after removing the
+   largest winners.
+4. No critical data, replay, execution, or accounting defect remains open.
+5. A locked temporal holdout is evaluated once, with all attempted strategy
+   variants retained in the trial ledger.
+
+## Verification
+
+```bash
+cd app
+python -m compileall -q .
+python -m unittest discover -s tests -v
+```
+
+CI runs both commands on every push and pull request.

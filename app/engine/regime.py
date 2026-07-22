@@ -19,7 +19,7 @@ from . import store
 from .structure import STRUCTURE_VERSION
 from .runlog import RunRecorder
 
-REGIME_VERSION = "regime-v0.7-draft"  # reads structure-v0.7
+REGIME_VERSION = "regime-v0.8-draft"
 
 
 def _classify(last_break, last_hi, last_lo):

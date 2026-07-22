@@ -23,7 +23,7 @@ from . import store
 from .swings import compute_atr, SWING_VERSION
 from .runlog import RunRecorder
 
-ZONE_VERSION = "zone-v0.8-draft"
+ZONE_VERSION = "zone-v0.9-draft"
 ZONE_TIERS = ("INTERMEDIATE", "MAJOR")
 ZONE_ATR = Decimal("0.25")
 TICK = Decimal("0.01")
@@ -33,12 +33,22 @@ MAX_TOUCH_FACTS = 10
 TF_WEIGHT = {"1W": 20, "1D": 15, "4H": 10, "1H": 5, "15m": 5}
 
 
-def strength(episodes: int, cluster: int, age_bars: int, tf: str) -> int:
-    s = min(45, episodes * 15)
-    s += min(20, cluster * 10)
-    s += min(15, age_bars * 15 // 300)
-    s += TF_WEIGHT.get(tf, 5)
-    return min(100, s)
+def formation_quality(cluster: int, tf: str) -> int:
+    """Immutable creation quality; mitigation must never increase it."""
+    return min(100, 50 + min(30, cluster * 10) + TF_WEIGHT.get(tf, 5))
+
+
+def freshness(episodes: int, age_bars: int, broken: bool = False) -> int:
+    """Remaining zone freshness decays with mitigation and age."""
+    if broken:
+        return 0
+    mitigation_decay = episodes * 25
+    age_decay = min(25, age_bars // 100)
+    return max(0, 100 - mitigation_decay - age_decay)
+
+
+def strength(quality: int, remaining_freshness: int) -> int:
+    return (quality + remaining_freshness) // 2
 
 
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
@@ -83,12 +93,16 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             base = {"zone_id": zone_id, "zone_type": kind_z,
                     "bottom": str(bottom), "top": str(top),
                     "anchor_swing_ts": s["market_time"], "cluster_members": cluster}
+            quality = formation_quality(cluster, tf)
+            fresh = freshness(0, 0)
             if store.insert_fact(con, symbol=symbol, tf=tf, kind="zone",
                                  market_time=s["market_time"],
                                  confirmed_at=s["confirmed_at"],
                                  algo_version=ZONE_VERSION,
                                  payload={**base, "event": "CREATED", "state": "FRESH",
-                                          "strength": strength(0, cluster, 0, tf)}):
+                                          "formation_quality": quality,
+                                          "freshness": fresh,
+                                          "strength": strength(quality, fresh)}):
                 n_created += 1
 
             episodes = 0
@@ -102,12 +116,15 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 tol = max(TICK, TOL_ATR * atr[j]) if atr[j] is not None else TICK
                 broken = (close < bottom - tol) if kind_z == "DEMAND" else (close > top + tol)
                 if broken:
+                    fresh = freshness(episodes, j - i, broken=True)
                     if store.insert_fact(con, symbol=symbol, tf=tf, kind="zone",
                                          market_time=c["open_ts"], confirmed_at=bar_close_ts,
                                          algo_version=ZONE_VERSION,
                                          payload={**base, "event": "BROKEN", "state": "BROKEN",
                                                   "episodes": episodes,
-                                                  "strength": strength(episodes, cluster, j - i, tf)}):
+                                                  "formation_quality": quality,
+                                                  "freshness": fresh,
+                                                  "strength": strength(quality, fresh)}):
                         n_events += 1
                     break
                 overlap = lo <= top and hi >= bottom
@@ -116,12 +133,15 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                     if episodes <= MAX_TOUCH_FACTS:
                         state = ("TOUCHED" if episodes == 1 else
                                  "TESTED" if episodes == 2 else "WEAKENED")
+                        fresh = freshness(episodes, j - i)
                         if store.insert_fact(con, symbol=symbol, tf=tf, kind="zone",
                                              market_time=c["open_ts"], confirmed_at=bar_close_ts,
                                              algo_version=ZONE_VERSION,
                                              payload={**base, "event": "TOUCH", "state": state,
                                                       "episode": episodes,
-                                                      "strength": strength(episodes, cluster, j - i, tf)}):
+                                                      "formation_quality": quality,
+                                                      "freshness": fresh,
+                                                      "strength": strength(quality, fresh)}):
                             n_events += 1
                 inside = overlap
 

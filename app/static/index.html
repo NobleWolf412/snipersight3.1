@@ -206,6 +206,9 @@
       line-height:1.7;color:var(--txt-dim);border-bottom:1px solid var(--line)">—</div>
     <div class="phead" style="border-top:none">FACT ENGINES</div>
     <div class="enginebox" id="engines"></div>
+    <div class="phead" style="border-top:none">DATA HEALTH <span class="cnt" id="healthState">—</span></div>
+    <div id="dataHealth" style="padding:8px 12px;font-family:var(--mono);font-size:9px;
+      line-height:1.65;color:var(--txt-dim);border-bottom:1px solid var(--line)">—</div>
   </aside>
 
   <main class="center">
@@ -274,11 +277,31 @@
   </footer>
 </div>
 
+<div id="sysAlert" role="alert" style="display:none;position:fixed;z-index:9999;left:50%;top:8px;
+  transform:translateX(-50%);max-width:min(760px,90vw);padding:8px 12px;border:1px solid var(--red);
+  background:rgba(40,8,12,.96);color:#ffd7d7;font-family:var(--mono);font-size:10px;
+  box-shadow:0 0 20px rgba(255,93,93,.25)"></div>
+
 <script>
 const TFS=["15m","1H","4H","1D","1W"];
 const TF_SEC={"15m":900,"1H":3600,"4H":14400,"1D":86400,"1W":604800};
 let tf="1D",sym="BTC-USD",asOf=null,feedState="VALIDATED";
 let zoneLines=[],setupLines=[],lastFacts={},overview=null;
+
+function systemError(message){
+  const el=document.getElementById('sysAlert');
+  el.textContent=`DEGRADED · ${message}`;el.style.display='block';
+}
+async function api(url){
+  try{
+    const response=await fetch(url,{headers:{'Accept':'application/json'}});
+    if(!response.ok)throw new Error(`${response.status} ${response.statusText}`);
+    return await response.json();
+  }catch(error){
+    systemError(`${url} · ${error.message||error}`);
+    throw error;
+  }
+}
 
 document.getElementById('tfs').innerHTML=
   TFS.map(t=>`<button class="tf${t===tf?' on':''}" data-tf="${t}">${t}</button>`).join('');
@@ -302,11 +325,11 @@ new ResizeObserver(es=>{const{width,height}=es[0].contentRect;
 /* ---------- chart + facts ---------- */
 async function load(){
   const ao=asOf?`&as_of=${asOf}`:'';
-  const q=k=>fetch(`/api/facts?kind=${k}&symbol=${sym}&tf=${tf}${ao}`).then(r=>r.json());
+  const q=k=>api(`/api/facts?kind=${k}&symbol=${sym}&tf=${tf}${ao}`);
   const [candles,swingF,structF,zoneF,liqF,regimeF,setupF,cycleF,track]=await Promise.all([
-    fetch(`/api/candles?symbol=${sym}&tf=${tf}&limit=1500${asOf?`&end_ts=${asOf}`:''}`).then(r=>r.json()),
+    api(`/api/candles?symbol=${sym}&tf=${tf}&limit=1500${asOf?`&end_ts=${asOf}`:''}`),
     q('swing'),q('structure'),q('zone'),q('liquidity'),q('regime'),q('setup'),q('cycle'),
-    fetch(`/api/track?symbol=${sym}&tf=${tf}`).then(r=>r.json())]);
+    api(`/api/track?symbol=${sym}&tf=${tf}`)]);
   lastFacts={swing:swingF,structure:structF,zone:zoneF,liquidity:liqF,regime:regimeF,setup:setupF,cycle:cycleF};
   series.setData(candles);
   const on=id=>document.getElementById(id).checked;
@@ -447,7 +470,7 @@ async function load(){
     :'PAPER — no closed trades on this view';
   document.getElementById('st-swings').textContent=
     `view: ${nMaj} majors / ${nB} breaks / ${nZ} zones / ${nSweep} sweeps / ${nSet} setups`;
-  fetch('/api/status').then(r=>r.json()).then(s=>{
+  api('/api/status').then(s=>{
     document.getElementById('st-facts').textContent=s.facts.toLocaleString();
     document.getElementById('st-algo').textContent=s.algo_version;
   });
@@ -456,8 +479,18 @@ async function load(){
 /* ---------- overview rails ---------- */
 const REG_TAG=r=>!r?'':r.includes('BULL')?'bull':r.includes('BEAR')?'bear':r==='TRANSITION'?'trans':'';
 async function loadOverview(){
-  overview=await fetch('/api/overview').then(r=>r.json());
-  fetch('/api/cycles').then(r=>r.json()).then(cy=>{
+  overview=await api('/api/overview');
+  api('/api/health').then(h=>{
+    const state=document.getElementById('healthState');
+    state.textContent=h.status;state.style.color=h.status==='OK'?'var(--green)':'var(--red)';
+    const stale=h.stale_series||[];
+    document.getElementById('dataHealth').innerHTML=
+      `<div>DB <span style="color:${h.database==='ok'?'var(--green)':'var(--red)'}">${h.database.toUpperCase()}</span></div>`+
+      `<div>REJECTED OHLC <span style="color:var(--txt)">${h.bad_candles_rejected}</span> · GAPS <span style="color:${h.gaps_logged?'var(--amber)':'var(--txt)'}">${h.gaps_logged}</span></div>`+
+      `<div>STALE SERIES <span style="color:${stale.length?'var(--red)':'var(--green)'}">${stale.length}</span></div>`+
+      (stale.length?`<div style="color:var(--red)">${stale.slice(0,3).map(s=>`${s.symbol} ${s.tf}`).join(' · ')}</div>`:'');
+  }).catch(()=>{/* api() already exposes degraded state */});
+  api('/api/cycles').then(cy=>{
     const el=document.getElementById('cyclePanel');
     if(!cy.daily){el.textContent='— no data —';return;}
     const d=cy.daily.current,w=cy.weekly.current,win=cy.windows;
@@ -472,8 +505,8 @@ async function loadOverview(){
       (win.pushout_extended_window?`<div>pushout·wk <span style="color:var(--amber)">→ ${win.pushout_extended_window.end}</span> <span style="color:var(--txt-faint)">n≈2</span></div>`:'')+
       (win.pushout_extended_window_4y?`<div>pushout·4y <span style="color:var(--amber)">→ ${win.pushout_extended_window_4y.end}</span> <span style="color:var(--txt-faint)">RT ${win.fy_top_fraction} · n≈2</span></div>`:'')+
       `<div style="color:var(--txt-faint);margin-top:3px">observational only — never trades</div>`;
-  }).catch(()=>{});
-  fetch('/api/portfolio').then(r=>r.json()).then(p=>{
+  }).catch(()=>{/* api() already exposes degraded state */});
+  api('/api/portfolio').then(p=>{
     const up=p.return_pct>=0;
     const cf=p.config||{};
     document.getElementById('st-equity').innerHTML=
@@ -482,7 +515,7 @@ async function loadOverview(){
       `<span style="color:var(--txt-faint)">(${cf.risk_pct}%/trade · ${cf.max_total_risk_pct}% cap · ${cf.max_leverage}× · halt ${cf.daily_loss_pct}%)</span> · `+
       `${p.decisions.APPROVED||0}✓ ${p.decisions.REDUCED||0}↓ ${p.decisions.REJECTED||0}✗`+
       (p.kill_switch_days?` · ${p.kill_switch_days} halt days`:'');
-  }).catch(()=>{});
+  }).catch(()=>{/* api() already exposes degraded state */});
   const w=document.getElementById('watch');
   w.innerHTML=overview.symbols.map(s=>{
     const up=(s.change_pct||0)>=0;
@@ -545,6 +578,8 @@ function renderFeed(){
   el.innerHTML=list.map((f,i)=>{
     const res=f.result;
     const rcls=res?((+res.r_multiple)>0?'up':'dn'):'';
+    const stage=res?'CLOSED':f.state==='FORMING'?'LOCATION / WATCH':
+      f.state==='VALIDATED'?'READY / RISK CHECK':'CANCELLED';
     return `<div class="scard${f.state==='VALIDATED'&&!res?' live':''}${f.state==='FORMING'?' forming':''}" data-i="${i}">
       <div class="sc-h"><span class="sc-sym">${f.symbol}</span><span class="sc-tf">${f.tf}</span>
         <span class="score num">R ${f.rank}</span></div>
@@ -553,6 +588,7 @@ function renderFeed(){
         <span class="rr num">${f.direction} · R:R <b>${f.rr}</b></span>
         <span class="sc-out num ${rcls}">${res?`${res.outcome} ${(+res.r_multiple)>0?'+':''}${res.r_multiple}R`:age(f.market_time)+' ago'}</span>
       </div>
+      <div style="padding:4px 10px;border-top:1px solid var(--line);font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;color:var(--amber)">STAGE · ${stage}</div>
       <div class="sc-levels num">
         <div><span>ENTRY</span>${(+f.entry).toLocaleString()}</div>
         <div class="v-t"><span>TP</span>${(+f.tp).toLocaleString()}</div>
@@ -589,8 +625,8 @@ document.querySelectorAll('.ftab.rt').forEach(t=>t.onclick=()=>{
 
 async function loadAccount(){
   const [p,perf]=await Promise.all([
-    fetch('/api/portfolio').then(r=>r.json()),
-    fetch('/api/performance').then(r=>r.json())]);
+    api('/api/portfolio'),
+    api('/api/performance')]);
   const up=p.return_pct>=0;
   document.getElementById('acct-stats').innerHTML=
     `<div style="font-family:var(--mono)">
@@ -707,9 +743,9 @@ for(const id of['showMicro','showLocal','showStruct','showLabels','showZones','s
 let lastTicker={};
 async function tickPrices(){
   try{
-    lastTicker=await fetch('/api/ticker').then(r=>r.json());
+    lastTicker=await api('/api/ticker');
     const t=lastTicker[sym];
-    if(t&&!asOf){
+    if(t&&t.status==='OK'&&t.price!==null&&!asOf){
       const px=document.getElementById('cpx');
       const prev=parseFloat(px.textContent.replace(/,/g,''))||t.price;
       px.textContent=t.price.toLocaleString();
@@ -717,13 +753,13 @@ async function tickPrices(){
     }
     document.querySelectorAll('.wrow').forEach(r=>{
       const tk=lastTicker[r.dataset.sym];
-      if(tk)r.querySelector('.wpx').textContent=tk.price.toLocaleString();
+      if(tk&&tk.status==='OK'&&tk.price!==null)r.querySelector('.wpx').textContent=tk.price.toLocaleString();
     });
-  }catch(e){}
+  }catch(e){/* api() already exposes the degraded state */}
 }
 setInterval(tickPrices,10000);tickPrices();
 
-loadOverview();load();
+loadOverview().catch(()=>{/* api() reported */});load().catch(()=>{/* api() reported */});
 setInterval(loadOverview,30000);
 </script>
 </body>

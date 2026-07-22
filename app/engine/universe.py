@@ -97,6 +97,20 @@ def all_tracked_symbols(con) -> list[str]:
     return sorted(set(have) | set(SEED))
 
 
+def admitted_at(con, symbol: str, as_of: int) -> bool:
+    """Point-in-time eligibility used to prevent present-universe backtests."""
+    row = con.execute(
+        "SELECT payload FROM facts WHERE kind='universe' AND algo_version=? "
+        "AND confirmed_at<=? ORDER BY confirmed_at DESC, id DESC LIMIT 1",
+        (UNIVERSE_VERSION, as_of)).fetchone()
+    if row is None:
+        # BTC/ETH are the declared, golden-calibrated seed universe. Other
+        # assets have no defensible eligibility before the first snapshot.
+        return symbol in SEED
+    members = json.loads(row[0])["members"]
+    return any(m["symbol"] == symbol and m["state"] == "ADMITTED" for m in members)
+
+
 def refresh(con, ranked: list[tuple[str, float]] | None = None) -> dict:
     """Rank live, classify each candidate, record one universe fact. Returns
     the classification incl. which symbols need backfill (WARMING)."""

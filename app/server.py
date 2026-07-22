@@ -6,11 +6,11 @@ Run: uvicorn server:app --port 8422
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from engine import store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe
+from engine import store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata
 
 KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "structure": structure.STRUCTURE_VERSION,
@@ -19,6 +19,7 @@ KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "regime": regime.REGIME_VERSION,
                  "setup": setups.SETUP_VERSION,
                  "exec": execsim.EXEC_VERSION,
+                 "order": execsim.EXEC_VERSION,
                  "cycle": cycles.CYCLES_VERSION}
 
 app = FastAPI(title="SniperSight", version="0.1-draft")
@@ -28,7 +29,8 @@ VALID_TFS = set(importer.TF_SECONDS)
 
 
 @app.get("/api/candles")
-def candles(symbol: str = "BTC-USD", tf: str = "1H", limit: int = 1500,
+def candles(symbol: str = Query("BTC-USD", pattern=r"^[A-Z0-9]+-USD$"),
+            tf: str = "1H", limit: int = Query(1500, ge=1, le=5000),
             end_ts: int | None = None):
     """end_ts enables replay: only candles opening BEFORE end_ts are returned."""
     if tf not in VALID_TFS:
@@ -99,13 +101,16 @@ def track(symbol: str = "BTC-USD", tf: str = "1H"):
     try:
         rows = store.get_facts(con, symbol, tf, "exec", execsim.EXEC_VERSION)
         outs = [json.loads(r["payload"]) for r in rows]
-        rs = [float(o["r_multiple"]) for o in outs]
+        filled = [o for o in outs if o["outcome"] != "MISSED"]
+        rs = [float(o["r_multiple"]) for o in filled]
         wins = [r for r in rs if r > 0]
         losses = [r for r in rs if r < 0]
-        return {"n": len(outs),
-                "tp": sum(1 for o in outs if o["outcome"] == "TP"),
-                "sl": sum(1 for o in outs if o["outcome"] == "SL"),
-                "timeout": sum(1 for o in outs if o["outcome"] == "TIMEOUT"),
+        return {"n": len(filled), "signals": len(outs),
+                "missed": sum(1 for o in outs if o["outcome"] == "MISSED"),
+                "fill_rate": round(len(filled) / len(outs), 3) if outs else None,
+                "tp": sum(1 for o in filled if o["outcome"] == "TP"),
+                "sl": sum(1 for o in filled if o["outcome"] == "SL"),
+                "timeout": sum(1 for o in filled if o["outcome"] == "TIMEOUT"),
                 "win_rate": round(len(wins) / len(rs), 3) if rs else None,
                 "profit_factor": round(sum(wins) / abs(sum(losses)), 2) if losses else None,
                 "sum_r": round(sum(rs), 2), "by_setup": {o["setup_id"]: o for o in outs}}
@@ -176,6 +181,8 @@ def performance():
             for tf in ("15m", "1H", "4H", "1D", "1W"):
                 for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
                     p = json.loads(r["payload"])
+                    if p["outcome"] == "MISSED":
+                        continue
                     rm = float(p["r_multiple"])
                     for key, bucket in ((sym, by_sym), (p["strategy"], by_strat)):
                         a = bucket.setdefault(key, blank())
@@ -220,19 +227,24 @@ def ticker():
     """Display-only live prices (Coinbase spot ticker). NEVER consumed by
     engines — analysis stays closed-candle-only (§5); this exists purely so
     the human sees the market move between candle closes."""
-    import urllib.request
-    out = {}
-    for sym in universe.all_tracked_symbols(con):
-        try:
-            req = urllib.request.Request(
-                f"https://api.exchange.coinbase.com/products/{sym}/ticker",
-                headers={"User-Agent": "snipersight/0.1"})
-            with urllib.request.urlopen(req, timeout=5) as r:
-                d = json.loads(r.read().decode())
-            out[sym] = {"price": float(d["price"]), "time": d["time"]}
-        except Exception:
-            out[sym] = None
-    return out
+    con = store.connect()
+    try:
+        symbols = universe.all_tracked_symbols(con)
+    finally:
+        con.close()
+    return marketdata.fetch_tickers(symbols)
+
+
+@app.get("/api/manifests/{manifest_hash}")
+def manifest(manifest_hash: str):
+    con = store.connect()
+    try:
+        result = store.get_manifest(con, manifest_hash)
+        if result is None:
+            raise HTTPException(404, "manifest not found")
+        return {"manifest_hash": manifest_hash, **result}
+    finally:
+        con.close()
 
 
 @app.get("/api/overview")
@@ -322,10 +334,43 @@ def status():
         c = con.execute("SELECT symbol, tf, COUNT(*), MIN(open_ts), MAX(open_ts) "
                         "FROM candles GROUP BY symbol, tf").fetchall()
         f = con.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+        m = con.execute("SELECT COUNT(*) FROM manifests").fetchone()[0]
         gaps = con.execute("SELECT COALESCE(SUM(n_gaps),0) FROM import_log").fetchone()[0]
-        return {"facts": f, "gap_candles_logged": gaps, "algo_version": swings.SWING_VERSION,
+        return {"facts": f, "manifests": m, "gap_candles_logged": gaps,
+                "algo_version": swings.SWING_VERSION,
+                "versions": {**KIND_VERSIONS, "risk": risk.RISK_VERSION,
+                             "scalein": scalein.SCALE_VERSION},
                 "candles": [{"symbol": s, "tf": t, "n": n, "first": lo, "last": hi}
                             for s, t, n, lo, hi in c]}
+    finally:
+        con.close()
+
+
+@app.get("/api/health")
+def health():
+    """Operational health is explicit; the UI must not infer it from silence."""
+    import time as _t
+    now = int(_t.time())
+    con = store.connect()
+    try:
+        integrity = con.execute("PRAGMA quick_check").fetchone()[0]
+        rows = con.execute(
+            "SELECT symbol, tf, MAX(open_ts) FROM candles GROUP BY symbol, tf"
+        ).fetchall()
+        series = []
+        for symbol, tf, last_open in rows:
+            sec = importer.TF_SECONDS[tf]
+            age_s = max(0, now - (last_open + sec))
+            series.append({"symbol": symbol, "tf": tf, "last_open": last_open,
+                           "age_s": age_s, "stale": age_s > 2 * sec})
+        bad, gaps = con.execute(
+            "SELECT COALESCE(SUM(n_bad),0), COALESCE(SUM(n_gaps),0) FROM import_log"
+        ).fetchone()
+        return {"status": "OK" if integrity == "ok" and not any(
+                    s["stale"] for s in series) else "DEGRADED",
+                "database": integrity, "bad_candles_rejected": bad,
+                "gaps_logged": gaps, "series": series,
+                "stale_series": [s for s in series if s["stale"]]}
     finally:
         con.close()
 

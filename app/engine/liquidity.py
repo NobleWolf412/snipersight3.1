@@ -16,7 +16,7 @@ from . import store
 from .swings import compute_atr, SWING_VERSION
 from .runlog import RunRecorder
 
-LIQ_VERSION = "liq-v0.7-draft"  # reads swing-v0.7 score-based tiers
+LIQ_VERSION = "liq-v0.8-draft"
 # v0.2: pools cluster INTERMEDIATE+ swings (was LOCAL) — matches user's
 # macro liquidity ladder (golden-btc-1d.json).
 POOL_TIERS = ("INTERMEDIATE", "MAJOR")
@@ -44,6 +44,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
         for side in ("HIGH", "LOW"):
             arr = sorted(swings[side], key=lambda s: s["market_time"])
+            claimed_member_ts: set[int] = set()
             for k, s in enumerate(arr):
                 i = ts_index.get(s["market_time"])
                 if i is None or atr[i] is None:
@@ -55,11 +56,18 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 if not members:
                     continue
                 cluster = members + [s]
+                member_ts = {t["market_time"] for t in cluster}
+                # One canonical pool per overlapping swing cluster. Later
+                # qualifying members belong to the existing pool rather than
+                # spawning correlated duplicate targets.
+                if member_ts & claimed_member_ts:
+                    continue
+                claimed_member_ts.update(member_ts)
                 level = (max if side == "HIGH" else min)(t["price"] for t in cluster)
                 pool_id = f"{symbol}|{tf}|EQ{side[0]}|{s['market_time']}"
                 base = {"pool_id": pool_id, "side": side, "level": str(level),
                         "n_members": len(cluster),
-                        "member_ts": [t["market_time"] for t in cluster]}
+                        "member_ts": sorted(member_ts), "state": "ACTIVE"}
                 if store.insert_fact(con, symbol=symbol, tf=tf, kind="liquidity",
                                      market_time=s["market_time"],
                                      confirmed_at=s["confirmed_at"],
@@ -67,6 +75,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                                      payload={**base, "event": "POOL"}):
                     n_pools += 1
 
+                swept_once = False
                 for j in range(i + 1, len(candles)):
                     c = candles[j]
                     bar_close_ts = c["open_ts"] + tf_seconds
@@ -78,16 +87,19 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                         broke, swept = close > level + tol, hi > level and close <= level
                     else:
                         broke, swept = close < level - tol, lo < level and close >= level
-                    if broke or swept:
+                    if broke or (swept and not swept_once):
                         ev = "BROKEN" if broke else "SWEEP"
-                        payload = {**base, "event": ev}
+                        payload = {**base, "event": ev,
+                                   "state": "BROKEN" if broke else "SWEPT_REJECTED"}
                         if swept:
                             payload["outcome"] = "REJECTED"
+                            swept_once = True
                         if store.insert_fact(con, symbol=symbol, tf=tf, kind="liquidity",
                                              market_time=c["open_ts"], confirmed_at=bar_close_ts,
                                              algo_version=LIQ_VERSION, payload=payload):
                             n_events += 1
-                        break
+                        if broke:
+                            break
 
         con.commit()
         rec.n_new_facts = n_pools + n_events
