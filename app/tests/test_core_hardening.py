@@ -227,5 +227,33 @@ class TestTickerEndpoint(TempStore):
         self.assertEqual(result["BTC-USD"]["status"], "OK")
 
 
+class TestFactLifecycleOrdering(TempStore):
+    def test_order_events_are_returned_in_causal_order(self):
+        base = {"setup_id": "s1", "side": "LONG", "order_type": "LIMIT",
+                "limit_price": "100", "available_at": 100}
+        store.insert_fact(self.con, symbol="BTC-USD", tf="1H", kind="order",
+                          market_time=50, confirmed_at=100,
+                          algo_version=execsim.EXEC_VERSION,
+                          payload={**base, "event": "PLACED"})
+        store.insert_fact(self.con, symbol="BTC-USD", tf="1H", kind="order",
+                          market_time=50, confirmed_at=200,
+                          algo_version=execsim.EXEC_VERSION,
+                          payload={**base, "event": "FILLED"})
+        events = [json.loads(r["payload"])["event"] for r in store.get_facts(
+            self.con, "BTC-USD", "1H", "order", execsim.EXEC_VERSION)]
+        self.assertEqual(events, ["PLACED", "FILLED"])
+
+
+class TestCockpitHierarchy(unittest.TestCase):
+    def test_wallet_and_positions_are_persistent_landmarks(self):
+        html = (Path(__file__).parents[1] / "static" / "index.html").read_text()
+        self.assertIn('aria-label="Paper wallet summary"', html)
+        self.assertIn('aria-label="Active paper positions"', html)
+        self.assertIn('id="walletBalance"', html)
+        self.assertIn('id="activePositions"', html)
+        self.assertLess(html.index('id="activePositions"'),
+                        html.index('data-rt="feed"'))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -130,23 +130,66 @@ def portfolio():
             "ORDER BY id DESC LIMIT 1", (risk.RISK_VERSION,)).fetchone()
         acct = json.loads(arow[0]) if arow else None
         recent, kills = [], 0
+        setup_by_id, risk_by_id, latest_order, completed = {}, {}, {}, set()
         for r in store.get_facts(con, "PORTFOLIO", "ALL", "risk", risk.RISK_VERSION):
             p = json.loads(r["payload"])
             if p.get("event") == "KILL_SWITCH":
                 kills += 1
         for sym in universe.all_tracked_symbols(con):
             for tf in ("15m", "1H", "4H", "1D", "1W"):
+                for version in (setups.SETUP_VERSION, scalein.SCALE_VERSION):
+                    for r in store.get_facts(con, sym, tf, "setup", version):
+                        p = json.loads(r["payload"])
+                        if p.get("state") == "VALIDATED":
+                            setup_by_id[p["setup_id"]] = {
+                                "symbol": sym, "tf": tf,
+                                "confirmed_at": r["confirmed_at"], **p}
                 for r in store.get_facts(con, sym, tf, "risk", risk.RISK_VERSION):
                     p = json.loads(r["payload"])
                     if p.get("event") == "DECISION":
-                        recent.append({"symbol": sym, "tf": tf, "ts": r["confirmed_at"], **p})
+                        decision = {"symbol": sym, "tf": tf,
+                                    "ts": r["confirmed_at"], **p}
+                        recent.append(decision)
+                        risk_by_id[p["setup_id"]] = decision
+                for r in store.get_facts(con, sym, tf, "order", execsim.EXEC_VERSION):
+                    p = json.loads(r["payload"])
+                    latest_order[p["setup_id"]] = {
+                        "symbol": sym, "tf": tf,
+                        "confirmed_at": r["confirmed_at"], **p}
+                for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
+                    completed.add(json.loads(r["payload"])["setup_id"])
         recent.sort(key=lambda d: d["ts"])
+        positions, pending_orders = [], []
+        for sid, order in latest_order.items():
+            if sid in completed:
+                continue
+            detail = setup_by_id.get(sid, {})
+            sized = risk_by_id.get(sid, {})
+            item = {"setup_id": sid, "symbol": order["symbol"],
+                    "tf": order["tf"], "direction": order.get("side"),
+                    "strategy": detail.get("strategy"),
+                    "entry": detail.get("entry", order.get("limit_price")),
+                    "tp": detail.get("tp"), "sl": detail.get("sl"),
+                    "risk_usd": sized.get("risk_usd"),
+                    "notional_usd": sized.get("notional_usd"),
+                    "decision": sized.get("decision"),
+                    "updated_at": order["confirmed_at"]}
+            if order.get("event") == "FILLED":
+                positions.append(item)
+            elif order.get("event") == "PLACED":
+                pending_orders.append(item)
+        positions.sort(key=lambda p: p["updated_at"], reverse=True)
+        pending_orders.sort(key=lambda p: p["updated_at"], reverse=True)
         eq = float(acct["final_equity"]) if acct else float(risk.START_EQUITY)
         return {"start_equity": float(risk.START_EQUITY), "equity": round(eq, 2),
                 "return_pct": float(acct["return_pct"]) if acct else 0.0,
                 "max_drawdown_pct": acct.get("max_drawdown_pct") if acct else None,
                 "decisions": acct["decisions"] if acct else {},
                 "kill_switch_days": kills,
+                "active_positions": positions,
+                "pending_orders": pending_orders,
+                "open_risk_usd": round(sum(float(p["risk_usd"] or 0)
+                                           for p in positions), 2),
                 "curve": [{"ts": c["ts"], "equity": float(c["equity"])}
                           for c in (acct["curve"] if acct else [])],
                 "recent": recent[-25:],

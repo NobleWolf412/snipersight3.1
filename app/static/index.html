@@ -152,6 +152,76 @@
   ::-webkit-scrollbar{width:8px}
   ::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:4px}
   ::-webkit-scrollbar-track{background:transparent}
+
+  /* Product shell: strong hierarchy, readable type, and bounded work areas. */
+  :root{
+    --bg0:#070a10;--bg1:#0c1119;--bg2:#111925;--bg3:#182332;
+    --line:#202c3b;--line-hi:#34475d;
+    --txt:#d7e0e8;--txt-dim:#91a1b2;--txt-faint:#5f7183;
+    --panel-shadow:0 18px 45px rgba(0,0,0,.24);
+  }
+  body{font-size:14px;line-height:1.45;background-color:#05070b;background-size:64px 64px}
+  .app{padding:8px;gap:8px;background:transparent;grid-template-rows:56px minmax(0,1fr) 34px;
+    grid-template-columns:236px minmax(540px,1fr) 360px}
+  header.top,aside.left,main.center,aside.right,footer.foot{
+    border:1px solid var(--line);border-radius:11px;box-shadow:var(--panel-shadow);overflow:hidden}
+  header.top{padding:0 18px;background:linear-gradient(180deg,#111823,#0b1119)}
+  aside.left,aside.right{background:rgba(12,17,25,.98)}
+  main.center{background:#080c12}
+  footer.foot{padding:0 13px;background:#0b1017;font-size:10.5px}
+  .logo{font-size:15px}.sess .lbl,.clock .z{font-size:10px}
+  .sess-name{font-size:11.5px}.pill{border-radius:6px;padding:4px 9px}
+  .phead{min-height:39px;padding:10px 13px;background:rgba(20,29,41,.72);
+    border-bottom-color:var(--line-hi);font-size:10px;font-weight:700;color:#a9b7c5}
+  .phead .cnt{font-weight:500;color:var(--txt-dim)}
+  .wrow{padding:11px 13px;border-left-width:3px}.wsym,.wpx{font-size:12.5px}
+  .tag{font-size:9.5px;border-radius:5px;padding:2px 6px}.toggles label{font-size:10.5px;color:var(--txt-dim)}
+  .chead{min-height:52px;padding:10px 16px;background:linear-gradient(180deg,#111923,#0c121a)}
+  .csym,.cpx{font-size:17px}.regime{font-size:10.5px}
+  .chartwrap{margin:8px;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .ftabs{background:#0d141d}.ftab{padding:10px 0;font-size:10px;font-weight:700;color:var(--txt-dim)}
+  .feed{padding:10px}.scard{border-color:#2a3849;border-radius:8px;background:linear-gradient(145deg,#141e2a,#101720)}
+  .scard:hover{border-color:#476079;transform:translateY(-1px)}
+  .scard.live{border-width:1px;border-color:rgba(47,214,232,.65);box-shadow:0 0 0 1px rgba(47,214,232,.08),0 12px 30px rgba(0,0,0,.18)}
+  .sc-h{padding:11px 12px}.sc-sym{font-size:13px}.sc-b{padding:0 12px 10px}
+  .sc-tf,.strat{font-size:9.5px}.rr{font-size:10.5px}.sc-levels{font-size:10.5px}.sc-levels span{font-size:9px}
+  .empty{font-size:10.5px;color:var(--txt-dim);padding:20px 14px}
+
+  .portfolio-card{margin:10px 10px 8px;padding:14px;border:1px solid #355067;border-radius:10px;
+    background:radial-gradient(circle at 88% 10%,rgba(47,214,232,.13),transparent 34%),
+      linear-gradient(145deg,#142333,#0e1722);box-shadow:0 14px 32px rgba(0,0,0,.2)}
+  .portfolio-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .eyebrow{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.15em;color:#91a8ba}
+  .wallet-balance{margin-top:3px;font-family:var(--mono);font-size:24px;font-weight:650;letter-spacing:-.04em;color:#f1f8fb}
+  .portfolio-return{font-family:var(--mono);font-size:11px;font-weight:700;padding:5px 8px;border-radius:6px;background:rgba(61,220,132,.1);color:var(--green)}
+  .portfolio-return.neg{background:rgba(255,93,93,.1);color:var(--red)}
+  .portfolio-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px}
+  .metric{min-width:0;padding:8px;border:1px solid rgba(93,118,143,.24);border-radius:7px;background:rgba(5,9,14,.28)}
+  .metric span{display:block;font-family:var(--mono);font-size:8px;letter-spacing:.1em;color:var(--txt-faint);white-space:nowrap}
+  .metric b{display:block;margin-top:3px;font-family:var(--mono);font-size:11px;font-weight:600;color:#dce8ef;overflow:hidden;text-overflow:ellipsis}
+  .positions-panel{margin:0 10px 10px;border:1px solid #304155;border-radius:10px;background:#0e151f;overflow:hidden}
+  .positions-head{display:flex;align-items:center;padding:10px 11px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:9.5px;font-weight:750;letter-spacing:.13em;color:#dce8ef}
+  .positions-head .count{margin-left:auto;min-width:22px;text-align:center;padding:2px 6px;border-radius:10px;background:var(--cyan-ghost);color:var(--cyan);border:1px solid var(--cyan-dim)}
+  .position-list{max-height:184px;overflow-y:auto}
+  .position-row{padding:10px 11px;border-bottom:1px solid var(--line)}.position-row:last-child{border-bottom:0}
+  .position-main,.position-meta{display:flex;align-items:center;gap:7px}
+  .position-main strong{font-family:var(--mono);font-size:12px;color:#edf6fa}
+  .position-side{font-family:var(--mono);font-size:8.5px;font-weight:750;letter-spacing:.08em;padding:2px 5px;border-radius:4px}
+  .position-side.long{color:var(--green);background:rgba(61,220,132,.1)}
+  .position-side.short{color:var(--red);background:rgba(255,93,93,.1)}
+  .position-risk{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--amber)}
+  .position-meta{margin-top:6px;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--txt-dim)}
+  .position-empty{padding:14px 11px;color:var(--txt-dim);font-size:11px;line-height:1.45}
+  .position-empty b{display:block;color:#c7d4de;margin-bottom:2px}
+  #acct-stats{background:linear-gradient(145deg,#142333,#0e1722)}
+
+  @media(max-width:1180px){.app{grid-template-columns:210px minmax(480px,1fr) 330px}.sessbar-w,.rp span:first-child{display:none}}
+  @media(max-width:900px){
+    body{overflow:auto}.app{height:auto;min-height:100vh;grid-template-columns:1fr;grid-template-rows:auto;grid-template-areas:"top" "right" "center" "left" "foot"}
+    header.top{min-height:58px;flex-wrap:wrap}.sess,.rp{display:none}
+    main.center{height:68vh;min-height:520px}aside.right{min-height:620px}aside.left{min-height:500px}
+    footer.foot{min-height:38px}
+  }
 </style>
 </head>
 <body>
@@ -202,15 +272,15 @@
       <label><input type="checkbox" id="showCycles" checked> CYCLES</label>
     </div>
     <div class="phead" style="border-top:none">CYCLES <span class="cnt">OBSERVATIONAL</span></div>
-    <div id="cyclePanel" style="padding:8px 12px;font-family:var(--mono);font-size:9.5px;
+    <div id="cyclePanel" style="padding:8px 12px;font-family:var(--mono);font-size:10.5px;
       line-height:1.7;color:var(--txt-dim);border-bottom:1px solid var(--line)">—</div>
     <div class="phead" style="border-top:none">FACT ENGINES</div>
     <div class="enginebox" id="engines"></div>
     <div class="phead" style="border-top:none">DATA HEALTH <span class="cnt" id="healthState">—</span></div>
-    <div id="dataHealth" style="padding:8px 12px;font-family:var(--mono);font-size:9px;
+    <div id="dataHealth" style="padding:8px 12px;font-family:var(--mono);font-size:10px;
       line-height:1.65;color:var(--txt-dim);border-bottom:1px solid var(--line)">—</div>
     <div class="phead" style="border-top:none">REJECTION FUNNEL <span class="cnt">CURRENT VERSION</span></div>
-    <div id="rejectionFunnel" style="padding:8px 12px;font-family:var(--mono);font-size:8.5px;
+    <div id="rejectionFunnel" style="padding:8px 12px;font-family:var(--mono);font-size:10px;
       line-height:1.65;color:var(--txt-dim)">—</div>
   </aside>
 
@@ -221,7 +291,7 @@
       <span class="chg num" id="cchg"></span>
       <div class="tfs" id="tfs"></div>
       <div class="regime" id="regime">REGIME <b>—</b></div>
-      <div id="mtfContext" style="margin-left:auto;display:flex;gap:5px;font-family:var(--mono);font-size:8.5px"></div>
+      <div id="mtfContext" style="margin-left:auto;display:flex;gap:5px;font-family:var(--mono);font-size:9.5px"></div>
     </div>
     <div class="chartwrap">
       <div id="chart"></div>
@@ -240,6 +310,23 @@
   </main>
 
   <aside class="right">
+    <section class="portfolio-card" aria-label="Paper wallet summary">
+      <div class="portfolio-top">
+        <div><div class="eyebrow">PAPER WALLET</div><div class="wallet-balance num" id="walletBalance">$—</div></div>
+        <div class="portfolio-return" id="walletReturn">—</div>
+      </div>
+      <div class="portfolio-metrics">
+        <div class="metric"><span>AVAILABLE</span><b id="walletAvailable">$—</b></div>
+        <div class="metric"><span>OPEN RISK</span><b id="walletRisk">$—</b></div>
+        <div class="metric"><span>PENDING</span><b id="walletPending">—</b></div>
+      </div>
+    </section>
+    <section class="positions-panel" aria-label="Active paper positions">
+      <div class="positions-head">ACTIVE POSITIONS <span class="count" id="positionCount">0</span></div>
+      <div class="position-list" id="activePositions">
+        <div class="position-empty"><b>No active positions</b>Filled paper positions will appear here.</div>
+      </div>
+    </section>
     <div class="ftabs" style="border-bottom:1px solid var(--line)">
       <div class="ftab rt on" data-rt="feed" style="font-size:10px;letter-spacing:.16em">SETUP FEED <span class="cnt" id="feedcnt">—</span></div>
       <div class="ftab rt" data-rt="acct" style="font-size:10px;letter-spacing:.16em">ACCOUNT</div>
@@ -522,6 +609,33 @@ async function loadOverview(){
   api('/api/portfolio').then(p=>{
     const up=p.return_pct>=0;
     const cf=p.config||{};
+    const positions=p.active_positions||[],pending=p.pending_orders||[];
+    const deployed=positions.reduce((n,x)=>n+(+x.notional_usd||0),0);
+    const available=Math.max(0,p.equity-deployed);
+    const money=n=>'$'+(+n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.getElementById('walletBalance').textContent=money(p.equity);
+    const wr=document.getElementById('walletReturn');
+    wr.textContent=`${up?'+':''}${p.return_pct}%`;wr.className='portfolio-return'+(up?'':' neg');
+    document.getElementById('walletAvailable').textContent=money(available);
+    document.getElementById('walletRisk').textContent=money(p.open_risk_usd||0);
+    document.getElementById('walletPending').textContent=pending.length.toLocaleString();
+    document.getElementById('positionCount').textContent=positions.length;
+    const positionList=document.getElementById('activePositions');
+    positionList.innerHTML=positions.length?positions.map(x=>{
+      const side=(x.direction||'—').toLowerCase();
+      const price=v=>v===null||v===undefined?'—':(+v).toLocaleString(undefined,{maximumFractionDigits:+v<1?5:2});
+      return `<div class="position-row" data-sym="${x.symbol}" data-tf="${x.tf}">
+        <div class="position-main"><strong>${x.symbol.replace('-USD','')}</strong><span class="tag">${x.tf}</span>
+          <span class="position-side ${side}">${x.direction||'—'}</span>
+          <span class="position-risk">RISK ${money(x.risk_usd||0)}</span></div>
+        <div class="position-meta"><span>ENTRY ${price(x.entry)}</span><span class="up">TP ${price(x.tp)}</span><span class="dn">SL ${price(x.sl)}</span></div>
+      </div>`;
+    }).join(''):`<div class="position-empty"><b>No active positions</b>${pending.length?`${pending.length} limit order${pending.length===1?' is':'s are'} waiting for a fill.`:'Filled paper positions will appear here.'}</div>`;
+    positionList.querySelectorAll('.position-row').forEach(row=>row.onclick=()=>{
+      sym=row.dataset.sym;tf=row.dataset.tf;
+      document.querySelectorAll('#tfs .tf').forEach(x=>x.classList.toggle('on',x.dataset.tf===tf));
+      loadOverview();load();
+    });
     document.getElementById('st-equity').innerHTML=
       `EQUITY <span class="${up?'hot':''}">$${p.equity.toLocaleString()}</span> `+
       `(${up?'+':''}${p.return_pct}%) · next risk <span class="hot">$${(cf.next_risk_usd||0).toLocaleString(undefined,{maximumFractionDigits:0})}</span> `+

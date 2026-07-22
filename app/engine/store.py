@@ -163,5 +163,8 @@ def get_facts(con, symbol: str, tf: str, kind: str, algo_version: str,
     if as_of is not None:
         q += " AND confirmed_at<=?"
         args.append(as_of)
-    q += " ORDER BY market_time"
+    # Lifecycle facts often share market_time (for example PLACED then FILLED).
+    # Stable causal ordering prevents callers from mistaking an older event for
+    # the current state when timestamps tie.
+    q += " ORDER BY market_time, confirmed_at, id"
     return con.execute(q, args).fetchall()
