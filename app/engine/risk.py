@@ -23,7 +23,9 @@ from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.5-draft"
+RISK_VERSION = "risk-v0.6-draft"
+# v0.6: account accounting is scoped to the active non-destructive forward
+# baseline. Strategy eligibility and sizing rules are unchanged.
 # v0.4 (user directive 2026-07-21): per-trade risk 1% -> 2%. Coherently
 # re-tuned the whole envelope so the concurrency and kill-switch don't silently
 # break: total cap 2% -> 4% (keeps 2 concurrent at 2% each), daily halt 3% ->
@@ -60,13 +62,16 @@ def _day(ts: int) -> str:
 def run(con) -> dict:
     with RunRecorder(con, "risk", RISK_VERSION, "PORTFOLIO", "ALL") as rec:
         from .scalein import SCALE_VERSION   # lazy: avoids circular import
+        baseline = store.get_active_baseline(con)
+        baseline_start = baseline["started_at"]
         intents, exits = [], {}
         for sym in _symbols(con):
             for tf in TFS:
                 for ver in (SETUP_VERSION, SCALE_VERSION):
                     for r in store.get_facts(con, sym, tf, "setup", ver):
                         p = json.loads(r["payload"])
-                        if p["state"] == "VALIDATED":
+                        if (p["state"] == "VALIDATED" and
+                                r["confirmed_at"] >= baseline_start):
                             intents.append({"symbol": sym, "tf": tf,
                                             "market_time": r["market_time"],
                                             "confirmed_at": r["confirmed_at"],
@@ -113,6 +118,8 @@ def run(con) -> dict:
                                      "day_start_equity": str(day_start_equity[d]),
                                      "loss_limit_usd": str(loss_limit),
                                      "equity": str(equity),
+                                     "baseline_id": baseline["id"],
+                                     "baseline_started_at": baseline_start,
                                      "reason": "daily loss limit reached — no new entries today"}):
                         n_new_facts += 1
 
@@ -172,7 +179,8 @@ def run(con) -> dict:
             payload = {"event": "DECISION", "setup_id": it["setup_id"],
                        "decision": decision, "reasons": reasons or ["WITHIN_LIMITS"],
                        "intended_risk_usd": str(intended), "risk_usd": str(risk_usd),
-                       "equity_at": str(equity)}
+                       "equity_at": str(equity), "baseline_id": baseline["id"],
+                       "baseline_started_at": baseline_start}
             if decision != "REJECTED" and stop_dist > 0:
                 units = (risk_usd / stop_dist)
                 payload.update({"units": str(units.quantize(Decimal("0.00000001"))),
@@ -202,13 +210,16 @@ def run(con) -> dict:
             maxdd = max(maxdd, (peak - e) / peak * 100 if peak else 0)
         # deterministic anchor: last settlement (not wall-clock) so a re-run over
         # identical data produces a byte-identical summary fact (idempotent).
-        summ_ts = int(curve[-1]["ts"]) if curve else 0
+        summ_ts = int(curve[-1]["ts"]) if curve else baseline_start
         if store.insert_fact(
                 con, symbol="PORTFOLIO", tf="ALL", kind="account",
                 market_time=summ_ts, confirmed_at=summ_ts,
                 algo_version=RISK_VERSION,
                 payload={"event": "SUMMARY", "start_equity": str(START_EQUITY),
                          "final_equity": str(equity),
+                         "baseline_id": baseline["id"],
+                         "baseline_started_at": baseline_start,
+                         "baseline_label": baseline["label"],
                          "return_pct": str(((equity / START_EQUITY - 1) * 100).quantize(QC)),
                          "max_drawdown_pct": round(maxdd, 2),
                          "decisions": n, "curve": curve,
@@ -218,5 +229,5 @@ def run(con) -> dict:
             n_new_facts += 1
         con.commit()
         rec.n_new_facts = n_new_facts
-        rec.notes = f"final_equity={equity}"
+        rec.notes = f"baseline={baseline['id']} final_equity={equity}"
         return {"final_equity": str(equity), **n}

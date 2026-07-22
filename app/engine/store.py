@@ -8,6 +8,7 @@ engine over identical data must be a no-op (INSERT OR IGNORE on content_hash).
 import hashlib
 import json
 import sqlite3
+import time
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "snipersight.db"
@@ -93,6 +94,19 @@ CREATE TABLE IF NOT EXISTS quality_checks (
 );
 CREATE INDEX IF NOT EXISTS ix_quality_checks_run
     ON quality_checks (quality_run_id, stage, status);
+
+CREATE TABLE IF NOT EXISTS research_baselines (
+    id          INTEGER PRIMARY KEY,
+    started_at  INTEGER NOT NULL,
+    created_at  INTEGER NOT NULL,
+    label       TEXT NOT NULL,
+    active      INTEGER NOT NULL DEFAULT 1,
+    strategy_version TEXT,
+    execution_version TEXT,
+    risk_version TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_research_baseline_active
+    ON research_baselines (active) WHERE active = 1;
 """
 
 
@@ -134,7 +148,49 @@ def _migrate(con: sqlite3.Connection) -> None:
         con.execute(
             "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
             (4, "fact_producer_run_lineage"))
+    if 5 not in applied:
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (5, "forward_research_baselines"))
     con.commit()
+
+
+def get_active_baseline(con: sqlite3.Connection) -> dict:
+    """Return the active forward-test window without mutating legacy stores."""
+    row = con.execute(
+        "SELECT id,started_at,created_at,label,strategy_version,"
+        "execution_version,risk_version FROM research_baselines "
+        "WHERE active=1 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return {"id": None, "started_at": 0, "created_at": None,
+                "label": "All history (legacy)", "strategy_version": None,
+                "execution_version": None, "risk_version": None}
+    keys = ("id", "started_at", "created_at", "label", "strategy_version",
+            "execution_version", "risk_version")
+    return dict(zip(keys, row))
+
+
+def start_baseline(con: sqlite3.Connection, *, started_at: int | None = None,
+                   label: str = "Forward paper baseline",
+                   strategy_version: str | None = None,
+                   execution_version: str | None = None,
+                   risk_version: str | None = None) -> dict:
+    """Start a new non-destructive research window and retain all prior facts."""
+    ts = int(time.time()) if started_at is None else int(started_at)
+    created_at = int(time.time())
+    clean_label = label.strip() or "Forward paper baseline"
+    with con:
+        con.execute("UPDATE research_baselines SET active=0 WHERE active=1")
+        cur = con.execute(
+            "INSERT INTO research_baselines "
+            "(started_at,created_at,label,active,strategy_version,"
+            "execution_version,risk_version) VALUES (?,?,?,?,?,?,?)",
+            (ts, created_at, clean_label, 1, strategy_version,
+             execution_version, risk_version))
+    return {"id": cur.lastrowid, "started_at": ts, "created_at": created_at,
+            "label": clean_label, "strategy_version": strategy_version,
+            "execution_version": execution_version, "risk_version": risk_version}
 
 
 def canonical_payload(obj: dict) -> str:

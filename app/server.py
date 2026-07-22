@@ -30,6 +30,31 @@ STATIC = Path(__file__).resolve().parent / "static"
 VALID_TFS = set(importer.TF_SECONDS)
 
 
+def _baseline_setup_ids(con, *, symbol: str | None = None,
+                        tf: str | None = None) -> tuple[dict, set[str]]:
+    """Single source of truth for facts visible in the active paper window."""
+    baseline = store.get_active_baseline(con)
+    clauses = ["kind='setup'", "confirmed_at>=?"]
+    args: list = [baseline["started_at"]]
+    if symbol is not None:
+        clauses.append("symbol=?")
+        args.append(symbol)
+    if tf is not None:
+        clauses.append("tf=?")
+        args.append(tf)
+    clauses.append("algo_version IN (?,?)")
+    args.extend((setups.SETUP_VERSION, scalein.SCALE_VERSION))
+    rows = con.execute(
+        "SELECT payload FROM facts WHERE " + " AND ".join(clauses), args
+    ).fetchall()
+    ids = set()
+    for (raw,) in rows:
+        payload = json.loads(raw)
+        if payload.get("state") == "VALIDATED":
+            ids.add(payload["setup_id"])
+    return baseline, ids
+
+
 @app.get("/api/candles")
 def candles(symbol: str = Query("BTC-USD", pattern=r"^[A-Z0-9]+-USD$"),
             tf: str = "1H", limit: int = Query(1500, ge=1, le=5000),
@@ -101,13 +126,14 @@ def track(symbol: str = "BTC-USD", tf: str = "1H"):
         raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
     con = store.connect()
     try:
+        baseline, eligible = _baseline_setup_ids(con, symbol=symbol, tf=tf)
         rows = store.get_facts(con, symbol, tf, "exec", execsim.EXEC_VERSION)
-        outs = [json.loads(r["payload"]) for r in rows]
+        outs = [p for r in rows if (p := json.loads(r["payload"]))["setup_id"] in eligible]
         filled = [o for o in outs if o["outcome"] != "MISSED"]
         rs = [float(o["r_multiple"]) for o in filled]
         wins = [r for r in rs if r > 0]
         losses = [r for r in rs if r < 0]
-        return {"n": len(filled), "signals": len(outs),
+        return {"baseline": baseline, "n": len(filled), "signals": len(outs),
                 "missed": sum(1 for o in outs if o["outcome"] == "MISSED"),
                 "fill_rate": round(len(filled) / len(outs), 3) if outs else None,
                 "tp": sum(1 for o in filled if o["outcome"] == "TP"),
@@ -133,6 +159,7 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
         raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
     con = store.connect()
     try:
+        baseline = store.get_active_baseline(con)
         setup_by_id = {}
         for version in (setups.SETUP_VERSION, scalein.SCALE_VERSION):
             rows = con.execute(
@@ -142,6 +169,8 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
             for sym, timeframe, market_time, confirmed_at, raw, algo_version in rows:
                 p = json.loads(raw)
                 if p.get("state") != "VALIDATED":
+                    continue
+                if confirmed_at < baseline["started_at"]:
                     continue
                 if symbol and sym != symbol:
                     continue
@@ -179,7 +208,8 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
         rejected_candidates = Counter()
         rows = con.execute(
             "SELECT symbol,tf,payload FROM facts WHERE kind='setup_rejection' "
-            "AND algo_version=?", (setups.SETUP_VERSION,)).fetchall()
+            "AND algo_version=? AND confirmed_at>=?",
+            (setups.SETUP_VERSION, baseline["started_at"])).fetchall()
         for sym, timeframe, raw in rows:
             if symbol and sym != symbol:
                 continue
@@ -215,6 +245,7 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
         winners = sum(r["failure_code"] == "WINNER" for r in eligible)
         return {
             "diagnostic_only": True,
+            "baseline": baseline,
             "filters": {"symbol": symbol, "tf": tf, "strategy": strategy},
             "versions": {"setup": setups.SETUP_VERSION, "risk": risk.RISK_VERSION,
                          "execution": execsim.EXEC_VERSION},
@@ -237,40 +268,47 @@ def portfolio():
     """Paper account state from risk-authority facts (§9/§13 dashboard)."""
     con = store.connect()
     try:
+        baseline, eligible = _baseline_setup_ids(con)
+        since = baseline["started_at"]
         # authoritative summary from the risk authority (§8: never re-derive equity)
         arow = con.execute(
             "SELECT payload FROM facts WHERE kind='account' AND algo_version=? "
-            "ORDER BY id DESC LIMIT 1", (risk.RISK_VERSION,)).fetchone()
+            "AND confirmed_at>=? ORDER BY id DESC LIMIT 1",
+            (risk.RISK_VERSION, since)).fetchone()
         acct = json.loads(arow[0]) if arow else None
         recent, kills = [], 0
         setup_by_id, risk_by_id, latest_order, completed = {}, {}, {}, set()
         for r in store.get_facts(con, "PORTFOLIO", "ALL", "risk", risk.RISK_VERSION):
             p = json.loads(r["payload"])
-            if p.get("event") == "KILL_SWITCH":
+            if r["confirmed_at"] >= since and p.get("event") == "KILL_SWITCH":
                 kills += 1
         for sym in universe.all_tracked_symbols(con):
             for tf in ("15m", "1H", "4H", "1D", "1W"):
                 for version in (setups.SETUP_VERSION, scalein.SCALE_VERSION):
                     for r in store.get_facts(con, sym, tf, "setup", version):
                         p = json.loads(r["payload"])
-                        if p.get("state") == "VALIDATED":
+                        if p.get("state") == "VALIDATED" and p["setup_id"] in eligible:
                             setup_by_id[p["setup_id"]] = {
                                 "symbol": sym, "tf": tf,
                                 "confirmed_at": r["confirmed_at"], **p}
                 for r in store.get_facts(con, sym, tf, "risk", risk.RISK_VERSION):
                     p = json.loads(r["payload"])
-                    if p.get("event") == "DECISION":
+                    if p.get("event") == "DECISION" and p.get("setup_id") in eligible:
                         decision = {"symbol": sym, "tf": tf,
                                     "ts": r["confirmed_at"], **p}
                         recent.append(decision)
                         risk_by_id[p["setup_id"]] = decision
                 for r in store.get_facts(con, sym, tf, "order", execsim.EXEC_VERSION):
                     p = json.loads(r["payload"])
+                    if p.get("setup_id") not in eligible:
+                        continue
                     latest_order[p["setup_id"]] = {
                         "symbol": sym, "tf": tf,
                         "confirmed_at": r["confirmed_at"], **p}
                 for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
-                    completed.add(json.loads(r["payload"])["setup_id"])
+                    sid = json.loads(r["payload"])["setup_id"]
+                    if sid in eligible:
+                        completed.add(sid)
         recent.sort(key=lambda d: d["ts"])
         positions, pending_orders = [], []
         for sid, order in latest_order.items():
@@ -298,7 +336,8 @@ def portfolio():
         positions.sort(key=lambda p: p["updated_at"], reverse=True)
         pending_orders.sort(key=lambda p: p["updated_at"], reverse=True)
         eq = float(acct["final_equity"]) if acct else float(risk.START_EQUITY)
-        return {"start_equity": float(risk.START_EQUITY), "equity": round(eq, 2),
+        return {"baseline": baseline,
+                "start_equity": float(risk.START_EQUITY), "equity": round(eq, 2),
                 "return_pct": float(acct["return_pct"]) if acct else 0.0,
                 "max_drawdown_pct": acct.get("max_drawdown_pct") if acct else None,
                 "decisions": acct["decisions"] if acct else {},
@@ -326,12 +365,14 @@ def performance():
     simulated trade; $-PnL only trades the risk authority actually sized."""
     con = store.connect()
     try:
+        baseline, eligible = _baseline_setup_ids(con)
         sized = {}   # setup_id -> risk_usd for APPROVED/REDUCED
         for sym in universe.all_tracked_symbols(con):
             for tf in ("15m", "1H", "4H", "1D", "1W"):
                 for r in store.get_facts(con, sym, tf, "risk", risk.RISK_VERSION):
                     p = json.loads(r["payload"])
-                    if p.get("event") == "DECISION" and p["decision"] in ("APPROVED", "REDUCED"):
+                    if (p.get("event") == "DECISION" and p.get("setup_id") in eligible
+                            and p["decision"] in ("APPROVED", "REDUCED")):
                         sized[p["setup_id"]] = float(p["risk_usd"])
 
         def blank():
@@ -342,7 +383,7 @@ def performance():
             for tf in ("15m", "1H", "4H", "1D", "1W"):
                 for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
                     p = json.loads(r["payload"])
-                    if p["outcome"] == "MISSED":
+                    if p["setup_id"] not in eligible or p["outcome"] == "MISSED":
                         continue
                     rm = float(p["r_multiple"])
                     for key, bucket in ((sym, by_sym), (p["strategy"], by_strat)):
@@ -365,7 +406,8 @@ def performance():
                             "sized": a["sized"], "pnl_usd": round(a["pnl_usd"], 2)})
             out.sort(key=lambda x: x["pnl_usd"])
             return out
-        return {"by_symbol": rows(by_sym), "by_strategy": rows(by_strat)}
+        return {"baseline": baseline, "by_symbol": rows(by_sym),
+                "by_strategy": rows(by_strat)}
     finally:
         con.close()
 
@@ -444,6 +486,8 @@ def overview():
     """One call for the cockpit rails: watchlist, setup feed, engine health."""
     con = store.connect()
     try:
+        baseline, eligible = _baseline_setup_ids(con)
+        since = baseline["started_at"]
         # latest universe membership (rank/volume/state per symbol)
         urow = con.execute(
             "SELECT payload FROM facts WHERE kind='universe' AND algo_version=? "
@@ -473,11 +517,15 @@ def overview():
                 for ver in (setups.SETUP_VERSION, scalein.SCALE_VERSION):
                     for r in store.get_facts(con, sym, tf, "setup", ver):
                         p = json.loads(r["payload"])
+                        if p.get("setup_id") not in eligible:
+                            continue
                         last_state[p["setup_id"]] = {"symbol": sym, "tf": tf,
                                                      "market_time": r["market_time"], **p}
                 outs = {}
                 for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
                     p = json.loads(r["payload"])
+                    if p.get("setup_id") not in eligible:
+                        continue
                     outs[p["setup_id"]] = {"outcome": p["outcome"],
                                            "r_multiple": p["r_multiple"]}
                 for s in last_state.values():
@@ -491,7 +539,8 @@ def overview():
             for tf in ("15m", "1H", "4H", "1D", "1W"):
                 for r in store.get_facts(con, sym, tf, "risk", risk.RISK_VERSION):
                     p = json.loads(r["payload"])
-                    if p.get("event") == "DECISION":
+                    if (p.get("event") == "DECISION" and
+                            p.get("setup_id") in eligible):
                         risk_by_setup[p["setup_id"]] = {
                             "decision": p["decision"], "risk_usd": p.get("risk_usd"),
                             "units": p.get("units"), "leverage": p.get("implied_leverage"),
@@ -514,12 +563,13 @@ def overview():
 
         rejection_funnel = {}
         for (payload,) in con.execute(
-                "SELECT payload FROM facts WHERE kind='setup_rejection' AND algo_version=?",
-                (setups.SETUP_VERSION,)).fetchall():
+                "SELECT payload FROM facts WHERE kind='setup_rejection' "
+                "AND algo_version=? AND confirmed_at>=?",
+                (setups.SETUP_VERSION, since)).fetchall():
             reason = json.loads(payload)["reason"]
             rejection_funnel[reason] = rejection_funnel.get(reason, 0) + 1
 
-        return {"symbols": symbols, "feed": feed[:40], "scanner": scanner,
+        return {"baseline": baseline, "symbols": symbols, "feed": feed[:40], "scanner": scanner,
                 "rejection_funnel": rejection_funnel,
                 "engines": [{"engine": e, "last_run": t, "ms": ms}
                             for e, t, ms in engines]}
@@ -536,12 +586,40 @@ def status():
         f = con.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
         m = con.execute("SELECT COUNT(*) FROM manifests").fetchone()[0]
         gaps = con.execute("SELECT COALESCE(SUM(n_gaps),0) FROM import_log").fetchone()[0]
-        return {"facts": f, "manifests": m, "gap_candles_logged": gaps,
+        return {"baseline": store.get_active_baseline(con),
+                "facts": f, "manifests": m, "gap_candles_logged": gaps,
                 "algo_version": swings.SWING_VERSION,
                 "versions": {**KIND_VERSIONS, "risk": risk.RISK_VERSION,
                              "scalein": scalein.SCALE_VERSION},
                 "candles": [{"symbol": s, "tf": t, "n": n, "first": lo, "last": hi}
                             for s, t, n, lo, hi in c]}
+    finally:
+        con.close()
+
+
+@app.get("/api/baseline")
+def baseline_status():
+    con = store.connect()
+    try:
+        return store.get_active_baseline(con)
+    finally:
+        con.close()
+
+
+@app.post("/api/baseline/reset")
+def reset_baseline(confirm: bool = False):
+    """Start a clean paper window. Historical facts and candles are retained."""
+    if not confirm:
+        raise HTTPException(400, "confirm=true is required; no data will be deleted")
+    con = store.connect()
+    try:
+        baseline = store.start_baseline(
+            con, label="Forward paper baseline",
+            strategy_version=setups.SETUP_VERSION,
+            execution_version=execsim.EXEC_VERSION,
+            risk_version=risk.RISK_VERSION)
+        risk.run(con)
+        return {"status": "RESET", "destructive": False, "baseline": baseline}
     finally:
         con.close()
 

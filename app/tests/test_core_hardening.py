@@ -53,7 +53,7 @@ class TestManifestsAndCosts(TempStore):
             versions = [r[0] for r in migrated.execute(
                 "SELECT version FROM schema_migrations ORDER BY version").fetchall()]
             self.assertIn("n_bad", columns)
-            self.assertEqual(versions, [1, 2, 3, 4])
+            self.assertEqual(versions, [1, 2, 3, 4, 5])
         finally:
             migrated.close()
 
@@ -160,6 +160,34 @@ class TestExecutionRealism(TempStore):
 
 
 class TestRiskVenueContract(TempStore):
+    def test_forward_baseline_excludes_old_loss_without_deleting_it(self):
+        candle(self.con, "BTC-USD", "1D", 0, 100, 101, 99, 100)
+        store.insert_fact(
+            self.con, symbol="BTC-USD", tf="1D", kind="setup",
+            market_time=10, confirmed_at=20, algo_version=setups.SETUP_VERSION,
+            payload={"setup_id": "old-loss", "strategy": "PULLBACK",
+                     "direction": "LONG", "entry": "100", "sl": "95", "tp": "110",
+                     "rr": "2", "rank": 50, "state": "VALIDATED"})
+        store.insert_fact(
+            self.con, symbol="BTC-USD", tf="1D", kind="exec",
+            market_time=10, confirmed_at=30, algo_version=execsim.EXEC_VERSION,
+            payload={"setup_id": "old-loss", "strategy": "PULLBACK",
+                     "outcome": "SL", "r_multiple": "-1.1"})
+        before = self.con.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+        first = store.start_baseline(self.con, started_at=100)
+        second = store.start_baseline(self.con, started_at=200)
+        result = risk.run(self.con)
+
+        self.assertEqual(result["final_equity"], "10000")
+        self.assertEqual(self.con.execute(
+            "SELECT COUNT(*) FROM facts WHERE kind IN ('setup','exec')").fetchone()[0], 2)
+        self.assertGreater(self.con.execute(
+            "SELECT COUNT(*) FROM facts").fetchone()[0], before)
+        self.assertNotEqual(first["id"], second["id"])
+        self.assertEqual(store.get_active_baseline(self.con)["id"], second["id"])
+        self.assertEqual(self.con.execute(
+            "SELECT COUNT(*) FROM research_baselines WHERE active=1").fetchone()[0], 1)
+
     def test_short_is_rejected_for_coinbase_spot_and_has_zero_risk(self):
         candle(self.con, "BTC-USD", "1D", 0, 100, 101, 99, 100)
         store.insert_fact(
@@ -250,6 +278,8 @@ class TestCockpitHierarchy(unittest.TestCase):
         self.assertIn('aria-label="Paper wallet summary"', html)
         self.assertIn('aria-label="Active paper positions"', html)
         self.assertIn('id="walletBalance"', html)
+        self.assertIn('id="baselineReset"', html)
+        self.assertIn('id="baselineLabel"', html)
         self.assertIn('id="activePositions"', html)
         self.assertIn('aria-label="Validated setup telemetry"', html)
         self.assertIn('id="telemetryRecords"', html)

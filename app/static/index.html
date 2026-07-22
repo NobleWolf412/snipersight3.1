@@ -195,6 +195,11 @@
   .wallet-balance{margin-top:3px;font-family:var(--mono);font-size:24px;font-weight:650;letter-spacing:-.04em;color:#f1f8fb}
   .portfolio-return{font-family:var(--mono);font-size:11px;font-weight:700;padding:5px 8px;border-radius:6px;background:rgba(61,220,132,.1);color:var(--green)}
   .portfolio-return.neg{background:rgba(255,93,93,.1);color:var(--red)}
+  .portfolio-actions{display:flex;align-items:flex-end;flex-direction:column;gap:7px}
+  .baseline-label{margin-top:5px;font-family:var(--mono);font-size:8.5px;color:var(--cyan);letter-spacing:.04em}
+  .baseline-reset{border:1px solid #3a5268;border-radius:5px;background:rgba(5,9,14,.38);color:#a9bdcc;
+    padding:4px 7px;font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;cursor:pointer}
+  .baseline-reset:hover{color:var(--cyan);border-color:var(--cyan-dim);background:var(--cyan-ghost)}
   .portfolio-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px}
   .metric{min-width:0;padding:8px;border:1px solid rgba(93,118,143,.24);border-radius:7px;background:rgba(5,9,14,.28)}
   .metric span{display:block;font-family:var(--mono);font-size:8px;letter-spacing:.1em;color:var(--txt-faint);white-space:nowrap}
@@ -349,8 +354,10 @@
   <aside class="right">
     <section class="portfolio-card" aria-label="Paper wallet summary">
       <div class="portfolio-top">
-        <div><div class="eyebrow">PAPER WALLET</div><div class="wallet-balance num" id="walletBalance">$—</div></div>
-        <div class="portfolio-return" id="walletReturn">—</div>
+        <div><div class="eyebrow">PAPER WALLET</div><div class="wallet-balance num" id="walletBalance">$—</div>
+          <div class="baseline-label" id="baselineLabel">ALL HISTORY</div></div>
+        <div class="portfolio-actions"><div class="portfolio-return" id="walletReturn">—</div>
+          <button class="baseline-reset" id="baselineReset" type="button">NEW BASELINE</button></div>
       </div>
       <div class="portfolio-metrics">
         <div class="metric"><span>AVAILABLE</span><b id="walletAvailable">$—</b></div>
@@ -437,9 +444,9 @@ function systemError(message){
   const el=document.getElementById('sysAlert');
   el.textContent=`DEGRADED · ${message}`;el.style.display='block';
 }
-async function api(url){
+async function api(url,options={}){
   try{
-    const response=await fetch(url,{headers:{'Accept':'application/json'}});
+    const response=await fetch(url,{...options,headers:{'Accept':'application/json',...(options.headers||{})}});
     if(!response.ok)throw new Error(`${response.status} ${response.statusText}`);
     return await response.json();
   }catch(error){
@@ -668,6 +675,9 @@ async function loadOverview(){
     const available=Math.max(0,p.equity-deployed);
     const money=n=>'$'+(+n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
     document.getElementById('walletBalance').textContent=money(p.equity);
+    const baseline=p.baseline||{};
+    document.getElementById('baselineLabel').textContent=baseline.started_at
+      ?`SINCE ${new Date(baseline.started_at*1000).toISOString().slice(0,10)}`:'ALL HISTORY';
     const wr=document.getElementById('walletReturn');
     wr.textContent=`${up?'+':''}${p.return_pct}%`;wr.className='portfolio-return'+(up?'':' neg');
     document.getElementById('walletAvailable').textContent=money(available);
@@ -887,6 +897,7 @@ async function loadAccount(){
      <div style="font-family:var(--mono);font-size:9.5px;color:var(--txt-dim);margin-top:5px;line-height:1.8">
       max drawdown <span style="color:var(--red)">${p.max_drawdown_pct??'—'}%</span> ·
       kill-switch days <span style="color:${p.kill_switch_days?'var(--amber)':'var(--txt)'}">${p.kill_switch_days}</span><br>
+      baseline: <span style="color:var(--cyan)">${p.baseline?.started_at?new Date(p.baseline.started_at*1000).toISOString().replace('T',' ').slice(0,16)+' UTC':'all history'}</span><br>
       decisions: ${p.decisions.APPROVED||0}✓ ${p.decisions.REDUCED||0}↓ ${p.decisions.REJECTED||0}✗
       · <span style="color:var(--txt-faint)">paper only — no live orders</span></div>`;
 
@@ -1009,6 +1020,21 @@ async function tickPrices(){
   }catch(e){/* api() already exposes the degraded state */}
 }
 setInterval(tickPrices,10000);tickPrices();
+
+document.getElementById('baselineReset').onclick=async()=>{
+  const ok=window.confirm(
+    'Start a new paper baseline now?\n\nWallet, positions, performance, and setup telemetry will start fresh. Historical candles and facts stay preserved for audit.'
+  );
+  if(!ok)return;
+  const button=document.getElementById('baselineReset');
+  button.disabled=true;button.textContent='RESETTING…';
+  try{
+    await api('/api/baseline/reset?confirm=true',{method:'POST'});
+    await Promise.all([loadOverview(),loadAccount(),loadTelemetry()]);
+  }finally{
+    button.disabled=false;button.textContent='NEW BASELINE';
+  }
+};
 
 loadOverview().catch(()=>{/* api() reported */});load().catch(()=>{/* api() reported */});
 loadPipelineHealth().catch(()=>{/* api() reported */});
