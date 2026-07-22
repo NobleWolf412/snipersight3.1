@@ -19,6 +19,7 @@ dropped — we are Coinbase spot with a curated-by-liquidity pool.
 import json
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from . import store
 from .runlog import RunRecorder
@@ -31,6 +32,8 @@ MIN_DAILY_CANDLES = 200           # ~structure-map warmup before a symbol is tra
 REFRESH_SECONDS = 3600            # volume ranking barely moves intraday
 SEED = ("BTC-USD", "ETH-USD")     # always-present anchors (golden-calibrated)
 REQUEST_PAUSE = 0.15
+RANK_WORKERS = 6
+LAST_RANK_HEALTH = {"attempted": 0, "succeeded": 0, "failed": 0}
 _UA = {"User-Agent": "snipersight/0.1"}
 # stablecoin bases have no tradeable structure (ported from prior project's
 # _is_stable_base) — a ~$1 pegged asset must never enter the universe.
@@ -61,15 +64,28 @@ def rank_by_volume() -> list[tuple[str, float]]:
     # /products is NOT volume-ordered, so we must stat every online USD pair to
     # rank correctly (missing a high-volume pair like SOL/XRP would silently
     # shrink the universe). ~388 calls, hourly refresh — well within limits.
-    rows = []
-    for pid in usd:
-        try:
-            s = _get(f"/products/{pid}/stats")
-            vol = float(s["last"]) * float(s["volume"])
-            rows.append((pid, vol))
-        except Exception:
-            continue
-        time.sleep(REQUEST_PAUSE)
+    global LAST_RANK_HEALTH
+    rows, failed = [], []
+
+    def stat(pid):
+        s = _get(f"/products/{pid}/stats")
+        return pid, float(s["last"]) * float(s["volume"])
+
+    with ThreadPoolExecutor(max_workers=RANK_WORKERS) as pool:
+        futures = {pool.submit(stat, pid): pid for pid in usd}
+        for future in as_completed(futures):
+            pid = futures[future]
+            try:
+                rows.append(future.result())
+            except Exception as exc:
+                failed.append({"symbol": pid, "error": type(exc).__name__})
+    LAST_RANK_HEALTH = {"attempted": len(usd), "succeeded": len(rows),
+                        "failed": len(failed), "sample_failures": failed[:10]}
+    if failed:
+        from .runlog import get_logger
+        get_logger().warning(
+            f"universe rank coverage {len(rows)}/{len(usd)}; "
+            f"{len(failed)} product stats failed")
     rows.sort(key=lambda r: -r[1])
     return rows
 
@@ -115,7 +131,10 @@ def refresh(con, ranked: list[tuple[str, float]] | None = None) -> dict:
     """Rank live, classify each candidate, record one universe fact. Returns
     the classification incl. which symbols need backfill (WARMING)."""
     with RunRecorder(con, "universe", UNIVERSE_VERSION, "PORTFOLIO", "ALL") as rec:
+        injected = ranked is not None
         ranked = ranked if ranked is not None else rank_by_volume()
+        rank_health = ({"attempted": len(ranked), "succeeded": len(ranked), "failed": 0,
+                        "source": "injected"} if injected else LAST_RANK_HEALTH)
         if not ranked:
             rec.notes = "rank source unavailable — universe unchanged"
             return {"members": [], "warming": [], "source": "unavailable"}
@@ -153,7 +172,8 @@ def refresh(con, ranked: list[tuple[str, float]] | None = None) -> dict:
                           algo_version=UNIVERSE_VERSION,
                           payload={"members": members, "top_n": TOP_N,
                                    "min_volume_usd": MIN_VOLUME_USD,
-                                   "min_daily_candles": MIN_DAILY_CANDLES})
+                                   "min_daily_candles": MIN_DAILY_CANDLES,
+                                   "rank_health": rank_health})
         con.commit()
         rec.n_new_facts = 1
         n_adm = sum(1 for m in members if m["state"] == "ADMITTED")

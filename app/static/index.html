@@ -209,6 +209,9 @@
     <div class="phead" style="border-top:none">DATA HEALTH <span class="cnt" id="healthState">—</span></div>
     <div id="dataHealth" style="padding:8px 12px;font-family:var(--mono);font-size:9px;
       line-height:1.65;color:var(--txt-dim);border-bottom:1px solid var(--line)">—</div>
+    <div class="phead" style="border-top:none">REJECTION FUNNEL <span class="cnt">CURRENT VERSION</span></div>
+    <div id="rejectionFunnel" style="padding:8px 12px;font-family:var(--mono);font-size:8.5px;
+      line-height:1.65;color:var(--txt-dim)">—</div>
   </aside>
 
   <main class="center">
@@ -218,6 +221,7 @@
       <span class="chg num" id="cchg"></span>
       <div class="tfs" id="tfs"></div>
       <div class="regime" id="regime">REGIME <b>—</b></div>
+      <div id="mtfContext" style="margin-left:auto;display:flex;gap:5px;font-family:var(--mono);font-size:8.5px"></div>
     </div>
     <div class="chartwrap">
       <div id="chart"></div>
@@ -326,10 +330,15 @@ new ResizeObserver(es=>{const{width,height}=es[0].contentRect;
 async function load(){
   const ao=asOf?`&as_of=${asOf}`:'';
   const q=k=>api(`/api/facts?kind=${k}&symbol=${sym}&tf=${tf}${ao}`);
-  const [candles,swingF,structF,zoneF,liqF,regimeF,setupF,cycleF,track]=await Promise.all([
+  const [candles,swingF,structF,zoneF,liqF,regimeF,setupF,cycleF,track,context]=await Promise.all([
     api(`/api/candles?symbol=${sym}&tf=${tf}&limit=1500${asOf?`&end_ts=${asOf}`:''}`),
     q('swing'),q('structure'),q('zone'),q('liquidity'),q('regime'),q('setup'),q('cycle'),
-    api(`/api/track?symbol=${sym}&tf=${tf}`)]);
+    api(`/api/track?symbol=${sym}&tf=${tf}`),
+    api(`/api/context?symbol=${sym}${asOf?`&as_of=${asOf}`:''}`)]);
+  document.getElementById('mtfContext').innerHTML=context.timeframes.map(x=>{
+    const cls=REG_TAG(x.regime);
+    return `<span class="tag ${cls}" title="${x.active_zones} active zones · ${x.forming} forming · ${x.ready} ready">${x.tf} ${x.regime?x.regime.replace('_',' '):'—'}</span>`;
+  }).join('');
   lastFacts={swing:swingF,structure:structF,zone:zoneF,liquidity:liqF,regime:regimeF,setup:setupF,cycle:cycleF};
   series.setData(candles);
   const on=id=>document.getElementById(id).checked;
@@ -480,6 +489,10 @@ async function load(){
 const REG_TAG=r=>!r?'':r.includes('BULL')?'bull':r.includes('BEAR')?'bear':r==='TRANSITION'?'trans':'';
 async function loadOverview(){
   overview=await api('/api/overview');
+  const funnel=Object.entries(overview.rejection_funnel||{}).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('rejectionFunnel').innerHTML=funnel.length
+    ?funnel.slice(0,5).map(([reason,n])=>`<div style="display:flex;justify-content:space-between"><span>${reason.replaceAll('_',' ')}</span><span style="color:var(--amber)">${n}</span></div>`).join('')
+    :'<span style="color:var(--txt-faint)">no rejection facts yet</span>';
   api('/api/health').then(h=>{
     const state=document.getElementById('healthState');
     state.textContent=h.status;state.style.color=h.status==='OK'?'var(--green)':'var(--red)';

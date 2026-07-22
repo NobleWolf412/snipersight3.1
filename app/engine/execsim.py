@@ -51,6 +51,15 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
         n_out = 0
         cost_manifest_hash = costs.record(con, COST_PROFILE)
+        execution_manifest_hash = store.record_manifest(con, "execution", {
+            "version": EXEC_VERSION, "max_entry_bars": MAX_ENTRY_BARS,
+            "max_holding_bars": MAX_BARS,
+            "order_available_after_confirmation": True,
+            "fill_model": "BAR_TOUCH_FULL_FILL",
+            "same_bar_stop_target": "STOP_FIRST",
+            "partial_fills": "UNAVAILABLE_WITH_OHLC_ONLY",
+            "cost_profile": COST_PROFILE.payload(),
+        })
         counts = {"TP": 0, "SL": 0, "TIMEOUT": 0, "OPEN": 0,
                   "MISSED": 0, "PENDING": 0}
         for sid, s in setups.items():
@@ -66,7 +75,8 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                           "order_type": "LIMIT", "limit_price": str(entry),
                           "available_at": available_at,
                           "max_entry_bars": MAX_ENTRY_BARS,
-                          "cost_manifest_hash": cost_manifest_hash}
+                          "cost_manifest_hash": cost_manifest_hash,
+                          "execution_manifest_hash": execution_manifest_hash}
             store.insert_fact(con, symbol=symbol, tf=tf, kind="order",
                               market_time=s["market_time"], confirmed_at=available_at,
                               algo_version=EXEC_VERSION,
@@ -92,6 +102,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                            "available_at": available_at, "fill_ts": None,
                            "ambiguous_bar": False,
                            "cost_manifest_hash": cost_manifest_hash,
+                           "execution_manifest_hash": execution_manifest_hash,
                            "manifest_hash": s.get("manifest_hash")}
                 store.insert_fact(con, symbol=symbol, tf=tf, kind="order",
                                   market_time=s["market_time"], confirmed_at=miss_ts,
@@ -175,6 +186,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                        "entry_fee_role": "MAKER",
                        "exit_fee_role": "MAKER" if outcome == "TP" else "TAKER",
                        "cost_manifest_hash": cost_manifest_hash,
+                       "execution_manifest_hash": execution_manifest_hash,
                        "manifest_hash": s.get("manifest_hash")}
             if store.insert_fact(con, symbol=symbol, tf=tf, kind="exec",
                                  market_time=s["market_time"], confirmed_at=exit_ts,

@@ -18,6 +18,7 @@ KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "liquidity": liquidity.LIQ_VERSION,
                  "regime": regime.REGIME_VERSION,
                  "setup": setups.SETUP_VERSION,
+                 "setup_rejection": setups.SETUP_VERSION,
                  "exec": execsim.EXEC_VERSION,
                  "order": execsim.EXEC_VERSION,
                  "cycle": cycles.CYCLES_VERSION}
@@ -247,6 +248,37 @@ def manifest(manifest_hash: str):
         con.close()
 
 
+@app.get("/api/context")
+def multi_timeframe_context(
+        symbol: str = Query("BTC-USD", pattern=r"^[A-Z0-9]+-USD$"),
+        as_of: int | None = None):
+    """Compact synchronized context strip for the decision workspace."""
+    con = store.connect()
+    try:
+        out = []
+        for tf in ("1W", "1D", "4H", "1H", "15m"):
+            regs = store.get_facts(
+                con, symbol, tf, "regime", regime.REGIME_VERSION, as_of)
+            reg = json.loads(regs[-1]["payload"])["regime"] if regs else None
+            zone_state = {}
+            for row in store.get_facts(
+                    con, symbol, tf, "zone", zones.ZONE_VERSION, as_of):
+                p = json.loads(row["payload"])
+                zone_state[p["zone_id"]] = p["state"]
+            setups_state = {}
+            for ver in (setups.SETUP_VERSION, scalein.SCALE_VERSION):
+                for row in store.get_facts(con, symbol, tf, "setup", ver, as_of):
+                    p = json.loads(row["payload"])
+                    setups_state[p["setup_id"]] = p["state"]
+            out.append({"tf": tf, "regime": reg,
+                        "active_zones": sum(s != "BROKEN" for s in zone_state.values()),
+                        "forming": sum(s == "FORMING" for s in setups_state.values()),
+                        "ready": sum(s == "VALIDATED" for s in setups_state.values())})
+        return {"symbol": symbol, "as_of": as_of, "timeframes": out}
+    finally:
+        con.close()
+
+
 @app.get("/api/overview")
 def overview():
     """One call for the cockpit rails: watchlist, setup feed, engine health."""
@@ -320,7 +352,15 @@ def overview():
         except Exception:
             scanner = {"alive": False, "age_s": None}
 
+        rejection_funnel = {}
+        for (payload,) in con.execute(
+                "SELECT payload FROM facts WHERE kind='setup_rejection' AND algo_version=?",
+                (setups.SETUP_VERSION,)).fetchall():
+            reason = json.loads(payload)["reason"]
+            rejection_funnel[reason] = rejection_funnel.get(reason, 0) + 1
+
         return {"symbols": symbols, "feed": feed[:40], "scanner": scanner,
+                "rejection_funnel": rejection_funnel,
                 "engines": [{"engine": e, "last_run": t, "ms": ms}
                             for e, t, ms in engines]}
     finally:

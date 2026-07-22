@@ -23,11 +23,25 @@ new immutable manifest and engine version. It must never be a hidden config edit
 - liq-v0.8: overlapping clusters do not create duplicate pools; a sweep no
   longer erases the later broken state.
 - setup-v0.6: a reversal requires both transition structure and a recent
-  directionally relevant liquidity sweep; costs come from a manifest.
+  directionally relevant liquidity sweep; costs come from a manifest; every
+  rejected candidate is retained as a reason-coded research fact.
 - exec-v0.7: signals are unavailable until confirmation; limit entries may be
-  missed; maker/taker fees differ; MAE/MFE and order facts are recorded.
+  missed; maker/taker fees differ; MAE/MFE and order facts are recorded; the
+  execution assumptions are content-addressed independently of the strategy.
 - risk-v0.5: start-of-day loss baseline, zero risk on rejection, point-in-time
   universe gate, Coinbase-spot short rejection, 1× cash cap.
+
+## Operational visibility
+
+- SQLite starts with foreign-key enforcement and a busy timeout. Explicit,
+  idempotent migrations make upgrades from legacy databases observable.
+- Universe ranking is bounded-concurrent and publishes coverage, failure, and
+  warning counts instead of silently treating missing products as valid data.
+- The cockpit exposes data health, synchronized multi-timeframe context, setup
+  stage counts, rejection reasons, missed-entry rate, and degraded API states.
+- Validation reports pin strategy and execution manifests. Bootstrap intervals
+  are reported when a sample exists; PBO is marked unavailable until multiple
+  independently retained strategy paths exist.
 
 ## Research gates that code cannot honestly “fix”
 

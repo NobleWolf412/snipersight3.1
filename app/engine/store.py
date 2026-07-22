@@ -61,7 +61,14 @@ CREATE TABLE IF NOT EXISTS import_log (
     n_gaps      INTEGER NOT NULL,
     gaps        TEXT NOT NULL,           -- JSON list of missing open_ts
     source      TEXT NOT NULL,
-    run_at      INTEGER NOT NULL
+    run_at      INTEGER NOT NULL,
+    n_bad       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version     INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    applied_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 """
 
@@ -70,12 +77,30 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(db_path)
     con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA foreign_keys=ON")
+    con.execute("PRAGMA busy_timeout=5000")
     con.executescript(SCHEMA)
-    try:  # migration: importer-v0.2 malformed-candle counter
-        con.execute("ALTER TABLE import_log ADD COLUMN n_bad INTEGER NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # column already exists
+    _migrate(con)
     return con
+
+
+def _migrate(con: sqlite3.Connection) -> None:
+    """Small explicit migration runner; every schema change is recorded."""
+    applied = {r[0] for r in con.execute(
+        "SELECT version FROM schema_migrations").fetchall()}
+    if 1 not in applied:
+        columns = {r[1] for r in con.execute("PRAGMA table_info(import_log)").fetchall()}
+        if "n_bad" not in columns:
+            con.execute(
+                "ALTER TABLE import_log ADD COLUMN n_bad INTEGER NOT NULL DEFAULT 0")
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (1, "import_log_n_bad"))
+    if 2 not in applied:
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (2, "manifests_and_feed_index"))
+    con.commit()
 
 
 def canonical_payload(obj: dict) -> str:

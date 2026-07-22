@@ -34,7 +34,8 @@ def load(con):
                                "net": float(p["r_multiple"]), "gross": float(p["r_gross"]),
                                "strategy": p["strategy"], "outcome": p["outcome"],
                                "manifest_hash": p.get("manifest_hash"),
-                               "cost_manifest_hash": p.get("cost_manifest_hash")})
+                               "cost_manifest_hash": p.get("cost_manifest_hash"),
+                               "execution_manifest_hash": p.get("execution_manifest_hash")})
     trades.sort(key=lambda t: t["ts"])
     return trades, missed, symbols
 
@@ -93,11 +94,14 @@ def main():
     manifests = sorted({t["manifest_hash"] for t in trades if t["manifest_hash"]})
     cost_manifests = sorted({t["cost_manifest_hash"] for t in trades
                              if t["cost_manifest_hash"]})
+    execution_manifests = sorted({t["execution_manifest_hash"] for t in trades
+                                  if t["execution_manifest_hash"]})
     trial_count = con.execute("SELECT COUNT(*) FROM manifests WHERE kind='strategy'").fetchone()[0]
     lines = [f"# Validation Report — {execsim.EXEC_VERSION}, net of costs",
              "", f"Filled trades: {len(trades)} · missed limits: {missed} · symbols: {len(symbols)}",
              "", f"Strategy manifests: {', '.join(manifests) or 'legacy/unversioned'}",
              f"Cost manifests: {', '.join(cost_manifests) or 'legacy/unversioned'}",
+             f"Execution manifests: {', '.join(execution_manifests) or 'legacy/unversioned'}",
              f"Recorded strategy trials: {trial_count}",
              "PBO: unavailable until multiple strategy return paths exist in the trial ledger.",
              "", "**Scope caveat: rules were calibrated with hindsight over this window — "

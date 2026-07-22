@@ -87,6 +87,8 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             "min_risk_cost_multiple": str(MIN_RISK_COST_MULT),
             "reversal_requires_sweep": True,
             "cost_profile": COST_PROFILE.payload(),
+            "inputs": {"swing": SWING_VERSION, "zone": ZONE_VERSION,
+                       "liquidity": LIQ_VERSION, "regime": REGIME_VERSION},
         }
         manifest_hash = store.record_manifest(con, "strategy", strategy_manifest)
         cost_manifest_hash = costs.record(con, COST_PROFILE)
@@ -161,7 +163,18 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                        and s["confirmed_at"] <= confirmed_at for s in sweeps)
 
         rec.n_inputs = len(zones)
-        n_setups = n_expired = n_cost_rejected = n_forming = n_cancelled = 0
+        n_setups = n_expired = n_cost_rejected = n_forming = n_cancelled = n_rejected = 0
+
+        def reject(zone_id, touched, reason, details=None):
+            nonlocal n_rejected
+            payload = {"event": "REJECTED", "zone_id": zone_id,
+                       "reason": reason, "details": details or {},
+                       "manifest_hash": manifest_hash}
+            if store.insert_fact(con, symbol=symbol, tf=tf, kind="setup_rejection",
+                                 market_time=touched["market_time"],
+                                 confirmed_at=touched["confirmed_at"],
+                                 algo_version=SETUP_VERSION, payload=payload):
+                n_rejected += 1
 
         def gates(direction, entry, sl, tp, a):
             """Shared R:R + fee gates. Returns rr or None."""
@@ -259,10 +272,14 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             swept = recent_sweep(dir_hint, touched["market_time"], touched["confirmed_at"])
             play = playbook(created["zone_type"], reg, swept)
             if play is None:
+                reject(zone_id, touched, "NO_ELIGIBLE_PLAYBOOK",
+                       {"zone_type": created["zone_type"], "regime": reg,
+                        "recent_sweep": swept})
                 continue
             strategy, direction, base_rank = play
             i = ts_index.get(touched["market_time"])
             if i is None or atr[i] is None:
+                reject(zone_id, touched, "ATR_UNAVAILABLE")
                 continue
             top, bottom = Decimal(created["top"]), Decimal(created["bottom"])
             if direction == "LONG":
@@ -271,17 +288,25 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 entry, sl = bottom, top + SL_ATR * atr[i]
             tp = target(direction, entry, touched["confirmed_at"])
             if tp is None:
+                reject(zone_id, touched, "NO_CAUSAL_TARGET")
                 continue
             risk = (entry - sl) if direction == "LONG" else (sl - entry)
             reward = (tp - entry) if direction == "LONG" else (entry - tp)
             if risk <= 0:
+                reject(zone_id, touched, "INVALID_BRACKET")
                 continue
             rr = (reward / risk).quantize(Q2)
             if rr < MIN_RR:
+                reject(zone_id, touched, "RR_BELOW_MINIMUM",
+                       {"rr": str(rr), "minimum": str(MIN_RR)})
                 continue
             est_cost = costs.estimated_round_trip_cost(entry, atr[i], COST_PROFILE)
             if risk < MIN_RISK_COST_MULT * est_cost:
                 n_cost_rejected += 1
+                reject(zone_id, touched, "UNECONOMIC_AFTER_COSTS",
+                       {"risk_price_units": str(risk),
+                        "estimated_cost_price_units": str(est_cost),
+                        "required_multiple": str(MIN_RISK_COST_MULT)})
                 continue
 
             vol_hot = False
@@ -318,8 +343,9 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                     n_expired += 1
 
         con.commit()
-        rec.n_new_facts = n_setups + n_expired + n_forming + n_cancelled
+        rec.n_new_facts = n_setups + n_expired + n_forming + n_cancelled + n_rejected
         rec.notes = f"cost_rejected={n_cost_rejected}"
         return {"symbol": symbol, "tf": tf, "setups": n_setups,
                 "expired": n_expired, "cost_rejected": n_cost_rejected,
-                "forming": n_forming, "cancelled": n_cancelled}
+                "forming": n_forming, "cancelled": n_cancelled,
+                "rejected": n_rejected}

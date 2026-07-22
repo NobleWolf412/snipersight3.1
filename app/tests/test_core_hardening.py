@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import tempfile
 import unittest
 from decimal import Decimal
@@ -40,6 +41,22 @@ class TestManifestsAndCosts(TempStore):
         got = costs.estimated_round_trip_cost(Decimal("100"), Decimal("10"), p)
         self.assertEqual(got, Decimal("1.50"))
 
+    def test_legacy_import_log_is_migrated_once(self):
+        legacy = Path(self.tmp.name) / "legacy.db"
+        con = sqlite3.connect(legacy)
+        con.execute("CREATE TABLE import_log (id INTEGER PRIMARY KEY)")
+        con.commit();con.close()
+        migrated = store.connect(legacy)
+        try:
+            columns = {r[1] for r in migrated.execute(
+                "PRAGMA table_info(import_log)").fetchall()}
+            versions = [r[0] for r in migrated.execute(
+                "SELECT version FROM schema_migrations ORDER BY version").fetchall()]
+            self.assertIn("n_bad", columns)
+            self.assertEqual(versions, [1, 2])
+        finally:
+            migrated.close()
+
 
 class TestStrategyGuards(unittest.TestCase):
     def test_transition_requires_liquidity_sweep(self):
@@ -51,6 +68,30 @@ class TestStrategyGuards(unittest.TestCase):
         self.assertGreater(zones.freshness(0, 0), zones.freshness(1, 0))
         self.assertGreater(zones.freshness(1, 0), zones.freshness(2, 0))
         self.assertEqual(zones.freshness(0, 0, broken=True), 0)
+
+
+class TestRejectionFacts(TempStore):
+    def test_no_playbook_is_recorded_not_silently_dropped(self):
+        for i in range(20):
+            candle(self.con, "BTC-USD", "1H", i * 3600, 100, 102, 98, 100)
+        base = {"zone_id": "z1", "zone_type": "DEMAND",
+                "bottom": "95", "top": "100", "anchor_swing_ts": 0,
+                "cluster_members": 0, "strength": 80}
+        store.insert_fact(
+            self.con, symbol="BTC-USD", tf="1H", kind="zone",
+            market_time=0, confirmed_at=3600, algo_version=zones.ZONE_VERSION,
+            payload={**base, "event": "CREATED", "state": "FRESH"})
+        store.insert_fact(
+            self.con, symbol="BTC-USD", tf="1H", kind="zone",
+            market_time=15 * 3600, confirmed_at=16 * 3600,
+            algo_version=zones.ZONE_VERSION,
+            payload={**base, "event": "TOUCH", "state": "TOUCHED", "episode": 1})
+        result = setups.run(self.con, "BTC-USD", "1H", 3600)
+        self.assertEqual(result["rejected"], 1)
+        rows = store.get_facts(
+            self.con, "BTC-USD", "1H", "setup_rejection", setups.SETUP_VERSION)
+        self.assertEqual(json.loads(rows[0]["payload"])["reason"],
+                         "NO_ELIGIBLE_PLAYBOOK")
 
 
 class TestPointInTimeUniverse(TempStore):
@@ -65,6 +106,24 @@ class TestPointInTimeUniverse(TempStore):
             payload={"members": [{"symbol": "SOL-USD", "state": "ADMITTED"}]})
         self.assertFalse(universe.admitted_at(self.con, "SOL-USD", 99))
         self.assertTrue(universe.admitted_at(self.con, "SOL-USD", 100))
+
+    def test_ranker_accounts_for_failed_product_stats(self):
+        products = [
+            {"id": "BTC-USD", "quote_currency": "USD", "status": "online"},
+            {"id": "SOL-USD", "quote_currency": "USD", "status": "online"},
+        ]
+
+        def fake_get(path):
+            if path == "/products":
+                return products
+            if "SOL" in path:
+                raise TimeoutError()
+            return {"last": "100", "volume": "2"}
+
+        with patch.object(universe, "_get", side_effect=fake_get):
+            ranked = universe.rank_by_volume()
+        self.assertEqual(ranked, [("BTC-USD", 200.0)])
+        self.assertEqual(universe.LAST_RANK_HEALTH["failed"], 1)
 
 
 class TestExecutionRealism(TempStore):
