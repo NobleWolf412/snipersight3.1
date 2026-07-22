@@ -12,13 +12,12 @@ Draft methodology (pending §30 ratification; every choice below is versioned):
   ATR[i] = (ATR[i-1]*13 + TR[i]) / 14, Decimal, quantized to 8 dp.
 All arithmetic is Decimal; facts are append-only and idempotent on re-run.
 """
-import math
 from decimal import Decimal
 
 from . import store
 from .runlog import RunRecorder
 
-SWING_VERSION = "swing-v0.7-draft"
+SWING_VERSION = "swing-v0.8-draft"
 # v0.7: launched-impact window for dominant pivots runs to the next same-type
 # DOMINANT pivot (v0.6 cut it at the next intermediate pivot — the 126k cycle
 # top got zero credit for the bear CHoCH it caused and scored 54.22 vs 55).
@@ -282,8 +281,10 @@ def _run(con, rec, symbol: str, tf: str, tf_seconds: int) -> dict:
 
         # log-scaled volume (user: capitulation volume >> linear weighting)
         vol = Decimal(ev.get("vol_ratio", "1"))
-        vol_pts = pts(Decimal(str(math.log2(float(vol) + 1))),
-                      Decimal(str(math.log2(float(VOL_FULL) + 1))), W_VOL)
+        # Decimal-native log2 keeps the score reproducible across runtimes.
+        log2_vol = (vol + 1).ln() / Decimal(2).ln()
+        log2_full = (VOL_FULL + 1).ln() / Decimal(2).ln()
+        vol_pts = pts(log2_vol, log2_full, W_VOL)
         score_parts = {
             "margin": pts(Decimal(ev["margin_pct"]) / 100, MARGIN_FULL, W_MARGIN),
             "reversal": pts(Decimal(ev.get("reversal_atr", "0")), ATR_FULL, W_ATR),

@@ -38,10 +38,19 @@ CREATE TABLE IF NOT EXISTS facts (
     algo_version  TEXT NOT NULL,
     payload       TEXT NOT NULL,         -- canonical JSON (sorted keys)
     content_hash  TEXT NOT NULL,
+    producer_run_id TEXT,
     UNIQUE (content_hash)
 );
 CREATE INDEX IF NOT EXISTS ix_facts_query
     ON facts (symbol, tf, kind, algo_version, confirmed_at);
+CREATE INDEX IF NOT EXISTS ix_facts_feed
+    ON facts (kind, algo_version, confirmed_at, id);
+
+CREATE TABLE IF NOT EXISTS manifests (
+    manifest_hash TEXT PRIMARY KEY,
+    kind          TEXT NOT NULL,
+    payload       TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS import_log (
     id          INTEGER PRIMARY KEY,
@@ -53,8 +62,37 @@ CREATE TABLE IF NOT EXISTS import_log (
     n_gaps      INTEGER NOT NULL,
     gaps        TEXT NOT NULL,           -- JSON list of missing open_ts
     source      TEXT NOT NULL,
-    run_at      INTEGER NOT NULL
+    run_at      INTEGER NOT NULL,
+    n_bad       INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version     INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    applied_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS quality_runs (
+    id          INTEGER PRIMARY KEY,
+    observed_at INTEGER NOT NULL,
+    status      TEXT NOT NULL,
+    evaluation_allowed INTEGER NOT NULL,
+    summary     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS quality_checks (
+    id          INTEGER PRIMARY KEY,
+    quality_run_id INTEGER NOT NULL,
+    stage       TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    code        TEXT NOT NULL,
+    symbol      TEXT,
+    tf          TEXT,
+    details     TEXT NOT NULL,
+    FOREIGN KEY (quality_run_id) REFERENCES quality_runs(id)
+);
+CREATE INDEX IF NOT EXISTS ix_quality_checks_run
+    ON quality_checks (quality_run_id, stage, status);
 """
 
 
@@ -62,16 +100,62 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(db_path)
     con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA foreign_keys=ON")
+    con.execute("PRAGMA busy_timeout=5000")
     con.executescript(SCHEMA)
-    try:  # migration: importer-v0.2 malformed-candle counter
-        con.execute("ALTER TABLE import_log ADD COLUMN n_bad INTEGER NOT NULL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # column already exists
+    _migrate(con)
     return con
+
+
+def _migrate(con: sqlite3.Connection) -> None:
+    """Small explicit migration runner; every schema change is recorded."""
+    applied = {r[0] for r in con.execute(
+        "SELECT version FROM schema_migrations").fetchall()}
+    if 1 not in applied:
+        columns = {r[1] for r in con.execute("PRAGMA table_info(import_log)").fetchall()}
+        if "n_bad" not in columns:
+            con.execute(
+                "ALTER TABLE import_log ADD COLUMN n_bad INTEGER NOT NULL DEFAULT 0")
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (1, "import_log_n_bad"))
+    if 2 not in applied:
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (2, "manifests_and_feed_index"))
+    if 3 not in applied:
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (3, "pipeline_quality_contract"))
+    if 4 not in applied:
+        columns = {r[1] for r in con.execute("PRAGMA table_info(facts)").fetchall()}
+        if "producer_run_id" not in columns:
+            con.execute("ALTER TABLE facts ADD COLUMN producer_run_id TEXT")
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (4, "fact_producer_run_lineage"))
+    con.commit()
 
 
 def canonical_payload(obj: dict) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"))
+
+
+def record_manifest(con, kind: str, payload: dict) -> str:
+    """Persist an immutable, content-addressed run/config manifest."""
+    canonical = canonical_payload(payload)
+    digest = hashlib.sha256(f"{kind}|{canonical}".encode()).hexdigest()
+    con.execute(
+        "INSERT OR IGNORE INTO manifests (manifest_hash, kind, payload) VALUES (?,?,?)",
+        (digest, kind, canonical))
+    return digest
+
+
+def get_manifest(con, manifest_hash: str) -> dict | None:
+    row = con.execute(
+        "SELECT kind, payload FROM manifests WHERE manifest_hash=?", (manifest_hash,)
+    ).fetchone()
+    return None if row is None else {"kind": row[0], **json.loads(row[1])}
 
 
 def fact_hash(symbol: str, tf: str, kind: str, market_time: int,
@@ -85,11 +169,13 @@ def insert_fact(con, *, symbol: str, tf: str, kind: str, market_time: int,
     """Append a fact. Returns True if newly inserted, False if it already existed."""
     p = canonical_payload(payload)
     h = fact_hash(symbol, tf, kind, market_time, algo_version, p)
+    from .runlog import current_run_id
     cur = con.execute(
         "INSERT OR IGNORE INTO facts "
-        "(symbol, tf, kind, market_time, confirmed_at, algo_version, payload, content_hash) "
-        "VALUES (?,?,?,?,?,?,?,?)",
-        (symbol, tf, kind, market_time, confirmed_at, algo_version, p, h))
+        "(symbol, tf, kind, market_time, confirmed_at, algo_version, payload, "
+        "content_hash, producer_run_id) VALUES (?,?,?,?,?,?,?,?,?)",
+        (symbol, tf, kind, market_time, confirmed_at, algo_version, p, h,
+         current_run_id()))
     return cur.rowcount == 1
 
 
@@ -113,5 +199,8 @@ def get_facts(con, symbol: str, tf: str, kind: str, algo_version: str,
     if as_of is not None:
         q += " AND confirmed_at<=?"
         args.append(as_of)
-    q += " ORDER BY market_time"
+    # Lifecycle facts often share market_time (for example PLACED then FILLED).
+    # Stable causal ordering prevents callers from mistaking an older event for
+    # the current state when timestamps tie.
+    q += " ORDER BY market_time, confirmed_at, id"
     return con.execute(q, args).fetchall()

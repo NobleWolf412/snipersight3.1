@@ -20,7 +20,7 @@ from pathlib import Path
 import notify
 from engine import (store, importer, aggregator, swings, structure, zones,
                     liquidity, regime, setups, execsim, risk, scalein, cycles,
-                    universe, ingest)
+                    universe, ingest, quality)
 from engine.runlog import get_logger
 
 NATIVE_TFS = ("15m", "1H", "1D")
@@ -131,11 +131,13 @@ def cycle(con, log) -> tuple[int, list]:
     for sym in scan:
         for tf in ("4H", "1W"):
             aggregator.aggregate(con, sym, tf)
+        quality.assert_market_ready(con, sym, now)
         for mod in ENGINES:
             for tf in ALL_TFS:
                 mod.run(con, sym, tf, importer.TF_SECONDS[tf])
 
     risk.run(con)
+    quality.audit(con, now=now, persist=True)
 
     fired = []
     for sym_, tf_, pl in con.execute(

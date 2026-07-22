@@ -27,8 +27,9 @@ from .zones import ZONE_VERSION
 from .liquidity import LIQ_VERSION
 from .regime import REGIME_VERSION
 from .runlog import RunRecorder
+from . import costs
 
-SETUP_VERSION = "setup-v0.5-draft"
+SETUP_VERSION = "setup-v0.6-draft"
 # v0.5: FORMING state (accepted S14 recommendation) — price approaching an
 # active zone (within PROX_ATR of the edge, 4H/1D/1W only) with regime
 # aligned AND the prospective trade passing the same R:R + fee gates emits a
@@ -42,9 +43,9 @@ SL_ATR = Decimal("0.25")
 SWEEP_LOOKBACK_BARS = 10
 Q2 = Decimal("0.01")
 
-# Cost model (shared with execsim — single source of truth):
-FEE_SIDE = Decimal("0.0025")     # per-side fee on notional
-SLIP_ATR = Decimal("0.05")       # market-exit slippage as ATR fraction
+# Cost model is an immutable profile shared with execution simulation.
+COST_PROFILE = costs.DEFAULT_COST_PROFILE
+SLIP_ATR = COST_PROFILE.market_slippage_atr  # compatibility for older consumers
 
 # v0.3 (validation-001 finding): tight stops make fees enormous in R terms —
 # 15m round-trip costs ran 3-6R and the whole intraday book was net-negative.
@@ -62,23 +63,35 @@ MIN_RISK_COST_MULT = Decimal(2)
 # WEAKENING_* continuation entries. Draft pending §30 item 9 ratification.
 
 
-def playbook(zone_type: str, reg: str | None):
+def playbook(zone_type: str, reg: str | None, swept: bool = False):
     """Returns (strategy, direction, base_rank) or None if no play."""
     if zone_type == "DEMAND":
         if reg in ("BULL_TREND", "WEAKENING_BULL"):
             return "PULLBACK", "LONG", 50
-        if reg == "TRANSITION":
+        if reg == "TRANSITION" and swept:
             return "REVERSAL", "LONG", 40
     else:
         if reg in ("BEAR_TREND", "WEAKENING_BEAR"):
             return "PULLBACK", "SHORT", 50
-        if reg == "TRANSITION":
+        if reg == "TRANSITION" and swept:
             return "REVERSAL", "SHORT", 40
     return None
 
 
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
     with RunRecorder(con, "setup", SETUP_VERSION, symbol, tf) as rec:
+        strategy_manifest = {
+            "version": SETUP_VERSION, "min_rr": str(MIN_RR),
+            "good_rr": str(GOOD_RR), "sl_atr": str(SL_ATR),
+            "sweep_lookback_bars": SWEEP_LOOKBACK_BARS,
+            "min_risk_cost_multiple": str(MIN_RISK_COST_MULT),
+            "reversal_requires_sweep": True,
+            "cost_profile": COST_PROFILE.payload(),
+            "inputs": {"swing": SWING_VERSION, "zone": ZONE_VERSION,
+                       "liquidity": LIQ_VERSION, "regime": REGIME_VERSION},
+        }
+        manifest_hash = store.record_manifest(con, "strategy", strategy_manifest)
+        cost_manifest_hash = costs.record(con, COST_PROFILE)
         candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
         ts_index = {c["open_ts"]: i for i, c in enumerate(candles)}
         atr = compute_atr(candles)
@@ -142,8 +155,26 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 return None
             return min(beyond) if direction == "LONG" else max(beyond)
 
+        def recent_sweep(direction, market_time, confirmed_at):
+            side = "LOW" if direction == "LONG" else "HIGH"
+            lookback = SWEEP_LOOKBACK_BARS * tf_seconds
+            return any(s["side"] == side
+                       and 0 <= market_time - s["market_time"] <= lookback
+                       and s["confirmed_at"] <= confirmed_at for s in sweeps)
+
         rec.n_inputs = len(zones)
-        n_setups = n_expired = n_cost_rejected = n_forming = n_cancelled = 0
+        n_setups = n_expired = n_cost_rejected = n_forming = n_cancelled = n_rejected = 0
+
+        def reject(zone_id, touched, reason, details=None):
+            nonlocal n_rejected
+            payload = {"event": "REJECTED", "zone_id": zone_id,
+                       "reason": reason, "details": details or {},
+                       "manifest_hash": manifest_hash}
+            if store.insert_fact(con, symbol=symbol, tf=tf, kind="setup_rejection",
+                                 market_time=touched["market_time"],
+                                 confirmed_at=touched["confirmed_at"],
+                                 algo_version=SETUP_VERSION, payload=payload):
+                n_rejected += 1
 
         def gates(direction, entry, sl, tp, a):
             """Shared R:R + fee gates. Returns rr or None."""
@@ -154,7 +185,8 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             rr = (reward / risk).quantize(Q2)
             if rr < MIN_RR:
                 return None
-            if risk < MIN_RISK_COST_MULT * (2 * FEE_SIDE * entry + SLIP_ATR * a):
+            if risk < MIN_RISK_COST_MULT * costs.estimated_round_trip_cost(
+                    entry, a, COST_PROFILE):
                 return None
             return rr
 
@@ -188,7 +220,9 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                     if dist > PROX_ATR * atr[j]:
                         continue
                     reg_f = regime_at(bct)
-                    play_f = playbook(created["zone_type"], reg_f)
+                    dir_hint = "LONG" if created["zone_type"] == "DEMAND" else "SHORT"
+                    swept_f = recent_sweep(dir_hint, c["open_ts"], bct)
+                    play_f = playbook(created["zone_type"], reg_f, swept_f)
                     if play_f is None:
                         continue
                     strat_f, dir_f, _ = play_f
@@ -212,7 +246,9 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                                        f"prospective {strat_f} would pass all gates · watching"),
                                "zone_id": zone_id, "regime": reg_f, "state": "FORMING",
                                "distance_atr": str(dist_atr),
-                               "zone_strength": created.get("strength")}
+                               "zone_strength": created.get("strength"),
+                               "manifest_hash": manifest_hash,
+                               "cost_manifest_hash": cost_manifest_hash}
                     if store.insert_fact(con, symbol=symbol, tf=tf, kind="setup",
                                          market_time=c["open_ts"], confirmed_at=bct,
                                          algo_version=SETUP_VERSION, payload=payload):
@@ -232,12 +268,18 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             if not created or not touched:
                 continue
             reg = regime_at(touched["confirmed_at"])
-            play = playbook(created["zone_type"], reg)
+            dir_hint = "LONG" if created["zone_type"] == "DEMAND" else "SHORT"
+            swept = recent_sweep(dir_hint, touched["market_time"], touched["confirmed_at"])
+            play = playbook(created["zone_type"], reg, swept)
             if play is None:
+                reject(zone_id, touched, "NO_ELIGIBLE_PLAYBOOK",
+                       {"zone_type": created["zone_type"], "regime": reg,
+                        "recent_sweep": swept})
                 continue
             strategy, direction, base_rank = play
             i = ts_index.get(touched["market_time"])
             if i is None or atr[i] is None:
+                reject(zone_id, touched, "ATR_UNAVAILABLE")
                 continue
             top, bottom = Decimal(created["top"]), Decimal(created["bottom"])
             if direction == "LONG":
@@ -246,24 +288,27 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 entry, sl = bottom, top + SL_ATR * atr[i]
             tp = target(direction, entry, touched["confirmed_at"])
             if tp is None:
+                reject(zone_id, touched, "NO_CAUSAL_TARGET")
                 continue
             risk = (entry - sl) if direction == "LONG" else (sl - entry)
             reward = (tp - entry) if direction == "LONG" else (entry - tp)
             if risk <= 0:
+                reject(zone_id, touched, "INVALID_BRACKET")
                 continue
             rr = (reward / risk).quantize(Q2)
             if rr < MIN_RR:
+                reject(zone_id, touched, "RR_BELOW_MINIMUM",
+                       {"rr": str(rr), "minimum": str(MIN_RR)})
                 continue
-            est_cost = 2 * FEE_SIDE * entry + SLIP_ATR * atr[i]
+            est_cost = costs.estimated_round_trip_cost(entry, atr[i], COST_PROFILE)
             if risk < MIN_RISK_COST_MULT * est_cost:
                 n_cost_rejected += 1
+                reject(zone_id, touched, "UNECONOMIC_AFTER_COSTS",
+                       {"risk_price_units": str(risk),
+                        "estimated_cost_price_units": str(est_cost),
+                        "required_multiple": str(MIN_RISK_COST_MULT)})
                 continue
 
-            sweep_side = "LOW" if direction == "LONG" else "HIGH"
-            lookback = SWEEP_LOOKBACK_BARS * tf_seconds
-            swept = any(s["side"] == sweep_side
-                        and 0 <= touched["market_time"] - s["market_time"] <= lookback
-                        and s["confirmed_at"] <= touched["confirmed_at"] for s in sweeps)
             vol_hot = False
             if i >= 20:
                 avg = sum(Decimal(candles[j]["volume"]) for j in range(i - 20, i)) / 20
@@ -280,7 +325,9 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                        "strategy": strategy, "direction": direction,
                        "entry": str(entry), "sl": str(sl), "tp": str(tp),
                        "rr": str(rr), "rank": rank, "why": why,
-                       "zone_id": zone_id, "regime": reg, "state": "VALIDATED"}
+                       "zone_id": zone_id, "regime": reg, "state": "VALIDATED",
+                       "manifest_hash": manifest_hash,
+                       "cost_manifest_hash": cost_manifest_hash}
             if store.insert_fact(con, symbol=symbol, tf=tf, kind="setup",
                                  market_time=touched["market_time"],
                                  confirmed_at=touched["confirmed_at"],
@@ -296,8 +343,9 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                     n_expired += 1
 
         con.commit()
-        rec.n_new_facts = n_setups + n_expired + n_forming + n_cancelled
+        rec.n_new_facts = n_setups + n_expired + n_forming + n_cancelled + n_rejected
         rec.notes = f"cost_rejected={n_cost_rejected}"
         return {"symbol": symbol, "tf": tf, "setups": n_setups,
                 "expired": n_expired, "cost_rejected": n_cost_rejected,
-                "forming": n_forming, "cancelled": n_cancelled}
+                "forming": n_forming, "cancelled": n_cancelled,
+                "rejected": n_rejected}

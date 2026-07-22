@@ -7,29 +7,45 @@ not proof of edge. True OOS = forward paper trading from today.
 Usage: python validate.py  -> verification/validation-002.md + console summary
 """
 import json
+import random
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 from engine import store, execsim
 
-OUT = Path(__file__).resolve().parent / "verification" / "validation-002.md"
-SYMBOLS = ("BTC-USD", "ETH-USD")
-TFS = ("15m", "1H", "4H", "1D")
+OUT = Path(__file__).resolve().parent / "verification" / "validation-current.md"
+TFS = ("15m", "1H", "4H", "1D", "1W")
 
 
 def load(con):
-    trades = []
-    for sym in SYMBOLS:
+    trades, missed = [], 0
+    symbols = [r[0] for r in con.execute(
+        "SELECT DISTINCT symbol FROM candles ORDER BY symbol").fetchall()]
+    for sym in symbols:
         for tf in TFS:
             for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
                 p = json.loads(r["payload"])
+                if p["outcome"] == "MISSED":
+                    missed += 1
+                    continue
                 trades.append({"symbol": sym, "tf": tf, "ts": r["market_time"],
                                "year": datetime.fromtimestamp(r["market_time"], tz=timezone.utc).year,
                                "net": float(p["r_multiple"]), "gross": float(p["r_gross"]),
-                               "strategy": p["strategy"], "outcome": p["outcome"]})
+                               "strategy": p["strategy"], "outcome": p["outcome"],
+                               "manifest_hash": p.get("manifest_hash"),
+                               "cost_manifest_hash": p.get("cost_manifest_hash"),
+                               "execution_manifest_hash": p.get("execution_manifest_hash")})
     trades.sort(key=lambda t: t["ts"])
-    return trades
+    return trades, missed, symbols
+
+
+def bootstrap_mean_ci(rs, n=2000, seed=17):
+    if not rs:
+        return None
+    rng = random.Random(seed)
+    means = sorted(sum(rng.choice(rs) for _ in rs) / len(rs) for _ in range(n))
+    return round(means[int(n * .025)], 2), round(means[int(n * .975)], 2)
 
 
 def stats(rows):
@@ -55,25 +71,39 @@ def stats(rows):
     return {"n": len(rs), "win%": round(100 * len(wins) / len(rs)),
             "pf": pf, "sumR": round(sum(rs), 1),
             "avgR": round(sum(rs) / len(rs), 2),
-            "maxDD_R": round(maxdd, 1), "underwater": longest_under}
+            "maxDD_R": round(maxdd, 1), "underwater": longest_under,
+            "mean_ci": bootstrap_mean_ci(rs)}
 
 
 def fmt(label, s):
     if s is None:
-        return f"| {label} | — | — | — | — | — | — | — |"
+        return f"| {label} | — | — | — | — | — | — | — | — |"
+    ci = s["mean_ci"]
     return (f"| {label} | {s['n']} | {s['win%']}% | {s['pf'] if s['pf'] is not None else '—'} | "
-            f"{s['sumR']:+} | {s['avgR']:+} | {s['maxDD_R']} | {s['underwater']} |")
+            f"{s['sumR']:+} | {s['avgR']:+} | [{ci[0]:+}, {ci[1]:+}] | "
+            f"{s['maxDD_R']} | {s['underwater']} |")
 
 
-HDR = ("| Cohort | n | Win% | PF | ΣR | avg R | maxDD (R) | underwater |\n"
-       "|---|---|---|---|---|---|---|---|")
+HDR = ("| Cohort | n | Win% | PF | ΣR | avg R | mean R 95% CI | maxDD (R) | underwater |\n"
+       "|---|---|---|---|---|---|---|---|---|")
 
 
 def main():
     con = store.connect()
-    trades = load(con)
-    lines = [f"# Validation Report 001 — {execsim.EXEC_VERSION}, net of costs",
-             "", f"Trades: {len(trades)} · fees 0.25%/side · slippage 0.05 ATR on market exits",
+    trades, missed, symbols = load(con)
+    manifests = sorted({t["manifest_hash"] for t in trades if t["manifest_hash"]})
+    cost_manifests = sorted({t["cost_manifest_hash"] for t in trades
+                             if t["cost_manifest_hash"]})
+    execution_manifests = sorted({t["execution_manifest_hash"] for t in trades
+                                  if t["execution_manifest_hash"]})
+    trial_count = con.execute("SELECT COUNT(*) FROM manifests WHERE kind='strategy'").fetchone()[0]
+    lines = [f"# Validation Report — {execsim.EXEC_VERSION}, net of costs",
+             "", f"Filled trades: {len(trades)} · missed limits: {missed} · symbols: {len(symbols)}",
+             "", f"Strategy manifests: {', '.join(manifests) or 'legacy/unversioned'}",
+             f"Cost manifests: {', '.join(cost_manifests) or 'legacy/unversioned'}",
+             f"Execution manifests: {', '.join(execution_manifests) or 'legacy/unversioned'}",
+             f"Recorded strategy trials: {trial_count}",
+             "PBO: unavailable until multiple strategy return paths exist in the trial ledger.",
              "", "**Scope caveat: rules were calibrated with hindsight over this window — "
              "this measures robustness, not out-of-sample edge. True OOS starts with "
              "forward paper trading.**", ""]
@@ -83,7 +113,7 @@ def main():
         lines += [f"## {strat}", "", HDR, fmt("ALL (net)", stats(sub))]
         gross_stats = stats([{**t, "net": t["gross"]} for t in sub])
         lines.append(fmt("ALL (gross)", gross_stats))
-        for sym in SYMBOLS:
+        for sym in symbols:
             lines.append(fmt(sym, stats([t for t in sub if t["symbol"] == sym])))
         for tf in TFS:
             lines.append(fmt(tf, stats([t for t in sub if t["tf"] == tf])))

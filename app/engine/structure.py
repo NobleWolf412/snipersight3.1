@@ -19,7 +19,7 @@ from . import store
 from .swings import compute_atr, SWING_VERSION
 from .runlog import RunRecorder
 
-STRUCTURE_VERSION = "structure-v0.7-draft"  # reads swing-v0.7 score-based tiers
+STRUCTURE_VERSION = "structure-v0.8-draft"
 TICK = Decimal("0.01")
 TOL_ATR = Decimal("0.05")
 

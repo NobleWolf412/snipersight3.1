@@ -4,13 +4,14 @@ never derives them). Serves the chart UI at / and JSON at /api/*.
 Run: uvicorn server:app --port 8422
 """
 import json
+from collections import Counter
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from engine import store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe
+from engine import store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality
 
 KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "structure": structure.STRUCTURE_VERSION,
@@ -18,7 +19,9 @@ KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "liquidity": liquidity.LIQ_VERSION,
                  "regime": regime.REGIME_VERSION,
                  "setup": setups.SETUP_VERSION,
+                 "setup_rejection": setups.SETUP_VERSION,
                  "exec": execsim.EXEC_VERSION,
+                 "order": execsim.EXEC_VERSION,
                  "cycle": cycles.CYCLES_VERSION}
 
 app = FastAPI(title="SniperSight", version="0.1-draft")
@@ -28,7 +31,8 @@ VALID_TFS = set(importer.TF_SECONDS)
 
 
 @app.get("/api/candles")
-def candles(symbol: str = "BTC-USD", tf: str = "1H", limit: int = 1500,
+def candles(symbol: str = Query("BTC-USD", pattern=r"^[A-Z0-9]+-USD$"),
+            tf: str = "1H", limit: int = Query(1500, ge=1, le=5000),
             end_ts: int | None = None):
     """end_ts enables replay: only candles opening BEFORE end_ts are returned."""
     if tf not in VALID_TFS:
@@ -99,16 +103,131 @@ def track(symbol: str = "BTC-USD", tf: str = "1H"):
     try:
         rows = store.get_facts(con, symbol, tf, "exec", execsim.EXEC_VERSION)
         outs = [json.loads(r["payload"]) for r in rows]
-        rs = [float(o["r_multiple"]) for o in outs]
+        filled = [o for o in outs if o["outcome"] != "MISSED"]
+        rs = [float(o["r_multiple"]) for o in filled]
         wins = [r for r in rs if r > 0]
         losses = [r for r in rs if r < 0]
-        return {"n": len(outs),
-                "tp": sum(1 for o in outs if o["outcome"] == "TP"),
-                "sl": sum(1 for o in outs if o["outcome"] == "SL"),
-                "timeout": sum(1 for o in outs if o["outcome"] == "TIMEOUT"),
+        return {"n": len(filled), "signals": len(outs),
+                "missed": sum(1 for o in outs if o["outcome"] == "MISSED"),
+                "fill_rate": round(len(filled) / len(outs), 3) if outs else None,
+                "tp": sum(1 for o in filled if o["outcome"] == "TP"),
+                "sl": sum(1 for o in filled if o["outcome"] == "SL"),
+                "timeout": sum(1 for o in filled if o["outcome"] == "TIMEOUT"),
                 "win_rate": round(len(wins) / len(rs), 3) if rs else None,
                 "profit_factor": round(sum(wins) / abs(sum(losses)), 2) if losses else None,
                 "sum_r": round(sum(rs), 2), "by_setup": {o["setup_id"]: o for o in outs}}
+    finally:
+        con.close()
+
+
+@app.get("/api/setup-telemetry")
+def setup_telemetry(symbol: str | None = None, tf: str | None = None,
+                    strategy: str | None = None,
+                    limit: int = Query(100, ge=1, le=500)):
+    """Diagnostic-only lifecycle ledger for every validated setup.
+
+    This joins immutable facts; it never feeds the strategy or risk authority.
+    Summary counts are calculated before the response row limit is applied.
+    """
+    if tf is not None and tf not in VALID_TFS:
+        raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
+    con = store.connect()
+    try:
+        setup_by_id = {}
+        for version in (setups.SETUP_VERSION, scalein.SCALE_VERSION):
+            rows = con.execute(
+                "SELECT symbol,tf,market_time,confirmed_at,payload,algo_version "
+                "FROM facts WHERE kind='setup' AND algo_version=? "
+                "ORDER BY confirmed_at,id", (version,)).fetchall()
+            for sym, timeframe, market_time, confirmed_at, raw, algo_version in rows:
+                p = json.loads(raw)
+                if p.get("state") != "VALIDATED":
+                    continue
+                if symbol and sym != symbol:
+                    continue
+                if tf and timeframe != tf:
+                    continue
+                if strategy and p.get("strategy") != strategy:
+                    continue
+                setup_by_id[p["setup_id"]] = {
+                    "symbol": sym, "tf": timeframe, "market_time": market_time,
+                    "confirmed_at": confirmed_at, "algo_version": algo_version, **p}
+
+        def lifecycle_map(kind, version):
+            out = {}
+            rows = con.execute(
+                "SELECT confirmed_at,payload FROM facts WHERE kind=? AND algo_version=? "
+                "ORDER BY confirmed_at,id", (kind, version)).fetchall()
+            for confirmed_at, raw in rows:
+                p = json.loads(raw)
+                sid = p.get("setup_id")
+                if sid in setup_by_id:
+                    out[sid] = {"confirmed_at": confirmed_at, **p}
+            return out
+
+        risk_by_id = lifecycle_map("risk", risk.RISK_VERSION)
+        order_by_id = lifecycle_map("order", execsim.EXEC_VERSION)
+        exec_by_id = lifecycle_map("exec", execsim.EXEC_VERSION)
+        records = [telemetry.build_record(s, risk_by_id.get(sid),
+                                           order_by_id.get(sid), exec_by_id.get(sid))
+                   for sid, s in setup_by_id.items()]
+        records.sort(key=lambda r: r["confirmed_at"], reverse=True)
+
+        stages = Counter(r["stage"] for r in records)
+        failures = Counter(r["failure_code"] for r in records
+                           if r["failure_code"] not in telemetry.NON_FAILURES)
+        rejected_candidates = Counter()
+        rows = con.execute(
+            "SELECT symbol,tf,payload FROM facts WHERE kind='setup_rejection' "
+            "AND algo_version=?", (setups.SETUP_VERSION,)).fetchall()
+        for sym, timeframe, raw in rows:
+            if symbol and sym != symbol:
+                continue
+            if tf and timeframe != tf:
+                continue
+            rejected_candidates[json.loads(raw).get("reason", "UNKNOWN")] += 1
+
+        cohorts = {}
+        for r in records:
+            c = cohorts.setdefault(r.get("strategy") or "UNKNOWN",
+                                   {"validated": 0, "closed": 0, "wins": 0,
+                                    "net_r": 0.0, "stop_losses": 0})
+            c["validated"] += 1
+            if r["outcome"] and r["outcome"] != "MISSED":
+                c["closed"] += 1
+                net = float(r["net_r"] or 0)
+                c["net_r"] += net
+                c["wins"] += net > 0
+                c["stop_losses"] += r["failure_code"] == "STOP_LOSS"
+        for c in cohorts.values():
+            c["net_r"] = round(c["net_r"], 2)
+            c["win_rate"] = round(c["wins"] / c["closed"], 3) if c["closed"] else None
+
+        approved = sum(r["risk_decision"] in ("APPROVED", "REDUCED") for r in records)
+        eligible = [r for r in records
+                    if r["risk_decision"] in ("APPROVED", "REDUCED")]
+        placed = sum(r["order_event"] is not None for r in eligible)
+        filled = sum(r["order_event"] == "FILLED" or
+                     (r["outcome"] is not None and r["outcome"] != "MISSED")
+                     for r in eligible)
+        closed = sum(r["outcome"] is not None and r["outcome"] != "MISSED"
+                     for r in eligible)
+        winners = sum(r["failure_code"] == "WINNER" for r in eligible)
+        return {
+            "diagnostic_only": True,
+            "filters": {"symbol": symbol, "tf": tf, "strategy": strategy},
+            "versions": {"setup": setups.SETUP_VERSION, "risk": risk.RISK_VERSION,
+                         "execution": execsim.EXEC_VERSION},
+            "funnel": {"rejected_candidates": sum(rejected_candidates.values()),
+                       "validated": len(records), "risk_approved": approved,
+                       "order_placed": placed, "filled": filled,
+                       "closed": closed, "winners": winners},
+            "stages": dict(stages),
+            "failure_points": dict(failures.most_common()),
+            "candidate_rejections": dict(rejected_candidates.most_common()),
+            "cohorts": cohorts,
+            "records": records[:limit],
+        }
     finally:
         con.close()
 
@@ -124,23 +243,70 @@ def portfolio():
             "ORDER BY id DESC LIMIT 1", (risk.RISK_VERSION,)).fetchone()
         acct = json.loads(arow[0]) if arow else None
         recent, kills = [], 0
+        setup_by_id, risk_by_id, latest_order, completed = {}, {}, {}, set()
         for r in store.get_facts(con, "PORTFOLIO", "ALL", "risk", risk.RISK_VERSION):
             p = json.loads(r["payload"])
             if p.get("event") == "KILL_SWITCH":
                 kills += 1
         for sym in universe.all_tracked_symbols(con):
             for tf in ("15m", "1H", "4H", "1D", "1W"):
+                for version in (setups.SETUP_VERSION, scalein.SCALE_VERSION):
+                    for r in store.get_facts(con, sym, tf, "setup", version):
+                        p = json.loads(r["payload"])
+                        if p.get("state") == "VALIDATED":
+                            setup_by_id[p["setup_id"]] = {
+                                "symbol": sym, "tf": tf,
+                                "confirmed_at": r["confirmed_at"], **p}
                 for r in store.get_facts(con, sym, tf, "risk", risk.RISK_VERSION):
                     p = json.loads(r["payload"])
                     if p.get("event") == "DECISION":
-                        recent.append({"symbol": sym, "tf": tf, "ts": r["confirmed_at"], **p})
+                        decision = {"symbol": sym, "tf": tf,
+                                    "ts": r["confirmed_at"], **p}
+                        recent.append(decision)
+                        risk_by_id[p["setup_id"]] = decision
+                for r in store.get_facts(con, sym, tf, "order", execsim.EXEC_VERSION):
+                    p = json.loads(r["payload"])
+                    latest_order[p["setup_id"]] = {
+                        "symbol": sym, "tf": tf,
+                        "confirmed_at": r["confirmed_at"], **p}
+                for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
+                    completed.add(json.loads(r["payload"])["setup_id"])
         recent.sort(key=lambda d: d["ts"])
+        positions, pending_orders = [], []
+        for sid, order in latest_order.items():
+            if sid in completed:
+                continue
+            detail = setup_by_id.get(sid, {})
+            sized = risk_by_id.get(sid, {})
+            # execsim creates shadow orders for strategy research before the
+            # risk authority runs. Only sized decisions are portfolio exposure.
+            if sized.get("decision") not in ("APPROVED", "REDUCED"):
+                continue
+            item = {"setup_id": sid, "symbol": order["symbol"],
+                    "tf": order["tf"], "direction": order.get("side"),
+                    "strategy": detail.get("strategy"),
+                    "entry": detail.get("entry", order.get("limit_price")),
+                    "tp": detail.get("tp"), "sl": detail.get("sl"),
+                    "risk_usd": sized.get("risk_usd"),
+                    "notional_usd": sized.get("notional_usd"),
+                    "decision": sized.get("decision"),
+                    "updated_at": order["confirmed_at"]}
+            if order.get("event") == "FILLED":
+                positions.append(item)
+            elif order.get("event") == "PLACED":
+                pending_orders.append(item)
+        positions.sort(key=lambda p: p["updated_at"], reverse=True)
+        pending_orders.sort(key=lambda p: p["updated_at"], reverse=True)
         eq = float(acct["final_equity"]) if acct else float(risk.START_EQUITY)
         return {"start_equity": float(risk.START_EQUITY), "equity": round(eq, 2),
                 "return_pct": float(acct["return_pct"]) if acct else 0.0,
                 "max_drawdown_pct": acct.get("max_drawdown_pct") if acct else None,
                 "decisions": acct["decisions"] if acct else {},
                 "kill_switch_days": kills,
+                "active_positions": positions,
+                "pending_orders": pending_orders,
+                "open_risk_usd": round(sum(float(p["risk_usd"] or 0)
+                                           for p in positions), 2),
                 "curve": [{"ts": c["ts"], "equity": float(c["equity"])}
                           for c in (acct["curve"] if acct else [])],
                 "recent": recent[-25:],
@@ -176,6 +342,8 @@ def performance():
             for tf in ("15m", "1H", "4H", "1D", "1W"):
                 for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
                     p = json.loads(r["payload"])
+                    if p["outcome"] == "MISSED":
+                        continue
                     rm = float(p["r_multiple"])
                     for key, bucket in ((sym, by_sym), (p["strategy"], by_strat)):
                         a = bucket.setdefault(key, blank())
@@ -220,19 +388,55 @@ def ticker():
     """Display-only live prices (Coinbase spot ticker). NEVER consumed by
     engines — analysis stays closed-candle-only (§5); this exists purely so
     the human sees the market move between candle closes."""
-    import urllib.request
-    out = {}
-    for sym in universe.all_tracked_symbols(con):
-        try:
-            req = urllib.request.Request(
-                f"https://api.exchange.coinbase.com/products/{sym}/ticker",
-                headers={"User-Agent": "snipersight/0.1"})
-            with urllib.request.urlopen(req, timeout=5) as r:
-                d = json.loads(r.read().decode())
-            out[sym] = {"price": float(d["price"]), "time": d["time"]}
-        except Exception:
-            out[sym] = None
-    return out
+    con = store.connect()
+    try:
+        symbols = universe.all_tracked_symbols(con)
+    finally:
+        con.close()
+    return marketdata.fetch_tickers(symbols)
+
+
+@app.get("/api/manifests/{manifest_hash}")
+def manifest(manifest_hash: str):
+    con = store.connect()
+    try:
+        result = store.get_manifest(con, manifest_hash)
+        if result is None:
+            raise HTTPException(404, "manifest not found")
+        return {"manifest_hash": manifest_hash, **result}
+    finally:
+        con.close()
+
+
+@app.get("/api/context")
+def multi_timeframe_context(
+        symbol: str = Query("BTC-USD", pattern=r"^[A-Z0-9]+-USD$"),
+        as_of: int | None = None):
+    """Compact synchronized context strip for the decision workspace."""
+    con = store.connect()
+    try:
+        out = []
+        for tf in ("1W", "1D", "4H", "1H", "15m"):
+            regs = store.get_facts(
+                con, symbol, tf, "regime", regime.REGIME_VERSION, as_of)
+            reg = json.loads(regs[-1]["payload"])["regime"] if regs else None
+            zone_state = {}
+            for row in store.get_facts(
+                    con, symbol, tf, "zone", zones.ZONE_VERSION, as_of):
+                p = json.loads(row["payload"])
+                zone_state[p["zone_id"]] = p["state"]
+            setups_state = {}
+            for ver in (setups.SETUP_VERSION, scalein.SCALE_VERSION):
+                for row in store.get_facts(con, symbol, tf, "setup", ver, as_of):
+                    p = json.loads(row["payload"])
+                    setups_state[p["setup_id"]] = p["state"]
+            out.append({"tf": tf, "regime": reg,
+                        "active_zones": sum(s != "BROKEN" for s in zone_state.values()),
+                        "forming": sum(s == "FORMING" for s in setups_state.values()),
+                        "ready": sum(s == "VALIDATED" for s in setups_state.values())})
+        return {"symbol": symbol, "as_of": as_of, "timeframes": out}
+    finally:
+        con.close()
 
 
 @app.get("/api/overview")
@@ -308,7 +512,15 @@ def overview():
         except Exception:
             scanner = {"alive": False, "age_s": None}
 
+        rejection_funnel = {}
+        for (payload,) in con.execute(
+                "SELECT payload FROM facts WHERE kind='setup_rejection' AND algo_version=?",
+                (setups.SETUP_VERSION,)).fetchall():
+            reason = json.loads(payload)["reason"]
+            rejection_funnel[reason] = rejection_funnel.get(reason, 0) + 1
+
         return {"symbols": symbols, "feed": feed[:40], "scanner": scanner,
+                "rejection_funnel": rejection_funnel,
                 "engines": [{"engine": e, "last_run": t, "ms": ms}
                             for e, t, ms in engines]}
     finally:
@@ -322,10 +534,53 @@ def status():
         c = con.execute("SELECT symbol, tf, COUNT(*), MIN(open_ts), MAX(open_ts) "
                         "FROM candles GROUP BY symbol, tf").fetchall()
         f = con.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+        m = con.execute("SELECT COUNT(*) FROM manifests").fetchone()[0]
         gaps = con.execute("SELECT COALESCE(SUM(n_gaps),0) FROM import_log").fetchone()[0]
-        return {"facts": f, "gap_candles_logged": gaps, "algo_version": swings.SWING_VERSION,
+        return {"facts": f, "manifests": m, "gap_candles_logged": gaps,
+                "algo_version": swings.SWING_VERSION,
+                "versions": {**KIND_VERSIONS, "risk": risk.RISK_VERSION,
+                             "scalein": scalein.SCALE_VERSION},
                 "candles": [{"symbol": s, "tf": t, "n": n, "first": lo, "last": hi}
                             for s, t, n, lo, hi in c]}
+    finally:
+        con.close()
+
+
+@app.get("/api/health")
+def health():
+    """Operational health is explicit; the UI must not infer it from silence."""
+    import time as _t
+    now = int(_t.time())
+    con = store.connect()
+    try:
+        integrity = con.execute("PRAGMA quick_check").fetchone()[0]
+        rows = con.execute(
+            "SELECT symbol, tf, MAX(open_ts) FROM candles GROUP BY symbol, tf"
+        ).fetchall()
+        series = []
+        for symbol, tf, last_open in rows:
+            sec = importer.TF_SECONDS[tf]
+            age_s = max(0, now - (last_open + sec))
+            series.append({"symbol": symbol, "tf": tf, "last_open": last_open,
+                           "age_s": age_s, "stale": age_s > 2 * sec})
+        bad, gaps = con.execute(
+            "SELECT COALESCE(SUM(n_bad),0), COALESCE(SUM(n_gaps),0) FROM import_log"
+        ).fetchone()
+        return {"status": "OK" if integrity == "ok" and not any(
+                    s["stale"] for s in series) else "DEGRADED",
+                "database": integrity, "bad_candles_rejected": bad,
+                "gaps_logged": gaps, "series": series,
+                "stale_series": [s for s in series if s["stale"]]}
+    finally:
+        con.close()
+
+
+@app.get("/api/pipeline-health")
+def pipeline_health(symbol: str | None = None):
+    """Run the read-only A-to-Z contract audit used to qualify performance."""
+    con = store.connect()
+    try:
+        return quality.audit(con, symbol=symbol, persist=False)
     finally:
         con.close()
 

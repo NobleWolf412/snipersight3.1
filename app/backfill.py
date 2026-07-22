@@ -7,7 +7,7 @@ import argparse
 import time
 from datetime import datetime, timezone
 
-from engine import store, importer, aggregator, swings, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles
+from engine import store, importer, aggregator, swings, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, quality
 
 ENGINES = [("swings", swings), ("structure", structure), ("zones", zones),
            ("liquidity", liquidity), ("regime", regime), ("setups", setups),
@@ -39,12 +39,17 @@ def main():
         for tf in ("4H", "1W"):
             r = aggregator.aggregate(con, symbol, tf)
             print(f"agg     {r['symbol']:8s} {r['tf']:3s} candles={r['candles']:6d} skipped={r['skipped_incomplete']}")
+        quality.assert_market_ready(con, symbol, now)
         for name, mod in ENGINES:
             for tf in ("15m", "1H", "4H", "1D", "1W"):
                 r = mod.run(con, symbol, tf, TF_SECONDS[tf])
                 counts = " ".join(f"{k}+{v}" for k, v in r.items()
                                   if k not in ("symbol", "tf"))
                 print(f"{name:9s} {r['symbol']:8s} {r['tf']:3s} {counts}")
+    risk.run(con)
+    report = quality.audit(con, now=now, persist=True)
+    print(f"quality   {report['status']} blockers={len(report['blockers'])} "
+          f"warnings={len(report['warnings'])} evaluation_allowed={report['evaluation_allowed']}")
     con.close()
 
 

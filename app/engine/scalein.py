@@ -23,11 +23,12 @@ from decimal import Decimal
 from . import store
 from .swings import compute_atr
 from .structure import STRUCTURE_VERSION
-from .setups import (SETUP_VERSION, FEE_SIDE, SLIP_ATR, MIN_RISK_COST_MULT, Q2)
+from .setups import (SETUP_VERSION, COST_PROFILE, MIN_RISK_COST_MULT, Q2)
+from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.1-draft"
+SCALE_VERSION = "scale-v0.2-draft"
 PARENT_TFS = ("4H", "1D")
 TRIGGER_TF = "1H"
 TRIGGER_MIN_R = Decimal(1)
@@ -91,7 +92,7 @@ def run(con, symbol: str, tf: str = TRIGGER_TF, tf_seconds: int = 3600) -> dict:
                     i = ts_index.get(b["market_time"])
                     if i is None or atr_1h[i] is None or risk_dist <= 0:
                         continue
-                    est_cost = 2 * FEE_SIDE * px + SLIP_ATR * atr_1h[i]
+                    est_cost = costs.estimated_round_trip_cost(px, atr_1h[i], COST_PROFILE)
                     if risk_dist < MIN_RISK_COST_MULT * est_cost:
                         continue
                     reward = (tp - px) if long else (px - tp)
@@ -111,7 +112,9 @@ def run(con, symbol: str, tf: str = TRIGGER_TF, tf_seconds: int = 3600) -> dict:
                                        f"{parent['strategy']} · stop at parent entry "
                                        f"(breakeven) · shared TP · R:R {rr}"),
                                "zone_id": parent.get("zone_id"), "regime": parent.get("regime"),
-                               "state": "VALIDATED"}
+                               "state": "VALIDATED",
+                               "manifest_hash": parent.get("manifest_hash"),
+                               "cost_manifest_hash": parent.get("cost_manifest_hash")}
                     if store.insert_fact(con, symbol=symbol, tf=TRIGGER_TF, kind="setup",
                                          market_time=b["market_time"],
                                          confirmed_at=b["confirmed_at"],
