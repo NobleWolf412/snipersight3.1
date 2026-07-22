@@ -214,6 +214,29 @@
   .position-empty{padding:14px 11px;color:var(--txt-dim);font-size:11px;line-height:1.45}
   .position-empty b{display:block;color:#c7d4de;margin-bottom:2px}
   #acct-stats{background:linear-gradient(145deg,#142333,#0e1722)}
+  .trace-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:10px}
+  .trace-stat{padding:8px;border:1px solid var(--line);border-radius:7px;background:#101923}
+  .trace-stat span{display:block;font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:var(--txt-faint)}
+  .trace-stat b{display:block;margin-top:2px;font-family:var(--mono);font-size:14px;color:#eaf3f8}
+  .failure-list{padding:8px 10px;border-bottom:1px solid var(--line)}
+  .failure-row{display:grid;grid-template-columns:1fr 80px 24px;gap:7px;align-items:center;margin:6px 0;font-family:var(--mono);font-size:9px;color:var(--txt-dim)}
+  .failure-bar{height:5px;border-radius:4px;background:var(--bg3);overflow:hidden}
+  .failure-bar i{display:block;height:100%;border-radius:inherit;background:var(--red)}
+  .cohort-row{display:grid;grid-template-columns:1fr auto auto;gap:9px;padding:7px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:9.5px}
+  .trace-list{padding:9px;overflow-y:auto;min-height:0}
+  .trace-card{margin-bottom:9px;border:1px solid #2b3b4d;border-radius:9px;background:linear-gradient(145deg,#131d29,#0e151e);overflow:hidden;cursor:pointer}
+  .trace-card:hover{border-color:#4b657e}.trace-top{display:flex;align-items:center;gap:7px;padding:10px 11px;border-bottom:1px solid var(--line)}
+  .trace-top strong{font-family:var(--mono);font-size:12px;color:#edf6fa}.trace-date{margin-left:auto;font-family:var(--mono);font-size:8.5px;color:var(--txt-faint)}
+  .trace-stage{font-family:var(--mono);font-size:8px;font-weight:750;letter-spacing:.07em;padding:3px 6px;border-radius:5px;border:1px solid var(--line-hi);color:var(--txt-dim)}
+  .trace-stage.bad{color:var(--red);border-color:#713839;background:rgba(255,93,93,.07)}
+  .trace-stage.warn{color:var(--amber);border-color:#705627;background:rgba(255,181,71,.07)}
+  .trace-stage.good{color:var(--green);border-color:#286b4a;background:rgba(61,220,132,.07)}
+  .trace-stage.live{color:var(--cyan);border-color:var(--cyan-dim);background:var(--cyan-ghost)}
+  .trace-levels{display:grid;grid-template-columns:repeat(3,1fr);font-family:var(--mono);font-size:10px;border-bottom:1px solid var(--line)}
+  .trace-levels div{padding:8px 10px}.trace-levels span{display:block;font-size:8px;letter-spacing:.1em;color:var(--txt-faint);margin-bottom:2px}
+  .trace-why{padding:9px 11px;font-size:11px;line-height:1.5;color:#bfccd6}.trace-why b{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;color:var(--cyan)}
+  .trace-diagnosis{padding:8px 11px;border-top:1px solid var(--line);font-size:10px;color:var(--txt-dim);background:rgba(0,0,0,.12)}
+  .trace-diagnosis strong{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;color:var(--amber)}
 
   @media(max-width:1180px){.app{grid-template-columns:210px minmax(480px,1fr) 330px}.sessbar-w,.rp span:first-child{display:none}}
   @media(max-width:900px){
@@ -330,6 +353,7 @@
     <div class="ftabs" style="border-bottom:1px solid var(--line)">
       <div class="ftab rt on" data-rt="feed" style="font-size:10px;letter-spacing:.16em">SETUP FEED <span class="cnt" id="feedcnt">—</span></div>
       <div class="ftab rt" data-rt="acct" style="font-size:10px;letter-spacing:.16em">ACCOUNT</div>
+      <div class="ftab rt" data-rt="trace" style="font-size:10px;letter-spacing:.12em">SETUP TRACE</div>
     </div>
     <div id="feedView" style="display:flex;flex-direction:column;min-height:0;flex:1">
       <div class="ftabs">
@@ -351,6 +375,16 @@
       <div id="perfSym" style="padding:4px 0"></div>
       <div class="phead" style="border-top:1px solid var(--line)">BY STRATEGY</div>
       <div id="perfStrat" style="padding:4px 0 12px"></div>
+    </div>
+    <div id="traceView" aria-label="Validated setup telemetry" style="display:none;flex-direction:column;min-height:0;flex:1">
+      <div class="phead">VALIDATION FUNNEL <span class="cnt">DIAGNOSTIC ONLY</span></div>
+      <div class="trace-summary" id="traceSummary"></div>
+      <div class="phead">FAILURE POINTS <span class="cnt">WHERE LOGIC BREAKS</span></div>
+      <div class="failure-list" id="failurePoints"></div>
+      <div class="phead">STRATEGY COHORTS <span class="cnt">NET RESULTS</span></div>
+      <div id="telemetryCohorts"></div>
+      <div class="phead">VALIDATED ENTRIES <span class="cnt">ENTRY · WHY · RESULT</span></div>
+      <div class="trace-list" id="telemetryRecords"></div>
     </div>
   </aside>
 
@@ -740,15 +774,64 @@ document.querySelectorAll('.ftab:not(.rt)').forEach(t=>t.onclick=()=>{
   t.classList.add('on');feedState=t.dataset.fs;renderFeed();
 });
 
-/* ---------- right-rail view switch: FEED / ACCOUNT ---------- */
+/* ---------- right-rail view switch: FEED / ACCOUNT / SETUP TRACE ---------- */
 document.querySelectorAll('.ftab.rt').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.ftab.rt').forEach(x=>x.classList.remove('on'));
   t.classList.add('on');
-  const acct=t.dataset.rt==='acct';
-  document.getElementById('feedView').style.display=acct?'none':'flex';
-  document.getElementById('acctView').style.display=acct?'flex':'none';
-  if(acct)loadAccount();
+  const view=t.dataset.rt;
+  document.getElementById('feedView').style.display=view==='feed'?'flex':'none';
+  document.getElementById('acctView').style.display=view==='acct'?'flex':'none';
+  document.getElementById('traceView').style.display=view==='trace'?'flex':'none';
+  if(view==='acct')loadAccount();
+  if(view==='trace')loadTelemetry();
 });
+
+async function loadTelemetry(){
+  const data=await api('/api/setup-telemetry?limit=100');
+  const f=data.funnel;
+  const summary=[['VALIDATED',f.validated],['RISK OK',f.risk_approved],['ORDERS',f.order_placed],
+                 ['FILLED',f.filled],['CLOSED',f.closed],['WINNERS',f.winners]];
+  document.getElementById('traceSummary').innerHTML=summary.map(([label,n])=>
+    `<div class="trace-stat"><span>${label}</span><b>${n}</b></div>`).join('');
+
+  const failures=Object.entries(data.failure_points||{}),max=Math.max(1,...failures.map(x=>x[1]));
+  document.getElementById('failurePoints').innerHTML=failures.length?failures.map(([reason,n])=>
+    `<div class="failure-row"><span>${reason.replaceAll('_',' ')}</span>`+
+    `<div class="failure-bar"><i style="width:${100*n/max}%"></i></div><b>${n}</b></div>`).join(''):
+    '<div class="position-empty"><b>No terminal failures yet</b>Validated setups are still awaiting downstream evidence.</div>';
+
+  document.getElementById('telemetryCohorts').innerHTML=Object.entries(data.cohorts||{}).map(([name,c])=>
+    `<div class="cohort-row"><span>${name.replace('_',' ')}</span>`+
+    `<span>${c.closed} closed · ${c.win_rate===null?'—':Math.round(c.win_rate*100)+'%'} win</span>`+
+    `<b class="${c.net_r>=0?'up':'dn'}">${c.net_r>0?'+':''}${c.net_r}R</b></div>`).join('')||
+    '<div class="position-empty">No strategy cohorts yet.</div>';
+
+  const cls=r=>r.failure_code==='WINNER'?'good':
+    ['STOP_LOSS','RISK_REJECTED','COSTS_ERASED_EDGE','LOSING_EXIT'].includes(r.failure_code)?'bad':
+    ['ENTRY_NOT_FILLED','TIMEOUT_EXIT'].includes(r.failure_code)?'warn':'live';
+  const price=v=>v===null||v===undefined?'—':(+v).toLocaleString(undefined,{maximumFractionDigits:+v<1?6:2});
+  document.getElementById('telemetryRecords').innerHTML=data.records.length?data.records.map(r=>{
+    const when=new Date(r.confirmed_at*1000).toISOString().slice(0,10);
+    const diagnostics=[r.outcome, r.net_r!==null?`${+r.net_r>0?'+':''}${r.net_r}R net`:null,
+      r.mae_r!==null?`MAE ${r.mae_r}R`:null,r.mfe_r!==null?`MFE ${r.mfe_r}R`:null,
+      r.costs_r!==null?`cost ${r.costs_r}R`:null].filter(Boolean).join(' · ');
+    const shadow=r.risk_decision==='REJECTED'&&r.outcome?' · execution result is counterfactual shadow telemetry':'';
+    return `<article class="trace-card" data-sym="${r.symbol}" data-tf="${r.tf}" data-time="${r.market_time}">
+      <div class="trace-top"><strong>${r.symbol.replace('-USD','')}</strong><span class="tag">${r.tf}</span>`+
+      `<span class="trace-stage ${cls(r)}">${r.stage}</span><span class="trace-date">${when}</span></div>`+
+      `<div class="trace-levels"><div><span>ENTRY</span>${price(r.entry)}</div>`+
+      `<div class="up"><span>TARGET</span>${price(r.tp)}</div><div class="dn"><span>INVALIDATION</span>${price(r.sl)}</div></div>`+
+      `<div class="trace-why"><b>WHY THIS ENTRY</b><br>${r.why||'No rationale text recorded.'}</div>`+
+      `<div class="trace-diagnosis"><strong>${r.failure_code.replaceAll('_',' ')}</strong> · ${r.detail}${shadow}`+
+      `${diagnostics?`<br><span class="num">${diagnostics}</span>`:''}</div></article>`;
+  }).join(''):'<div class="position-empty"><b>No validated entries yet</b>Run the fact engines after candle history is available.</div>';
+  document.querySelectorAll('.trace-card').forEach(card=>card.onclick=()=>{
+    sym=card.dataset.sym;tf=card.dataset.tf;
+    document.querySelectorAll('#tfs .tf').forEach(x=>x.classList.toggle('on',x.dataset.tf===tf));
+    loadOverview();load().then(()=>chart.timeScale().setVisibleRange({
+      from:+card.dataset.time-60*TF_SEC[tf],to:+card.dataset.time+60*TF_SEC[tf]}));
+  });
+}
 
 async function loadAccount(){
   const [p,perf]=await Promise.all([

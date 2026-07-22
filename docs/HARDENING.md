@@ -39,6 +39,10 @@ new immutable manifest and engine version. It must never be a hidden config edit
   warning counts instead of silently treating missing products as valid data.
 - The cockpit exposes data health, synchronized multi-timeframe context, setup
   stage counts, rejection reasons, missed-entry rate, and degraded API states.
+- The diagnostic-only setup trace joins validation, risk, shadow execution,
+  fills, and exits. It exposes the exact entry rationale and attributes each
+  failure to portfolio, execution, setup/stop, exit logic, or economics. Shadow
+  orders rejected by risk are never presented as portfolio exposure.
 - Validation reports pin strategy and execution manifests. Bootstrap intervals
   are reported when a sample exists; PBO is marked unavailable until multiple
   independently retained strategy paths exist.

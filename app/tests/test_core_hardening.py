@@ -6,7 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
-from engine import costs, execsim, marketdata, risk, setups, store, universe, zones
+from engine import costs, execsim, marketdata, risk, setups, store, telemetry, universe, zones
 
 
 def candle(con, symbol, tf, ts, o, h, lo, c, volume="10"):
@@ -251,8 +251,45 @@ class TestCockpitHierarchy(unittest.TestCase):
         self.assertIn('aria-label="Active paper positions"', html)
         self.assertIn('id="walletBalance"', html)
         self.assertIn('id="activePositions"', html)
+        self.assertIn('aria-label="Validated setup telemetry"', html)
+        self.assertIn('id="telemetryRecords"', html)
         self.assertLess(html.index('id="activePositions"'),
                         html.index('data-rt="feed"'))
+
+
+class TestSetupTelemetry(unittest.TestCase):
+    def setUp(self):
+        self.setup = {"setup_id": "s1", "symbol": "BTC-USD", "tf": "1D",
+                      "entry": "100", "sl": "95", "tp": "110", "rr": "2",
+                      "why": "trend plus demand zone"}
+
+    def test_record_exposes_entry_geometry_and_reason(self):
+        row = telemetry.build_record(self.setup)
+        self.assertEqual(row["stop_distance"], 5)
+        self.assertEqual(row["reward_distance"], 10)
+        self.assertEqual(row["computed_rr"], 2)
+        self.assertEqual(row["why"], "trend plus demand zone")
+
+    def test_risk_rejection_is_owned_by_portfolio(self):
+        row = telemetry.build_record(
+            self.setup, {"decision": "REJECTED", "reasons": ["EXPOSURE_LIMIT"]})
+        self.assertEqual(row["failure_code"], "RISK_REJECTED")
+        self.assertEqual(row["failure_owner"], "PORTFOLIO")
+
+    def test_unfilled_limit_is_execution_failure(self):
+        row = telemetry.build_record(
+            self.setup, {"decision": "APPROVED"}, {"event": "MISSED"})
+        self.assertEqual(row["failure_code"], "ENTRY_NOT_FILLED")
+        self.assertEqual(row["failure_owner"], "EXECUTION")
+
+    def test_stop_is_distinct_from_cost_failure(self):
+        stopped = telemetry.build_record(
+            self.setup, execution={"outcome": "SL", "r_multiple": "-1.2"})
+        costly = telemetry.build_record(
+            self.setup, execution={"outcome": "TP", "r_multiple": "-0.1",
+                                   "r_gross": "0.4"})
+        self.assertEqual(stopped["failure_code"], "STOP_LOSS")
+        self.assertEqual(costly["failure_code"], "COSTS_ERASED_EDGE")
 
 
 if __name__ == "__main__":
