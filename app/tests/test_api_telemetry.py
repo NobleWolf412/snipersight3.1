@@ -8,6 +8,40 @@ from engine import execsim, risk, setups, store
 
 
 class TestSetupTelemetryAPI(unittest.TestCase):
+    def test_active_baseline_hides_pre_reset_losses_everywhere(self):
+        with tempfile.TemporaryDirectory() as d:
+            db = Path(d) / "baseline.db"
+            original_connect = store.connect
+            con = original_connect(db)
+            setup = {"setup_id": "old-loss", "state": "VALIDATED",
+                     "strategy": "PULLBACK", "direction": "LONG",
+                     "entry": "100", "sl": "95", "tp": "110", "rr": "2",
+                     "rank": 65, "why": "legacy test setup"}
+            store.insert_fact(con, symbol="BTC-USD", tf="1D", kind="setup",
+                              market_time=10, confirmed_at=20,
+                              algo_version=setups.SETUP_VERSION, payload=setup)
+            store.insert_fact(
+                con, symbol="BTC-USD", tf="1D", kind="exec", market_time=10,
+                confirmed_at=30, algo_version=execsim.EXEC_VERSION,
+                payload={"setup_id": "old-loss", "strategy": "PULLBACK",
+                         "outcome": "SL", "r_multiple": "-1.2"})
+            store.start_baseline(con, started_at=100)
+            risk.run(con)
+            con.close()
+
+            with patch("server.store.connect", side_effect=lambda: original_connect(db)):
+                track = server.track("BTC-USD", "1D")
+                trace = server.setup_telemetry(None, None, None, 100)
+                performance = server.performance()
+                portfolio = server.portfolio()
+
+        self.assertEqual(track["n"], 0)
+        self.assertEqual(trace["funnel"]["validated"], 0)
+        self.assertEqual(performance["by_symbol"], [])
+        self.assertEqual(portfolio["equity"], 10000.0)
+        self.assertEqual(portfolio["active_positions"], [])
+        self.assertEqual(portfolio["baseline"]["started_at"], 100)
+
     def test_lifecycle_funnel_and_failure_attribution(self):
         with tempfile.TemporaryDirectory() as d:
             db = Path(d) / "telemetry.db"

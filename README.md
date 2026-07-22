@@ -42,6 +42,17 @@ start.bat                     # watchdog: live scanner + API server + chart
 
 Then open http://localhost:8422.
 
+To begin a clean forward paper record without deleting candle history or audit facts,
+use **NEW BASELINE** in the wallet card. The same operation is available from `app/`:
+
+```
+python reset_baseline.py
+```
+
+The active baseline scopes wallet equity, positions, performance, setup telemetry,
+orders, and execution results. Reprocessing history cannot repopulate pre-baseline
+losses into the current paper record.
+
 ## Status
 
 v0 engine complete; forward paper-trade record accumulating. Live execution is

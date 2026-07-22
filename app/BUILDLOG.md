@@ -640,3 +640,11 @@ every simulated trade — the difference is deliberate and visible).
 
 **Verified:** panel renders (DOM check; screenshot tool flaky), endpoint live,
 watchdog handled redeploy.
+# 2026-07-22 — Non-destructive forward paper baseline
+
+- Added a versioned active baseline marker; candles and immutable facts remain intact.
+- Scoped risk accounting and all user-facing trade/performance telemetry to setups
+  validated on or after the active marker.
+- Added a confirmed API reset, CLI reset, and wallet control with visible start date.
+- Kept all strategy eligibility, entry, exit, and sizing constants unchanged.
+
