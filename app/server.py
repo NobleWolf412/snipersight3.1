@@ -154,6 +154,54 @@ def portfolio():
         con.close()
 
 
+@app.get("/api/performance")
+def performance():
+    """Per-symbol / per-strategy paper performance. R-stats cover every
+    simulated trade; $-PnL only trades the risk authority actually sized."""
+    con = store.connect()
+    try:
+        sized = {}   # setup_id -> risk_usd for APPROVED/REDUCED
+        for sym in universe.all_tracked_symbols(con):
+            for tf in ("15m", "1H", "4H", "1D", "1W"):
+                for r in store.get_facts(con, sym, tf, "risk", risk.RISK_VERSION):
+                    p = json.loads(r["payload"])
+                    if p.get("event") == "DECISION" and p["decision"] in ("APPROVED", "REDUCED"):
+                        sized[p["setup_id"]] = float(p["risk_usd"])
+
+        def blank():
+            return {"n": 0, "wins": 0, "sum_r": 0.0, "pos_r": 0.0, "neg_r": 0.0,
+                    "sized": 0, "pnl_usd": 0.0}
+        by_sym, by_strat = {}, {}
+        for sym in universe.all_tracked_symbols(con):
+            for tf in ("15m", "1H", "4H", "1D", "1W"):
+                for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
+                    p = json.loads(r["payload"])
+                    rm = float(p["r_multiple"])
+                    for key, bucket in ((sym, by_sym), (p["strategy"], by_strat)):
+                        a = bucket.setdefault(key, blank())
+                        a["n"] += 1
+                        a["wins"] += rm > 0
+                        a["sum_r"] += rm
+                        a["pos_r" if rm > 0 else "neg_r"] += rm
+                        ru = sized.get(p["setup_id"])
+                        if ru is not None:
+                            a["sized"] += 1
+                            a["pnl_usd"] += ru * rm
+
+        def rows(bucket):
+            out = []
+            for k, a in bucket.items():
+                pf = round(a["pos_r"] / abs(a["neg_r"]), 2) if a["neg_r"] < 0 and a["pos_r"] > 0 else None
+                out.append({"key": k, "n": a["n"], "win_pct": round(100 * a["wins"] / a["n"]) if a["n"] else 0,
+                            "pf": pf, "sum_r": round(a["sum_r"], 1),
+                            "sized": a["sized"], "pnl_usd": round(a["pnl_usd"], 2)})
+            out.sort(key=lambda x: x["pnl_usd"])
+            return out
+        return {"by_symbol": rows(by_sym), "by_strategy": rows(by_strat)}
+    finally:
+        con.close()
+
+
 @app.get("/api/cycles")
 def cycle_summary():
     """Nested-cycle satellite summary — OBSERVATIONAL ONLY, never consumed by

@@ -618,3 +618,25 @@ This is the risk authority + constitution working exactly as designed: the
 universe expansion didn't add options, it revealed the strategy is unproven on
 the broad set. Live trading (if ever) must stay gated to where forward evidence
 supports it. Determinism PASS throughout.
+
+---
+
+## S20 — 2026-07-21 — ACCOUNT view (making the -68% legible)
+
+**Built:** right rail gains FEED/ACCOUNT tabs. ACCOUNT: authoritative equity +
+return + maxDD + kill days (reads the `account` SUMMARY fact, never re-derives),
+SVG equity curve vs start-equity baseline, per-symbol and per-strategy tables
+(worst-first, $ and R columns). /api/performance aggregates exec facts joined
+to risk sizing ($-PnL counts only trades the authority sized; R columns count
+every simulated trade — the difference is deliberate and visible).
+
+**What the breakdown revealed (sharpens S19's finding):**
+- ETH is the ENTIRE edge: +$12,131, 43% win, +74.1R. Next best: ZEC +$1,034.
+- BTC is 0-for-12 (-$2,972) — "the BTC/ETH edge" was really an ETH edge.
+- PULLBACK is a net loser everywhere (-$5,730 across 97 trades).
+- XLM shows +31.6R but -$1,603: its R-positive trades were mostly unsized or
+  small-equity moments — sequencing/sizing matters, which is exactly why the
+  authoritative $ number is the one that counts.
+
+**Verified:** panel renders (DOM check; screenshot tool flaky), endpoint live,
+watchdog handled redeploy.

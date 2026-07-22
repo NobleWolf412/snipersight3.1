@@ -233,14 +233,31 @@
   </main>
 
   <aside class="right">
-    <div class="phead">SETUP FEED <span class="cnt" id="feedcnt">—</span></div>
-    <div class="ftabs">
-      <div class="ftab on" data-fs="VALIDATED">ACTIVE <span id="nVal"></span></div>
-      <div class="ftab" data-fs="FORMING">FORMING <span id="nForm"></span></div>
-      <div class="ftab" data-fs="EXPIRED">DEAD <span id="nExp"></span></div>
-      <div class="ftab" data-fs="DONE">CLOSED <span id="nDone"></span></div>
+    <div class="ftabs" style="border-bottom:1px solid var(--line)">
+      <div class="ftab rt on" data-rt="feed" style="font-size:10px;letter-spacing:.16em">SETUP FEED <span class="cnt" id="feedcnt">—</span></div>
+      <div class="ftab rt" data-rt="acct" style="font-size:10px;letter-spacing:.16em">ACCOUNT</div>
     </div>
-    <div class="feed" id="feed"></div>
+    <div id="feedView" style="display:flex;flex-direction:column;min-height:0;flex:1">
+      <div class="ftabs">
+        <div class="ftab on" data-fs="VALIDATED">ACTIVE <span id="nVal"></span></div>
+        <div class="ftab" data-fs="FORMING">FORMING <span id="nForm"></span></div>
+        <div class="ftab" data-fs="EXPIRED">DEAD <span id="nExp"></span></div>
+        <div class="ftab" data-fs="DONE">CLOSED <span id="nDone"></span></div>
+      </div>
+      <div class="feed" id="feed"></div>
+    </div>
+    <div id="acctView" style="display:none;flex-direction:column;min-height:0;flex:1;overflow-y:auto">
+      <div id="acct-stats" style="padding:12px;border-bottom:1px solid var(--line)"></div>
+      <div style="padding:10px 12px;border-bottom:1px solid var(--line)">
+        <div style="font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--txt-dim);margin-bottom:6px">EQUITY CURVE — SIZED PAPER TRADES</div>
+        <svg id="eqCurve" viewBox="0 0 268 84" style="width:100%;height:84px;display:block"></svg>
+        <div id="eqLabels" style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:8.5px;color:var(--txt-faint);margin-top:3px"></div>
+      </div>
+      <div class="phead">BY SYMBOL <span class="cnt">worst first</span></div>
+      <div id="perfSym" style="padding:4px 0"></div>
+      <div class="phead" style="border-top:1px solid var(--line)">BY STRATEGY</div>
+      <div id="perfStrat" style="padding:4px 0 12px"></div>
+    </div>
   </aside>
 
   <footer class="foot">
@@ -555,10 +572,72 @@ function renderFeed(){
     });
   });
 }
-document.querySelectorAll('.ftab').forEach(t=>t.onclick=()=>{
-  document.querySelectorAll('.ftab').forEach(x=>x.classList.remove('on'));
+document.querySelectorAll('.ftab:not(.rt)').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.ftab:not(.rt)').forEach(x=>x.classList.remove('on'));
   t.classList.add('on');feedState=t.dataset.fs;renderFeed();
 });
+
+/* ---------- right-rail view switch: FEED / ACCOUNT ---------- */
+document.querySelectorAll('.ftab.rt').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.ftab.rt').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');
+  const acct=t.dataset.rt==='acct';
+  document.getElementById('feedView').style.display=acct?'none':'flex';
+  document.getElementById('acctView').style.display=acct?'flex':'none';
+  if(acct)loadAccount();
+});
+
+async function loadAccount(){
+  const [p,perf]=await Promise.all([
+    fetch('/api/portfolio').then(r=>r.json()),
+    fetch('/api/performance').then(r=>r.json())]);
+  const up=p.return_pct>=0;
+  document.getElementById('acct-stats').innerHTML=
+    `<div style="font-family:var(--mono)">
+      <span style="font-size:20px;color:${up?'var(--green)':'var(--red)'}">$${p.equity.toLocaleString()}</span>
+      <span style="font-size:11px;color:${up?'var(--green)':'var(--red)'}"> ${up?'+':''}${p.return_pct}%</span>
+      <span style="font-size:9px;color:var(--txt-faint)"> from $${p.start_equity.toLocaleString()}</span></div>
+     <div style="font-family:var(--mono);font-size:9.5px;color:var(--txt-dim);margin-top:5px;line-height:1.8">
+      max drawdown <span style="color:var(--red)">${p.max_drawdown_pct??'—'}%</span> ·
+      kill-switch days <span style="color:${p.kill_switch_days?'var(--amber)':'var(--txt)'}">${p.kill_switch_days}</span><br>
+      decisions: ${p.decisions.APPROVED||0}✓ ${p.decisions.REDUCED||0}↓ ${p.decisions.REJECTED||0}✗
+      · <span style="color:var(--txt-faint)">paper only — no live orders</span></div>`;
+
+  // equity curve (SVG polyline, start-equity baseline)
+  const svg=document.getElementById('eqCurve');
+  const pts=p.curve||[];
+  if(pts.length>1){
+    const W=268,H=84,pad=4;
+    const eqs=pts.map(c=>c.equity), t0=pts[0].ts, t1=pts[pts.length-1].ts;
+    const lo=Math.min(...eqs,p.start_equity), hi=Math.max(...eqs,p.start_equity);
+    const X=ts=>pad+(W-2*pad)*(ts-t0)/Math.max(1,t1-t0);
+    const Y=e=>pad+(H-2*pad)*(1-(e-lo)/Math.max(1,hi-lo));
+    const line=pts.map(c=>`${X(c.ts).toFixed(1)},${Y(c.equity).toFixed(1)}`).join(' ');
+    const yStart=Y(p.start_equity).toFixed(1);
+    const endCol=eqs[eqs.length-1]>=p.start_equity?'#3ddc84':'#ff5d5d';
+    svg.innerHTML=
+      `<line x1="0" y1="${yStart}" x2="${W}" y2="${yStart}" stroke="#28394a" stroke-width="1" stroke-dasharray="3,3"/>`+
+      `<polyline points="${line}" fill="none" stroke="${endCol}" stroke-width="1.4"/>`+
+      `<circle cx="${X(t1).toFixed(1)}" cy="${Y(eqs[eqs.length-1]).toFixed(1)}" r="2.4" fill="${endCol}"/>`;
+    const d=ts=>new Date(ts*1000).toISOString().slice(0,10);
+    document.getElementById('eqLabels').innerHTML=
+      `<span>${d(t0)}</span><span style="color:var(--txt-dim)">peak $${Math.round(hi).toLocaleString()} · low $${Math.round(lo).toLocaleString()}</span><span>${d(t1)}</span>`;
+  }else{svg.innerHTML='';document.getElementById('eqLabels').textContent='no sized trades yet';}
+
+  const row=(r,label)=>{
+    const pos=r.pnl_usd>=0;
+    return `<div style="display:grid;grid-template-columns:56px 1fr auto auto;gap:8px;
+      padding:5px 12px;font-family:var(--mono);font-size:10px;border-bottom:1px solid var(--line)">
+      <span style="color:#dfe9f0">${label}</span>
+      <span style="color:var(--txt-faint)">${r.n} trades · ${r.win_pct}% win${r.pf?` · PF ${r.pf}`:''}</span>
+      <span style="color:var(--txt-dim)">${r.sum_r>0?'+':''}${r.sum_r}R</span>
+      <span style="color:${pos?'var(--green)':'var(--red)'};min-width:64px;text-align:right">${pos?'+':'−'}$${Math.abs(r.pnl_usd).toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+    </div>`;};
+  document.getElementById('perfSym').innerHTML=
+    perf.by_symbol.map(r=>row(r,r.key.replace('-USD',''))).join('')||'<div class="empty">no trades</div>';
+  document.getElementById('perfStrat').innerHTML=
+    perf.by_strategy.map(r=>row(r,r.key.replace('SCALE_IN','SCALE'))).join('')||'<div class="empty">no trades</div>';
+}
 
 /* ---------- session bar + clock ---------- */
 const SESSIONS=[["ASIA",0,6],["LON",6,12],["NY-O",12,17],["NY-PM",17,21],["LATE",21,24]];
