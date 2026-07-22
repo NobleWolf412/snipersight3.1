@@ -286,6 +286,8 @@ class TestCockpitHierarchy(unittest.TestCase):
         self.assertIn('aria-label="Pipeline quality and lineage"', html)
         self.assertIn('id="pipelineStages"', html)
         self.assertIn('id="evaluationGate"', html)
+        self.assertIn("evaluationGate.onclick=()=>showRightView('pipeline')", html)
+        self.assertIn('aria-label="Open pipeline quality details"', html)
         self.assertLess(html.index('id="activePositions"'),
                         html.index('data-rt="feed"'))
 

@@ -243,7 +243,8 @@
   .trace-diagnosis{padding:8px 11px;border-top:1px solid var(--line);font-size:10px;color:var(--txt-dim);background:rgba(0,0,0,.12)}
   .trace-diagnosis strong{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;color:var(--amber)}
   .evaluation-gate{display:none;padding:8px 14px;border-bottom:1px solid #713839;background:rgba(74,20,24,.72);font-family:var(--mono);font-size:10px;color:#ffd4d4;letter-spacing:.04em}
-  .evaluation-gate.show{display:flex;align-items:center;gap:9px}.evaluation-gate b{color:#fff}.evaluation-gate span{margin-left:auto;color:#ff9f9f}
+  .evaluation-gate.show{display:flex;align-items:center;gap:9px;cursor:pointer}.evaluation-gate b{color:#fff}.evaluation-gate span{margin-left:auto;color:#ff9f9f;text-decoration:underline;text-underline-offset:2px}
+  .evaluation-gate:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
   .pipeline-verdict{margin:10px;padding:12px;border:1px solid var(--line-hi);border-radius:9px;background:#101923}
   .pipeline-verdict strong{display:block;font-family:var(--mono);font-size:13px;letter-spacing:.08em}.pipeline-verdict p{margin-top:5px;font-size:11px;color:var(--txt-dim)}
   .pipeline-verdict.blocked{border-color:#713839;background:rgba(74,20,24,.28)}.pipeline-verdict.blocked strong{color:var(--red)}
@@ -334,7 +335,7 @@
       <div class="regime" id="regime">REGIME <b>—</b></div>
       <div id="mtfContext" style="margin-left:auto;display:flex;gap:5px;font-family:var(--mono);font-size:9.5px"></div>
     </div>
-    <div class="evaluation-gate" id="evaluationGate"><b>PERFORMANCE INVALID FOR EVALUATION</b>Upstream quality blockers are present.<span>Open PIPELINE</span></div>
+    <div class="evaluation-gate" id="evaluationGate" role="button" tabindex="0" aria-label="Open pipeline quality details"><b>PERFORMANCE INVALID FOR EVALUATION</b>Upstream quality blockers are present.<span>Open PIPELINE</span></div>
     <div class="chartwrap">
       <div id="chart"></div>
       <div id="inspector">
@@ -805,10 +806,9 @@ document.querySelectorAll('.ftab:not(.rt)').forEach(t=>t.onclick=()=>{
 });
 
 /* ---------- right-rail view switch: FEED / ACCOUNT / TRACE / PIPELINE ---------- */
-document.querySelectorAll('.ftab.rt').forEach(t=>t.onclick=()=>{
+function showRightView(view){
   document.querySelectorAll('.ftab.rt').forEach(x=>x.classList.remove('on'));
-  t.classList.add('on');
-  const view=t.dataset.rt;
+  document.querySelector(`.ftab.rt[data-rt="${view}"]`)?.classList.add('on');
   document.getElementById('feedView').style.display=view==='feed'?'flex':'none';
   document.getElementById('acctView').style.display=view==='acct'?'flex':'none';
   document.getElementById('traceView').style.display=view==='trace'?'flex':'none';
@@ -816,7 +816,13 @@ document.querySelectorAll('.ftab.rt').forEach(t=>t.onclick=()=>{
   if(view==='acct')loadAccount();
   if(view==='trace')loadTelemetry();
   if(view==='pipeline')loadPipelineHealth();
-});
+}
+document.querySelectorAll('.ftab.rt').forEach(t=>t.onclick=()=>showRightView(t.dataset.rt));
+const evaluationGate=document.getElementById('evaluationGate');
+evaluationGate.onclick=()=>showRightView('pipeline');
+evaluationGate.onkeydown=event=>{
+  if(event.key==='Enter'||event.key===' '){event.preventDefault();showRightView('pipeline');}
+};
 
 async function loadPipelineHealth(){
   const report=await api('/api/pipeline-health');
