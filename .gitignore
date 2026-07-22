@@ -1,0 +1,25 @@
+# Runtime data — regenerable, machine-specific, large
+app/data/
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# Runtime state
+app/data/heartbeat.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+
+# Scratch
+scratchpad/
+*.tmp

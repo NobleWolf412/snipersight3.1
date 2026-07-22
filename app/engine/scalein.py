@@ -1,0 +1,124 @@
+"""Scale-in playbook — LTF adds inside an active HTF setup. algo scale-v0.1-draft.
+
+Draft answer to §30 item 9 (HTF influence): the higher timeframe GATES the
+lower — a 1H trigger means nothing unless a 1D/4H setup is currently open in
+the same direction.
+
+Rules (versioned; pending user ratification):
+- Parent: a VALIDATED 1D/4H setup, from its trigger bar until its exec exit.
+- Trigger: a 1H BOS in the parent's direction, confirmed inside that window,
+  whose close has already moved >= 1 parent-R beyond the parent entry (the
+  add is bought with the market's progress, not with hope).
+- Add bracket: entry = the 1H break close; SL = the PARENT ENTRY (breakeven
+  line of the original position); TP = parent TP. Fee gate applies to the add
+  itself (same K as setups). Max 2 adds per parent.
+- SCALE-1 (honest caveat): the parent position keeps its ORIGINAL bracket in
+  the exec sim — full trail-to-breakeven accounting for the parent needs a
+  stateful position manager (exec v0.6+). Until then, adds are risk-governed
+  as additional exposure by the risk authority (half-size, exposure-capped).
+"""
+import json
+from decimal import Decimal
+
+from . import store
+from .swings import compute_atr
+from .structure import STRUCTURE_VERSION
+from .setups import (SETUP_VERSION, FEE_SIDE, SLIP_ATR, MIN_RISK_COST_MULT, Q2)
+from .execsim import EXEC_VERSION
+from .runlog import RunRecorder
+
+SCALE_VERSION = "scale-v0.1-draft"
+PARENT_TFS = ("4H", "1D")
+TRIGGER_TF = "1H"
+TRIGGER_MIN_R = Decimal(1)
+MIN_ADD_RR = Decimal(1)
+MAX_ADDS = 2
+
+
+def run(con, symbol: str, tf: str = TRIGGER_TF, tf_seconds: int = 3600) -> dict:
+    # pipeline-compatible signature; this engine only acts on the trigger TF
+    if tf != TRIGGER_TF:
+        return {"symbol": symbol, "parents": 0, "adds": 0}
+    with RunRecorder(con, "scalein", SCALE_VERSION, symbol, TRIGGER_TF) as rec:
+        candles_1h = [dict(r) for r in store.get_candles(con, symbol, TRIGGER_TF)]
+        ts_index = {c["open_ts"]: i for i, c in enumerate(candles_1h)}
+        atr_1h = compute_atr(candles_1h)
+
+        breaks = []
+        for r in store.get_facts(con, symbol, TRIGGER_TF, "structure", STRUCTURE_VERSION):
+            p = json.loads(r["payload"])
+            if p["event"] in ("BOS", "CHOCH"):
+                breaks.append({"market_time": r["market_time"],
+                               "confirmed_at": r["confirmed_at"],
+                               "direction": p["direction"],
+                               "close": Decimal(p["close"])})
+        breaks.sort(key=lambda b: b["confirmed_at"])
+
+        exits = {}
+        for tf in PARENT_TFS:
+            for r in store.get_facts(con, symbol, tf, "exec", EXEC_VERSION):
+                p = json.loads(r["payload"])
+                exits[p["setup_id"]] = r["confirmed_at"]
+
+        n_adds = 0
+        n_parents = 0
+        for tf in PARENT_TFS:
+            for r in store.get_facts(con, symbol, tf, "setup", SETUP_VERSION):
+                parent = json.loads(r["payload"])
+                if parent["state"] != "VALIDATED":
+                    continue
+                n_parents += 1
+                entry = Decimal(parent["entry"])
+                sl, tp = Decimal(parent["sl"]), Decimal(parent["tp"])
+                p_risk = abs(entry - sl)
+                long = parent["direction"] == "LONG"
+                w_start = r["confirmed_at"]
+                w_end = exits.get(parent["setup_id"], 2**53)
+                want_dir = "BULL" if long else "BEAR"
+                adds = 0
+                for b in breaks:
+                    if adds >= MAX_ADDS:
+                        break
+                    if not (w_start < b["confirmed_at"] < w_end):
+                        continue
+                    if b["direction"] != want_dir:
+                        continue
+                    px = b["close"]
+                    progressed = (px - entry) if long else (entry - px)
+                    if progressed < TRIGGER_MIN_R * p_risk:
+                        continue
+                    risk_dist = abs(px - entry)          # SL sits at parent entry
+                    i = ts_index.get(b["market_time"])
+                    if i is None or atr_1h[i] is None or risk_dist <= 0:
+                        continue
+                    est_cost = 2 * FEE_SIDE * px + SLIP_ATR * atr_1h[i]
+                    if risk_dist < MIN_RISK_COST_MULT * est_cost:
+                        continue
+                    reward = (tp - px) if long else (px - tp)
+                    if reward <= 0:
+                        continue
+                    rr = (reward / risk_dist).quantize(Q2)
+                    if rr < MIN_ADD_RR:
+                        continue
+                    adds += 1
+                    payload = {"setup_id": f"{parent['setup_id']}|ADD{adds}",
+                               "strategy": "SCALE_IN", "direction": parent["direction"],
+                               "parent_setup_id": parent["setup_id"],
+                               "entry": str(px), "sl": str(entry), "tp": str(tp),
+                               "rr": str(rr), "rank": 50,
+                               "why": (f"add #{adds} on 1H {b['direction']} BOS at "
+                                       f"{float(px):,.2f} inside active {tf} "
+                                       f"{parent['strategy']} · stop at parent entry "
+                                       f"(breakeven) · shared TP · R:R {rr}"),
+                               "zone_id": parent.get("zone_id"), "regime": parent.get("regime"),
+                               "state": "VALIDATED"}
+                    if store.insert_fact(con, symbol=symbol, tf=TRIGGER_TF, kind="setup",
+                                         market_time=b["market_time"],
+                                         confirmed_at=b["confirmed_at"],
+                                         algo_version=SCALE_VERSION, payload=payload):
+                        n_adds += 1
+
+        con.commit()
+        rec.n_inputs = n_parents
+        rec.n_new_facts = n_adds
+        return {"symbol": symbol, "parents": n_parents, "adds": n_adds}

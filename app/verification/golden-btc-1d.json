@@ -1,0 +1,39 @@
+{
+  "description": "User-supplied ground truth (swings.docx, 2026-07-21). Major daily swing points that matter to institutional market structure. Window: 2022-11-01 .. 2026-07-21. Anything the engine ranks MAJOR inside the window but not listed here is over-detection; anything here the engine misses is under-detection.",
+  "symbol": "BTC-USD",
+  "tf": "1D",
+  "window": ["2022-11-01", "2026-07-21"],
+  "swings": [
+    {"date": "2022-11-21", "type": "LOW",  "price": 15500,  "note": "Bear market bottom (LL)", "tolerance_days": 10},
+    {"date": "2023-01-17", "type": "LOW",  "price": 21750,  "note": "Higher Low, accumulation begins", "tolerance_days": 20},
+    {"date": "2024-03-14", "type": "HIGH", "price": 73800,  "note": "New ATH", "tolerance_days": 10},
+    {"date": "2024-04-20", "type": "LOW",  "price": 56000,  "note": "Higher Low, held structure", "tolerance_days": 45},
+    {"date": "2025-01-15", "type": "HIGH", "price": 108000, "note": "Higher High, continuation", "tolerance_days": 45},
+    {"date": "2025-07-15", "type": "HIGH", "price": 118000, "note": "Higher High, continuation", "tolerance_days": 45},
+    {"date": "2025-09-15", "type": "HIGH", "price": 123000, "note": "Cycle high, final HH", "tolerance_days": 45},
+    {"date": "2026-01-15", "type": "HIGH", "price": 95000,  "note": "Lower High, failed rally", "tolerance_days": 45}
+  ],
+  "breaks": [
+    {"date": "2023-01-20", "event": "CHOCH", "direction": "BULL", "price": 21500, "note": "End of bear market", "tolerance_days": 45},
+    {"date": "2023-03-18", "event": "BOS",   "direction": "BULL", "price": 28000, "note": "Confirmed institutional buying", "tolerance_days": 45},
+    {"date": "2023-10-23", "event": "BOS",   "direction": "BULL", "price": 35000, "note": "Broke 2023 range", "tolerance_days": 45},
+    {"date": "2024-11-10", "event": "BOS",   "direction": "BULL", "price": 73000, "note": "Broke previous ATH", "tolerance_days": 45},
+    {"date": "2025-10-15", "event": "CHOCH", "direction": "BEAR", "price": 100000, "note": "Lost first major HL", "tolerance_days": 45},
+    {"date": "2025-12-15", "event": "BOS",   "direction": "BEAR", "price": 89000, "note": "Confirmed macro downtrend", "tolerance_days": 45},
+    {"date": "2026-02-15", "event": "BOS",   "direction": "BEAR", "price": 69000, "note": "Lost major support", "tolerance_days": 45}
+  ],
+  "liquidity_levels": [
+    {"price": 123000, "note": "Cycle high liquidity"},
+    {"price": 118000, "note": "Swing high"},
+    {"price": 108000, "note": "Swing high"},
+    {"price": 100000, "note": "CHoCH area"},
+    {"price": 89000,  "note": "Bearish BOS"},
+    {"price": 73000,  "note": "Previous ATH / major BOS"},
+    {"price": 69000,  "note": "Current resistance / recent BOS"},
+    {"price": 63500,  "note": "Current demand zone 62-65k"},
+    {"price": 56000,  "note": "Major higher low"},
+    {"price": 35000,  "note": "2023 BOS"},
+    {"price": 28000,  "note": "Major accumulation / BOS"},
+    {"price": 15500,  "note": "Bear market low"}
+  ]
+}

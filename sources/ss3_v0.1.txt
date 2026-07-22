@@ -1,0 +1,223 @@
+SNIPERSIGHT3
+Product Constitution and v0 System Specification
+A governance and engineering foundation for a deterministic, explainable market-structure platform
+Version 0.1
+Prepared for product design and implementation planning
+
+Executive Summary
+SniperSight3 is defined as a market-structure intelligence, strategy-research, risk-management, and trade-execution platform. This document establishes the non-negotiable rules for the product and specifies the first development milestone: a replayable, inspectable, deterministic market-structure engine with no live trading.
+The development gate is simple: the system must be able to explain what it knew, when it knew it, how it classified the market, and which algorithm version produced the result.
+1. Purpose
+The constitution prevents the platform from becoming a collection of unrelated indicators, a constantly changing scoring system, an untestable AI black box, a backtester that uses future information, or a live system whose past decisions cannot be reproduced.
+Any component that violates these rules must be redesigned before it can influence real capital.
+2. Product Identity
+SniperSight3 is a market-structure intelligence, strategy-research, risk-management, and trade-execution platform.
+It is not primarily a signal service, chart indicator, social-trading platform, self-learning autonomous bot, guaranteed-profit system, or replacement for risk management.
+3. Core Operating Layers
+Layer 1 - Market observations
+Direct measurements: OHLCV, trades, order-book data, funding, open interest, and exchange account events. No interpretation occurs here.
+Layer 2 - Derived market facts
+Deterministic interpretations: swings, protected levels, BOS, CHoCH, zones, liquidity clusters, regimes, and volatility states.
+Layer 3 - Trading hypotheses
+Testable strategy claims, such as whether a bearish break and retest has favorable expectancy under defined conditions.
+Layer 4 - Trade intents
+Strategy-generated requests containing direction, entry, invalidation, targets, expiration, and requested account risk.
+Layer 5 - Executable orders
+Risk-approved venue instructions containing final quantity, price, protection, time-in-force, and an idempotent client order identifier.
+No component may skip layers. A strategy cannot write directly to the exchange.
+4. Determinism Principle
+Given the same market data, algorithm version, configuration, and calculation time, SniperSight3 must produce the same result.
+This applies to candles, features, swings, structure, zones, regimes, setups, strategy decisions, position sizing, risk decisions, and simulated execution.
+Randomized ML algorithms must record seeds, data versions, and environment versions.
+5. Causality and Look-Ahead Prevention
+A candle is not final until it closes. Developing-candle observations must be labeled provisional.
+A swing requiring candles to its right is not confirmed until those candles close. The system records market time, detection time, and confirmation time.
+Historical replay may not display facts before confirmation. Model features must use only information available at prediction time.
+6. Provisional and Confirmed Information
+DEVELOPING
+PROVISIONAL
+CONFIRMED
+INVALIDATED
+EXPIRED
+SUPERSEDED
+The initial strategy should act only on confirmed facts.
+7. Versioning Constitution
+Everything that can affect a result must be versioned: data normalization, candle aggregation, swing detection, structure classification, zone logic, liquidity logic, regime logic, strategy logic, risk rules, sizing, execution simulation, fees, slippage, features, models, and trade-management policies.
+A version becomes immutable once used in a recorded backtest, paper trade, or live trade. Editing creates a new version.
+8. Auditability Constitution
+Every trade must be reconstructable from the available data through the final outcome.
+What market data was available?
+What market facts existed?
+Which algorithms and versions created them?
+Which strategy version evaluated them?
+Why did the strategy create a trade intent?
+What risk rules were applied?
+Why was the trade approved, modified, or rejected?
+What orders and fills occurred?
+How was the position managed?
+Why did it close, and what was the net result?
+9. Risk Constitution
+Risk control is independent from strategy logic. Strategies request risk; the risk authority approves, reduces, or rejects it.
+Position sizing
+Maximum risk per trade
+Daily and total drawdown limits
+Portfolio, directional, and correlated exposure
+Leverage and concurrent-position limits
+Data, exchange, and account health
+Kill-switch state
+Stops should represent structural invalidation. Stops may tighten after entry but may not be widened to increase the originally approved loss.
+10. Execution Constitution
+Exchange state is authoritative.
+Order operations must be idempotent and safe to retry.
+Every filled position requires verified protection.
+New entries remain disabled after restart until reconciliation completes.
+UNKNOWN order state is critical and must be resolved.
+11. Strategy Constitution
+Every strategy must define eligible instruments, timeframes, context, setup, confirmation, entry, invalidation, targets, management, expiration, cancellation, re-entry, concurrency, and data-quality requirements.
+Undocumented discretion such as “take it when the chart looks clean” is not acceptable.
+12. Machine-Learning Constitution
+Initially, ML may rank valid setups, estimate outcome probabilities, retrieve similar historical contexts, detect drift, and identify anomalies.
+It may not change leverage or risk.
+It may not remove or widen stops.
+It may not bypass deterministic requirements.
+It may not promote or deploy itself.
+13. Human-Control Constitution
+The dashboard must clearly show automation status, active account, strategy version, eligible instruments, open risk, pending orders, positions, protection state, and system health.
+Disable a strategy or instrument
+Cancel pending entries
+Close a position
+Disable all automation
+Trigger emergency shutdown
+14. Research Constitution
+Each research run records strategy version, algorithms, instruments, period, data source/version, parameters, fees, funding, slippage, fills, starting capital, risk rules, software commit, and run timestamp. Results are immutable.
+15. Performance-Reporting Constitution
+Trade count and win rate
+Average win, average loss, expectancy, and profit factor
+Maximum drawdown and time underwater
+Fill rate, missed-entry rate, fees, funding, and slippage
+Performance by regime, instrument, direction, and dataset split
+In-sample, validation, out-of-sample, paper, and live results must remain separate.
+16. Scope Constitution
+v0 explicitly excludes live execution, ML-controlled trading, strategy marketplaces, options, forex, multi-exchange routing, social sentiment, news prediction, copy trading, reinforcement learning, mobile apps, public billing, and indicator sprawl.
+
+SniperSight3 v0 System Specification
+17. v0 Objective
+Prove that the system can interpret market structure consistently and causally without repainting history or relying on hindsight. No live trading occurs in v0.
+18. Supported Markets and Timeframes
+Instruments: BTCUSDT, ETHUSDT
+Venue: One selected crypto exchange
+Timeframes: 1W, 1D, 4H, 1H, 15m
+Optional development timeframe: 5m
+19. Functional Modules
+Market-data importer
+Historical backfill, updates, duplicate/gap detection, timestamps, source lineage, and deterministic re-import.
+Candle aggregator
+Canonical higher-timeframe candles with exchange-aware boundaries and validation.
+Replay engine
+Candle-by-candle playback with provisional and confirmed facts.
+Swing engine
+Potential, confirmed, hierarchical, protected, and invalidated swings.
+Structure engine
+HH, HL, LH, LL, BOS, CHoCH, structural direction, and transition states.
+Zone engine
+Creation, merging, strength, touches, breaks, flips, and invalidation.
+Liquidity engine
+Equal highs/lows, clusters, prior extremes, sweeps, rejection, and acceptance.
+Regime engine
+Trend, range, compression, expansion, transition, and supporting evidence.Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2193' in position 30: character maps to <undefined>
+
+Chart interface
+Synchronized charts and inspectable overlays.
+Fact inspector
+Version, source candles, confirmation time, invalidation, lineage, and state.
+20. Initial Swing Methodology
+Micro swing
+Five-candle fractal using two closed candles on each side. Intended for fine structure and entry analysis.
+Local swing
+A confirmed micro swing producing a reversal of at least a configurable volatility-adjusted amount. Initial research default: 0.75 ATR.
+Structural swing
+A local swing that breaks an existing structural level, produces meaningful displacement, or forms a significant directional leg.
+Major swing
+Macro structure used primarily on weekly, daily, and possibly 4H charts.
+21. Structural Vocabulary
+A CHoCH indicates transition risk; it does not by itself prove a complete trend reversal.
+22. Initial Structural-Break Rule
+The level belongs to a confirmed structural swing.
+A closed candle finishes beyond the level.
+The close exceeds the level by a minimum tolerance.
+A wick alone does not confirm the break.
+Initial tolerance: the greater of a small tick buffer or 0.05 ATR. Displacement, body size, relative volume, close location, follow-through, and reclaim behavior should be recorded as evidence before becoming required filters.
+23. Zone Specification
+Sources: structural swing clusters, repeated reactions, consolidation before displacement, prior daily highs/lows, and prior weekly highs/lows.
+Lifecycle: FRESH, TOUCHED, TESTED, WEAKENED, BROKEN, FLIPPED, INVALIDATED.
+Broken zones remain stored; their state changes instead of deleting history.
+24. Liquidity Specification
+Equal highs/lows within an initial 0.10 ATR tolerance
+Three or more nearby swing highs/lows
+Previous daily and weekly extremes
+Sweep, rejected sweep, and accepted sweep events
+A sweep requires price to trade beyond a level and return through it. A rejected sweep additionally requires a close back inside or a lower-timeframe structural reversal.
+25. Regime Specification
+BULL_TREND
+WEAKENING_BULL
+BEAR_TREND
+WEAKENING_BEAR
+RANGE
+COMPRESSION
+EXPANSION
+TRANSITION
+DISORDERED
+The classifier exposes a primary regime and supporting evidence, not an uncalibrated mystery percentage.
+26. Multi-Timeframe Context
+Weekly: BULL_TREND - HH / HL - last event Bullish BOS
+Daily: WEAKENING_BULL - possible lower high - last event Bearish CHoCH
+4H: BEAR_TREND - LH / LL - last event Bearish BOS
+1H: TRANSITION - bullish correction - retest developing
+15m: RANGE - local equal highs - liquidity cluster formed
+27. Golden-Chart Validation Library
+Create a manually reviewed library of approximately 50 BTC and 50 ETH examples covering trends, ranges, false breaks, reversals, compression, expansion, liquidity sweeps, pullbacks, transitions, and disorderly markets.
+Expected major swings
+Expected protected levels
+Expected BOS and CHoCH
+Expected important zones
+Expected liquidity clusters
+Expected regime
+28. v0 User Workflow
+Select BTCUSDT or ETHUSDT.
+Choose a historical date.
+Start candle-by-candle replay.
+Observe developing and confirmed structure.
+Click facts to inspect evidence and lineage.
+Compare synchronized timeframes.
+Submit structured feedback without automatically modifying algorithms.
+29. v0 Acceptance Criteria
+Reliable historical import and gap detection.
+No future-data leakage during replay.
+Accurate swing confirmation times.
+Deterministic structural facts.
+Inspectable BOS and CHoCH.
+Complete zone lifecycle.
+Synchronized multi-timeframe charts.
+Algorithm lineage on every fact.
+Automated golden-chart tests.
+Visible comparison reports for algorithm changes.
+Stable results after restart.
+All derived facts regenerable from canonical candles.
+30. Completion Gate Before Strategy Development
+Exact swing confirmation rule
+Structural-tier hierarchy
+Protected-high and protected-low logic
+BOS and CHoCH level selection
+Wick versus close rules
+Break tolerance
+Zone break and flip rules
+Retest definition and expiration
+Higher-timeframe influence
+Which facts are provisional and which are tradable
+31. Next Implementation Stage
+After v0 proves market understanding, v1 should implement exactly one higher-timeframe structure and lower-timeframe break-and-retest methodology as a durable state machine.
