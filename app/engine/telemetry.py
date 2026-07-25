@@ -6,8 +6,17 @@ to the strategy, portfolio authority, entry model, or exit economics.
 """
 from __future__ import annotations
 
+from collections import Counter
+
+from . import diagnostics
+
 
 NON_FAILURES = {"WINNER", "OPEN_POSITION", "WAITING_FOR_FILL", "AWAITING_RISK"}
+NORMAL_OUTCOMES = {
+    "WINNER", "STOP_LOSS", "LOSING_EXIT", "TIMEOUT_EXIT",
+    "ENTRY_NOT_FILLED", "COSTS_ERASED_EDGE", "OPEN_POSITION",
+    "WAITING_FOR_FILL", "AWAITING_RISK",
+}
 
 
 def classify_failure(risk: dict | None, order: dict | None,
@@ -67,9 +76,17 @@ def build_record(setup: dict, risk: dict | None = None,
     target = float(setup["tp"])
     stop_distance = abs(entry - stop)
     reward_distance = abs(target - entry)
+    diagnostic_events = diagnostics.explain_lifecycle(
+        setup, risk, order, execution, lifecycle)
+    defect_count = sum(d["category"] in {"SYSTEM_DEFECT", "MISSING_EVIDENCE", "INPUT_VALIDATION", "DATA_CONTRACT"}
+                       and d["severity"] not in {"INFO", "OUTCOME"}
+                       for d in diagnostic_events)
+    missing_evidence = sorted({field for d in diagnostic_events
+                               for field in d.get("missing_evidence", [])})
     return {
         **setup,
         **lifecycle,
+        "classification": "EXPECTED_ATTRITION" if lifecycle["failure_code"] in NORMAL_OUTCOMES else "DECISION",
         "stop_distance": round(stop_distance, 10),
         "reward_distance": round(reward_distance, 10),
         "computed_rr": round(reward_distance / stop_distance, 2) if stop_distance else None,
@@ -88,4 +105,33 @@ def build_record(setup: dict, risk: dict | None = None,
         "mfe_r": execution.get("mfe_r") if execution else None,
         "bars_to_fill": execution.get("bars_to_fill") if execution else None,
         "bars_held": execution.get("bars_held") if execution else None,
+        "diagnostics": diagnostic_events,
+        "diagnostic_count": len(diagnostic_events),
+        "defect_count": defect_count,
+        "missing_evidence": missing_evidence,
+    }
+
+
+def summarize_diagnostics(records: list[dict]) -> dict:
+    """Aggregate diagnostics without conflating trading outcomes and defects."""
+    categories = Counter()
+    severities = Counter()
+    root_causes = Counter()
+    rules = Counter()
+    missing = Counter()
+    for record in records:
+        for event in record.get("diagnostics", []):
+            categories[event.get("category") or "UNKNOWN"] += 1
+            severities[event.get("severity") or "UNKNOWN"] += 1
+            rules[event.get("rule_id") or "UNKNOWN"] += 1
+            if event.get("severity") not in {"INFO", "OUTCOME"}:
+                root_causes[diagnostics.root_cause_key(event)] += 1
+            for field in event.get("missing_evidence", []):
+                missing[field] += 1
+    return {
+        "categories": dict(categories.most_common()),
+        "severities": dict(severities.most_common()),
+        "root_causes": dict(root_causes.most_common()),
+        "rules": dict(rules.most_common()),
+        "missing_evidence": dict(missing.most_common()),
     }
