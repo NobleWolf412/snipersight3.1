@@ -692,3 +692,24 @@ onboarded RE-USD).
 
 **Final audit: 0 blockers, 116 honest warnings (70 known venue gaps, stale
 non-scanned series, 1 legacy-attribution note). EVALUATION ALLOWED.**
+
+---
+
+## S21b — 2026-07-25 — UI self-heal (the "only shows UTC" report)
+
+**User report:** clicked RAW COCKPIT top-right; page went empty except the UTC
+clock. Diagnosis: the click landed during the S21 server-chain restart window.
+The hardened UI's api() wrapper shows a DEGRADED banner on failure but never
+retries — a page loaded during any server blip stayed dead until manual
+refresh (the clock is pure JS, hence "only shows UTC").
+
+**Fix:** api()'s failure path now schedules a single coalesced retry loop
+(5s): hide the banner, re-run loadOverview/load/loadPipelineHealth; if the API
+is still down the banner re-appears and the loop continues. Footer shows
+"API UNREACHABLE — reconnecting…" during outages. (Also reverted a stray
+unclosed try{ from an edit against a stale copy of index.html — the hardening
+pass had rewritten the file; anchored edits now verified against disk.)
+
+**Tested live:** killed the server under an open page -> DEGRADED banner ->
+watchdog restarted it -> page self-healed to SCANNER LIVE with full data, no
+manual refresh.

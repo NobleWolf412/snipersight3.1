@@ -452,6 +452,7 @@ async function api(url,options={}){
     return await response.json();
   }catch(error){
     systemError(`${url} · ${error.message||error}`);
+    _apiRetry();   // never leave a dead page: auto-recover when the API returns
     throw error;
   }
 }
@@ -474,6 +475,23 @@ const series=chart.addCandlestickSeries({
 const chartEl=document.getElementById('chart');
 new ResizeObserver(es=>{const{width,height}=es[0].contentRect;
   chart.applyOptions({width:Math.floor(width),height:Math.floor(height)});}).observe(chartEl);
+
+/* ---------- resilience: never leave a dead page on API failure ---------- */
+let _retryT=null;
+function _apiRetry(){
+  const el=document.getElementById('st-scan');
+  if(el)el.textContent='API UNREACHABLE — reconnecting…';
+  const led=document.getElementById('scanLed');if(led)led.className='led idle';
+  if(_retryT)return;
+  _retryT=setTimeout(()=>{
+    _retryT=null;
+    const alert=document.getElementById('sysAlert');
+    if(alert)alert.style.display='none';           // re-shown by api() if still down
+    loadOverview().catch(()=>{});
+    load().catch(()=>{});
+    if(typeof loadPipelineHealth==='function')loadPipelineHealth().catch(()=>{});
+  },5000);
+}
 
 /* ---------- chart + facts ---------- */
 async function load(){
