@@ -7,3 +7,4 @@
 - [State Transition Tables Draft Appendix ST (v0.1)](state-transition-tables-draft.md) — v0.1: per-entity state machines (candle/swing/structure-break/zone/liquidity/regime); closes FINDING-005/007/022/024; resolves §30 mechanism items 2/6/8/10; files CR-A/CR-B for follow-up minor pass.
 - [Applicability Tags Draft Appendix AT (v0.1)](applicability-tags-draft.md) — v0.1: per-section v0/v0-partial/v1+ tags for §1–§16. Closes FINDING-015.
 - [HTF Level Query Shape — Sketch](htf-level-query-shape-sketch.md) — design sketch for the fact-store + as_of query API that both the chart renderer and strategy engine read from. Feeds Item D; not yet a decision.
+- [FORMING → armed order plan](forming-armed-order-plan.md) — War Room 2026-07-24 idea #5; grounding-corrected A→Z packet. Blocked on user: freeze exception + sizing-seam ruling (§9). Pending-review.

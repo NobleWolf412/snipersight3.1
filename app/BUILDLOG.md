@@ -648,3 +648,47 @@ watchdog handled redeploy.
 - Added a confirmed API reset, CLI reset, and wallet control with visible start date.
 - Kept all strategy eligibility, entry, exit, and sizing constants unchanged.
 
+
+---
+
+## S21 — 2026-07-25 — Unwedge the fail-closed gate (1,364 blockers -> 0)
+
+**Symptom:** UI showed BLOCKED / EVALUATION BLOCKED (1,364 critical blockers).
+Worse: engine.log showed EVERY live cycle since the hardening landed aborting
+with "BTC-USD blocked by market-data quality: SEQUENCE_GAPS" — the scanner was
+wedged for days and the hardened chain (setup-v0.6/exec-v0.7/risk-v0.6) had
+produced ZERO facts. The forward record was frozen.
+
+**Root causes:**
+1. Gap deadlock: assert_market_ready treats ANY candle discontinuity as
+   BLOCKED, but Coinbase legitimately omits buckets with zero trades and our
+   constitution logs gaps rather than fabricating candles. A permanent venue
+   void meant a permanently closed gate -> no engines -> no facts -> more
+   audit failures downstream (MISSING_AGGREGATE x382 accumulated as imports
+   continued while aggregation/engines were blocked).
+2. Generation leakage: the audit evaluated ALL fact generations, so legacy
+   (pre-order-lifecycle, pre-manifest) facts produced 786 EXIT_WITHOUT_ORDER +
+   126 REJECTED_WITH_EXPOSURE + 597 INCOMPLETE_LINEAGE against a chain that
+   never wrote them — contradicting HARDENING.md's own "older generations are
+   not comparable" rule.
+
+**Repairs (quality.py only — no strategy constants touched):**
+- KNOWN_VENUE_GAPS: discontinuities acknowledged in import_log degrade instead
+  of block; unexplained gaps still BLOCK (fail-closed preserved for genuine
+  corruption). Aggregate-TF discontinuities defer to the MISSING_AGGREGATE
+  reconciliation check (missing-by-design when sources incomplete).
+- SETUP/RISK/EXECUTION checks scoped to the active engine chain (lazy-imported
+  current versions). CAUSALITY and EQUITY_RECONCILIATION stay global —
+  corruption is corruption in any generation (one test initially broken by
+  over-scoping the account check; reverted that filter, suite green 55/55).
+
+**Repair run:** 1,427 gap ranges re-attempted -> 0 candles recovered (all
+genuine venue voids, now acknowledged); aggregates rebuilt for 31 symbols;
+hardened chain ran end-to-end for the first time (31/31 symbols, 67s);
+risk-v0.6 baseline account: $10,000, 0 trades (correct — nothing has validated
+inside the forward window yet under the stricter v0.6 gates). Scanner + server
+restarted under watchdog; first healthy cycle confirmed (universe refresh even
+onboarded RE-USD).
+
+**Final audit: 0 blockers, 116 honest warnings (70 known venue gaps, stale
+non-scanned series, 1 legacy-attribution note). EVALUATION ALLOWED.**

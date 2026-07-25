@@ -42,6 +42,9 @@ GOOD_RR = Decimal("2.5")
 SL_ATR = Decimal("0.25")
 SWEEP_LOOKBACK_BARS = 10
 Q2 = Decimal("0.01")
+# Armed-order window: number of bars a limit stays live before it MISSES.
+# MUST equal execsim.MAX_ENTRY_BARS — Phase G will collapse to one source.
+ENTRY_MAX_BARS = 4
 
 # Cost model is an immutable profile shared with execution simulation.
 COST_PROFILE = costs.DEFAULT_COST_PROFILE
@@ -248,7 +251,16 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                                "distance_atr": str(dist_atr),
                                "zone_strength": created.get("strength"),
                                "manifest_hash": manifest_hash,
-                               "cost_manifest_hash": cost_manifest_hash}
+                               "cost_manifest_hash": cost_manifest_hash,
+                               # Armed-order fields (Phase D scaffolding; sizing
+                               # wired in Phase E, inheritance in Phase F).
+                               "size_units": None, "risk_usd": None,
+                               "notional_usd": None, "implied_leverage": None,
+                               "risk_decision": None, "risk_reasons": [],
+                               "armed": False,
+                               "armed_at": bct,
+                               "expiry_bar_count": ENTRY_MAX_BARS,
+                               "expires_at_ts": bct + ENTRY_MAX_BARS * tf_seconds}
                     if store.insert_fact(con, symbol=symbol, tf=tf, kind="setup",
                                          market_time=c["open_ts"], confirmed_at=bct,
                                          algo_version=SETUP_VERSION, payload=payload):
@@ -327,7 +339,18 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                        "rr": str(rr), "rank": rank, "why": why,
                        "zone_id": zone_id, "regime": reg, "state": "VALIDATED",
                        "manifest_hash": manifest_hash,
-                       "cost_manifest_hash": cost_manifest_hash}
+                       "cost_manifest_hash": cost_manifest_hash,
+                       # Armed-order fields (Phase D scaffolding; Phase F will
+                       # overwrite entry/sl/tp/size fields by inheriting from
+                       # the matching FORMING when one exists).
+                       "size_units": None, "risk_usd": None,
+                       "notional_usd": None, "implied_leverage": None,
+                       "risk_decision": None, "risk_reasons": [],
+                       "armed": False,
+                       "armed_at": touched["confirmed_at"],
+                       "expiry_bar_count": ENTRY_MAX_BARS,
+                       "expires_at_ts": (touched["confirmed_at"]
+                                         + ENTRY_MAX_BARS * tf_seconds)}
             if store.insert_fact(con, symbol=symbol, tf=tf, kind="setup",
                                  market_time=touched["market_time"],
                                  confirmed_at=touched["confirmed_at"],

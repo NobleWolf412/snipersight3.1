@@ -67,3 +67,8 @@ No new trade logic until forward record ~30 days (target ~2026-08-20). Allowed: 
 
 ## Single next step
 Nothing build-critical — let the record accumulate. On user request during freeze: Tauri or Telegram. On user return with rulings: §30 session (now trivially concrete — every rule runs live on the chart).
+
+## In flight — 2026-07-24 War Room follow-up
+- War Room idea #5 ("Complete FORMING → armed order") — plan APPROVED (`mem:forming-armed-order-plan`, Phases A–K). Grounding memo corrects the pitch: FORMING already carries entry/sl/tp/rr; missed-limit accounting already ships; real delta is `size` + `expiry_bar_count` + VALIDATED-inherits-FORMING.
+- **Rulings (2026-07-24):** freeze exception GRANTED (one-off, forward clock not reset); sizing seam A chosen (extract pure `risk.size_order`, §9 preserved).
+- Handed off to Coder — Phase D (schema-only) → Phase K (Auditor review). Handoff packet in the plan note (files in play, contracts, bit-identity acceptance, expected replay diff, non-scope).

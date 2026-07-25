@@ -16,6 +16,34 @@ STAGES = ("DATA", "AGGREGATION", "FACTS", "SETUP", "RISK", "EXECUTION", "ACCOUNT
 ORDER = {"PASS": 0, "DEGRADED": 1, "BLOCKED": 2}
 
 
+def _current_versions():
+    """Active engine chain. Generation-specific checks (SETUP/RISK/EXECUTION)
+    evaluate ONLY the active chain: per docs/HARDENING.md, older generations
+    are retained as historical artifacts and are not comparable — auditing
+    them as if they were the live pipeline permanently blocks evaluation on
+    facts that the active chain never produced. Lazy import avoids cycles."""
+    from . import setups, scalein, execsim, risk
+    return {"setup": (setups.SETUP_VERSION, scalein.SCALE_VERSION),
+            "risk": (risk.RISK_VERSION,),
+            "exec": (execsim.EXEC_VERSION,),
+            "order": (execsim.EXEC_VERSION,)}
+
+
+def _known_gap_buckets(con, sym: str, tf: str) -> set[int]:
+    """Gap timestamps the importer acknowledged at import time (gap-honesty
+    rule: gaps are logged, never fabricated). Coinbase legitimately omits a
+    bucket when zero trades occurred in it — an acknowledged void is data,
+    not corruption, and must not wedge the fail-closed gate forever."""
+    out: set[int] = set()
+    for (g,) in con.execute(
+            "SELECT gaps FROM import_log WHERE symbol=? AND tf=?", (sym, tf)):
+        try:
+            out.update(int(t) for t in json.loads(g))
+        except Exception:
+            continue
+    return out
+
+
 class DataQualityError(RuntimeError):
     pass
 
@@ -63,10 +91,29 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
         if bad:
             _issue(checks, "DATA", "BLOCKED", "OHLC_INVARIANT_FAILURE",
                    f"{bad} malformed or misaligned candles", sym, tf)
-        gaps = sum(rows[i][0] - rows[i - 1][0] != sec for i in range(1, len(rows)))
-        if gaps:
-            _issue(checks, "DATA", "BLOCKED", "SEQUENCE_GAPS",
-                   f"{gaps} discontinuities in candle sequence", sym, tf)
+        missing: list[int] = []
+        for i in range(1, len(rows)):
+            t = rows[i - 1][0] + sec
+            while t < rows[i][0] and len(missing) <= 5000:
+                missing.append(t)
+                t += sec
+        if missing:
+            if tf in importer.NATIVE_TFS:
+                logged = _known_gap_buckets(con, sym, tf)
+                unexplained = [t for t in missing if t not in logged]
+            else:
+                # Aggregate TFs: a missing bucket is BY DESIGN when its source
+                # bucket was incomplete (never fabricate). Genuine aggregation
+                # failures are caught independently by MISSING_AGGREGATE below.
+                unexplained = []
+            if unexplained:
+                _issue(checks, "DATA", "BLOCKED", "SEQUENCE_GAPS",
+                       f"{len(unexplained)} unexplained discontinuities in candle sequence",
+                       sym, tf)
+            if len(missing) > len(unexplained):
+                _issue(checks, "DATA", "DEGRADED", "KNOWN_VENUE_GAPS",
+                       f"{len(missing) - len(unexplained)} venue-acknowledged empty "
+                       f"buckets (logged at import; no trades or venue outage)", sym, tf)
         developing = sum(r[0] + sec > now for r in rows)
         if developing:
             _issue(checks, "DATA", "BLOCKED", "DEVELOPING_CANDLES",
@@ -122,6 +169,12 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
     now = int(time.time()) if now is None else now
     checks = audit_market_inputs(con, symbol, now)
     where, args = (" AND symbol=?", [symbol]) if symbol else ("", [])
+    cur = _current_versions()
+
+    def _ver_clause(kind):
+        vers = cur[kind]
+        return (" AND algo_version IN (" + ",".join("?" * len(vers)) + ")",
+                list(vers))
 
     n = con.execute("SELECT COUNT(*) FROM facts WHERE confirmed_at<market_time" + where,
                     args).fetchone()[0]
@@ -136,8 +189,10 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
                f"{unattributed} facts predate producer-run attribution; rebuild the baseline",
                symbol)
 
+    sv_clause, sv_args = _ver_clause("setup")
     setup_rows = con.execute(
-        "SELECT symbol,tf,payload FROM facts WHERE kind='setup'" + where, args).fetchall()
+        "SELECT symbol,tf,payload FROM facts WHERE kind='setup'" + where + sv_clause,
+        args + sv_args).fetchall()
     setup_ids = set()
     for sym, tf, raw in setup_rows:
         p = json.loads(raw)
@@ -158,8 +213,10 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
             _issue(checks, "SETUP", "DEGRADED", "INCOMPLETE_LINEAGE",
                    f"{p.get('setup_id')} missing {','.join(missing)}", sym, tf)
 
+    rv_clause, rv_args = _ver_clause("risk")
     risk_rows = con.execute(
-        "SELECT symbol,tf,payload FROM facts WHERE kind='risk'" + where, args).fetchall()
+        "SELECT symbol,tf,payload FROM facts WHERE kind='risk'" + where + rv_clause,
+        args + rv_args).fetchall()
     approved = set()
     for sym, tf, raw in risk_rows:
         p = json.loads(raw)
@@ -178,9 +235,10 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
                 _issue(checks, "RISK", "BLOCKED", "SIZED_DECISION_INCOMPLETE",
                        f"{sid} is missing units or notional", sym, tf)
 
+    ov_clause, ov_args = _ver_clause("order")
     order_rows = con.execute(
         "SELECT symbol,tf,confirmed_at,payload FROM facts WHERE kind='order'" + where +
-        " ORDER BY confirmed_at,id", args).fetchall()
+        ov_clause + " ORDER BY confirmed_at,id", args + ov_args).fetchall()
     orders = {}
     for sym, tf, confirmed_at, raw in order_rows:
         p = json.loads(raw); sid = p.get("setup_id"); orders[sid] = p
@@ -191,9 +249,10 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
             _issue(checks, "EXECUTION", "BLOCKED", "ORDER_BEFORE_AVAILABLE",
                    f"{sid} order event precedes availability", sym, tf)
 
+    ev_clause, ev_args = _ver_clause("exec")
     exec_rows = con.execute(
-        "SELECT symbol,tf,confirmed_at,payload FROM facts WHERE kind='exec'" + where,
-        args).fetchall()
+        "SELECT symbol,tf,confirmed_at,payload FROM facts WHERE kind='exec'" + where +
+        ev_clause, args + ev_args).fetchall()
     for sym, tf, confirmed_at, raw in exec_rows:
         p = json.loads(raw); sid = p.get("setup_id")
         if sid not in orders:
@@ -204,6 +263,9 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
             _issue(checks, "EXECUTION", "BLOCKED", "EXIT_BEFORE_FILL",
                    f"execution {sid} exits before its fill", sym, tf)
 
+    # deliberately unversioned: a summary that fails to reconcile to its own
+    # curve is corrupt whatever generation wrote it (internal consistency,
+    # not a cross-generation comparison)
     account = con.execute(
         "SELECT payload FROM facts WHERE kind='account' ORDER BY id DESC LIMIT 1").fetchone()
     if risk_rows and account is None:
