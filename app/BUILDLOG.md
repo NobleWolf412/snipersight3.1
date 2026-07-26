@@ -939,3 +939,44 @@ critical) and list row shape ({name,value}) against the renderer source.
 {"ok":true,"detail":"DEGRADED"}; `brief` -> 202 and wrote a real dossier;
 `{"actionId":"rm -rf"}` -> 400 refused and logged. panes.json backed up to
 panes.json.bak before edit. 75 tests green.
+
+---
+
+## S24b — 2026-07-26 — "4 actionable" reconciled; orphaned-symbol blocker fixed
+
+**User caught a contradiction:** the cockpit badge said 4 ACTIONABLE while the
+new ApexShell pane said 0 blockers and I had just told them nothing needed
+attention. The user was right and I was wrong — I had quoted an audit snapshot
+taken minutes earlier instead of re-reading.
+
+**What the 4 actually were:** 4 pipeline blockers at that moment (3 pending 4H
+aggregates + 1 gap series). By the time I looked again, three had aged out and
+ONE was real: MISSING_AGGREGATE on ONDO-USD 4H.
+
+**Root cause (a genuine bug, not noise):** ONDO had DROPPED OUT of the admitted
+universe, and the live loop only aggregates the admitted scan set — while the
+audit (and risk, and the server) iterate ALL TRACKED symbols. So a symbol that
+leaves the universe keeps its 1H imports but stops being rolled up: ONDO had 1H
+data to 07:00 and 4H stuck at 00:00, with all four source candles present. That
+bucket could never be emitted, so the gate would have blocked forever, and it
+would recur on every universe rotation. Fix: live.py now aggregates every
+tracked symbol (a cheap roll-up of candles already held) while engines and
+scanning stay scoped to the admitted set. Re-aggregation wrote 38,505 missing
+higher-timeframe candles across the tracked set; audit back to 0 blockers.
+
+**Surface consistency:** the pane now publishes `actionable` computed by calling
+the very endpoint the badge calls (lazy import to dodge the circular import),
+rather than a re-implementation — two surfaces reporting different numbers is
+worse than either being wrong. Added as the pane's first stat, so it also feeds
+the collapsed tracker-bar chip.
+
+**Performance defect found by measurement, not assumption:** a COLD /api/state
+took **72.7s** (full audit contending with the scanner's writes) while warm
+polls took 0.37s. ApexShell's sourceHttp.js times out at **6s** — so every
+cache expiry would have rendered the pane "svc offline". The endpoint now NEVER
+audits inside the request: it serves the last known verdict, refreshes in a
+daemon thread, and reports "AUDIT PENDING" on the very first poll after start.
+Measured after the fix: 0.45s / 1.03s / 0.007s / 0.005s — all inside the
+timeout. RE-AUDIT still forces a synchronous fresh run and reseeds the cache.
+
+75 tests green.

@@ -38,11 +38,50 @@ def _severity(status: str) -> str:
     return {"PASS": "good", "DEGRADED": "warning"}.get(status, "critical")
 
 
+_cache: dict = {"at": 0.0, "report": None, "refreshing": False}
+CACHE_TTL = 300
+
+
+def _refresh_async():
+    """Recompute the verdict off the request path."""
+    from . import quality, store
+    try:
+        con = store.connect()
+        try:
+            _cache["report"], _cache["at"] = quality.audit(con), time.time()
+        finally:
+            con.close()
+    except Exception as exc:
+        log_line(f"background audit failed: {exc}")
+    finally:
+        _cache["refreshing"] = False
+
+
+def _report(con):
+    """NEVER audit inside the request. A cold full audit was measured at 72s
+    while contending with the scanner's writes, and ApexShell's http source
+    times out at 6s (sourceHttp.js) — auditing synchronously would show the
+    pane as OFFLINE on every cache miss. Serve the last known verdict and
+    refresh in the background; the RE-AUDIT button forces a fresh one."""
+    import threading
+    stale = _cache["report"] is None or time.time() - _cache["at"] > CACHE_TTL
+    if stale and not _cache["refreshing"]:
+        _cache["refreshing"] = True
+        threading.Thread(target=_refresh_async, daemon=True).start()
+    return _cache["report"]
+
+
 def state(con) -> dict:
     """The pane payload: one health verdict plus the numbers worth a glance."""
-    from . import quality, risk, setups, scalein, universe, store
+    from . import risk, setups, scalein, universe, store
 
-    report = quality.audit(con)
+    report = _report(con)
+    if report is None:          # first poll after start — say so, never stall
+        return {"data": {"status": "warning", "verdict": "AUDIT PENDING",
+                         "actionable": "—", "blockers": "—", "warnings": "—",
+                         "scanner": "—", "equity": "—", "setups": "—",
+                         "issues": [{"name": "first audit running", "value": "wait"}]},
+                "log": list(_log), "busy": True}
     blockers, warnings = report["blockers"], report["warnings"]
 
     # scanner liveness from the heartbeat the live loop writes each poll
@@ -69,6 +108,23 @@ def state(con) -> dict:
                     if p["state"] == "VALIDATED" and r["confirmed_at"] >= baseline["started_at"]:
                         active += 1
 
+    # "Actionable" must match the cockpit's DIAGNOSTICS badge exactly — the two
+    # surfaces reporting different numbers is worse than either being wrong
+    # (they disagreed on 2026-07-26 and sent the operator chasing a phantom).
+    # Badge formula: pipeline blockers + summed setup-telemetry defects.
+    # Call the very endpoint the badge calls (lazy import: server imports this
+    # module at load, so this must resolve at call time, not import time).
+    # Reimplementing the sum here is how the two surfaces drift apart.
+    defects = 0
+    try:
+        import server
+        payload = server.setup_telemetry(limit=500)
+        defects = sum(int(r.get("defect_count") or 0)
+                      for r in payload.get("records", []))
+    except Exception as exc:
+        log_line(f"defect count unavailable: {exc}")   # loud-fallback rule
+    actionable = len(blockers) + defects
+
     # the issue list the operator actually triages, worst first
     issues = [{"name": f"{c['code']} · {c.get('symbol') or 'portfolio'}",
                "value": "BLOCK"} for c in blockers[:6]]
@@ -87,6 +143,7 @@ def state(con) -> dict:
             "status": _severity(report["status"]),
             "verdict": f"{report['status']} · "
                        f"{'EVALUATION ALLOWED' if report['evaluation_allowed'] else 'BLOCKED'}",
+            "actionable": actionable,
             "blockers": len(blockers),
             "warnings": len(warnings),
             "scanner": scanner,
@@ -161,6 +218,7 @@ def action(con, action_id: str) -> dict:
         _busy = True
         try:
             report = quality.audit(con, persist=True)
+            _cache["report"], _cache["at"] = report, time.time()   # button = fresh
             log_line(f"audit: {report['status']} · {len(report['blockers'])} blockers")
             return {"ok": True, "detail": report["status"]}
         finally:

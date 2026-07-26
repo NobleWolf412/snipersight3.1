@@ -128,9 +128,16 @@ def cycle(con, log) -> tuple[int, list]:
         return 0, []
 
     before = con.execute("SELECT COALESCE(MAX(id),0) FROM facts").fetchone()[0]
-    for sym in scan:
+    # Aggregate EVERY tracked symbol, not just the admitted scan set. When a
+    # symbol drops out of the universe mid-session its final higher-timeframe
+    # buckets would otherwise never be rolled up — leaving complete 1H data with
+    # no 4H candle, which the audit correctly reports as a permanent blocker
+    # (ONDO-USD, 2026-07-26). Aggregation is a cheap roll-up of candles we
+    # already hold; engines and scanning stay scoped to the admitted set.
+    for sym in universe.all_tracked_symbols(con):
         for tf in ("4H", "1W"):
             aggregator.aggregate(con, sym, tf)
+    for sym in scan:
         quality.assert_market_ready(con, sym, now)
         for mod in ENGINES:
             for tf in ALL_TFS:
