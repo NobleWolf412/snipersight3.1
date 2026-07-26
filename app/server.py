@@ -756,6 +756,14 @@ def index():
                         headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
+@app.get("/raw", include_in_schema=False)
+def raw_redirect():
+    """S23: the cockpit wrapper is gone — the app and its diagnostics drawer are
+    one page at '/'. Kept so old bookmarks and muscle memory still land somewhere."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/", status_code=308)
+
+
 class _NoCacheStatic(StaticFiles):
     """Serve UI assets without browser caching.
 

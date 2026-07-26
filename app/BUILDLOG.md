@@ -819,3 +819,49 @@ because the browser pane was not compositing frames, so CSS transitions never
 advanced. Disabling the transition proved the rule applies: translateX(0),
 left=576 of a 1280 viewport, scrim opacity 1 — DRAWER OPENS CORRECTLY. Live
 badge confirmed working ("4 ACTIONABLE DIAGNOSTICS"). Suite: 71 green.
+
+---
+
+## S23 — 2026-07-26 — Cockpit wrapper deleted (one page); two blockers fixed
+
+**User decision:** full consolidation. The RAW COCKPIT button had zero
+consumers — it offered the same screen minus diagnostics plus 39px of chart —
+while the /raw ROUTE existed only because the wrapper embedded the app in an
+iframe. 151 lines of wrapper hosted one button and one drawer.
+
+**Consolidated:** DIAGNOSTICS button + drawer now live directly in index.html
+(position:fixed overlay, no iframe of self). The diagnostics PANEL is still the
+reusable /static/diagnostics.html, now LAZY-LOADED on first open so the trading
+view pays nothing for it at startup. Deleted cockpit_server.py, cockpit.html,
+cockpit.js. watchdog launches server:app. /raw -> 308 redirect to / so old
+bookmarks land somewhere. Removed the now-pointless "back to cockpit" pill.
+Verified: no self-iframe, lazy src null-then-loaded, drawer at left=576/1280,
+panel headings correct, app height 800 (was 761 inside the frame) — 39px back.
+Tests rewritten for the consolidated design (75 green).
+
+**Blocker regression fixed (found while verifying, NOT user-visible before):**
+audit had gone BLOCKED again with 4 blockers.
+1. SEQUENCE_GAPS on EUL-USD 15m (830 "unexplained"). Root cause was MY S21 fix
+   trusting import_log.gaps, which importer truncates at 200 while n_gaps stays
+   exact — so any series with >200 real voids re-wedged the gate. Now judged on
+   the COUNT with the listed timestamps as a budget; import cap raised to 5000.
+2. MISSING_AGGREGATE on ONDO/SUI 4H. A bucket that closed moments ago simply
+   has not been aggregated yet — scheduling lag, not corruption. Now
+   AGGREGATE_PENDING (DEGRADED) within two bucket periods, MISSING_AGGREGATE
+   (BLOCKED) only if it persists.
+Audit: 0 blockers, evaluation allowed.
+
+**Self-inflicted scare worth recording:** the cap change was applied by blind
+string replace and dropped a comment INTO the middle of the SQL argument list,
+commenting out the remaining args — importer.py stopped parsing while the live
+scanner imports it. Caught by the very next syntax check and fixed inside a
+minute. Never inject a comment mid-call via string replace.
+
+**Answered for the user (right-rail investigation):** SETUP FEED / SETUP TRACE
+are NOT broken. 1,832 setup facts exist (379 current-gen) but ZERO inside the
+active baseline window — nothing has validated since the Jul-22 baseline, which
+is truthful under the stricter setup-v0.6 rules. The store holds 4,492
+setup_rejection facts explaining exactly why: NO_ELIGIBLE_PLAYBOOK 3,959 (88%),
+UNECONOMIC_AFTER_COSTS 370 (8%), RR_BELOW_MINIMUM 163 (4%). The empty state
+blames "the fee gate", which accounts for only 8% — the UI is guessing while the
+real answer sits in the fact store. Proposal recorded, not yet built.

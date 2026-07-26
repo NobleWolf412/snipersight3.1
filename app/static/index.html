@@ -149,6 +149,30 @@
     text-align:center;line-height:1.8;letter-spacing:.06em}
   .foot .hot{color:var(--cyan)}
   .foot .sep{color:var(--txt-faint)}
+  /* diagnostics drawer — consolidated from the deleted cockpit wrapper (S23).
+     position:fixed so it overlays the app grid without touching its layout. */
+  .diag-scrim{position:fixed;inset:0;background:rgba(0,0,0,.48);opacity:0;pointer-events:none;
+    transition:opacity .18s ease;z-index:900}
+  .diag-scrim.open{opacity:1;pointer-events:auto}
+  .diag-drawer{position:fixed;z-index:901;top:0;right:0;height:100%;width:min(720px,55vw);
+    min-width:420px;background:var(--bg1);border-left:1px solid var(--cyan);
+    box-shadow:-12px 0 36px rgba(0,0,0,.5);transform:translateX(101%);
+    transition:transform .18s ease;display:grid;grid-template-rows:36px 1fr}
+  .diag-drawer.open{transform:translateX(0)}
+  .diag-head{display:flex;align-items:center;padding:0 10px;border-bottom:1px solid var(--line);
+    font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--cyan)}
+  .diag-head span{margin-left:auto;color:var(--txt-dim);letter-spacing:.04em}
+  .diag-head button{margin-left:8px;padding:3px 7px;font-family:var(--mono);font-size:10px;
+    background:var(--bg2);color:var(--txt);border:1px solid var(--line-hi);border-radius:2px;cursor:pointer}
+  .diag-drawer iframe{width:100%;height:100%;border:0;background:var(--bg0)}
+  #diagButton{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;padding:4px 9px;
+    background:var(--bg2);color:var(--txt-dim);border:1px solid var(--line-hi);border-radius:2px;
+    cursor:pointer;display:flex;align-items:center;gap:5px}
+  #diagButton:hover,#diagButton[aria-expanded="true"]{border-color:var(--cyan);color:var(--cyan)}
+  #diagButton.alert{border-color:#713839;color:#ffd4d4;background:rgba(74,20,24,.35)}
+  #diagBadge{display:none;min-width:16px;height:16px;padding:0 4px;align-items:center;
+    justify-content:center;border-radius:8px;background:var(--red);color:#fff;font-size:9px}
+  #diagBadge.show{display:inline-flex}
   ::-webkit-scrollbar{width:8px}
   ::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:4px}
   ::-webkit-scrollbar-track{background:transparent}
@@ -277,11 +301,6 @@
       </svg>
       SNIPER<b>SIGHT</b>
     </div>
-    <!-- return path out of /raw: RAW COCKPIT was a one-way door. Hidden when
-         this page is the cockpit's embedded frame (no self-link inside self). -->
-    <a id="backToCockpit" href="/" target="_top" class="pill" style="display:none;
-      text-decoration:none;border-color:var(--cyan-dim);color:var(--cyan)"
-      title="back to the integrated cockpit (WHY? drawer, diagnostics)">◂ COCKPIT</a>
     <div class="divv"></div>
     <div class="sess">
       <span class="lbl">SESSION</span>
@@ -294,6 +313,8 @@
     </div>
     <div class="divv"></div>
     <span class="pill paper">PAPER MODE</span>
+    <button id="diagButton" type="button" aria-controls="diagDrawer" aria-expanded="false"
+      title="Why the engine did what it did: setup traces, rejection reasons, data health (Ctrl+Shift+D)">DIAGNOSTICS<span id="diagBadge"></span></button>
     <div class="rp">
       <span style="font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--txt-faint)">REPLAY</span>
       <button id="rpBack" title="step one candle back">◀</button>
@@ -439,6 +460,14 @@
   </footer>
 </div>
 
+<div class="diag-scrim" id="diagScrim"></div>
+<aside class="diag-drawer" id="diagDrawer" aria-label="Decision diagnostics">
+  <div class="diag-head">DIAGNOSTICS · WHY THIS TRADE, WHY NOT THAT ONE
+    <span>Esc closes · Ctrl+Shift+D toggles</span>
+    <button id="diagClose" type="button" aria-label="Close diagnostics">✕</button></div>
+  <iframe id="diagFrame" title="Decision provenance and diagnostics" data-src="/static/diagnostics.html?embed=1&amp;v=2"></iframe>
+</aside>
+
 <div id="sysAlert" role="alert" style="display:none;position:fixed;z-index:9999;left:50%;top:8px;
   transform:translateX(-50%);max-width:min(760px,90vw);padding:8px 12px;border:1px solid var(--red);
   background:rgba(40,8,12,.96);color:#ffd7d7;font-family:var(--mono);font-size:10px;
@@ -469,8 +498,53 @@ async function api(url,options={}){
 document.getElementById('tfs').innerHTML=
   TFS.map(t=>`<button class="tf${t===tf?' on':''}" data-tf="${t}">${t}</button>`).join('');
 
-/* standalone /raw gets a way back; the cockpit's embedded frame does not */
-if(window.self===window.top)document.getElementById('backToCockpit').style.display='';
+/* ---------- diagnostics drawer (S23: consolidated from the cockpit wrapper) ----------
+   The heavy diagnostics panel is loaded LAZILY on first open, so the trading
+   view never pays for it at startup. */
+(()=>{
+  const btn=document.getElementById('diagButton'), drawer=document.getElementById('diagDrawer'),
+        scrim=document.getElementById('diagScrim'), close=document.getElementById('diagClose'),
+        badge=document.getElementById('diagBadge'), frame=document.getElementById('diagFrame');
+  function setOpen(open){
+    if(open&&!frame.src)frame.src=frame.dataset.src;      // lazy first load
+    drawer.classList.toggle('open',open);
+    scrim.classList.toggle('open',open);
+    btn.setAttribute('aria-expanded',String(open));
+    if(open&&frame.contentWindow)
+      frame.contentWindow.postMessage({type:'snipersight:refresh'},location.origin);
+  }
+  const isOpen=()=>drawer.classList.contains('open');
+  btn.onclick=()=>setOpen(!isOpen());
+  close.onclick=()=>setOpen(false);
+  scrim.onclick=()=>setOpen(false);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape')setOpen(false);
+    if(e.ctrlKey&&e.shiftKey&&e.key.toLowerCase()==='d'){e.preventDefault();setOpen(!isOpen());}
+  });
+  window.addEventListener('message',e=>{
+    if(e.origin===location.origin&&e.data?.type==='snipersight:open-diagnostics')setOpen(true);
+  });
+  async function refreshBadge(){
+    try{
+      const [tel,health]=await Promise.all([
+        fetch('/api/setup-telemetry?limit=500').then(r=>r.ok?r.json():Promise.reject(r.status)),
+        fetch('/api/pipeline-health').then(r=>r.ok?r.json():Promise.reject(r.status))]);
+      const defects=(tel.records||[]).reduce((s,r)=>s+Number(r.defect_count||0),0);
+      const n=defects+(health.blockers||[]).length;
+      badge.textContent=n>99?'99+':String(n);
+      badge.classList.toggle('show',n>0);
+      btn.classList.toggle('alert',n>0);
+      btn.title=n>0
+        ?`${n} actionable diagnostic${n===1?'':'s'} — setup traces, rejection reasons, data health (Ctrl+Shift+D)`
+        :'No actionable defects. Setup traces, rejection reasons, data health (Ctrl+Shift+D)';
+    }catch(err){
+      // loud-fallback rule: a degraded diagnostics feed must be visible
+      badge.textContent='!';badge.classList.add('show');btn.classList.add('alert');
+      btn.title='Diagnostics feed degraded — open to inspect (Ctrl+Shift+D)';
+    }
+  }
+  refreshBadge();setInterval(refreshBadge,60000);
+})();
 
 /* ---------- restart both processes (watchdog respawns; see /api/system/restart) ---------- */
 document.getElementById('btnRestart').onclick=async ev=>{

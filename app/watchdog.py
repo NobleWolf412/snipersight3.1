@@ -99,7 +99,7 @@ def main():
     py = sys.executable.replace("pythonw.exe", "python.exe")
     log("watchdog start")
     live = Child("live-scanner", [py, "-X", "utf8", "live.py"], notify_restart=True)
-    server = Child("api-server", [py, "-m", "uvicorn", "cockpit_server:app",
+    server = Child("api-server", [py, "-m", "uvicorn", "server:app",
                                   "--port", "8422", "--host", "127.0.0.1"])
     external_server = server_up()
     if external_server:

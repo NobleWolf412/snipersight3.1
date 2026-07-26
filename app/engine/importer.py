@@ -85,8 +85,10 @@ def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int) -> dict:
         "INSERT INTO import_log "
         "(symbol, tf, range_start, range_end, n_candles, n_gaps, gaps, source, run_at, n_bad) "
         "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        # gap-list cap raised from 200: truncation made real voids look
+        # "unexplained" to the quality audit and re-wedged the fail-closed gate.
         (symbol, tf, start_ts, end_ts, len(seen), len(gaps),
-         json.dumps(gaps[:200]), "coinbase", imported_at, n_bad))
+         json.dumps(gaps[:5000]), "coinbase", imported_at, n_bad))
     con.commit()
     return {"symbol": symbol, "tf": tf, "candles": len(seen), "gaps": len(gaps),
             "bad": n_bad}

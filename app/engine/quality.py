@@ -29,19 +29,26 @@ def _current_versions():
             "order": (execsim.EXEC_VERSION,)}
 
 
-def _known_gap_buckets(con, sym: str, tf: str) -> set[int]:
-    """Gap timestamps the importer acknowledged at import time (gap-honesty
-    rule: gaps are logged, never fabricated). Coinbase legitimately omits a
-    bucket when zero trades occurred in it — an acknowledged void is data,
-    not corruption, and must not wedge the fail-closed gate forever."""
-    out: set[int] = set()
-    for (g,) in con.execute(
-            "SELECT gaps FROM import_log WHERE symbol=? AND tf=?", (sym, tf)):
+def _known_gap_buckets(con, sym: str, tf: str) -> tuple[set[int], int]:
+    """Gaps the importer acknowledged at import time (gap-honesty rule: gaps are
+    logged, never fabricated). Coinbase legitimately omits a bucket when zero
+    trades occurred in it — an acknowledged void is data, not corruption.
+
+    Returns (explicitly listed timestamps, total acknowledged count). The list is
+    truncated at import (gaps[:200]) while n_gaps is exact, so a thin listing
+    like EUL-USD 15m with 830 real voids must be judged on the COUNT — otherwise
+    truncation alone re-wedges the fail-closed gate (regression seen 2026-07-26).
+    """
+    listed: set[int] = set()
+    total = 0
+    for g, n in con.execute(
+            "SELECT gaps, n_gaps FROM import_log WHERE symbol=? AND tf=?", (sym, tf)):
+        total += int(n or 0)
         try:
-            out.update(int(t) for t in json.loads(g))
+            listed.update(int(t) for t in json.loads(g))
         except Exception:
             continue
-    return out
+    return listed, total
 
 
 class DataQualityError(RuntimeError):
@@ -99,8 +106,11 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
                 t += sec
         if missing:
             if tf in importer.NATIVE_TFS:
-                logged = _known_gap_buckets(con, sym, tf)
-                unexplained = [t for t in missing if t not in logged]
+                listed, acknowledged = _known_gap_buckets(con, sym, tf)
+                remaining = [t for t in missing if t not in listed]
+                # voids the importer counted but could not list (truncation)
+                budget = max(0, acknowledged - len([t for t in missing if t in listed]))
+                unexplained = remaining[budget:]
             else:
                 # Aggregate TFs: a missing bucket is BY DESIGN when its source
                 # bucket was incomplete (never fabricate). Genuine aggregation
@@ -150,8 +160,20 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
                         str(sum(Decimal(r[5]) for r in group)))
                 got = actual.get(bstart)
                 if got is None:
-                    _issue(checks, "AGGREGATION", "BLOCKED", "MISSING_AGGREGATE",
-                           f"complete {target} bucket {bstart} was not emitted", sym, target)
+                    # A bucket that closed moments ago simply has not been
+                    # aggregated yet — that is scheduling lag, not corruption,
+                    # and blocking on it wedges the pipeline against itself
+                    # (regression 2026-07-26: ONDO/SUI 4H). Only a bucket that
+                    # stayed unemitted for more than one further bucket period
+                    # is a genuine aggregation failure.
+                    lagging = now - (bstart + rule["bucket"]) <= 2 * rule["bucket"]
+                    _issue(checks, "AGGREGATION",
+                           "DEGRADED" if lagging else "BLOCKED",
+                           "AGGREGATE_PENDING" if lagging else "MISSING_AGGREGATE",
+                           (f"complete {target} bucket {bstart} not yet emitted "
+                            f"(awaiting next aggregation pass)" if lagging else
+                            f"complete {target} bucket {bstart} was not emitted"),
+                           sym, target)
                 elif tuple(map(str, got)) != tuple(map(str, want)):
                     _issue(checks, "AGGREGATION", "BLOCKED", "AGGREGATE_MISMATCH",
                            f"{target} bucket {bstart} does not reconcile to {rule['source']}", sym, target)
