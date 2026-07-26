@@ -865,3 +865,37 @@ setup_rejection facts explaining exactly why: NO_ELIGIBLE_PLAYBOOK 3,959 (88%),
 UNECONOMIC_AFTER_COSTS 370 (8%), RR_BELOW_MINIMUM 163 (4%). The empty state
 blames "the fee gate", which accounts for only 8% — the UI is guessing while the
 real answer sits in the fact store. Proposal recorded, not yet built.
+
+---
+
+## S23b — 2026-07-26 — Right rail simplified; empty state stops guessing
+
+**User:** the right rail was confusing — four top tabs over four sub-tabs, every
+one reading 0 — and asked whether SETUP TRACE / PIPELINE belong in diagnostics.
+They do.
+
+**Moved:** SETUP TRACE and PIPELINE out of the trading rail and into the
+DIAGNOSTICS drawer, which now has its own strip: SETUP TRACE · PIPELINE · FULL
+PANEL (the reusable diagnostics.html iframe). Each tab loads only when first
+shown. The trading rail keeps exactly the two operational views: SETUP FEED and
+ACCOUNT. The evaluation gate now opens the drawer on its PIPELINE tab instead of
+hijacking the rail.
+
+**Empty state now states the recorded reason** instead of blaming the fee gate
+(which was ~8% of rejections). Reads live from the baseline-scoped rejection
+funnel, e.g. "190 candidates rejected since baseline: 172 no eligible playbook,
+12 uneconomic after costs, 6 rr below minimum" with a SETUP TRACE ▸ button that
+opens the drawer. A dead panel became the most informative thing on screen.
+
+**Bug caught in verification (selector collision):** the feed sub-tab handler
+bound `.ftab:not(.rt)`, which also matched the new drawer tabs, and — being
+assigned later — clobbered their onclick. Symptom was subtle: the first tab
+appeared to work (its content was already populated by the 60s poller) while
+clicks did nothing. Scoped to `.ftab:not(.rt):not(.dt)` and moved the drawer
+tabs to addEventListener so no future assignment can silently win.
+
+**Verified end-to-end:** rail tabs = [feed, acct]; empty state renders the real
+funnel; SETUP TRACE ▸ opens the drawer on trace (flex, content loaded); PIPELINE
+tab switches (DEGRADED · EVALUATION ALLOWED, stages listed); FULL PANEL lazy
+loads the iframe; feed sub-tabs (ACTIVE/FORMING/DEAD/CLOSED) still switch. One
+stale test updated to the new gate contract. 75 tests green.

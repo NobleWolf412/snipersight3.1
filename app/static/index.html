@@ -157,7 +157,7 @@
   .diag-drawer{position:fixed;z-index:901;top:0;right:0;height:100%;width:min(720px,55vw);
     min-width:420px;background:var(--bg1);border-left:1px solid var(--cyan);
     box-shadow:-12px 0 36px rgba(0,0,0,.5);transform:translateX(101%);
-    transition:transform .18s ease;display:grid;grid-template-rows:36px 1fr}
+    transition:transform .18s ease;display:grid;grid-template-rows:36px 28px 1fr}
   .diag-drawer.open{transform:translateX(0)}
   .diag-head{display:flex;align-items:center;padding:0 10px;border-bottom:1px solid var(--line);
     font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--cyan)}
@@ -165,6 +165,8 @@
   .diag-head button{margin-left:8px;padding:3px 7px;font-family:var(--mono);font-size:10px;
     background:var(--bg2);color:var(--txt);border:1px solid var(--line-hi);border-radius:2px;cursor:pointer}
   .diag-drawer iframe{width:100%;height:100%;border:0;background:var(--bg0)}
+  #diagTabs .ftab{padding:6px 0;font-size:9px}
+  #diagBody>div{flex:1;min-height:0}
   #diagButton{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;padding:4px 9px;
     background:var(--bg2);color:var(--txt-dim);border:1px solid var(--line-hi);border-radius:2px;
     cursor:pointer;display:flex;align-items:center;gap:5px}
@@ -401,8 +403,6 @@
     <div class="ftabs" style="border-bottom:1px solid var(--line)">
       <div class="ftab rt on" data-rt="feed" style="font-size:10px;letter-spacing:.16em">SETUP FEED <span class="cnt" id="feedcnt">—</span></div>
       <div class="ftab rt" data-rt="acct" style="font-size:10px;letter-spacing:.16em">ACCOUNT</div>
-      <div class="ftab rt" data-rt="trace" style="font-size:10px;letter-spacing:.12em">SETUP TRACE</div>
-      <div class="ftab rt" data-rt="pipeline" style="font-size:10px;letter-spacing:.1em">PIPELINE</div>
     </div>
     <div id="feedView" style="display:flex;flex-direction:column;min-height:0;flex:1">
       <div class="ftabs">
@@ -424,21 +424,6 @@
       <div id="perfSym" style="padding:4px 0"></div>
       <div class="phead" style="border-top:1px solid var(--line)">BY STRATEGY</div>
       <div id="perfStrat" style="padding:4px 0 12px"></div>
-    </div>
-    <div id="traceView" aria-label="Validated setup telemetry" style="display:none;flex-direction:column;min-height:0;flex:1">
-      <div class="phead">VALIDATION FUNNEL <span class="cnt">DIAGNOSTIC ONLY</span></div>
-      <div class="trace-summary" id="traceSummary"></div>
-      <div class="phead">FAILURE POINTS <span class="cnt">WHERE LOGIC BREAKS</span></div>
-      <div class="failure-list" id="failurePoints"></div>
-      <div class="phead">STRATEGY COHORTS <span class="cnt">NET RESULTS</span></div>
-      <div id="telemetryCohorts"></div>
-      <div class="phead">VALIDATED ENTRIES <span class="cnt">ENTRY · WHY · RESULT</span></div>
-      <div class="trace-list" id="telemetryRecords"></div>
-    </div>
-    <div id="pipelineView" aria-label="Pipeline quality and lineage" style="display:none;flex-direction:column;min-height:0;flex:1;overflow-y:auto">
-      <div class="phead">A–Z QUALITY CONTRACT <span class="cnt">FAIL CLOSED</span></div>
-      <div id="pipelineVerdict"></div>
-      <div id="pipelineStages"></div>
     </div>
   </aside>
 
@@ -465,7 +450,31 @@
   <div class="diag-head">DIAGNOSTICS · WHY THIS TRADE, WHY NOT THAT ONE
     <span>Esc closes · Ctrl+Shift+D toggles</span>
     <button id="diagClose" type="button" aria-label="Close diagnostics">✕</button></div>
-  <iframe id="diagFrame" title="Decision provenance and diagnostics" data-src="/static/diagnostics.html?embed=1&amp;v=2"></iframe>
+  <div class="ftabs" id="diagTabs">
+    <div class="ftab dt on" data-dt="trace">SETUP TRACE</div>
+    <div class="ftab dt" data-dt="pipeline">PIPELINE <span id="dtPipe"></span></div>
+    <div class="ftab dt" data-dt="panel">FULL PANEL</div>
+  </div>
+  <div id="diagBody" style="min-height:0;display:flex;flex-direction:column;overflow:hidden">
+    <div id="traceView" aria-label="Validated setup telemetry" style="display:none;flex-direction:column;min-height:0;flex:1">
+      <div class="phead">VALIDATION FUNNEL <span class="cnt">DIAGNOSTIC ONLY</span></div>
+      <div class="trace-summary" id="traceSummary"></div>
+      <div class="phead">FAILURE POINTS <span class="cnt">WHERE LOGIC BREAKS</span></div>
+      <div class="failure-list" id="failurePoints"></div>
+      <div class="phead">STRATEGY COHORTS <span class="cnt">NET RESULTS</span></div>
+      <div id="telemetryCohorts"></div>
+      <div class="phead">VALIDATED ENTRIES <span class="cnt">ENTRY · WHY · RESULT</span></div>
+      <div class="trace-list" id="telemetryRecords"></div>
+    </div>
+    <div id="pipelineView" aria-label="Pipeline quality and lineage" style="display:none;flex-direction:column;min-height:0;flex:1;overflow-y:auto">
+      <div class="phead">A–Z QUALITY CONTRACT <span class="cnt">FAIL CLOSED</span></div>
+      <div id="pipelineVerdict"></div>
+      <div id="pipelineStages"></div>
+    </div>
+    <div id="panelView" style="display:none;flex:1;min-height:0">
+      <iframe id="diagFrame" title="Decision provenance and diagnostics" data-src="/static/diagnostics.html?embed=1&amp;v=2"></iframe>
+    </div>
+  </div>
 </aside>
 
 <div id="sysAlert" role="alert" style="display:none;position:fixed;z-index:9999;left:50%;top:8px;
@@ -505,14 +514,32 @@ document.getElementById('tfs').innerHTML=
   const btn=document.getElementById('diagButton'), drawer=document.getElementById('diagDrawer'),
         scrim=document.getElementById('diagScrim'), close=document.getElementById('diagClose'),
         badge=document.getElementById('diagBadge'), frame=document.getElementById('diagFrame');
-  function setOpen(open){
-    if(open&&!frame.src)frame.src=frame.dataset.src;      // lazy first load
+  let activeTab='trace';
+  function showTab(t){
+    activeTab=t;
+    document.querySelectorAll('#diagTabs .ftab.dt')
+      .forEach(x=>x.classList.toggle('on',x.dataset.dt===t));
+    document.getElementById('traceView').style.display=t==='trace'?'flex':'none';
+    document.getElementById('pipelineView').style.display=t==='pipeline'?'flex':'none';
+    document.getElementById('panelView').style.display=t==='panel'?'block':'none';
+    // each tab loads only when first shown — nothing here costs the trading view
+    if(t==='trace')loadTelemetry().catch(()=>{});
+    else if(t==='pipeline')loadPipelineHealth().catch(()=>{});
+    else if(t==='panel'){
+      if(!frame.src)frame.src=frame.dataset.src;
+      else frame.contentWindow?.postMessage({type:'snipersight:refresh'},location.origin);
+    }
+  }
+  function setOpen(open,tab){
     drawer.classList.toggle('open',open);
     scrim.classList.toggle('open',open);
     btn.setAttribute('aria-expanded',String(open));
-    if(open&&frame.contentWindow)
-      frame.contentWindow.postMessage({type:'snipersight:refresh'},location.origin);
+    if(open)showTab(tab||activeTab);
   }
+  document.querySelectorAll('#diagTabs .ftab.dt')
+    .forEach(t=>t.addEventListener('click',()=>showTab(t.dataset.dt)));
+  // callable from the evaluation gate and the empty setup feed
+  window.openDiagnostics=t=>setOpen(true,t);
   const isOpen=()=>drawer.classList.contains('open');
   btn.onclick=()=>setOpen(!isOpen());
   close.onclick=()=>setOpen(false);
@@ -890,8 +917,25 @@ function renderFeed(){
   const list=groups[feedState]||[];
   const el=document.getElementById('feed');
   if(!list.length){
-    el.innerHTML=`<div class="empty">— NO ${feedState==='VALIDATED'?'ACTIVE':feedState} SETUPS —<br>
-      ${feedState==='VALIDATED'?'the fee gate only passes<br>economic setups (1D / 4H)':''}</div>`;
+    if(feedState==='VALIDATED'){
+      // Say WHY, from the recorded rejection facts — the old copy blamed the
+      // fee gate, which is ~8% of the real reasons (S23 finding).
+      const funnel=Object.entries((overview&&overview.rejection_funnel)||{})
+        .sort((a,b)=>b[1]-a[1]);
+      const total=funnel.reduce((s,[,n])=>s+n,0);
+      el.innerHTML='<div class="empty">— NO ACTIVE SETUPS —<br>'+(total
+        ? total.toLocaleString()+' candidates rejected since baseline:<br>'+
+          funnel.slice(0,3).map(([r,n])=>'<span style="color:var(--amber)">'+
+            n.toLocaleString()+'</span> '+r.replaceAll('_',' ').toLowerCase()).join('<br>')+
+          '<br><button id="feedWhy" style="margin-top:7px;font-family:var(--mono);font-size:9px;'+
+          'letter-spacing:.1em;background:var(--bg2);color:var(--txt-dim);border:1px solid '+
+          'var(--line-hi);border-radius:2px;padding:3px 8px;cursor:pointer">SETUP TRACE ▸</button>'
+        : 'no candidates evaluated yet')+'</div>';
+      const w=document.getElementById('feedWhy');
+      if(w)w.onclick=()=>openDiagnostics('trace');
+    }else{
+      el.innerHTML='<div class="empty">— NO '+feedState+' SETUPS —</div>';
+    }
     return;
   }
   const age=t=>{const d=Date.now()/1000-t;
@@ -929,8 +973,8 @@ function renderFeed(){
     });
   });
 }
-document.querySelectorAll('.ftab:not(.rt)').forEach(t=>t.onclick=()=>{
-  document.querySelectorAll('.ftab:not(.rt)').forEach(x=>x.classList.remove('on'));
+document.querySelectorAll('.ftab:not(.rt):not(.dt)').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.ftab:not(.rt):not(.dt)').forEach(x=>x.classList.remove('on'));
   t.classList.add('on');feedState=t.dataset.fs;renderFeed();
 });
 
@@ -940,17 +984,13 @@ function showRightView(view){
   document.querySelector(`.ftab.rt[data-rt="${view}"]`)?.classList.add('on');
   document.getElementById('feedView').style.display=view==='feed'?'flex':'none';
   document.getElementById('acctView').style.display=view==='acct'?'flex':'none';
-  document.getElementById('traceView').style.display=view==='trace'?'flex':'none';
-  document.getElementById('pipelineView').style.display=view==='pipeline'?'flex':'none';
   if(view==='acct')loadAccount();
-  if(view==='trace')loadTelemetry();
-  if(view==='pipeline')loadPipelineHealth();
 }
 document.querySelectorAll('.ftab.rt').forEach(t=>t.onclick=()=>showRightView(t.dataset.rt));
 const evaluationGate=document.getElementById('evaluationGate');
-evaluationGate.onclick=()=>showRightView('pipeline');
+evaluationGate.onclick=()=>openDiagnostics('pipeline');
 evaluationGate.onkeydown=event=>{
-  if(event.key==='Enter'||event.key===' '){event.preventDefault();showRightView('pipeline');}
+  if(event.key==='Enter'||event.key===' '){event.preventDefault();openDiagnostics('pipeline');}
 };
 
 async function loadPipelineHealth(){

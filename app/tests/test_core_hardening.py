@@ -286,7 +286,11 @@ class TestCockpitHierarchy(unittest.TestCase):
         self.assertIn('aria-label="Pipeline quality and lineage"', html)
         self.assertIn('id="pipelineStages"', html)
         self.assertIn('id="evaluationGate"', html)
-        self.assertIn("evaluationGate.onclick=()=>showRightView('pipeline')", html)
+        # S23: pipeline + setup-trace moved out of the trading rail into the
+        # diagnostics drawer, so the gate opens the drawer on its pipeline tab.
+        self.assertIn("evaluationGate.onclick=()=>openDiagnostics('pipeline')", html)
+        self.assertIn('data-dt="pipeline"', html)
+        self.assertIn('data-dt="trace"', html)
         self.assertIn('aria-label="Open pipeline quality details"', html)
         self.assertLess(html.index('id="activePositions"'),
                         html.index('data-rt="feed"'))
