@@ -899,3 +899,43 @@ funnel; SETUP TRACE ▸ opens the drawer on trace (flex, content loaded); PIPELI
 tab switches (DEGRADED · EVALUATION ALLOWED, stages listed); FULL PANEL lazy
 loads the iframe; feed sub-tabs (ACTIVE/FORMING/DEAD/CLOSED) still switch. One
 stale test updated to the new gate contract. 75 tests green.
+
+---
+
+## S24 — 2026-07-26 — ApexShell bridge (diagnostics reach the mothership)
+
+**Ask:** surface SniperSight's issues in ApexShell's tracker, with a button to
+hand them to the war room / an agent.
+
+**Discovery — no new ApexShell code needed.** Its Tracker already ships an
+`http-json` monitor source (main/monitors/sourceHttp.js, registered in
+index.js): it polls `GET {base}/api/state` for
+`{panes:{<id>:{data,log,busy}}}` and posts `{paneId,actionId}` to
+`{base}/api/action` (202 accept / 409 busy). So the work was to make
+SniperSight speak that contract, then add one pane entry.
+
+**Built:** `engine/apexbridge.py` + `/api/state` + `/api/action`. The pane
+carries: pipeline LED (audit status), verdict, blocker/warning counts, scanner
+liveness, paper equity, active setups, an Open Issues list (blockers first,
+then warning codes with counts), a monotonic activity log, and two buttons.
+
+**Deliberate boundary — no "fix it" button.** Verbs are allow-listed:
+`audit` re-runs the quality audit; `brief` writes a war-room dossier
+(war-room/diagnosis-<ts>.md) containing the verdict, every blocker with
+evidence, warnings by code, the recorded rejection funnel, repro commands, and
+the rules any fixer must follow (§7: new algo_version, never edit in place).
+Unknown verbs are refused (400) and logged. The shell OBSERVES and can package
+a problem; a human still dispatches the fix. Letting a dashboard button
+auto-remediate a trading engine is precisely the unaudited mutation §7/§13
+forbid.
+
+**Bug caught in verification:** the pane's buttons were declared with an
+`actions` key, but renderer/monitors.js reads `w.items` — they would have
+rendered as an empty box. Fixed after reading the renderer rather than assuming
+the schema from the README. Also verified led vocabulary (good/warning/
+critical) and list row shape ({name,value}) against the renderer source.
+
+**Verified live:** state payload binds every widget; `audit` -> 202
+{"ok":true,"detail":"DEGRADED"}; `brief` -> 202 and wrote a real dossier;
+`{"actionId":"rm -rf"}` -> 400 refused and logged. panes.json backed up to
+panes.json.bak before edit. 75 tests green.

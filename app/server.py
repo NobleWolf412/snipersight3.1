@@ -7,11 +7,11 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from engine import store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality
+from engine import store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
 
 KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "structure": structure.STRUCTURE_VERSION,
@@ -754,6 +754,34 @@ def pipeline_health(symbol: str | None = None):
 def index():
     return FileResponse(STATIC / "index.html",
                         headers={"Cache-Control": "no-cache, must-revalidate"})
+
+
+@app.get("/api/state")
+def apex_state():
+    """ApexShell monitor contract — the shell GETs this and binds the fields.
+    Read-only; it can observe SniperSight but never steer it."""
+    con = store.connect()
+    try:
+        return {"panes": {apexbridge.PANE_ID: apexbridge.state(con)}}
+    finally:
+        con.close()
+
+
+@app.post("/api/action", status_code=202)
+def apex_action(payload: dict, response: Response):
+    """ApexShell action verbs. Allow-listed and non-destructive: `audit` re-runs
+    the quality audit, `brief` writes a war-room dossier for a human to dispatch.
+    Fixing is deliberately NOT a button — see engine/apexbridge.py."""
+    if payload.get("paneId") not in (apexbridge.PANE_ID, None):
+        raise HTTPException(404, "unknown pane")
+    con = store.connect()
+    try:
+        result = apexbridge.action(con, str(payload.get("actionId", "")))
+        if not result["ok"]:
+            response.status_code = 400
+        return result
+    finally:
+        con.close()
 
 
 @app.get("/raw", include_in_schema=False)
