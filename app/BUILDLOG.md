@@ -713,3 +713,22 @@ pass had rewritten the file; anchored edits now verified against disk.)
 **Tested live:** killed the server under an open page -> DEGRADED banner ->
 watchdog restarted it -> page self-healed to SCANNER LIVE with full data, no
 manual refresh.
+
+---
+
+## S21c — 2026-07-26 — RAW COCKPIT was a one-way door
+
+**User report:** "where is the WHY and raw cockpit now? it's not on the screen."
+
+**Diagnosis:** both controls live in cockpit.html's top bar, served at `/`.
+Clicking RAW COCKPIT navigates to `/raw` (index.html standalone), which has
+NO link back and no WHY drawer — so after one click the user is stranded on a
+page whose only route home is hand-editing the URL. Confirmed the controls
+render correctly at `/` (RAW COCKPIT x=1094, WHY? x=1195 of 1280) and that the
+header stays responsive down to 880px, so clipping was NOT the cause.
+
+**Fix:** index.html gains a "◂ COCKPIT" pill linking to `/` (target=_top).
+Shown only when `window.self===window.top` — the cockpit embeds this same file
+in an iframe, and a self-link inside the cockpit's own frame would be noise.
+Verified both ways: visible standalone at /raw (href="/"), display:none inside
+the embedded frame.

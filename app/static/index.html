@@ -277,6 +277,11 @@
       </svg>
       SNIPER<b>SIGHT</b>
     </div>
+    <!-- return path out of /raw: RAW COCKPIT was a one-way door. Hidden when
+         this page is the cockpit's embedded frame (no self-link inside self). -->
+    <a id="backToCockpit" href="/" target="_top" class="pill" style="display:none;
+      text-decoration:none;border-color:var(--cyan-dim);color:var(--cyan)"
+      title="back to the integrated cockpit (WHY? drawer, diagnostics)">◂ COCKPIT</a>
     <div class="divv"></div>
     <div class="sess">
       <span class="lbl">SESSION</span>
@@ -459,6 +464,9 @@ async function api(url,options={}){
 
 document.getElementById('tfs').innerHTML=
   TFS.map(t=>`<button class="tf${t===tf?' on':''}" data-tf="${t}">${t}</button>`).join('');
+
+/* standalone /raw gets a way back; the cockpit's embedded frame does not */
+if(window.self===window.top)document.getElementById('backToCockpit').style.display='';
 
 const chart=LightweightCharts.createChart(document.getElementById('chart'),{
   layout:{background:{color:'transparent'},textColor:'#6b7c8c',
