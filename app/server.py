@@ -756,4 +756,20 @@ def index():
                         headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
-app.mount("/static", StaticFiles(directory=STATIC), name="static")
+class _NoCacheStatic(StaticFiles):
+    """Serve UI assets without browser caching.
+
+    Rationale (S22b): renaming a DOM id in cockpit.html while the browser
+    replayed a CACHED cockpit.js left the script binding a now-missing element,
+    throwing on load and silently killing the whole drawer — HTML and JS from
+    two different generations. These files are a few KB on loopback, so any
+    caching win is irrelevant next to serving a self-inconsistent UI.
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+
+app.mount("/static", _NoCacheStatic(directory=STATIC), name="static")

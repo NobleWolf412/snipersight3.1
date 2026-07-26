@@ -36,18 +36,19 @@ button.alert{border-color:#713839;color:#ffd4d4;background:rgba(74,20,24,.35)}
     <div class="status" id="status">DECISION PROVENANCE READY</div>
     <div class="actions">
       <a href="/raw" target="_top">RAW COCKPIT</a>
-      <button id="whyButton" type="button" aria-controls="whyDrawer" aria-expanded="false">WHY?<span class="badge" id="whyBadge"></span></button>
+      <button id="diagButton" type="button" aria-controls="diagDrawer" aria-expanded="false"
+        title="Why the engine did what it did: setup traces, rejection reasons, data health (Ctrl+Shift+D)">DIAGNOSTICS<span class="badge" id="diagBadge"></span></button>
     </div>
   </header>
   <main class="stage">
     <iframe id="cockpit" src="/raw" title="SniperSight trading cockpit"></iframe>
     <div class="scrim" id="scrim"></div>
-    <aside class="drawer" id="whyDrawer" aria-label="Decision diagnostics">
-      <div class="drawer-head">WHY? · DIAGNOSTICS <span>Esc closes · Ctrl+Shift+D toggles</span><button id="closeWhy" type="button" aria-label="Close diagnostics">✕</button></div>
-      <iframe id="diagnostics" src="/static/diagnostics.html?embed=1" title="Decision provenance and diagnostics"></iframe>
+    <aside class="drawer" id="diagDrawer" aria-label="Decision diagnostics">
+      <div class="drawer-head">DIAGNOSTICS · WHY THIS TRADE, WHY NOT THAT ONE <span>Esc closes · Ctrl+Shift+D toggles</span><button id="diagClose" type="button" aria-label="Close diagnostics">✕</button></div>
+      <iframe id="diagnostics" src="/static/diagnostics.html?embed=1&amp;v=2" title="Decision provenance and diagnostics"></iframe>
     </aside>
   </main>
 </div>
-<script src="/static/cockpit.js"></script>
+<script src="/static/cockpit.js?v=2"></script>
 </body>
 </html>

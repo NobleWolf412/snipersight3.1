@@ -20,7 +20,7 @@ class DefaultCockpitRouteTests(unittest.TestCase):
     def test_integrated_shell_embeds_raw_route_without_recursion(self):
         html = (APP / "static" / "cockpit.html").read_text(encoding="utf-8")
 
-        self.assertIn('id="whyButton"', html)
+        self.assertIn('id="diagButton"', html)
         self.assertIn('src="/raw"', html)
         self.assertIn('href="/raw"', html)
         self.assertNotIn('id="cockpit" src="/"', html)

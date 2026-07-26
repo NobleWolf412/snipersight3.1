@@ -14,11 +14,14 @@ class CockpitDiagnosticsIntegrationTests(unittest.TestCase):
         self.assertIn("http://localhost:8422", launcher)
         self.assertIn("watchdog.py", launcher)
 
-    def test_cockpit_contains_accessible_why_drawer(self):
+    def test_cockpit_contains_accessible_diagnostics_drawer(self):
         html = (STATIC / "cockpit.html").read_text(encoding="utf-8")
-        self.assertIn('id="whyButton"', html)
-        self.assertIn('aria-controls="whyDrawer"', html)
-        self.assertIn('id="whyDrawer"', html)
+        self.assertIn('id="diagButton"', html)
+        self.assertIn('aria-controls="diagDrawer"', html)
+        self.assertIn('id="diagDrawer"', html)
+        # the control names what it opens; ">WHY?<" was a question with no object
+        self.assertIn(">DIAGNOSTICS<", html)
+        self.assertNotIn(">WHY?<", html)
         self.assertIn('/static/diagnostics.html?embed=1', html)
         # MUST embed /raw, never "/": the cockpit itself is served at "/", so
         # src="/" would make it embed itself recursively (fixed in 846f310).

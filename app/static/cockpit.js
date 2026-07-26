@@ -1,9 +1,9 @@
 (() => {
-  const button = document.getElementById('whyButton');
-  const close = document.getElementById('closeWhy');
-  const drawer = document.getElementById('whyDrawer');
+  const button = document.getElementById('diagButton');
+  const close = document.getElementById('diagClose');
+  const drawer = document.getElementById('diagDrawer');
   const scrim = document.getElementById('scrim');
-  const badge = document.getElementById('whyBadge');
+  const badge = document.getElementById('diagBadge');
   const status = document.getElementById('status');
   const diagnostics = document.getElementById('diagnostics');
 

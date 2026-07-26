@@ -779,3 +779,43 @@ assert the shipped design, added a guard that the recursive form never returns,
 plus tests for the return-path pill and the restart endpoint's refusal path.
 Suite: 71 tests green (1 skipped — the lock-port probe correctly skips while a
 real watchdog holds it).
+
+---
+
+## S22b — 2026-07-26 — "WHY?" renamed; static-asset cache trap fixed
+
+**User critique (correct):** "WHY?" is a question with no object — and with the
+badge it read "WHY? 12", i.e. "why 12?". The control is really an inspector for
+decision provenance: setup traces, rejection reasons, data health.
+
+**Renamed:** button "WHY?" -> **DIAGNOSTICS** (badge now reads naturally as a
+count of actionable items), with a title attribute that keeps the intent
+explicit: "Why the engine did what it did…". Drawer header "WHY? · DIAGNOSTICS"
+-> "DIAGNOSTICS · WHY THIS TRADE, WHY NOT THAT ONE" (a complete phrase, not a
+dangling question). Same dangling label inside diagnostics.html: panel heading
+"WHY?" -> "DECISION RATIONALE". Element ids renamed too (whyButton/whyDrawer/
+whyBadge/closeWhy -> diag*) so nothing internal still says "why" while the UI
+says otherwise; cockpit.js and both test files retargeted.
+
+**Bug found while verifying (the important one):** after the id rename the
+drawer silently stopped working — the browser replayed a CACHED cockpit.js that
+still bound `whyButton`, hit a null, and threw at load, killing every handler
+and the badge refresh. HTML and JS from two different generations. Fixes:
+1. `_NoCacheStatic` — /static now serves `Cache-Control: no-cache,
+   must-revalidate`. These are a few KB on loopback; a caching win is worthless
+   next to serving a self-inconsistent UI. (This same trap explains the earlier
+   "hard-refresh needed" notes in S16/S21b.)
+2. Cache-busted the asset URLs (`cockpit.js?v=2`, diagnostics css/js, and the
+   diagnostics iframe src) so the transition works even from an already-stale
+   cache — no user-side Ctrl+F5 required.
+
+**Also fixed:** diagnostics.html's COCKPIT link pointed at
+`/static/cockpit.html` with no target; inside the drawer iframe that would have
+nested an entire cockpit inside the cockpit. Now `href="/" target="_top"`.
+
+**Verification note worth remembering:** the drawer appeared "stuck closed"
+(transform frozen at translateX(101%) while the class was `open`) purely
+because the browser pane was not compositing frames, so CSS transitions never
+advanced. Disabling the transition proved the rule applies: translateX(0),
+left=576 of a 1280 viewport, scrim opacity 1 — DRAWER OPENS CORRECTLY. Live
+badge confirmed working ("4 ACTIONABLE DIAGNOSTICS"). Suite: 71 green.
