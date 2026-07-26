@@ -732,3 +732,50 @@ Shown only when `window.self===window.top` — the cockpit embeds this same file
 in an iframe, and a self-link inside the cockpit's own frame would be noise.
 Verified both ways: visible standalone at /raw (href="/"), display:none inside
 the embedded frame.
+
+---
+
+## S22 — 2026-07-26 — One-click restart button (server + scanner)
+
+**User ask:** a UI button to restart "both servers, front and back."
+
+**Clarification worth recording:** there is no separate front/back server. One
+FastAPI process serves BOTH the API and the UI (cockpit_server mounts server),
+and the second process is the live scanner. So "both" = api-server + scanner,
+which is exactly what the watchdog already supervises.
+
+**Design — restart, never a kill switch:** `POST /api/system/restart?target=
+server|scanner|both` has NO spawn capability by construction. It only asks
+processes to exit (scanner: taskkill by heartbeat pid; server: os._exit after a
+0.75s timer so the acknowledgement flushes first) and lets the EXISTING watchdog
+respawn them on its 5s backoff. If the watchdog is not holding its lock socket
+(:8423) the endpoint refuses with 409 — otherwise the button would take the app
+down with nothing to bring it back. Two further guards: a heartbeat older than
+180s is never signalled (the pid may be recycled to an unrelated process), and
+target is regex-constrained by FastAPI (unknown targets -> 422).
+
+**Windows honesty bug found and fixed mid-build:** os.kill(pid, SIGTERM)
+terminates the target but still raises WinError 87, so the first version
+reported "scanner stop failed" while the watchdog log showed a clean exit —
+a lie in the response. Replaced with taskkill and OBSERVED-outcome reporting.
+
+**UI:** "⟳ RESTART" in the footer beside the scanner light (visible in both the
+standalone /raw view and the cockpit's embedded frame), with a confirm dialog
+stating that the watchdog respawns within ~15s and that append-only facts are
+never lost. On success the footer shows "RESTARTING — waiting for watchdog…"
+and the S21b self-heal loop repaints the page unaided.
+
+**Verified end-to-end (clicked in the browser, confirm auto-accepted):**
+scanner 1160 -> 15944, api-server 18604 -> 7816, page self-healed to
+SCANNER LIVE with full data, button re-enabled, no manual refresh. Note the
+api-server's graceful exit logs rc=0 (vs rc=4294967295 for an external kill) —
+a useful signature of an intentional restart.
+
+**Also fixed:** two stale tests from 5645ce9 that failed at HEAD before any of
+my edits — one asserted `iframe src="/"`, i.e. the cockpit embedding ITSELF
+recursively, which 846f310 had deliberately fixed; the other expected the
+launcher to open /static/cockpit.html rather than the origin. Corrected both to
+assert the shipped design, added a guard that the recursive form never returns,
+plus tests for the return-path pill and the restart endpoint's refusal path.
+Suite: 71 tests green (1 skipped — the lock-port probe correctly skips while a
+real watchdog holds it).

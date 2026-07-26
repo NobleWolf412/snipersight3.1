@@ -422,7 +422,11 @@
   </aside>
 
   <footer class="foot">
-    <span><i class="led" id="scanLed" style="display:inline-block;vertical-align:middle;margin-right:6px"></i><span id="st-scan">SCANNER —</span></span>
+    <span><i class="led" id="scanLed" style="display:inline-block;vertical-align:middle;margin-right:6px"></i><span id="st-scan">SCANNER —</span>
+      <button id="btnRestart" title="Stop the API server and scanner; the watchdog respawns both within ~15s"
+        style="margin-left:8px;font-family:var(--mono);font-size:9px;letter-spacing:.1em;
+        padding:2px 7px;background:var(--bg2);color:var(--txt-dim);border:1px solid var(--line-hi);
+        border-radius:2px;cursor:pointer">⟳ RESTART</button></span>
     <span class="sep">|</span>
     <span>FACT STORE <span class="hot num" id="st-facts">—</span> · append-only · <span id="st-algo">—</span></span>
     <span class="sep">|</span>
@@ -467,6 +471,31 @@ document.getElementById('tfs').innerHTML=
 
 /* standalone /raw gets a way back; the cockpit's embedded frame does not */
 if(window.self===window.top)document.getElementById('backToCockpit').style.display='';
+
+/* ---------- restart both processes (watchdog respawns; see /api/system/restart) ---------- */
+document.getElementById('btnRestart').onclick=async ev=>{
+  const btn=ev.currentTarget;
+  if(!confirm('Restart the API server and live scanner?\n\n'
+    +'The watchdog respawns both within ~15 seconds. Recorded facts are '
+    +'append-only, so nothing already logged is lost.'))return;
+  btn.disabled=true;const was=btn.textContent;btn.textContent='⟳ RESTARTING…';
+  try{
+    const r=await fetch('/api/system/restart?target=both',{method:'POST'});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){
+      alert('Restart refused: '+(d.detail||r.status)); // e.g. watchdog not running
+      btn.disabled=false;btn.textContent=was;return;
+    }
+    if(d.warnings&&d.warnings.length)console.warn('restart warnings:',d.warnings);
+    const el=document.getElementById('st-scan');
+    if(el)el.textContent='RESTARTING — waiting for watchdog…';
+    // the server is exiting; _apiRetry()'s loop reconnects and repaints on its own
+    setTimeout(()=>{_apiRetry();btn.disabled=false;btn.textContent=was;},1500);
+  }catch(e){
+    // the server may have exited before the response reached us — still fine
+    setTimeout(()=>{_apiRetry();btn.disabled=false;btn.textContent=was;},1500);
+  }
+};
 
 const chart=LightweightCharts.createChart(document.getElementById('chart'),{
   layout:{background:{color:'transparent'},textColor:'#6b7c8c',

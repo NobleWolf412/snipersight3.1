@@ -359,6 +359,93 @@ def portfolio():
         con.close()
 
 
+WATCHDOG_LOCK_PORT = 8423       # watchdog.py holds a listening lock socket here
+HEARTBEAT = STATIC.parent / "data" / "heartbeat.json"
+
+
+def _stop_pid(pid: int) -> tuple[bool, str]:
+    """Stop a process and report the OBSERVED outcome.
+
+    Windows note: os.kill(pid, SIGTERM) does terminate the target but can still
+    raise WinError 87, so trusting the exception produced a false "stop failed"
+    while the watchdog log showed a clean exit. taskkill reports truthfully.
+    """
+    import os
+    import signal
+    import subprocess
+    import sys
+    if sys.platform == "win32":
+        r = subprocess.run(["taskkill", "/PID", str(pid), "/F"],
+                           capture_output=True, text=True, timeout=10)
+        msg = (r.stdout or r.stderr or "").strip().splitlines()
+        return r.returncode == 0, (msg[-1] if msg else f"taskkill rc={r.returncode}")
+    os.kill(pid, signal.SIGTERM)
+    return True, "SIGTERM sent"
+
+
+def _watchdog_alive() -> bool:
+    """True when a supervisor holds the watchdog lock socket. If we can bind it,
+    nothing is supervising and nothing would restart what we stop."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", WATCHDOG_LOCK_PORT))
+        return False
+    except OSError:
+        return True
+    finally:
+        s.close()
+
+
+@app.post("/api/system/restart")
+def system_restart(target: str = Query("both", pattern="^(server|scanner|both)$")):
+    """Restart supervised processes.
+
+    Deliberately has NO spawn capability: it only asks processes to exit and
+    lets the existing watchdog respawn them (5s backoff). If the watchdog is
+    not running we refuse — otherwise this endpoint would be a kill switch
+    rather than a restart. Local-loopback only; paper research app; the fact
+    store is append-only so an interrupted cycle loses no recorded evidence.
+    """
+    import os
+    import threading
+    import time as _t
+
+    if not _watchdog_alive():
+        raise HTTPException(409, "watchdog is not running — refusing to stop "
+                                 "processes nothing would restart. Start it with "
+                                 "start.bat, then retry.")
+    actions, warnings = [], []
+
+    if target in ("scanner", "both"):
+        try:
+            hb = json.loads(HEARTBEAT.read_text())
+            age = _t.time() - hb["ts"]
+            if age > 180:
+                # a stale heartbeat means the pid may already be recycled to an
+                # unrelated process — never signal a pid we cannot vouch for
+                warnings.append(f"scanner heartbeat is {int(age)}s stale; not "
+                                f"signalling pid {hb['pid']} (may be recycled). "
+                                f"The watchdog will respawn it on its own.")
+            else:
+                stopped, detail = _stop_pid(int(hb["pid"]))
+                (actions if stopped else warnings).append(
+                    f"scanner pid {hb['pid']} {'stopped' if stopped else 'stop failed'} ({detail})")
+        except FileNotFoundError:
+            warnings.append("no heartbeat file; scanner has never reported")
+        except Exception as exc:
+            warnings.append(f"scanner stop failed: {exc}")
+
+    if target in ("server", "both"):
+        # exit AFTER this response flushes, so the caller sees the acknowledgement
+        threading.Timer(0.75, lambda: os._exit(0)).start()
+        actions.append(f"api-server pid {os.getpid()} exiting")
+
+    return {"ok": True, "target": target, "actions": actions,
+            "warnings": warnings, "supervisor": "watchdog",
+            "expected_back_within_s": 15}
+
+
 @app.get("/api/performance")
 def performance():
     """Per-symbol / per-strategy paper performance. R-stats cover every
