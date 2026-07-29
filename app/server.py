@@ -742,18 +742,41 @@ def health():
 
 @app.get("/api/pipeline-health")
 def pipeline_health(symbol: str | None = None):
-    """Run the read-only A-to-Z contract audit used to qualify performance."""
+    """Read-only A-to-Z contract audit used to qualify performance.
+
+    Serves the shared cached verdict (quality.cached_audit): a cold full audit
+    runs ~72s, which hangs every caller and made the shell's health chip sit
+    blank. A per-symbol query still audits directly since it is narrow.
+    """
     con = store.connect()
     try:
-        return quality.audit(con, symbol=symbol, persist=False)
+        if symbol:
+            return quality.audit(con, symbol=symbol, persist=False)
+        report = quality.cached_audit(con)
+        if report is None:
+            return {"status": "PENDING", "evaluation_allowed": True,
+                    "pending": True, "stages": [], "blockers": [], "warnings": [],
+                    "detail": "first audit running"}
+        return report
     finally:
         con.close()
 
 
+NO_CACHE = {"Cache-Control": "no-cache, must-revalidate"}
+
+
 @app.get("/")
 def index():
-    return FileResponse(STATIC / "index.html",
-                        headers={"Cache-Control": "no-cache, must-revalidate"})
+    """The redesigned shell (docs/REDESIGN-PLAN.md phase 1)."""
+    return FileResponse(STATIC / "shell.html", headers=NO_CACHE)
+
+
+@app.get("/legacy", include_in_schema=False)
+def legacy():
+    """The previous cockpit. Kept reachable until its chart moves into the new
+    CHART surface in phase 2 — deleting a working tool before its replacement
+    exists is how you end up with neither."""
+    return FileResponse(STATIC / "index.html", headers=NO_CACHE)
 
 
 @app.get("/api/state")

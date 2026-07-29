@@ -119,6 +119,50 @@ def _stage_rung(checks, stage):
     return max(relevant, key=RUNG_ORD.get) if relevant else "SERVE"
 
 
+_AUDIT_CACHE: dict = {"at": 0.0, "report": None, "refreshing": False}
+AUDIT_TTL = 300
+
+
+def cached_audit(con, force: bool = False):
+    """The one verdict every surface reads.
+
+    A full audit was measured at 72s cold while contending with the scanner's
+    writes. Any HTTP handler that calls audit() directly therefore hangs its
+    caller — which is exactly how the redesigned shell's health chip and the
+    ApexShell pane came to disagree and stall. Serve the last known report and
+    refresh off the request path; `force` runs it synchronously for a button.
+    Returns None only before the very first audit completes — callers must
+    render that as "pending", never as a confident zero.
+    """
+    import threading
+    if force:
+        _AUDIT_CACHE["report"] = audit(con, persist=True)
+        _AUDIT_CACHE["at"] = time.time()
+        return _AUDIT_CACHE["report"]
+
+    stale = (_AUDIT_CACHE["report"] is None
+             or time.time() - _AUDIT_CACHE["at"] > AUDIT_TTL)
+    if stale and not _AUDIT_CACHE["refreshing"]:
+        _AUDIT_CACHE["refreshing"] = True
+
+        def _bg():
+            from . import store
+            try:
+                c = store.connect()
+                try:
+                    _AUDIT_CACHE["report"] = audit(c)
+                    _AUDIT_CACHE["at"] = time.time()
+                finally:
+                    c.close()
+            except Exception:
+                pass
+            finally:
+                _AUDIT_CACHE["refreshing"] = False
+
+        threading.Thread(target=_bg, daemon=True).start()
+    return _AUDIT_CACHE["report"]
+
+
 def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
     now = int(time.time()) if now is None else now
     checks = []

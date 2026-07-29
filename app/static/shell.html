@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SniperSight</title>
+<link rel="icon" href="/static/assets/snipersight-logo.png">
+<link rel="stylesheet" href="/static/ss.css?v=1">
+</head>
+<body data-mode="idle">
+
+<div class="shell">
+
+  <!-- ══ top bar: identity, venue, mode, health ══ -->
+  <header class="topbar">
+    <div class="brand">
+      <img src="/static/assets/snipersight-logo.png" alt="SniperSight">
+    </div>
+
+    <label class="t-label" style="display:flex;align-items:center;gap:8px">VENUE
+      <select id="venue" class="btn" style="text-transform:none;letter-spacing:.08em">
+        <option value="coinbase">Coinbase · spot</option>
+        <option value="phemex">Phemex · perps</option>
+      </select>
+    </label>
+
+    <span class="chip chip-amber" id="modeChip">
+      <span class="orb warn"></span><span class="term" data-t="paper">Paper</span>
+    </span>
+
+    <div class="spacer"></div>
+
+    <span class="chip" id="healthChip" title="pipeline audit"><span class="orb" id="healthOrb"></span><span id="healthTxt">—</span></span>
+    <span class="chip" id="scanChip"><span class="orb" id="scanOrb"></span><span id="scanTxt">SCANNER —</span></span>
+    <span class="t-mono" id="clock" style="color:var(--fg-4)">—</span>
+  </header>
+
+  <!-- ══ left rail: five surfaces, each with one job ══ -->
+  <nav class="nav">
+    <a href="#command" class="on"   data-s="command">Command<span class="nav-count" id="nCommand"></span></a>
+    <a href="#chart"                data-s="chart">Chart</a>
+    <a href="#results"              data-s="results">Results</a>
+    <div class="nav-sep"></div>
+    <a href="#setup"                data-s="setup">Scanner Setup</a>
+    <a href="#diagnostics"          data-s="diagnostics">Diagnostics<span class="nav-count" id="nDiag"></span></a>
+  </nav>
+
+  <!-- ══ stage ══ -->
+  <main class="stage">
+
+    <!-- ─── COMMAND ─── -->
+    <section class="surface on" id="s-command">
+      <div class="surface-head">
+        <h1 class="t-page">Command</h1>
+        <p>What should I do right now?</p>
+      </div>
+
+      <div class="panel panel-accent bracket" style="margin-bottom:var(--lg)">
+        <div class="panel-head">
+          <span class="t-section">Scanner</span>
+          <div class="spacer" style="margin-left:auto"></div>
+          <button class="btn btn-cyan" id="btnScan">Run Scan</button>
+          <button class="btn" id="btnAuto" title="Autonomous mode — locked until the forward record earns it" disabled>Auto: Off</button>
+        </div>
+        <div class="panel-body">
+          <div class="grid cols-4">
+            <div class="tile"><span class="t-label">Universe</span><span class="t-metric" id="mUniverse">—</span></div>
+            <div class="tile"><span class="t-label"><span class="term" data-t="setup">Active setups</span></span><span class="t-metric" id="mSetups">—</span></div>
+            <div class="tile"><span class="t-label">Equity <span class="term" data-t="paper">(paper)</span></span><span class="t-metric" id="mEquity">—</span></div>
+            <div class="tile"><span class="t-label">Next trade risk</span><span class="t-metric" id="mRisk">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <span class="t-section">Setup Deck</span>
+          <span class="chip" style="margin-left:auto">One per token · best replaces pending</span>
+        </div>
+        <div id="deck"><div class="empty">loading…</div></div>
+      </div>
+    </section>
+
+    <!-- ─── CHART ─── -->
+    <section class="surface" id="s-chart">
+      <div class="surface-head"><h1 class="t-page">Chart</h1><p>Is this trade good, and what are my levels?</p></div>
+      <div class="stub">
+        <b>Phase 2.</b><br>
+        Chart owns the screen. <span class="term" data-t="entry">Entry</span>,
+        <span class="term" data-t="tp">TP</span> and <span class="term" data-t="sl">SL</span> plotted and draggable —
+        dragging recomputes <span class="term" data-t="rr">R:R</span>, position size, and on
+        <span class="term" data-t="perps">perps</span> the <span class="term" data-t="liquidation">liquidation</span> distance.<br>
+        Order ticket with <span class="term" data-t="trailing">trailing stop</span> toggle.
+        Overlay toggles for structure, zones, <span class="term" data-t="liquidity">liquidity</span> and
+        <span class="term" data-t="dcl">cycle</span> lows.<br>
+        The working chart is still live at <a href="/legacy" style="color:var(--accent)">/legacy</a> until it moves here.
+      </div>
+    </section>
+
+    <!-- ─── RESULTS ─── -->
+    <section class="surface" id="s-results">
+      <div class="surface-head"><h1 class="t-page">Results</h1><p>Is this actually working?</p></div>
+      <div class="grid cols-4" style="margin-bottom:var(--lg)">
+        <div class="tile"><span class="t-label">Equity</span><span class="t-metric" id="rEquity">—</span></div>
+        <div class="tile"><span class="t-label">Return</span><span class="t-metric" id="rReturn">—</span></div>
+        <div class="tile"><span class="t-label">Max <span class="term" data-t="drawdown">drawdown</span></span><span class="t-metric" id="rDD">—</span></div>
+        <div class="tile"><span class="t-label"><span class="term" data-t="killSwitch">Halt</span> days</span><span class="t-metric" id="rHalt">—</span></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="t-section">Forward Record</span>
+          <span class="chip" id="baselineChip" style="margin-left:auto">—</span></div>
+        <div class="panel-body t-body" id="resultsNote">loading…</div>
+      </div>
+    </section>
+
+    <!-- ─── SCANNER SETUP ─── -->
+    <section class="surface" id="s-setup">
+      <div class="surface-head"><h1 class="t-page">Scanner Setup</h1><p>What is the bot allowed to do?</p></div>
+      <div class="grid cols-2">
+        <div class="panel">
+          <div class="panel-head"><span class="t-section">Venue &amp; Credentials</span></div>
+          <div class="panel-body stub">
+            <b>Phase 3.</b> API keys entered by you, stored in OS credential storage —
+            never in the fact store, logs, or git. Read-only keys until
+            <span class="term" data-t="live">live</span> unlocks.
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="t-section">Risk</span></div>
+          <div class="panel-body stub">
+            <b>Phase 3.</b> <span class="term" data-t="riskPerTrade">Risk per trade</span>,
+            total <span class="term" data-t="drawdown">drawdown</span> limit, concurrent positions,
+            <span class="term" data-t="leverage">leverage</span> (per venue).<br>
+            Live today in code: 2% per trade, 4% total, 6% daily halt.
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="t-section">Strategies</span></div>
+          <div class="panel-body stub">
+            <b>Phase 3.</b> Toggle Pullback / Reversal / Scale-in.
+            Cycle joins only if the measurement earns it.
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="t-section">Auto Mode</span></div>
+          <div class="panel-body stub">
+            <b>Phase 5.</b> Arm with timer, total <span class="term" data-t="drawdown">drawdown</span> halt,
+            data-health halt, and a always-visible HALT ALL.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── DIAGNOSTICS ─── -->
+    <section class="surface" id="s-diagnostics">
+      <div class="surface-head"><h1 class="t-page">Diagnostics</h1><p>Is the machine telling me the truth?</p></div>
+      <div class="grid cols-2" style="margin-bottom:var(--lg)">
+        <div class="panel">
+          <div class="panel-head"><span class="t-section">Pipeline</span>
+            <button class="btn" id="btnAudit" style="margin-left:auto">Re-audit</button></div>
+          <div class="panel-body">
+            <div class="t-metric" id="dVerdict" style="margin-bottom:var(--sm)">—</div>
+            <div class="t-mono" id="dCounts" style="color:var(--fg-3)">—</div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="t-section">Why nothing fired</span></div>
+          <div class="panel-body" id="dFunnel"><span class="t-mono" style="color:var(--fg-4)">loading…</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="t-section">Open Issues</span>
+          <span class="chip" style="margin-left:auto"><span class="term" data-t="telemetry">telemetry</span></span></div>
+        <div id="dIssues"><div class="empty">loading…</div></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ══ status bar ══ -->
+  <footer class="statusbar">
+    <span><span class="term" data-t="fact">Facts</span> <b id="sbFacts">—</b></span>
+    <span><span class="term" data-t="algoVersion">Engine</span> <b id="sbAlgo">—</b></span>
+    <span><span class="term" data-t="baseline">Baseline</span> <b id="sbBaseline">—</b></span>
+    <span style="margin-left:auto">Sim only — no live orders</span>
+  </footer>
+
+</div>
+
+<script src="/static/glossary.js?v=1"></script>
+<script src="/static/shell.js?v=1"></script>
+</body>
+</html>

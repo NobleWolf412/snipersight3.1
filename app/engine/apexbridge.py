@@ -64,11 +64,8 @@ def _report(con):
     pane as OFFLINE on every cache miss. Serve the last known verdict and
     refresh in the background; the RE-AUDIT button forces a fresh one."""
     import threading
-    stale = _cache["report"] is None or time.time() - _cache["at"] > CACHE_TTL
-    if stale and not _cache["refreshing"]:
-        _cache["refreshing"] = True
-        threading.Thread(target=_refresh_async, daemon=True).start()
-    return _cache["report"]
+    from . import quality
+    return quality.cached_audit(con)   # one shared verdict for every surface
 
 
 def state(con) -> dict:

@@ -980,3 +980,47 @@ Measured after the fix: 0.45s / 1.03s / 0.007s / 0.005s — all inside the
 timeout. RE-AUDIT still forces a synchronous fresh run and reseeds the cache.
 
 75 tests green.
+
+---
+
+## S25 — 2026-07-28 — UI redesign phase 1: design system, shell, glossary
+
+**Operator verdict on the old UI: "terrible AI slop."** Measured before touching
+anything: 14 distinct font sizes, 31 interactive elements, 15 tabs, and a footer
+that was five unrelated facts glued with pipes — telemetry cosplaying as
+insight. Root cause was not styling: the screen displayed what the ENGINE
+produces instead of answering what the OPERATOR must decide.
+
+**Interviewed rather than guessed** (operator's instruction). Answers set the
+plan: build live rails but keep live locked; audience is "me now, everyday user
+later"; Coinbase + Phemex; one setup per token with a challenger the user
+approves; longs AND shorts with optional leverage; manual chart edits tagged and
+excluded from edge stats. Plan written first: docs/REDESIGN-PLAN.md.
+
+**Found the real brand instead of inventing a third one.** snipersight-trading
+carried a full design system (docs/DESIGN-SYSTEM.md, copied here) and the logo:
+a gunmetal scope ring with a GREEN reticle. My cyan-on-black HUD was off-brand
+as well as undesigned. Adopted verbatim: OKLCH olive-tinted surfaces (never
+#000), dynamic --accent (green rest / amber armed / red live), Share Tech Mono
+for chrome, Inter for prose only, JetBrains Mono for numbers, scanlines as a
+2-bit overlay, motion slow and non-celebratory.
+
+**Built:** `ss.css` (the system), `shell.html` (five surfaces: COMMAND, CHART,
+RESULTS, SCANNER SETUP, DIAGNOSTICS — each answering exactly one question),
+`shell.js` (nav + live wiring), `glossary.js` (57 terms; every domain word on
+screen explains itself on hover — the operator's "lingo I have no idea what it
+means"). Fonts vendored locally (~100KB) so there is no runtime dependency on
+Google. Old cockpit preserved at /legacy until its chart moves in phase 2 —
+deleting a working tool before its replacement exists leaves you with neither.
+
+**Measured after:** exactly **6 font sizes** (10 / 11.5 / 13 / 16 / 26 / 32),
+saturated colour **0.3%** of screen against the system's ≤10% rule, 25 glossary
+terms live, all surfaces carrying real data.
+
+**Root-cause fix found while wiring (not cosmetic):** the shell's health chip
+sat blank because `/api/pipeline-health` still ran a FULL synchronous audit —
+the same 72-second path already fixed for the ApexShell pane but never at the
+source. Two surfaces had independently cached the same verdict, which is how
+they disagreed on 2026-07-26. Added `quality.cached_audit()` as the single
+shared verdict (background refresh, `force` for buttons); both the endpoint and
+the bridge now read it. Response time went from hanging to **7ms**. 89 tests green.
