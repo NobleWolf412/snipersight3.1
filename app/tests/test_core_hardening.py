@@ -53,7 +53,7 @@ class TestManifestsAndCosts(TempStore):
             versions = [r[0] for r in migrated.execute(
                 "SELECT version FROM schema_migrations ORDER BY version").fetchall()]
             self.assertIn("n_bad", columns)
-            self.assertEqual(versions, [1, 2, 3, 4, 5])
+            self.assertEqual(versions, [1, 2, 3, 4, 5, 6])
         finally:
             migrated.close()
 

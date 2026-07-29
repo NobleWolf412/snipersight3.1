@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS quality_checks (
     stage       TEXT NOT NULL,
     status      TEXT NOT NULL,
     code        TEXT NOT NULL,
+    rung        TEXT NOT NULL DEFAULT 'HALT',
     symbol      TEXT,
     tf          TEXT,
     details     TEXT NOT NULL,
@@ -152,6 +153,14 @@ def _migrate(con: sqlite3.Connection) -> None:
         con.execute(
             "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
             (5, "forward_research_baselines"))
+    if 6 not in applied:
+        columns = {r[1] for r in con.execute("PRAGMA table_info(quality_checks)").fetchall()}
+        if "rung" not in columns:
+            con.execute(
+                "ALTER TABLE quality_checks ADD COLUMN rung TEXT NOT NULL DEFAULT 'HALT'")
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (6, "quality_checks_rung"))
     con.commit()
 
 

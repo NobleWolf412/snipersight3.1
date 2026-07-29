@@ -15,6 +15,54 @@ from . import aggregator, importer
 STAGES = ("DATA", "AGGREGATION", "FACTS", "SETUP", "RISK", "EXECUTION", "ACCOUNTING")
 ORDER = {"PASS": 0, "DEGRADED": 1, "BLOCKED": 2}
 
+# Kill-Switch Ladder — the single vocabulary every audit finding declares itself
+# in, and the routing table the watchdog dispatches on. Adding a new _issue()
+# code without an entry in CODE_RUNG falls back to HALT/SERVE_FLAG (see
+# _rung_for) — safe, but the mapping must be made explicit in the same change.
+RUNGS = ("SERVE", "SERVE_FLAG", "QUARANTINE", "AUTO_DISABLE", "HALT")
+RUNG_ORD = {r: i for i, r in enumerate(RUNGS)}
+
+CODE_RUNG = {
+    # DATA
+    "NO_CANDLES":              "HALT",
+    "UNKNOWN_TIMEFRAME":       "HALT",
+    "OHLC_INVARIANT_FAILURE":  "HALT",
+    "SEQUENCE_GAPS":           "HALT",
+    "DEVELOPING_CANDLES":      "HALT",
+    "STALE_SERIES":            "QUARANTINE",   # per-symbol/tf degrade
+    "KNOWN_VENUE_GAPS":        "SERVE_FLAG",   # documented, not corruption
+    # AGGREGATION
+    "AGGREGATE_PENDING":       "SERVE_FLAG",   # scheduling lag
+    "MISSING_AGGREGATE":       "HALT",
+    "AGGREGATE_MISMATCH":      "HALT",
+    "ORPHAN_AGGREGATE":        "HALT",
+    "NO_COMPLETE_BUCKETS":     "SERVE_FLAG",
+    # FACTS
+    "CAUSALITY_VIOLATION":     "HALT",
+    "UNATTRIBUTED_LEGACY_FACTS": "SERVE_FLAG",
+    # SETUP
+    "INVALID_BRACKET":         "AUTO_DISABLE",
+    "INCOMPLETE_LINEAGE":      "SERVE_FLAG",
+    # RISK
+    "ORPHAN_RISK_DECISION":    "HALT",
+    "REJECTED_WITH_EXPOSURE":  "HALT",
+    "SIZED_DECISION_INCOMPLETE": "HALT",
+    # EXECUTION
+    "ORPHAN_ORDER":            "HALT",
+    "ORDER_BEFORE_AVAILABLE":  "HALT",
+    "EXIT_WITHOUT_ORDER":      "HALT",
+    "EXIT_BEFORE_FILL":        "HALT",
+    # ACCOUNTING
+    "ACCOUNT_SUMMARY_MISSING": "HALT",
+    "EQUITY_RECONCILIATION_FAILED": "HALT",
+}
+
+
+def _rung_for(status: str, code: str) -> str:
+    if code in CODE_RUNG:
+        return CODE_RUNG[code]
+    return "HALT" if status == "BLOCKED" else "SERVE_FLAG"
+
 
 def _current_versions():
     """Active engine chain. Generation-specific checks (SETUP/RISK/EXECUTION)
@@ -57,12 +105,18 @@ class DataQualityError(RuntimeError):
 
 def _issue(checks, stage, status, code, details, symbol=None, tf=None):
     checks.append({"stage": stage, "status": status, "code": code,
+                   "rung": _rung_for(status, code),
                    "symbol": symbol, "tf": tf, "details": details})
 
 
 def _stage_status(checks, stage):
     relevant = [c["status"] for c in checks if c["stage"] == stage]
     return max(relevant, key=ORDER.get) if relevant else "PASS"
+
+
+def _stage_rung(checks, stage):
+    relevant = [c["rung"] for c in checks if c["stage"] == stage]
+    return max(relevant, key=RUNG_ORD.get) if relevant else "SERVE"
 
 
 def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
@@ -301,10 +355,16 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
                    f"summary {p['final_equity']} does not equal ledger {expected}")
 
     stages = [{"stage": stage, "status": _stage_status(checks, stage),
+               "rung": _stage_rung(checks, stage),
                "checks": [c for c in checks if c["stage"] == stage]}
               for stage in STAGES]
     status = max((s["status"] for s in stages), key=ORDER.get)
-    result = {"observed_at": now, "status": status,
+    worst_rung = max((s["rung"] for s in stages), key=RUNG_ORD.get)
+    rung_counts = {r: 0 for r in RUNGS}
+    for c in checks:
+        rung_counts[c["rung"]] = rung_counts.get(c["rung"], 0) + 1
+    result = {"observed_at": now, "status": status, "worst_rung": worst_rung,
+              "rung_counts": rung_counts,
               "evaluation_allowed": status != "BLOCKED",
               "strategy_rules_changed": False, "stages": stages,
               "blockers": [c for c in checks if c["status"] == "BLOCKED"],
@@ -314,13 +374,15 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
             "INSERT INTO quality_runs(observed_at,status,evaluation_allowed,summary) "
             "VALUES (?,?,?,?)", (now, status, int(result["evaluation_allowed"]),
                                   json.dumps({"blockers": len(result["blockers"]),
-                                              "warnings": len(result["warnings"])})))
+                                              "warnings": len(result["warnings"]),
+                                              "worst_rung": worst_rung,
+                                              "rung_counts": rung_counts})))
         run_id = cur.lastrowid
         con.executemany(
-            "INSERT INTO quality_checks(quality_run_id,stage,status,code,symbol,tf,details) "
-            "VALUES (?,?,?,?,?,?,?)",
-            [(run_id, c["stage"], c["status"], c["code"], c.get("symbol"),
-              c.get("tf"), c["details"]) for c in checks])
+            "INSERT INTO quality_checks(quality_run_id,stage,status,code,rung,symbol,tf,details) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            [(run_id, c["stage"], c["status"], c["code"], c["rung"],
+              c.get("symbol"), c.get("tf"), c["details"]) for c in checks])
         con.commit(); result["quality_run_id"] = run_id
     return result
 

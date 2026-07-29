@@ -105,6 +105,75 @@ class TestPipelineContracts(QualityStoreCase):
         self.assertEqual(producer, row[0])
 
 
+class TestKillSwitchRungs(QualityStoreCase):
+    """Every _issue() code declares its watchdog dispatch rung. This coverage
+    test guards against a new finding being added to quality.py without a
+    matching CODE_RUNG entry — the fallback in _rung_for is a safety net, not
+    a substitute for the declaration."""
+
+    def test_code_rung_is_the_watchdog_dispatch_table(self):
+        # AST-walk the module and pull the CODE argument (4th positional) from
+        # every _issue() call. A regex-based version of this test was a no-op
+        # because it captured the FIRST quoted literal, which is the stage
+        # (Auditor FIND-1, 2026-07-26). The IfExp branch handles calls where
+        # the code is written as `"X" if cond else "Y"` (Auditor NR-1).
+        import ast
+
+        def _literal_strings(node: ast.AST) -> set[str]:
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                return {node.value}
+            if isinstance(node, ast.IfExp):
+                return _literal_strings(node.body) | _literal_strings(node.orelse)
+            return set()
+
+        with open(quality.__file__, encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        codes: set[str] = set()
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "_issue"
+                    and len(node.args) >= 4):
+                codes |= _literal_strings(node.args[3])
+        # sanity: the AST walk actually found calls (guard against future refactor)
+        self.assertGreater(len(codes), 10,
+                           "AST walk found too few _issue codes — did _issue rename?")
+        missing = codes - set(quality.CODE_RUNG)
+        self.assertFalse(missing, f"codes without CODE_RUNG entry: {sorted(missing)}")
+        # every mapped rung is one of the five ladder rungs
+        self.assertTrue(set(quality.CODE_RUNG.values()) <= set(quality.RUNGS))
+
+    def test_stale_series_routes_to_quarantine_not_halt(self):
+        # A per-symbol/tf staleness must degrade, not halt the whole pipeline —
+        # the room's Contrarian was explicit: freezing on one late bar is worse
+        # than the disease.
+        self.candle("1H", 0)
+        self.con.commit()
+        report = quality.audit(self.con, now=1_000_000)
+        stale = [c for c in report["warnings"] if c["code"] == "STALE_SERIES"]
+        self.assertTrue(stale, "expected a STALE_SERIES warning")
+        self.assertEqual(stale[0]["rung"], "QUARANTINE")
+
+    def test_halt_codes_carry_halt_rung(self):
+        # An OHLC invariant break is cardiac — it must reach rung HALT so the
+        # watchdog restarts live.
+        self.con.execute(
+            "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ("BTC-USD", "1H", 0, "100", "50", "60", "70", "1", "coinbase", 1))
+        self.con.commit()
+        report = quality.audit(self.con, now=100_000)
+        codes = {c["code"]: c["rung"] for c in report["blockers"]}
+        self.assertEqual(codes.get("OHLC_INVARIANT_FAILURE"), "HALT")
+        self.assertEqual(report["worst_rung"], "HALT")
+
+    def test_persisted_checks_include_rung_column(self):
+        report = quality.audit(self.con, now=1000, persist=True)
+        self.assertIsNotNone(report["quality_run_id"])
+        columns = {r[1] for r in self.con.execute(
+            "PRAGMA table_info(quality_checks)").fetchall()}
+        self.assertIn("rung", columns)
+
+
 class TestStrategyRulesRemainFrozen(unittest.TestCase):
     def test_observability_did_not_change_strategy_constants(self):
         self.assertEqual(setups.MIN_RR, Decimal("1.5"))
