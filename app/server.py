@@ -34,6 +34,24 @@ STATIC = Path(__file__).resolve().parent / "static"
 
 VALID_TFS = set(importer.TF_SECONDS)
 
+# Ticker shape. This was `^[A-Z0-9]+-USD$` — a Coinbase-spot spelling, written
+# when every symbol looked like BTC-USD. The universe moved to perps in S34 and
+# the pattern did not, so FastAPI rejected the entire tradeable universe at
+# validation before a single line of handler ran.
+#
+# Measured 2026-07-30, every symbol in `universe.scan_symbols`: **0 of 33 could
+# load a chart. All 33 returned HTTP 422.** `BTCUSDT` has no hyphen; `PF_XBTUSD`
+# additionally has an underscore, which `[A-Z0-9]` excludes. The Chart surface
+# has been completely dead for the whole perp era, and it failed at the
+# framework boundary — so no handler logged anything and no health check saw it.
+#
+# Deliberately a SHAPE check, not a whitelist: the handler already returns an
+# empty series for a symbol it does not hold, which is the honest answer for an
+# unknown ticker. A regex that encodes one venue's naming convention is exactly
+# what went wrong here, and swapping it for a different hardcoded convention
+# would repeat it.
+SYMBOL_PATTERN = r"^[A-Z0-9][A-Z0-9_-]{1,23}$"
+
 
 def _baseline_setup_ids(con, *, symbol: str | None = None,
                         tf: str | None = None) -> tuple[dict, set[str]]:
@@ -61,7 +79,7 @@ def _baseline_setup_ids(con, *, symbol: str | None = None,
 
 
 @app.get("/api/candles")
-def candles(symbol: str = Query("BTC-USD", pattern=r"^[A-Z0-9]+-USD$"),
+def candles(symbol: str = Query("BTC-USD", pattern=SYMBOL_PATTERN),
             tf: str = "1H", limit: int = Query(1500, ge=1, le=5000),
             end_ts: int | None = None):
     """end_ts enables replay: only candles opening BEFORE end_ts are returned."""
@@ -1046,8 +1064,23 @@ def cycle_summary():
     import time as _t
     con = store.connect()
     try:
-        candles = [dict(r) for r in store.get_candles(con, cycles.BTC, "1D")]
-        return cycles.summarize(candles, int(_t.time()))
+        # Resolve the ASSET, not a ticker. Reading `cycles.BTC` unconditionally
+        # pointed this endpoint at BTC-USD, which stopped being imported when
+        # the universe moved to perps — so the panel served a frozen series
+        # while two live BTC feeds sat unused.
+        sym = cycles.btc_series(con)
+        if sym is None:
+            return {"unavailable": True,
+                    "why": "no Bitcoin series is tracked in this store",
+                    "note": cycles.NOTE}
+        candles = [dict(r) for r in store.get_candles(con, sym, "1D")]
+        out = cycles.summarize(candles, int(_t.time()))
+        # Which series answered, and how fresh it is — a cycle count read off a
+        # stale feed looks identical to one read off a live feed.
+        out["source_symbol"] = sym
+        out["last_candle_ts"] = candles[-1]["open_ts"] if candles else None
+        out["candles"] = len(candles)
+        return out
     finally:
         con.close()
 
@@ -1079,7 +1112,7 @@ def manifest(manifest_hash: str):
 
 @app.get("/api/context")
 def multi_timeframe_context(
-        symbol: str = Query("BTC-USD", pattern=r"^[A-Z0-9]+-USD$"),
+        symbol: str = Query("BTC-USD", pattern=SYMBOL_PATTERN),
         as_of: int | None = None):
     """Compact synchronized context strip for the decision workspace."""
     con = store.connect()

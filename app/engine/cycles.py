@@ -23,8 +23,52 @@ from decimal import Decimal
 from . import store
 from .runlog import RunRecorder
 
-CYCLES_VERSION = "cycles-v0.1-draft"
-BTC = "BTC-USD"
+CYCLES_VERSION = "cycles-v0.2-draft"
+# v0.2: the engine was DEAD. `run()` early-returned unless `symbol == "BTC-USD"`,
+# and BTC-USD left the scan set when the universe moved to perps — so the engine
+# no-opped for every symbol on every cycle. Measured 2026-07-30: BTC-USD carried
+# 1,670 daily candles ending 2026-07-28 (stale, no longer imported) while the
+# two tracked BTC series, PF_XBTUSD and BTCUSDT, were current and ignored. The
+# newest cycle fact was 2026-06-08.
+#
+# The cycle model is about BITCOIN, not about one venue's ticker. Hardcoding a
+# spelling made an asset-level model depend on a venue listing — the same class
+# of error as the Coinbase-hardcoded price fetch (S37) and `TICK = 0.01` (S40).
+
+# Known spellings of the same asset. Order is NOT preference — `btc_series`
+# picks by history depth among the ones actually being kept current.
+BTC_ALIASES = ("BTC-USD", "BTCUSDT", "PF_XBTUSD", "XBTUSD", "BTC-USDT")
+BTC = "BTC-USD"          # legacy default, retained for callers that pass no con
+
+
+def btc_series(con, *, require_current: bool = True) -> str | None:
+    """Which stored series to read Bitcoin's cycle from.
+
+    Deepest daily history wins, because the model anchors on a 2022 four-year
+    low and a series that starts after it cannot see the count. But depth only
+    counts if the series is still being IMPORTED: BTC-USD is the deepest in this
+    store and has been frozen since it left the universe, so preferring it would
+    have kept the engine looking at a dead file forever — a subtler version of
+    the bug this function exists to fix.
+
+    Returns None when no BTC series is tracked at all, so the caller can say so
+    rather than silently emitting nothing (loud-fallback rule).
+    """
+    from . import universe
+    live = set(universe.scan_symbols(con)) if require_current else None
+    best, best_n = None, 0
+    for sym in BTC_ALIASES:
+        if live is not None and sym not in live:
+            continue
+        n = con.execute("SELECT COUNT(*) FROM candles WHERE symbol=? AND tf='1D'",
+                        (sym,)).fetchone()[0]
+        if n > best_n:
+            best, best_n = sym, n
+    if best is None and require_current:
+        # Nothing current — fall back to the deepest stored series and let the
+        # caller see that it is not live.
+        return btc_series(con, require_current=False)
+    return best
 
 # --- heuristic constants (round numbers, community convention, not fitted) ---
 FRACTAL_W = 2                       # bars each side (mirrors swing-engine convention)
@@ -242,8 +286,14 @@ def summarize(candles: list, now_ts: int) -> dict:
 
 
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
-    """Emit detection facts (BTC 1D only). Summary stays computed, not stored."""
-    if symbol != BTC or tf != "1D":
+    """Emit detection facts (BTC 1D only). Summary stays computed, not stored.
+
+    The symbol test resolves the ASSET rather than comparing to a hardcoded
+    ticker — see `btc_series` and the v0.2 note for what that cost.
+    """
+    if tf != "1D":
+        return {"symbol": symbol, "tf": tf, "facts": 0}
+    if symbol != btc_series(con):
         return {"symbol": symbol, "tf": tf, "facts": 0}
     with RunRecorder(con, "cycles", CYCLES_VERSION, symbol, tf) as rec:
         candles = [dict(r) for r in store.get_candles(con, symbol, tf)]

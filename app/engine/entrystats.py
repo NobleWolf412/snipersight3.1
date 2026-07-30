@@ -98,7 +98,11 @@ from pathlib import Path
 
 from . import costs, store
 
-ENTRYSTATS_VERSION = "entrystats-v0.1-draft"
+ENTRYSTATS_VERSION = "entrystats-v0.2-draft"
+# v0.2: the taker-entry penalty uses the spread of the symbol's OWN venue. On
+# the Coinbase default it overstated the penalty on perps by ~4x (0.20% vs
+# 0.05%), and this statistic is what decides whether limit or market entries are
+# better — a venue-blind spread answers that question wrong.
 
 # Versions are PINNED here, not imported from `setups.SETUP_VERSION` /
 # `execsim.EXEC_VERSION`. That is deliberate and it is not tidiness.
@@ -118,7 +122,22 @@ SCALE_VERSION = "scale-v0.2-draft"
 # Cost profile comes from `costs` rather than from `setups`, for the same reason:
 # it is the profile the recorded facts were priced under, and every exec fact
 # carries its `cost_manifest_hash` so the claim is checkable.
-COST_PROFILE = costs.DEFAULT_COST_PROFILE
+# Retained ONLY as the label for reports that predate per-venue pricing. Live
+# fee arithmetic must use costs.profile_for(symbol); see the note in setups.py.
+LEGACY_REPORT_PROFILE = costs.DEFAULT_COST_PROFILE
+
+
+def _spread(symbol):
+    """Taker-minus-maker spread for THIS symbol's venue.
+
+    The entry-fee penalty is the cost of crossing the spread instead of resting.
+    Computed with the process-wide Coinbase default it overstated the penalty on
+    perps by roughly 14x — and this number feeds the entry-quality statistics
+    that decide whether limit or market entries are better, so a venue-blind
+    spread would answer that question wrong.
+    """
+    p = costs.profile_for(symbol)
+    return p.taker_rate - p.maker_rate
 
 # Fallbacks only. The real window is read from the `execution` manifest that the
 # exec facts themselves point at (`execution_manifest_hash`) — see
@@ -589,7 +608,7 @@ def load_orders(con, *, setup_version: str = SETUP_VERSION,
                 # cost profile execsim actually recorded rather than from the
                 # spec's quoted rates — so the number belongs to this book.
                 rec["taker_entry_penalty_r"] = _f(
-                    (COST_PROFILE.taker_rate - COST_PROFILE.maker_rate) * fp / risk)
+                    _spread(rec["symbol"]) * fp / risk)
 
             if with_counterfactual:
                 key = (sym, t)
@@ -610,7 +629,7 @@ def load_orders(con, *, setup_version: str = SETUP_VERSION,
                     fillm = _d(cf["cf_fill_price"])
                     riskm = (fillm - s_) if long else (s_ - fillm)
                     cf["cf_taker_entry_penalty_r"] = (
-                        _f((COST_PROFILE.taker_rate - COST_PROFILE.maker_rate)
+                        _f(_spread(rec["symbol"])
                            * fillm / riskm) if riskm > 0 else None)
                 rec["cf"] = cf
         records.append(rec)
@@ -1127,7 +1146,7 @@ def report(con=None, *, db_path: Path | None = None,
         "entrystats_version": ENTRYSTATS_VERSION,
         "setup_version": setup_version,
         "exec_version": exec_version,
-        "cost_profile": COST_PROFILE.payload(),
+        "cost_profile": LEGACY_REPORT_PROFILE.payload(),
         "filters": {"symbol": symbol, "tf": tf, "strategy": strategy,
                     "as_of": as_of},
         "counts": counts,

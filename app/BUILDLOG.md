@@ -3286,3 +3286,70 @@ before; the remaining +0.15 R on REVERSAL is something to test forward, not
 something to trust.
 
 **555 python + 50 js tests green.**
+
+---
+
+## S52 — Venue-blind costs fixed: the 15.7x fee over-charge
+
+Closes the defect flagged when the `cool-golick-5c5baa` worktree was preserved.
+Its `test_venue_costs.py` was the specification; this session made it pass.
+
+**What was already right:** the parallel work had `costs.profile_for(symbol)`
+and per-venue profiles, and `execsim`/`setups` already resolved per symbol.
+
+**What was still wrong, and it was the load-bearing half:**
+  · `costs.profile_for` FELL BACK to the Coinbase default on an unrecognised
+    symbol. A silent default is how the whole class of bug happens; it now
+    raises. Every symbol in the traded universe resolves, so a raise means a
+    genuinely unknown instrument reached pricing.
+  · `estimated_round_trip_cost` defaulted its profile argument, making "charge
+    the wrong venue" the path of least resistance for a caller. Now required.
+  · `setups.COST_PROFILE` — a module global every consumer inherited. Removed.
+  · **`scalein` imported it**, so every scale-in add on a perp had to clear a
+    gate built from ~14x the fees its venue charges.
+  · **`entrystats`** used it for the taker-entry penalty — the statistic that
+    decides whether limit or market entries are better. A venue-blind spread
+    answers that question wrong (0.20% vs the perp's real 0.05%).
+  · No `by_version()`, so a recorded fact's profile could not be resolved from
+    its version without guessing.
+  · No guard against `venues.py` and `costs.py` drifting apart. They duplicate
+    three rates each by necessity — profiles are immutable because facts cite
+    them, venues carry live capability. `_assert_venue_rates` now runs at
+    IMPORT, so editing a rate without minting a new profile version fails at
+    startup rather than quietly re-pricing history.
+
+**Two labelling defects found while making the spec pass:**
+  1. `fees_price_units` included funding, while `funding_price_units` reported
+     the same funding beside it — any consumer summing them double-counted.
+     Split. Net P&L and r_multiple are unchanged; both legs still deduct.
+  2. The EXECUTION manifest embedded the cost profile, so a hash certifying the
+     FILL MODEL varied by venue — a fee change was indistinguishable from an
+     execution-model change, and two books running identical rules looked
+     different. Costs are proven separately by `cost_manifest_hash`.
+
+**A test asserted the wrong thing.** `test_funding` pinned
+`fees = ... + funding_cost` by SOURCE REGEX, which forced the double-count. Its
+docstring stated the real intent — "if it were recorded but not summed into the
+cost of the trade... the R would still be wrong" — so it was rewritten to assert
+the ARITHMETIC of a simulated trade: funding must reach `r_multiple`. Stronger
+than the regex and no longer in conflict with correct labelling. (My first
+version compared on the price scale where `r_multiple` is rounded on the R
+scale, manufacturing a 5x-amplified mismatch. Fixed.)
+
+**Version cascade, caught by the lockfile rather than by vigilance.**
+`test_version_cascade` failed on the exec bump and named its consumers, exactly
+as designed. exec-v0.16 -> v0.17, and with it risk -> v0.16, scale -> v0.11
+(also changed on its own account), cooldown -> v0.5. setup did NOT move: it
+already resolved per symbol, so its outputs are unchanged.
+
+**Measured on the re-simulated book, 639 resolved trades:**
+  · pricing now: **356 phemex · 276 kraken · 7 coinbase** — previously all 639
+    were charged Coinbase spot rates
+  · fees charged **1,582** price units against **24,764** at the old profile —
+    a **15.7x over-charge**
+  · the pre-trade gate: a perp setup needed a **2.00%** stop to count as
+    economic, now **0.14%** — 14.3x easier to clear, which is a large share of
+    the UNECONOMIC_AFTER_COSTS rejections
+  · book total **+33.76 R**
+
+573 python + 50 js green.

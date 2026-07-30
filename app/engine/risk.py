@@ -23,7 +23,11 @@ from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.15-draft"
+RISK_VERSION = "risk-v0.16-draft"
+# v0.16: cascade from exec-v0.17. risk replays the whole account from exec
+# facts, so an exec version move changes this engine's inputs and therefore its
+# decisions and equity curve — even though no rule here changed. Leaving the tag
+# put is the S37/S40 defect: two generations under one label.
 # v0.13: cascade from exec-v0.14. The account replay is built from exec facts,
 # and exec-v0.14 corrects a crossing leg that booked market fills at a price the
 # bar never traded. Every equity figure downstream of those fills changes, so

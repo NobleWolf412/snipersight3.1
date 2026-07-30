@@ -163,9 +163,12 @@ PD_LOOKBACK_SWINGS = 6
 # the precise failure that produced 26 factors worth 5 in the prior project.
 
 
-# Cost model is an immutable profile shared with execution simulation.
-COST_PROFILE = costs.DEFAULT_COST_PROFILE
-SLIP_ATR = COST_PROFILE.market_slippage_atr  # compatibility for older consumers
+# Cost model is an immutable profile resolved PER SYMBOL — see costs.profile_for.
+# There is deliberately no module-level COST_PROFILE here any more: every
+# consumer that imported that name silently inherited Coinbase spot rates, which
+# is precisely how the perp book came to be priced at ~14x its real fees with
+# nothing failing. A global default is what made the mistake invisible.
+SLIP_ATR = costs.DEFAULT_COST_PROFILE.market_slippage_atr   # legacy consumers only
 
 # v0.3 (validation-001 finding): tight stops make fees enormous in R terms —
 # 15m round-trip costs ran 3-6R and the whole intraday book was net-negative.

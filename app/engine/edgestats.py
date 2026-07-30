@@ -233,7 +233,21 @@ def load_trades(con, *, algo_version: str, symbol: str | None = None,
         r_net = float(Decimal(p["r_multiple"]))
         r_gross = float(Decimal(p["r_gross"]))
         # The only float conversion in the module: price ratios becoming R.
-        fees_r = float(fees / risk)
+        # `fees_price_units` CHANGED MEANING at exec-v0.17. Before it, execsim
+        # folded funding into that field while ALSO reporting it separately as
+        # `funding_price_units`; from v0.17 it is exchange fees only. Both
+        # generations are in the store and both must read correctly, so the two
+        # components are separated here and recombined explicitly below.
+        #
+        # Getting this wrong is a silent double-count in either direction: on a
+        # v0.17 fact, treating `fees` as funding-inclusive under-adds the
+        # cost-free baseline and then re-charges funding a second time in the
+        # venue-real scenario. On Kraken, where funding is 58.8% of modelled
+        # cost, that is not a rounding error.
+        funding = Decimal(p.get("funding_price_units", "0"))
+        fee_only = fees if _fees_exclude_funding(algo_version) else (fees - funding)
+        fees_r = float(fee_only / risk)
+        funding_r = float(funding / risk)
         legs_r = float((entry + eff_exit) / risk)
 
         v = _venue_or_none(sym)
@@ -249,21 +263,20 @@ def load_trades(con, *, algo_version: str, symbol: str | None = None,
             "fees_price_units": fees,
             "exit_fee_role": p.get("exit_fee_role", "TAKER"),
             "entry_fee_role": p.get("entry_fee_role", "MAKER"),
-            # execsim folds funding INTO `fees_price_units`, so `fees_r` above
-            # already contains it and `r_ex_fee` adds it back. The venue-real
-            # scenario then re-charged fees only — stripping funding out of the
-            # very scenario `_verdict` reads. Carried separately here so it can
-            # be put back. Pre-v0.12 facts have no funding record and get 0,
+            # Funding, always separate from fees regardless of which generation
+            # wrote the fact. Pre-v0.12 facts have no funding record and get 0,
             # which is correct: those trades were simulated without it.
-            "funding_r": float(Decimal(p.get("funding_price_units", "0")) / risk),
+            "funding_r": funding_r,
             "r_net": r_net, "r_gross": r_gross,
             "costs_r": float(Decimal(p.get("costs_r", "0"))),
             "fees_r": fees_r,
-            # Slippage is the part of costs_r that is NOT fee. Held constant by
-            # every scenario — re-pricing a fee must not quietly re-price the
-            # market-exit slip too.
-            "slip_r": float(Decimal(p.get("costs_r", "0"))) - fees_r,
-            "r_ex_fee": r_net + fees_r,
+            # Slippage is whatever total cost is NOT fee and NOT funding. Held
+            # constant by every scenario — re-pricing a fee must not quietly
+            # re-price the market-exit slip too.
+            "slip_r": float(Decimal(p.get("costs_r", "0"))) - fees_r - funding_r,
+            # The cost-free baseline: BOTH fees and funding added back, so the
+            # venue-real scenario can charge both without double-counting.
+            "r_ex_fee": r_net + fees_r + funding_r,
             "legs_r": legs_r,
             "venue": v.key if v else None,
             # Carried so the confound guard can see which engine generation
@@ -354,6 +367,29 @@ def _core(trades: list[dict], resamples: int, warnings: list[str],
 
 
 # ---------------------------------------------------------------- fee models
+
+def _fees_exclude_funding(algo_version: str | None) -> bool:
+    """Does this generation's `fees_price_units` mean exchange fees ONLY?
+
+    exec-v0.17 split them; every earlier generation folded funding into the fee
+    field while also reporting it separately. Keyed on the version string
+    deliberately rather than inferred from the numbers — a heuristic that tries
+    to detect which convention a fact used would be wrong exactly when funding
+    happens to be zero, which is most 15m trades.
+
+    Parsed as a TUPLE OF INTS, not a float. `float("0.2") == 0.2 >= 0.17` is
+    True, which would have read every exec-v0.2 fact as the new convention —
+    a version string is a sequence of integers, and 2 < 17.
+    """
+    if not algo_version:
+        return False
+    try:
+        parts = algo_version.split("-v")[1].split("-")[0].split(".")
+        n = tuple(int(x) for x in parts)
+    except (IndexError, ValueError):
+        return False
+    return n >= (0, 17)
+
 
 def _venue_fee_r(t: dict) -> float:
     """What this trade's COST would have been in R at the venue's real published

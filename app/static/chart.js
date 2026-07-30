@@ -235,6 +235,29 @@ window.SSChart = (() => {
   }
 
   /* ---------- overlays + data ---------- */
+  /* Blank everything that describes a market, then say why.
+
+     Called on any load failure. An operator reads pixels before they read
+     banners, so a populated chart of the WRONG market is more dangerous than
+     an empty one — especially with an order ticket attached to it. Every
+     figure here is market-specific and must go: series, overlays, bracket
+     lines, both header chips, and the Arm button. */
+  function clearChart(title, detail){
+    candles = [];
+    facts = {swing: [], struct: [], zone: [], liq: [], regime: [],
+             setupF: [], cycle: [], riskF: []};
+    levels = {entry: null, tp: null, sl: null};
+    try{ series.setData([]); }catch(e){ /* chart may not be built yet */ }
+    try{ drawOverlays(); }catch(e){ /* overlays follow the now-empty facts */ }
+    $('cPrice').textContent = '—';
+    $('cPrice').className = 'chip';
+    $('cRegime').textContent = '—';
+    $('tkArm').disabled = true;
+    const el = $('chartEmpty');
+    el.style.display = '';                    // the bug: only ever unset on success
+    el.textContent = detail ? `${title} — ${detail}` : title;
+  }
+
   async function load(){
     if(!sym) return;
     const seq = ++loadSeq;
@@ -246,7 +269,15 @@ window.SSChart = (() => {
         q('swing'), q('structure'), q('zone'), q('liquidity'),
         q('regime'), q('setup'), q('cycle'), q('risk')]);
     }catch(err){
-      if(seq === loadSeq) $('chartEmpty').textContent = 'data unavailable — ' + err.message;
+      // The failure path used to write into #chartEmpty and return — but
+      // #chartEmpty is only ever un-hidden on the SUCCESS path below, so after
+      // one good load the message was written into a hidden element and the
+      // previous symbol's candles, levels, price chip, regime chip, overlay
+      // counts and LIVE ORDER TICKET all stayed on screen under the new
+      // symbol's name. `sym`/`tf` were already reassigned by the handlers, so
+      // the selector read the new market and every number on it was the old
+      // one. That is the worst failure mode this file can produce.
+      if(seq === loadSeq) clearChart('Could not load ' + sym + ' · ' + tf, err.message);
       return;
     }
     if(seq !== loadSeq) return;                 // a newer symbol/tf won the race
@@ -261,8 +292,14 @@ window.SSChart = (() => {
     candles = c;
     facts = {swing, struct, zone, liq, regime, setupF, cycle, riskF};
 
-    $('chartEmpty').style.display = candles.length ? 'none' : '';
-    if(!candles.length){ $('chartEmpty').textContent = 'no candles for this timeframe'; return; }
+    if(!candles.length){
+      // "the venue served nothing here" is a different fact from "the request
+      // failed", and the operator has to be able to tell them apart.
+      clearChart(`No candles for ${sym} · ${tf}`,
+                 'the store holds no bars for this timeframe yet');
+      return;
+    }
+    $('chartEmpty').style.display = 'none';
 
     series.applyOptions({priceFormat: {type: 'price',
       precision: digits(candles[candles.length - 1].close),

@@ -20,7 +20,17 @@ from .setups import SETUP_VERSION
 from .swings import compute_atr
 from .runlog import RunRecorder
 
-EXEC_VERSION = "exec-v0.16-draft"
+EXEC_VERSION = "exec-v0.17-draft"
+# v0.17: two output changes, both labelling rather than economics.
+#  * `fees_price_units` is now EXCHANGE FEES ONLY. Funding was folded in while
+#    also reported as `funding_price_units`, so a consumer summing the two
+#    double-counted it. Net P&L and r_multiple are unchanged — both legs are
+#    still deducted — but the recorded numbers differ, so the version moves.
+#  * the execution manifest no longer embeds the cost profile. That manifest
+#    certifies the FILL MODEL, which is identical on every venue; including
+#    costs made its hash vary by symbol, so a fee change was indistinguishable
+#    from an execution-model change. What was charged is proven by
+#    cost_manifest_hash, which is per-venue by design.
 # v0.15: **exec-v0.14 IS POISONED — do not read it.** It covers two setup
 #   generations. The cross-fill correction below was simulated and tagged
 #   v0.14 while SETUP_VERSION was still v0.11; the zone lookahead fix then
@@ -136,7 +146,12 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             "fill_model": "BAR_TOUCH_FULL_FILL",
             "same_bar_stop_target": "STOP_FIRST",
             "partial_fills": "UNAVAILABLE_WITH_OHLC_ONLY",
-            "cost_profile": COST_PROFILE.payload(),
+            # No cost reference here, deliberately. This manifest certifies the
+            # FILL MODEL, which is identical on every venue. Folding costs in
+            # made the hash vary by symbol, so a fee change was indistinguishable
+            # from an execution-model change and two books running identical
+            # rules looked like they ran different ones. What each trade was
+            # charged is proven separately by cost_manifest_hash.
         })
         counts = {"TP": 0, "SL": 0, "TIMEOUT": 0, "OPEN": 0,
                   "MISSED": 0, "PENDING": 0}
@@ -359,9 +374,15 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                          else COST_PROFILE.taker_rate)
             entry_rate = (COST_PROFILE.taker_rate if entry_role == "TAKER"
                           else COST_PROFILE.maker_rate)
-            fees = entry_rate * entry + exit_rate * eff_exit + funding_cost
+            # `fees_price_units` means EXCHANGE FEES. Funding was being folded in
+            # here while also reported as `funding_price_units`, so any consumer
+            # adding the two double-counted the funding leg. Net P&L is
+            # unchanged — both are still deducted below — only the labelling is
+            # now honest about which cost is which.
+            fees = entry_rate * entry + exit_rate * eff_exit
             gross = (exit_price - entry) if long else (entry - exit_price)
-            net = ((eff_exit - entry) if long else (entry - eff_exit)) - fees
+            net = (((eff_exit - entry) if long else (entry - eff_exit))
+                   - fees - funding_cost)
             r_gross = (gross / risk).quantize(Q2) if risk > 0 else Decimal(0)
             r_mult = (net / risk).quantize(Q2) if risk > 0 else Decimal(0)
             held = candles[i:j + 1]
@@ -390,6 +411,13 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                        "ambiguous_bar": ambiguous,
                        "entry_fee_role": entry_role,
                        "exit_fee_role": "MAKER" if outcome == "TP" else "TAKER",
+                       # Which venue's fee schedule this trade was actually
+                       # charged. The manifest hash already proves it, but a
+                       # hash is not readable: with the label on the fact, a
+                       # book priced on the wrong venue is visible at a glance
+                       # instead of needing 232 facts to be re-derived.
+                       "venue": COST_PROFILE.venue,
+                       "cost_profile_version": COST_PROFILE.version,
                        "cost_manifest_hash": cost_manifest_hash,
                        "execution_manifest_hash": execution_manifest_hash,
                        "manifest_hash": s.get("manifest_hash")}

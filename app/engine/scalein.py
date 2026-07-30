@@ -23,12 +23,16 @@ from decimal import Decimal
 from . import store
 from .swings import compute_atr
 from .structure import STRUCTURE_VERSION
-from .setups import (SETUP_VERSION, COST_PROFILE, MIN_RISK_COST_MULT, Q2)
+from .setups import SETUP_VERSION, MIN_RISK_COST_MULT, Q2
 from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.10-draft"
+SCALE_VERSION = "scale-v0.11-draft"
+# v0.11: the add's economics gate is priced on the ADD'S OWN VENUE. It imported
+# setups.COST_PROFILE — the process-wide Coinbase default — so every scale-in on
+# a perp had to clear a gate built from fees ~14x higher than the venue charges.
+# Decisions differ, hence the bump.
 # v0.8: cascade from exec-v0.14. An add is only placed against a position the
 # simulator says is open, so a corrected fill price changes which adds exist and
 # what they are worth.
@@ -106,7 +110,10 @@ def run(con, symbol: str, tf: str = TRIGGER_TF, tf_seconds: int = 3600) -> dict:
                     i = ts_index.get(b["market_time"])
                     if i is None or atr_1h[i] is None or risk_dist <= 0:
                         continue
-                    est_cost = costs.estimated_round_trip_cost(px, atr_1h[i], COST_PROFILE)
+                    # the ADD trades on the same venue as its parent, so it is
+                    # priced there — not on the process-wide spot default
+                    est_cost = costs.estimated_round_trip_cost(
+                        px, atr_1h[i], costs.profile_for(symbol))
                     if risk_dist < MIN_RISK_COST_MULT * est_cost:
                         continue
                     reward = (tp - px) if long else (px - tp)

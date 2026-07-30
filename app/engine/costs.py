@@ -54,6 +54,46 @@ _BY_VENUE_KEY = {
     "kraken-perp": KRAKEN_PERP_COST_PROFILE,
 }
 
+_BY_VERSION = {p.version: p for p in _BY_VENUE_KEY.values()}
+
+
+def by_version(version: str) -> CostProfile:
+    """The immutable profile a recorded fact refers to.
+
+    Raises on an unknown version rather than substituting a live profile: an
+    exec fact's `cost_manifest_hash` is its PROOF of what it was charged, and
+    silently answering with today's rates would let a historical report be
+    re-priced without anything saying so.
+    """
+    if version not in _BY_VERSION:
+        raise ValueError(f"unknown cost profile version {version!r}")
+    return _BY_VERSION[version]
+
+
+def _assert_venue_rates(profile: CostProfile, venue) -> None:
+    """One authority per number (§6): a profile must not restate a venue's rates.
+
+    Profiles are immutable and versioned because facts reference them; venues
+    carry the live capability table. They therefore duplicate three numbers, and
+    duplication drifts. This runs at import so editing a rate in `venues.py`
+    without minting a NEW profile version fails loudly at startup instead of
+    quietly re-pricing history.
+    """
+    for attr, vattr in (("maker_rate", "maker_rate"),
+                        ("taker_rate", "taker_rate"),
+                        ("market_slippage_atr", "slippage_atr")):
+        ours, theirs = getattr(profile, attr), getattr(venue, vattr)
+        assert ours == theirs, (
+            f"cost profile {profile.version} {attr}={ours} disagrees with venue "
+            f"{venue.key} {vattr}={theirs} — mint a new profile version rather "
+            f"than editing rates in place")
+
+
+def _check_profiles_match_venues() -> None:
+    from . import venues as _venues
+    for v in _venues.ALL:
+        _assert_venue_rates(by_version(v.cost_profile), v)
+
 
 def profile_for(symbol: str | None) -> CostProfile:
     """The cost profile of the venue THIS symbol trades on.
@@ -72,16 +112,20 @@ def profile_for(symbol: str | None) -> CostProfile:
     rejections, and it also pushed surviving setups toward the wide stops and
     distant targets this version exists to fix.
 
-    An unrecognised symbol falls back to the COSTLIER profile. Guessing cheap
-    would let a setup pass a gate it has not earned.
+    An unrecognised symbol RAISES. Falling back to a default profile is the
+    original bug in miniature: it is exactly how every perp came to be priced at
+    Coinbase rates without anything failing. A wrong fee is not a safer answer
+    than a loud failure — it is the same wrong answer, only harder to find. Every
+    symbol in the traded universe resolves (spot, Phemex and Kraken all do), so
+    a raise here means a genuinely unknown instrument reached pricing.
     """
+    from . import venues
     if not symbol:
-        return DEFAULT_COST_PROFILE
-    try:
-        from . import venues
-        return _BY_VENUE_KEY.get(venues.venue_for(symbol).key, DEFAULT_COST_PROFILE)
-    except Exception:
-        return DEFAULT_COST_PROFILE
+        raise ValueError("cannot price an empty symbol")
+    venue = venues.venue_for(symbol)          # raises on an unknown instrument
+    if venue.key not in _BY_VENUE_KEY:
+        raise ValueError(f"no cost profile registered for venue {venue.key!r}")
+    return _BY_VENUE_KEY[venue.key]
 
 
 def record(con, profile: CostProfile = DEFAULT_COST_PROFILE) -> str:
@@ -99,7 +143,7 @@ DEFAULT_FUNDING_RATE = Decimal("0.0001")
 
 
 def estimated_round_trip_cost(entry: Decimal, atr: Decimal,
-                              profile: CostProfile = DEFAULT_COST_PROFILE,
+                              profile: CostProfile,
                               *, symbol: str | None = None,
                               tf_seconds: int | None = None,
                               funding_rate: Decimal | None = None) -> Decimal:
@@ -124,3 +168,7 @@ def estimated_round_trip_cost(entry: Decimal, atr: Decimal,
         hours = Decimal(EXPECTED_HOLD_BARS * tf_seconds) / Decimal(3600)
         cost += venues.funding_cost_rate(symbol, rate, hours) * entry
     return cost
+
+
+# Fail at import, not at the first mispriced trade.
+_check_profiles_match_venues()

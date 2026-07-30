@@ -24,7 +24,7 @@ engine you changed, and bump those too.
 """
 import unittest
 
-from engine import (breakout, cooldowns, execsim, venues, liquidity, ma, momentum, ranges, regime,
+from engine import (breakout, cooldowns, cycles, execsim, venues, liquidity, ma, momentum, ranges, regime,
                     risk, scalein, setups, structure, swings, volatility,
                     volume, zones)
 
@@ -47,6 +47,9 @@ LOCKED = {
     "cooldown": cooldowns.COOLDOWN_VERSION,
     "breakout": breakout.BREAKOUT_VERSION,
     "venues": venues.VENUES_VERSION,
+    # Observational satellite with no consumers — locked anyway, because
+    # "nothing reads it" is exactly how it went dead unnoticed for 21 hours.
+    "cycles": cycles.CYCLES_VERSION,
 }
 
 EXPECTED = {
@@ -72,12 +75,23 @@ EXPECTED = {
     # three read exec facts: risk replays the account from them, scalein only
     # adds to a position the simulator says is open, and cooldowns are derived
     # purely from recorded exits. All four moved together.
-    "exec": "exec-v0.16-draft",
-    "risk": "risk-v0.15-draft",
-    "scale": "scale-v0.10-draft",
-    "cooldown": "cooldown-v0.4-draft",
+    # S52 cascade. exec-v0.16 -> v0.17 split funding out of `fees_price_units`
+    # (it was folded in while ALSO reported separately, so any consumer summing
+    # the two double-counted it) and dropped the cost profile from the execution
+    # manifest, which had made a fill-model hash vary by venue. Net P&L is
+    # unchanged, but the recorded facts differ. CONSUMERS["exec"] is
+    # ("risk", "scale", "cooldown"): risk replays the account from exec facts,
+    # scalein only adds to a position the simulator says is open, and cooldowns
+    # are derived purely from recorded exits. All four move together.
+    # scale ALSO changed on its own account — its economics gate now prices the
+    # add on the add's own venue instead of the process-wide Coinbase default.
+    "exec": "exec-v0.17-draft",
+    "risk": "risk-v0.16-draft",
+    "scale": "scale-v0.11-draft",
+    "cooldown": "cooldown-v0.5-draft",
     "breakout": "breakout-v0.2-draft",
     "venues": "venues-v0.2-draft",
+    "cycles": "cycles-v0.2-draft",
 }
 
 # Who reads whose facts. Bumping a key REQUIRES considering every value.
