@@ -183,6 +183,122 @@ body{
 .cols-4{grid-template-columns:repeat(4,1fr)}
 @media(max-width:1100px){.cols-4{grid-template-columns:repeat(2,1fr)}.cols-3{grid-template-columns:repeat(2,1fr)}}
 
+/* backend console — the operator watching the engines think */
+#console{height:260px;overflow:auto;padding:var(--md) var(--lg);margin:0;
+  background:rgba(0,0,0,.45);color:var(--fg-3);font-size:11.5px;line-height:1.65;
+  white-space:pre-wrap;word-break:break-word}
+#console .l-err{color:var(--red-2)}
+#console .l-warn{color:var(--amber)}
+#console .l-info{color:var(--fg-2)}
+#console .l-mark{color:var(--accent)}
+#console .l-time{color:var(--fg-4)}
+
+/* ---------- CHART surface: the chart owns the screen ---------- */
+/* stage rows are 56 topbar + 26 statusbar; --xl padding top and bottom */
+#s-chart.on{display:flex;flex-direction:column;gap:var(--md);
+  height:calc(100vh - 56px - 26px - var(--xl) * 2)}
+.chart-top{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap;flex:none}
+.chart-main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 320px;
+  gap:var(--md);min-height:0}
+@media(max-width:1180px){.chart-main{grid-template-columns:minmax(0,1fr) 268px}}
+
+.chart-pane{position:relative;min-width:0;overflow:hidden}
+/* scanlines belong on chrome, not over price data */
+.chart-pane::before{display:none}
+#chartBox{position:absolute;inset:0}
+#chartHandles{position:absolute;inset:0;pointer-events:none}
+.chart-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--fg-4);background:var(--bg);z-index:2}
+
+/* draggable level tags — the grab target, not decoration */
+.lvl{position:absolute;left:0;transform:translateY(-50%);pointer-events:auto;cursor:ns-resize;
+  padding:2px 7px;border-radius:var(--r-sm);font-family:var(--f-mono);font-size:10px;
+  font-weight:600;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;
+  border:1px solid currentColor;background:rgba(0,0,0,.82);user-select:none;z-index:3}
+.lvl:hover,.lvl.drag{background:currentColor}
+.lvl:hover span,.lvl.drag span{color:#000}
+.lvl-entry{color:var(--cyan)} .lvl-tp{color:var(--green)} .lvl-sl{color:var(--red-2)}
+
+/* segmented controls */
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}
+.seg button{font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.14em;
+  text-transform:uppercase;padding:8px 11px;cursor:pointer;background:transparent;
+  color:var(--fg-3);border:0;border-right:1px solid var(--border-soft)}
+.seg button:last-child{border-right:0}
+.seg button:hover{color:var(--fg-2);background:rgba(255,255,255,.03)}
+.seg button.on{background:rgba(var(--accent-rgb),.12);color:var(--accent)}
+/* nothing recorded for this overlay on this timeframe — say so, don't look broken */
+.seg button.empty{color:var(--fg-4);opacity:.55;text-decoration:line-through}
+.seg button.empty.on{background:transparent}
+.seg-dir button.on[data-d="LONG"]{background:rgba(0,255,170,.14);color:var(--green)}
+.seg-dir button.on[data-d="SHORT"]{background:rgba(248,113,113,.14);color:var(--red-2)}
+.seg-dir{width:100%}.seg-dir button{flex:1}
+
+/* order ticket */
+.ticket{display:flex;flex-direction:column;min-height:0}
+.ticket-body{padding:var(--md) var(--lg);display:flex;flex-direction:column;gap:var(--md);
+  overflow:auto;flex:1}
+.fld{display:flex;flex-direction:column;gap:5px}
+.fld input{background:rgba(0,0,0,.45);border:1px solid var(--border);border-radius:var(--r-md);
+  padding:9px 11px;color:var(--fg);font-family:var(--f-mono);font-size:13px;
+  font-variant-numeric:tabular-nums;width:100%}
+.fld input:focus{outline:0;border-color:var(--accent)}
+.fld.bad input{border-color:var(--red)}
+.fld-row{display:flex;gap:var(--sm);align-items:stretch}
+.fld-row input{flex:1}
+.fld-row .btn{flex:none;white-space:nowrap}
+.fld-inline{flex-direction:row;align-items:center;justify-content:space-between;gap:var(--sm)}
+.fld-inline input{width:88px}
+.row-toggle{display:flex;align-items:center;gap:var(--sm);cursor:pointer}
+.row-toggle input{accent-color:var(--accent);width:14px;height:14px;cursor:pointer}
+
+.tk-out{display:flex;flex-direction:column;gap:1px;border-top:1px solid var(--border-soft);
+  border-bottom:1px solid var(--border-soft);padding:var(--md) 0}
+.tk-out div{display:flex;justify-content:space-between;align-items:baseline;gap:var(--sm);
+  font-family:var(--f-mono);font-size:11.5px;padding:3px 0}
+.tk-out .k{color:var(--fg-4);letter-spacing:.1em;text-transform:uppercase;font-size:10px}
+.tk-out .v{color:var(--fg);font-variant-numeric:tabular-nums}
+.tk-out .v.good{color:var(--green)} .tk-out .v.bad{color:var(--red-2)}
+.tk-out .v.warn{color:var(--amber)}
+.tk-warn{border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);
+  border-radius:var(--r-md);padding:9px 11px;color:var(--red-2);
+  font-family:var(--f-mono);font-size:11px;line-height:1.6}
+.tk-why{color:var(--fg-3);font-size:12px}
+.tk-verdict{border-radius:var(--r-md);padding:8px 10px;margin-bottom:var(--md);
+  font-family:var(--f-mono);font-size:11px;line-height:1.6}
+.tk-verdict b{letter-spacing:.12em}
+.tk-verdict.ok{background:rgba(0,255,170,.08);color:var(--green);border:1px solid rgba(0,255,170,.3)}
+.tk-verdict.warn{background:rgba(255,194,102,.08);color:var(--amber);border:1px solid rgba(255,194,102,.3)}
+.tk-verdict.bad{background:rgba(248,113,113,.08);color:var(--red-2);border:1px solid rgba(248,113,113,.35)}
+.tk-why em{color:var(--fg-4);font-style:normal;font-family:var(--f-mono);font-size:10px;
+  letter-spacing:.16em;text-transform:uppercase;display:block;margin-bottom:3px}
+.tk-actions{display:flex;gap:var(--sm);margin-top:auto}
+.tk-actions .btn{flex:1}
+.tk-lock{color:var(--fg-4);font-size:10px;line-height:1.6;text-align:center}
+
+/* a setup the risk authority refused is not an opportunity — do not dress it as one */
+.deck-row.dead{opacity:.55}
+.deck-row.dead .t-mono b{color:var(--fg-3) !important}
+
+/* settings rows */
+.set-row{display:flex;align-items:flex-start;gap:var(--md);padding:10px 0;
+  border-bottom:1px solid var(--border-soft);cursor:pointer}
+.set-row:last-child{border-bottom:0}
+.set-row>span{flex:1}
+.set-row input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px;
+  margin-top:2px;cursor:pointer;flex:none}
+.set-row input:not([type=checkbox]){background:rgba(0,0,0,.45);border:1px solid var(--border);
+  border-radius:var(--r-md);padding:6px 9px;color:var(--fg);font-family:var(--f-mono);
+  font-size:12px;flex:none}
+.set-row.changed{background:rgba(var(--accent-rgb),.05)}
+.set-row.changed .t-mono{color:var(--accent)}
+
+/* halted: the whole shell says so, not just the button */
+body.is-halted .topbar{box-shadow:inset 0 -2px 0 var(--red)}
+body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5em;
+  letter-spacing:.2em;vertical-align:middle}
+
 .empty{padding:var(--xl);text-align:center;color:var(--fg-4);
   font-family:var(--f-mono);font-size:11.5px;line-height:2}
 .stub{border:1px dashed var(--border);border-radius:var(--r-lg);padding:var(--xl);

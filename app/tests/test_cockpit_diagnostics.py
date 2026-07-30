@@ -1,4 +1,10 @@
-"""Diagnostics drawer contract — now hosted directly in the trading page (S23)."""
+"""Diagnostics contract — now a first-class surface in the shell (phase 1/6).
+
+Replaces the legacy drawer tests: /legacy was retired 2026-07-29 and its
+diagnostics moved into the shell's DIAGNOSTICS surface. The properties being
+guarded are the same — the operator can always reach the verdict, the funnel,
+and the telemetry that explains why nothing fired.
+"""
 from pathlib import Path
 import unittest
 
@@ -6,47 +12,32 @@ APP = Path(__file__).resolve().parents[1]
 STATIC = APP / "static"
 
 
-class DiagnosticsDrawerTests(unittest.TestCase):
+class DiagnosticsSurfaceTests(unittest.TestCase):
     def setUp(self):
-        self.html = (STATIC / "index.html").read_text(encoding="utf-8")
+        self.html = (STATIC / "shell.html").read_text(encoding="utf-8")
+        self.js = (STATIC / "shell.js").read_text(encoding="utf-8")
 
     def test_launcher_opens_the_app_origin(self):
         launcher = (APP / "start.bat").read_text(encoding="utf-8")
         self.assertIn("http://localhost:8422", launcher)
         self.assertIn("watchdog.py", launcher)
 
-    def test_drawer_is_accessible_and_named(self):
-        self.assertIn('id="diagButton"', self.html)
-        self.assertIn('aria-controls="diagDrawer"', self.html)
-        self.assertIn('id="diagDrawer"', self.html)
-        # the control names what it opens; ">WHY?<" was a question with no object
-        self.assertIn(">DIAGNOSTICS<", self.html)
-        self.assertNotIn(">WHY?<", self.html)
+    def test_diagnostics_is_a_navigable_surface(self):
+        self.assertIn('data-s="diagnostics"', self.html)
+        self.assertIn('id="s-diagnostics"', self.html)
 
-    def test_panel_is_lazy_loaded_on_first_open(self):
-        """The trading view must not pay for the diagnostics panel at startup."""
-        self.assertIn('data-src="/static/diagnostics.html?embed=1', self.html)
-        self.assertIn("frame.src=frame.dataset.src", self.html)
+    def test_verdict_funnel_and_telemetry_are_all_present(self):
+        """The operator asked for telemetry and rejection reasons in ONE place."""
+        for anchor in ('id="dVerdict"', 'id="dFunnel"', 'id="dIssues"',
+                       'id="dTelemetry"'):
+            self.assertIn(anchor, self.html, anchor)
 
-    def test_keyboard_affordances_present(self):
-        self.assertIn("Ctrl+Shift+D", self.html)
-        self.assertIn("'Escape'", self.html)
+    def test_reaudit_is_reachable(self):
+        self.assertIn('id="btnAudit"', self.html)
+        self.assertIn("btnAudit", self.js)
 
-    def test_badge_counts_actionable_defects(self):
-        self.assertIn("/api/setup-telemetry?limit=500", self.html)
-        self.assertIn("/api/pipeline-health", self.html)
-        self.assertIn("defect_count", self.html)
-
-    def test_embedded_diagnostics_remove_duplicate_header(self):
-        html = (STATIC / "diagnostics.html").read_text(encoding="utf-8")
-        css = (STATIC / "diagnostics.css").read_text(encoding="utf-8")
-        self.assertIn("get('embed')==='1'", html)
-        self.assertIn(".embed header{display:none}", css)
-
-    def test_diagnostics_link_home_does_not_nest(self):
-        html = (STATIC / "diagnostics.html").read_text(encoding="utf-8")
-        self.assertIn('href="/" target="_top"', html)
-        self.assertNotIn('href="/static/cockpit.html"', html)
+    def test_blocker_count_is_surfaced_in_the_nav(self):
+        self.assertIn('id="nDiag"', self.html)
 
 
 if __name__ == "__main__":

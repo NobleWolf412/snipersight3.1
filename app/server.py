@@ -4,6 +4,7 @@ never derives them). Serves the chart UI at / and JSON at /api/*.
 Run: uvicorn server:app --port 8422
 """
 import json
+import threading
 from collections import Counter
 from pathlib import Path
 
@@ -22,7 +23,11 @@ KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "setup_rejection": setups.SETUP_VERSION,
                  "exec": execsim.EXEC_VERSION,
                  "order": execsim.EXEC_VERSION,
-                 "cycle": cycles.CYCLES_VERSION}
+                 "cycle": cycles.CYCLES_VERSION,
+                 # the chart's order ticket reads the sizing verdict for the
+                 # setup it is showing, so it can never invite the operator to
+                 # size a trade the risk authority already refused
+                 "risk": risk.RISK_VERSION}
 
 app = FastAPI(title="SniperSight", version="0.1-draft")
 STATIC = Path(__file__).resolve().parent / "static"
@@ -359,6 +364,7 @@ def portfolio():
         con.close()
 
 
+SCANNER_STALE_S = 90            # heartbeat beats per stage; 90s means stuck
 WATCHDOG_LOCK_PORT = 8423       # watchdog.py holds a listening lock socket here
 HEARTBEAT = STATIC.parent / "data" / "heartbeat.json"
 
@@ -643,7 +649,9 @@ def overview():
         hb_path = STATIC.parent / "data" / "heartbeat.json"
         try:
             hb = json.loads(hb_path.read_text())
-            scanner = {"alive": _t.time() - hb["ts"] < 150,
+            # The live loop now beats at every stage, not once per cycle, so a
+            # short threshold genuinely means "stuck" rather than "mid-pass".
+            scanner = {"alive": _t.time() - hb["ts"] < SCANNER_STALE_S,
                        "age_s": int(_t.time() - hb["ts"]), **hb}
         except Exception:
             scanner = {"alive": False, "age_s": None}
@@ -680,6 +688,129 @@ def status():
                              "scalein": scalein.SCALE_VERSION},
                 "candles": [{"symbol": s, "tf": t, "n": n, "first": lo, "last": hi}
                             for s, t, n, lo, hi in c]}
+    finally:
+        con.close()
+
+
+@app.get("/api/trade-config")
+def trade_config(symbol: str | None = None):
+    """Sizing and cost constants for the order ticket, for THIS symbol's venue.
+
+    The ticket must NOT hard-code these. When the cockpit re-derived a number
+    the engine already owned, the two disagreed and the operator chased a
+    phantom (2026-07-26). One authority, read over the wire.
+
+    Venue matters enormously here, not cosmetically: spot round-trip fees are
+    1.00% of notional against 0.07% on perps. A 0.1%-stop trade nets -7.00R on
+    spot and +2.30R on perps. Showing spot fees on a perp chart would be a lie
+    that flips the sign of the decision.
+    """
+    from engine import venues
+    try:
+        v = venues.venue_for(symbol) if symbol else venues.COINBASE_SPOT
+    except ValueError:
+        v = venues.COINBASE_SPOT          # conservative: the costlier venue
+    return {
+        "risk_pct": float(risk.RISK_PCT),
+        "max_total_risk_pct": float(risk.MAX_TOTAL_OPEN_RISK_PCT),
+        "max_concurrent": risk.MAX_CONCURRENT,
+        "max_leverage": float(v.max_leverage),
+        "daily_loss_pct": float(risk.DAILY_LOSS_LIMIT_PCT),
+        "venue": {"key": v.key, "kind": v.kind, "quote": v.quote,
+                  "allow_shorts": v.allow_shorts,
+                  "funding_per_day": v.funding_settlements_per_day},
+        "venues": [{"key": x.key, "kind": x.kind, "allow_shorts": x.allow_shorts,
+                    "max_leverage": float(x.max_leverage)} for x in venues.ALL],
+        "cost": {"version": v.cost_profile, "venue": v.key,
+                 "maker_rate": float(v.maker_rate),
+                 "taker_rate": float(v.taker_rate),
+                 "slippage_atr": float(v.slippage_atr)},
+        # Live order submission is locked until the forward record earns it.
+        # The UI reads this rather than deciding for itself.
+        "live_enabled": False,
+        "live_locked_reason": "Forward paper evidence has not yet earned live "
+                              "execution. Rails exist; the switch is off.",
+    }
+
+
+@app.get("/api/credentials")
+def credentials_status():
+    """What credentials EXIST — never their values. There is deliberately no
+    route that returns a secret; `credentials.read_secret` is in-process only."""
+    from engine import credentials
+    return {"available": credentials.available(), "status": credentials.status(),
+            "fields": list(credentials.FIELDS),
+            "note": "Stored with Windows DPAPI, encrypted to your user account. "
+                    "Never written to the fact store, the log, or git. A stored "
+                    "key does not enable live trading — that gate is separate."}
+
+
+@app.post("/api/credentials")
+def credentials_store(payload: dict):
+    """Encrypt and store one credential field.
+
+    The value is never logged, never echoed back, and never leaves this process
+    in plaintext. Only the fact that it was set is reported.
+    """
+    from engine import credentials
+    venue, field = str(payload.get("venue", "")), str(payload.get("field", ""))
+    value = payload.get("value") or ""
+    try:
+        if payload.get("clear"):
+            credentials.clear(venue, field or None)
+        else:
+            credentials.store_secret(venue, field, value)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(400, str(exc))
+    from engine.runlog import get_logger
+    # log the EVENT, never the value
+    get_logger().info(f"CREDENTIAL {'cleared' if payload.get('clear') else 'stored'}: "
+                      f"{venue}/{field or 'all'}")
+    return {"ok": True, "status": credentials.status()}
+
+
+@app.get("/api/settings")
+def get_settings():
+    from engine import settings as _settings
+    con = store.connect()
+    try:
+        values = _settings.all_settings(con)
+        # the guardrail panel shows engine-owned limits beside operator ones;
+        # it must read them, never restate them
+        values["risk_config"] = {
+            "daily_loss_pct": float(risk.DAILY_LOSS_LIMIT_PCT) * 100,
+            "max_total_risk_pct": float(risk.MAX_TOTAL_OPEN_RISK_PCT) * 100,
+            "max_concurrent": risk.MAX_CONCURRENT,
+        }
+        return {"values": values, "spec": _settings.describe(),
+                "history": _settings.history(con, 20)}
+    finally:
+        con.close()
+
+
+@app.post("/api/settings")
+def post_settings(payload: dict):
+    """Apply operator settings.
+
+    A BEHAVIOURAL change starts a new forward baseline — a record spanning two
+    configurations cannot say which one produced which result. Nothing is
+    deleted; the previous baseline and its facts are retained.
+    """
+    from engine import settings as _settings
+    changes = payload.get("changes") or {}
+    if not isinstance(changes, dict) or not changes:
+        raise HTTPException(400, "changes must be a non-empty object")
+    con = store.connect()
+    try:
+        result = _settings.set_many(con, changes, note=str(payload.get("note", "")))
+        if result["applied"]:
+            from engine.runlog import get_logger
+            get_logger().info(f"SETTINGS CHANGED: {result['applied']}")
+        if result["behavioural"]:
+            risk.run(con)          # re-derive the account under the new baseline
+        return result
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     finally:
         con.close()
 
@@ -771,12 +902,88 @@ def index():
     return FileResponse(STATIC / "shell.html", headers=NO_CACHE)
 
 
-@app.get("/legacy", include_in_schema=False)
-def legacy():
-    """The previous cockpit. Kept reachable until its chart moves into the new
-    CHART surface in phase 2 — deleting a working tool before its replacement
-    exists is how you end up with neither."""
-    return FileResponse(STATIC / "index.html", headers=NO_CACHE)
+# /legacy retired 2026-07-29 (phase 6). Every surface it uniquely served now has
+# a replacement in the shell — chart + order ticket (CHART), equity curve and
+# per-symbol/strategy breakdown (RESULTS), setup telemetry and the rejection
+# funnel (DIAGNOSTICS). The file itself is deleted rather than left dark: a
+# second UI reading the same facts is a second place for them to disagree, which
+# is exactly how the two equity numbers diverged on 2026-07-26.
+
+
+ENGINE_LOG = STATIC.parent / "data" / "engine.log"
+_scan = {"running": False, "started_at": 0, "detail": ""}
+_scan_lock = threading.Lock()   # uvicorn runs sync endpoints on a threadpool,
+                                # so check-then-set on _scan is NOT atomic
+
+
+@app.get("/api/console")
+def console(offset: int = -1, limit: int = Query(400, ge=1, le=2000)):
+    """Tail the shared engine log.
+
+    Both the scanner process and this server write here, so a byte offset is
+    the only cursor that sees BOTH — an in-process ring buffer would show the
+    operator half the story. offset=-1 means "start near the end".
+    """
+    try:
+        size = ENGINE_LOG.stat().st_size
+    except FileNotFoundError:
+        return {"offset": 0, "lines": [], "scan": _scan, "detail": "no log yet"}
+    head_partial = False
+    if offset < 0 or offset > size:
+        offset = max(0, size - 8192)          # first call: recent tail only
+        head_partial = offset > 0             # that seek landed mid-line
+    # Binary, deliberately. The log is CRLF and text mode collapses \r\n to \n,
+    # so the decoded length undercounts the file by one byte per line and the
+    # cursor drifts BACKWARD every poll — re-showing painted bytes mid-line.
+    with open(ENGINE_LOG, "rb") as fh:
+        fh.seek(offset)
+        raw = fh.read()
+    # Stop at the last newline: the engines are mid-write while we read, so a
+    # trailing partial line would be emitted now and its remainder next poll,
+    # showing the operator two fragments of one line and no whole line.
+    cut = raw.rfind(b"\n") + 1
+    raw, tail = raw[:cut], raw[cut:]
+    new_offset = offset + cut
+    if head_partial:                          # drop the half line we seeked into
+        raw = raw[raw.find(b"\n") + 1:] if b"\n" in raw else b""
+    text = raw.decode("utf-8", errors="replace")
+    lines = [ln for ln in text.splitlines() if ln.strip()][-limit:]
+    return {"offset": new_offset, "lines": lines, "scan": _scan,
+            "pending": len(tail)}
+
+
+@app.post("/api/scan", status_code=202)
+def scan_now(response: Response):
+    """Run one real scan cycle on demand — the same code path the live loop
+    runs, so a manual scan can never diverge from an automatic one. Facts are
+    content-hashed and idempotent, so overlapping with the scanner's own tick
+    duplicates nothing."""
+    import time as _t
+    with _scan_lock:
+        if _scan["running"]:
+            response.status_code = 409
+            return {"ok": False, "detail": "a scan is already running"}
+        _scan.update(running=True, started_at=int(_t.time()), detail="scanning…")
+
+    def _run():
+        import live
+        from engine.runlog import get_logger
+        log = get_logger()
+        con = store.connect()
+        try:
+            log.info("MANUAL SCAN requested from cockpit")
+            n, fired = live.cycle(con, log)
+            _scan["detail"] = f"{n} new candles, {len(fired)} new setups"
+            log.info(f"MANUAL SCAN complete: {_scan['detail']}")
+        except Exception as exc:
+            _scan["detail"] = f"failed: {exc}"
+            log.error(f"MANUAL SCAN failed: {exc}")
+        finally:
+            con.close()
+            _scan["running"] = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "detail": "scan started"}
 
 
 @app.get("/api/state")

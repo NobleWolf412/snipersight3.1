@@ -24,9 +24,16 @@ class ConsolidatedCockpitTests(unittest.TestCase):
         self.assertIn("RedirectResponse", src)
 
     def test_no_iframe_embeds_the_app_in_itself(self):
-        html = (APP / "static" / "index.html").read_text(encoding="utf-8")
+        html = (APP / "static" / "shell.html").read_text(encoding="utf-8")
         self.assertNotIn('src="/raw"', html)
         self.assertNotIn('id="cockpit"', html)
+
+    def test_legacy_ui_is_fully_retired(self):
+        """A second UI over the same facts is a second place for them to
+        disagree — which is how two equity numbers diverged on 2026-07-26."""
+        self.assertFalse((APP / "static" / "index.html").exists())
+        src = (APP / "server.py").read_text(encoding="utf-8")
+        self.assertNotIn('@app.get("/legacy"', src)
 
 
 if __name__ == "__main__":

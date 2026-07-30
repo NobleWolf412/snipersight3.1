@@ -13,6 +13,9 @@
     document.querySelectorAll('.surface').forEach(s => s.classList.toggle('on', s.id === 's' + '-' + name));
     document.querySelectorAll('.nav a').forEach(a => a.classList.toggle('on', a.dataset.s === name));
     if(location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
+    // The chart cannot size itself while its surface is display:none, so it is
+    // told when it becomes visible rather than measuring a 0x0 box at load.
+    if(window.SSChart) name === 'chart' ? SSChart.onShow() : SSChart.onHide();
   }
   document.querySelectorAll('.nav a').forEach(a =>
     a.addEventListener('click', e => { e.preventDefault(); go(a.dataset.s); }));
@@ -49,7 +52,15 @@
     // scanner liveness
     const sc = o.scanner || {};
     $('scanOrb').className = 'orb ' + (sc.alive ? 'good' : 'bad');
-    $('scanTxt').textContent = sc.alive ? 'SCANNER LIVE' : 'SCANNER DOWN';
+    // show WHAT it is doing, not just that it lives — the phase comes from the
+    // live loop's per-stage heartbeat
+    const phase = sc.phase && sc.phase !== 'idle' ? sc.phase.split(' (')[0] : null;
+    $('scanTxt').textContent = sc.alive
+      ? (phase ? 'SCANNER · ' + phase.toUpperCase() : 'SCANNER LIVE')
+      : 'SCANNER DOWN';
+    $('scanChip').title = sc.alive
+      ? `${sc.phase || 'idle'} · ${sc.cycles || 0} cycles · heartbeat ${sc.age_s}s ago`
+      : `no heartbeat for ${sc.age_s == null ? '?' : sc.age_s}s`;
 
     if(o.baseline){
       $('sbBaseline').textContent = new Date(o.baseline.started_at * 1000).toISOString().slice(0, 10);
@@ -79,7 +90,25 @@
     }
     el.innerHTML = [...best.values()].sort((a, b) => (b.rank || 0) - (a.rank || 0)).map(s => {
       const long = s.direction === 'LONG';
-      return `<div class="deck-row" style="display:grid;grid-template-columns:120px 96px 1fr auto;
+      // The risk authority is the last word on whether a setup is tradeable.
+      // Showing a rejected setup as if it were actionable is the worst thing
+      // this deck can do — the operator would size a trade the engine refused.
+      const r = s.risk;
+      const dec = r ? r.decision : null;
+      const money = v => v == null ? null : '$' + Number(v).toLocaleString(undefined, {maximumFractionDigits: 0});
+      const chip = dec === 'APPROVED' ? 'chip-green' : dec === 'REDUCED' ? 'chip-amber'
+                 : dec === 'REJECTED' ? 'chip-red' : '';
+      const verdict = dec
+        ? `<span class="chip ${chip}">${dec}</span>` +
+          (dec === 'REJECTED'
+            ? `<div class="t-label" style="margin-top:4px;color:var(--red-2)">${
+                (r.reasons || []).join(', ').replaceAll('_', ' ').toLowerCase() || 'no reason given'}</div>`
+            : `<div class="t-label" style="margin-top:4px">risks ${money(r.risk_usd) || '—'}${
+                r.units ? ' · ' + Number(r.units).toLocaleString() + ' units' : ''}</div>`)
+        : '<span class="chip">unsized</span><div class="t-label" style="margin-top:4px">no risk decision</div>';
+
+      return `<div class="deck-row${dec === 'REJECTED' ? ' dead' : ''}"
+        style="display:grid;grid-template-columns:120px 92px 1fr 150px auto;
         gap:var(--md);align-items:center;padding:var(--md) var(--lg);border-bottom:1px solid var(--border-soft)">
         <div>
           <div class="t-mono" style="font-size:13px;color:var(--fg)">${s.symbol.replace('-USD','')}</div>
@@ -95,11 +124,15 @@
           sl <b style="color:var(--red-2)">${(+s.sl).toLocaleString()}</b> ·
           <span class="term" data-t="rr">R:R</span> ${s.rr}
         </div>
+        <div>${verdict}</div>
         <button class="btn" data-sym="${s.symbol}" data-tf="${s.tf}">Open chart</button>
       </div>`;
     }).join('');
     el.querySelectorAll('button[data-sym]').forEach(b =>
-      b.addEventListener('click', () => go('chart')));
+      b.addEventListener('click', () => {
+        go('chart');
+        if(window.SSChart) SSChart.open(b.dataset.sym, b.dataset.tf);
+      }));
   }
 
   function renderFunnel(funnel){
@@ -115,6 +148,10 @@
   async function loadPortfolio(){
     const p = await api('/api/portfolio');
     const up = p.return_pct >= 0;
+    $('equityTxt').textContent = money(p.equity);
+    $('equityRet').textContent = '  ' + (up ? '+' : '') + p.return_pct + '%';
+    $('equityChip').title = `account equity (paper) — start ${money(p.start_equity)}, ` +
+      `open risk ${money(p.open_risk_usd || 0)}`;
     $('mEquity').textContent = money(p.equity);
     $('rEquity').textContent = money(p.equity);
     $('rReturn').textContent = (up ? '+' : '') + p.return_pct + '%';
@@ -122,6 +159,7 @@
     $('rDD').textContent = (p.max_drawdown_pct ?? '—') + '%';
     $('rHalt').textContent = p.kill_switch_days ?? 0;
     if(p.config) $('mRisk').textContent = money(p.config.next_risk_usd);
+    drawCurve(p.curve, p.start_equity);
     const d = p.decisions || {};
     $('resultsNote').innerHTML =
       `Risk authority decisions: <b>${d.APPROVED || 0}</b> approved,
@@ -129,6 +167,54 @@
        Sizing runs at ${p.config ? p.config.risk_pct : '—'}% per trade with a
        ${p.config ? p.config.max_total_risk_pct : '—'}% total cap.
        Everything here is <span class="term" data-t="paper">paper</span>.`;
+  }
+
+  /* ---------- RESULTS: curve + per-symbol/strategy breakdown ---------- */
+  function drawCurve(curve, start){
+    const el = $('eqCurve');
+    if(!curve || curve.length < 2){
+      el.innerHTML = `<text x="400" y="84" text-anchor="middle" fill="var(--fg-4)"
+        font-family="var(--f-mono)" font-size="11">no closed trades in this window yet</text>`;
+      $('eqNote').textContent = curve && curve.length === 1
+        ? '1 settlement — a curve needs at least two points' : '';
+      return;
+    }
+    const ys = curve.map(p => +p.equity);
+    const lo = Math.min(...ys, start), hi = Math.max(...ys, start);
+    const pad = (hi - lo) * 0.1 || 1;
+    const y = v => 150 - ((v - (lo - pad)) / ((hi + pad) - (lo - pad))) * 140;
+    const x = i => (i / (curve.length - 1)) * 800;
+    const pts = curve.map((p, i) => `${x(i).toFixed(1)},${y(+p.equity).toFixed(1)}`).join(' ');
+    const up = ys[ys.length - 1] >= start;
+    const col = up ? 'var(--green)' : 'var(--red-2)';
+    el.innerHTML =
+      `<line x1="0" y1="${y(start).toFixed(1)}" x2="800" y2="${y(start).toFixed(1)}"
+             stroke="var(--fg-4)" stroke-dasharray="3 4" stroke-width="1" opacity=".6"/>
+       <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2"
+                 vector-effect="non-scaling-stroke"/>`;
+    $('eqNote').textContent =
+      `${curve.length} settlements · start ${money(start)} · peak ${money(hi)} · now ${money(ys[ys.length-1])}`;
+  }
+
+  function perfRows(rows, key){
+    if(!rows || !rows.length) return '<div class="empty">no closed trades yet</div>';
+    return rows.map(r => {
+      const pnl = +(r.net_r ?? r.total_r ?? 0);
+      const good = pnl >= 0;
+      return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:var(--md);
+        align-items:center;padding:8px var(--lg);border-bottom:1px solid var(--border-soft)"
+        class="t-mono">
+        <span style="color:var(--fg-2)">${String(r[key] ?? '—').replace('-USD','')}</span>
+        <span style="color:var(--fg-4)">${r.n ?? r.trades ?? 0} trades</span>
+        <b style="color:${good ? 'var(--green)' : 'var(--red-2)'}">${good ? '+' : ''}${pnl.toFixed(2)}R</b>
+      </div>`;
+    }).join('');
+  }
+
+  async function loadPerformance(){
+    const p = await api('/api/performance');
+    $('perfSymbol').innerHTML = perfRows(p.by_symbol, 'symbol');
+    $('perfStrategy').innerHTML = perfRows(p.by_strategy, 'strategy');
   }
 
   /* ---------- DIAGNOSTICS ---------- */
@@ -160,6 +246,200 @@
     }).join('') : '<div class="empty">no open issues</div>';
   }
 
+  /* ---------- SCANNER SETUP: show the real sizing rules, not prose ---------- */
+  async function loadRisk(){
+    const c = await api('/api/trade-config');
+    const pct = v => (v * 100).toFixed(v * 100 % 1 ? 1 : 0) + '%';
+    const row = (k, v, note) => `<div><span class="k">${k}</span>` +
+      `<span class="v">${v}${note ? ' <span style="color:var(--fg-4)">' + note + '</span>' : ''}</span></div>`;
+    $('riskNow').innerHTML =
+      row('risk per trade', pct(c.risk_pct)) +
+      row('total open risk', pct(c.max_total_risk_pct), `(${c.max_concurrent} × per-trade)`) +
+      row('concurrent positions', c.max_concurrent) +
+      row('daily loss halt', pct(c.daily_loss_pct)) +
+      row('live execution', c.live_enabled ? 'ENABLED' : 'LOCKED') +
+      // Per-venue, because the difference is decisive rather than cosmetic:
+      // a 0.1%-stop trade nets -7.00R on spot and +2.30R on perps.
+      (c.venues || []).map(v => row(
+        v.key.replace('-', ' '),
+        `${v.allow_shorts ? 'long+short' : 'long only'} · ${v.max_leverage}x`)).join('');
+    $('riskVer').textContent = c.cost.version;
+  }
+
+  /* ---------- settings: editable, audited, honest about the cost ---------- */
+  let setSpec = [], setValues = {}, setPending = {};
+
+  function renderSettings(){
+    const esc = s => String(s).replace(/[<>&"]/g, c =>
+      ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+    $('setFields').innerHTML = setSpec.map(s => {
+      const v = (s.name in setPending) ? setPending[s.name] : setValues[s.name];
+      const changed = (s.name in setPending) && setPending[s.name] !== setValues[s.name];
+      const ctl = s.type === 'bool'
+        ? `<input type="checkbox" data-set="${s.name}" ${v ? 'checked' : ''}>`
+        : `<input class="t-mono" data-set="${s.name}" value="${esc(v)}" style="width:110px">`;
+      return `<label class="set-row${changed ? ' changed' : ''}">
+        ${s.type === 'bool' ? ctl : ''}
+        <span>
+          <span class="t-mono" style="color:var(--fg-2)">${s.name.replaceAll('_',' ')}</span>
+          ${s.class === 'BEHAVIOURAL' ? '<span class="chip chip-amber">rule</span>' : ''}
+          <span class="t-label" style="display:block;margin-top:2px;text-transform:none;
+            letter-spacing:0;color:var(--fg-4)">${esc(s.description)}</span>
+        </span>
+        ${s.type === 'bool' ? '' : ctl}
+      </label>`;
+    }).join('');
+    const dirty = Object.keys(setPending).filter(k => setPending[k] !== setValues[k]);
+    $('setDirty').hidden = !dirty.length;
+    $('setApply').disabled = $('setReset').disabled = !dirty.length;
+    const rules = dirty.filter(k => (setSpec.find(s => s.name === k) || {}).class === 'BEHAVIOURAL');
+    $('setWarn').hidden = !rules.length;
+    if(rules.length) $('setWarn').innerHTML =
+      `Changing <b>${rules.join(', ').replaceAll('_',' ')}</b> starts a NEW forward window. ` +
+      'Your existing record is kept but stops accumulating. Nothing is deleted.';
+  }
+
+  async function loadSettings(){
+    const d = await api('/api/settings');
+    setSpec = d.spec; setValues = d.values;
+    // drop pending edits that the server now agrees with
+    for(const k of Object.keys(setPending))
+      if(setPending[k] === setValues[k]) delete setPending[k];
+    renderSettings();
+    // guardrails: every gate that can stop new entries, and whether it is armed
+    const gr = (k, v, cls) => `<div><span class="k">${k}</span>` +
+      `<span class="v ${cls || ''}">${v}</span></div>`;
+    const rc = setValues.risk_config || {};
+    $('guardRows').innerHTML =
+      gr('operator halt', setValues.halted ? 'ENGAGED' : 'armed',
+         setValues.halted ? 'bad' : 'good') +
+      gr('total drawdown halt', setValues.max_drawdown_pct + '% from peak', 'good') +
+      gr('daily loss halt', (rc.daily_loss_pct != null ? rc.daily_loss_pct : 6) + '%', 'good') +
+      gr('data-health halt', setValues.halt_on_data_blocked ? 'armed' : 'DISABLED',
+         setValues.halt_on_data_blocked ? 'good' : 'warn') +
+      gr('max concurrent', rc.max_concurrent != null ? rc.max_concurrent : 2) +
+      gr('total open risk', (rc.max_total_risk_pct != null ? rc.max_total_risk_pct : 4) + '%') +
+      gr('live execution', 'LOCKED', 'warn');
+    $('guardChip').textContent = setValues.halted ? 'halted' : 'armed';
+    $('guardChip').className = 'chip ' + (setValues.halted ? 'chip-red' : 'chip-green');
+
+    const halted = !!setValues.halted;
+    $('btnHalt').textContent = halted ? 'HALTED' : 'HALT';
+    $('btnHalt').className = 'btn ' + (halted ? 'btn-cyan' : 'btn-red');
+    $('btnHalt').title = halted
+      ? 'new entries are blocked — click to resume'
+      : 'stop sizing new entries (open positions still settle)';
+    document.body.classList.toggle('is-halted', halted);
+  }
+
+  document.addEventListener('change', e => {
+    const el = e.target.closest('[data-set]');
+    if(!el) return;
+    const spec = setSpec.find(s => s.name === el.dataset.set);
+    setPending[el.dataset.set] = spec.type === 'bool' ? el.checked
+      : (spec.type === 'int' ? parseInt(el.value, 10) : el.value);
+    renderSettings();
+  });
+
+  async function applySettings(changes, note){
+    const r = await fetch('/api/settings', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({changes, note: note || ''})});
+    const d = await r.json().catch(() => ({}));
+    if(!r.ok) throw new Error(d.detail || ('settings → ' + r.status));
+    return d;
+  }
+
+  $('setApply').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    const changes = {};
+    for(const k of Object.keys(setPending))
+      if(setPending[k] !== setValues[k]) changes[k] = setPending[k];
+    if(!Object.keys(changes).length) return;
+    b.disabled = true; b.textContent = 'Applying…';
+    try{
+      const d = await applySettings(changes, 'scanner setup');
+      setPending = {};
+      await refresh();
+      if(d.baseline) alert('New forward window started (baseline #' + d.baseline.id +
+        ').\nYour previous record is retained, but stops accumulating.');
+    }catch(err){ markDegraded(String(err)); }
+    b.textContent = 'Apply';
+    renderSettings();
+  });
+
+  $('setReset').addEventListener('click', () => { setPending = {}; renderSettings(); });
+
+  $('btnHalt').addEventListener('click', async e => {
+    const b = e.currentTarget, halting = !setValues.halted;
+    if(halting && !confirm('Halt the scanner?\n\nNo NEW entries will be sized. ' +
+        'Open positions still settle — refusing to close a position is not safety.')) return;
+    b.disabled = true;
+    try{
+      await applySettings({halted: halting}, halting ? 'operator halt' : 'operator resume');
+      await loadSettings();
+    }catch(err){ markDegraded(String(err)); }
+    b.disabled = false;
+  });
+
+  /* ---------- credentials: write-only, never displayed ---------- */
+  async function loadCredentials(){
+    const d = await api('/api/credentials');
+    const venues = Object.keys(d.status);
+    $('credChip').textContent = d.available ? 'DPAPI' : 'unavailable';
+    $('credChip').className = 'chip ' + (d.available ? 'chip-green' : 'chip-red');
+    $('credFields').innerHTML = venues.map(v => `
+      <div style="margin-bottom:var(--md)">
+        <div class="t-label" style="margin-bottom:6px">${v.replace('-', ' ')}</div>
+        ${d.fields.map(f => {
+          const set = d.status[v][f];
+          return `<div class="fld-row" style="margin-bottom:6px">
+            <input type="password" data-cred="${v}|${f}" autocomplete="off"
+              placeholder="${set ? '•••••••• stored' : f.replace('_', ' ')}">
+            <button class="btn" data-credsave="${v}|${f}">Save</button>
+            ${set ? `<button class="btn btn-red" data-credclear="${v}|${f}">Clear</button>` : ''}
+          </div>`;
+        }).join('')}
+      </div>`).join('');
+  }
+
+  document.addEventListener('click', async e => {
+    const save = e.target.closest('[data-credsave]');
+    const clr = e.target.closest('[data-credclear]');
+    if(!save && !clr) return;
+    const key = (save || clr).dataset.credsave || (save || clr).dataset.credclear;
+    const [venue, field] = key.split('|');
+    const input = document.querySelector(`[data-cred="${key}"]`);
+    try{
+      const body = clr ? {venue, field, clear: true}
+                       : {venue, field, value: input ? input.value : ''};
+      const r = await fetch('/api/credentials', {method:'POST',
+        headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      const d = await r.json().catch(() => ({}));
+      if(!r.ok) throw new Error(d.detail || ('credentials → ' + r.status));
+      if(input) input.value = '';        // never leave a secret in the DOM
+      await loadCredentials();
+    }catch(err){ alert('Could not save credential: ' + err.message); }
+  });
+
+  /* where candidates die, stage by stage — the operator's debugging view */
+  async function loadTelemetry(){
+    const t = await api('/api/setup-telemetry?limit=200');
+    const stages = t.stages || {}, fails = t.failure_points || {};
+    const rows = Object.entries(stages).length ? Object.entries(stages)
+      : Object.entries(fails);
+    const defects = (t.records || []).reduce((s, r) => s + (r.defect_count || 0), 0);
+    $('telChip').textContent = defects ? defects + ' defects' : 'clean';
+    $('telChip').className = 'chip ' + (defects ? 'chip-red' : 'chip-green');
+    $('dTelemetry').innerHTML = rows.length
+      ? rows.sort((a, b) => b[1] - a[1]).map(([k, n]) =>
+          `<div style="display:flex;justify-content:space-between;padding:7px var(--lg);
+            border-bottom:1px solid var(--border-soft)" class="t-mono">
+            <span style="color:var(--fg-3)">${k.replaceAll('_', ' ').toLowerCase()}</span>
+            <b style="color:var(--fg-2)">${fmt(n)}</b></div>`).join('')
+      : '<div class="empty">no candidates recorded in this window yet</div>';
+  }
+
   async function loadStatus(){
     const s = await api('/api/status');
     $('sbFacts').textContent = fmt(s.facts);
@@ -167,17 +447,76 @@
   }
 
   /* ---------- actions ---------- */
-  $('btnScan').addEventListener('click', async e => {
-    const b = e.currentTarget, was = b.textContent;
-    b.disabled = true; b.textContent = 'Scanning…';
+  /* ---------- backend console: tail the log both processes write ---------- */
+  let logOffset = -1, follow = true, scanning = false;
+  const consoleEl = $('console');
+
+  function paint(lines){
+    if(!lines.length) return;
+    const html = lines.map(ln => {
+      const m = ln.match(/^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\s+(\w+)?\s*(.*)$/);
+      if(!m) return `<span class="l-info">${esc(ln)}</span>`;
+      const [, ts, lvl, rest] = m;
+      const cls = /ERROR/.test(lvl) ? 'l-err' : /WARNING/.test(lvl) ? 'l-warn'
+                : /MANUAL SCAN|SETUP FIRED/.test(rest) ? 'l-mark' : 'l-info';
+      return `<span class="l-time">${ts.slice(11)}</span> <span class="${cls}">${esc(rest)}</span>`;
+    }).join('\n');
+    consoleEl.insertAdjacentHTML('beforeend', (consoleEl.dataset.seeded ? '\n' : '') + html);
+    consoleEl.dataset.seeded = '1';
+    // keep the buffer bounded so a long session cannot eat the tab's memory
+    const kids = consoleEl.childNodes;
+    while(kids.length > 4000) consoleEl.removeChild(kids[0]);
+    if(follow) consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
+  const esc = s => s.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+  let polling = false;
+  async function pollConsole(){
+    // Two overlapping polls would both fetch from the same logOffset and paint
+    // the same lines twice — the click handler's poll races the interval.
+    if(polling) return;
+    polling = true;
     try{
-      // Phase 1 wires the existing audit/refresh path; a true on-demand scan
-      // trigger lands with the scanner control work in phase 2.
-      await fetch('/api/action', {method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({paneId:'snipersight', actionId:'audit'})});
-      await refresh();
-    }catch(err){ markDegraded(String(err)); }
-    b.disabled = false; b.textContent = was;
+      const d = await api('/api/console?offset=' + logOffset);
+      if(!consoleEl.dataset.seeded) consoleEl.textContent = '';
+      logOffset = d.offset;
+      paint(d.lines || []);
+      const s = d.scan || {}, b = $('btnScan');
+      $('consoleState').textContent = s.running ? 'scanning…' : (s.detail || 'idle');
+      $('consoleState').className = 'chip ' + (s.running ? 'chip-accent' : '');
+      // The backend owns the truth about whether a scan is running, so a page
+      // reload mid-scan shows the same button state as the tab that started it.
+      b.disabled = !!s.running;
+      b.textContent = s.running ? 'Scanning…' : 'Run Scan';
+      if(scanning && !s.running) refresh();          // just finished — repaint deck
+      scanning = !!s.running;
+    }catch(err){ /* console is best-effort; the health chip owns API state */ }
+    finally{ polling = false; }
+  }
+  $('btnFollow').addEventListener('click', e => {
+    follow = !follow;
+    e.currentTarget.textContent = follow ? 'Following' : 'Paused';
+    e.currentTarget.style.color = follow ? '' : 'var(--fg-4)';
+  });
+  pollConsole();
+  setInterval(pollConsole, 2000);
+
+  /* ---------- run a real scan ---------- */
+  $('btnScan').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    b.disabled = true; b.textContent = 'Scanning…';
+    follow = true;
+    try{
+      const r = await fetch('/api/scan', {method:'POST'});
+      const d = await r.json().catch(() => ({}));
+      if(r.status === 409){ $('consoleState').textContent = 'already scanning'; }
+      else if(!r.ok){ markDegraded(d.detail || ('scan → ' + r.status)); }
+      await pollConsole();
+    }catch(err){
+      markDegraded(String(err));
+      b.disabled = false; b.textContent = 'Run Scan';
+    }
+    // the poll loop re-enables the button when the backend reports it finished
   });
 
   $('btnAudit').addEventListener('click', async e => {
@@ -202,7 +541,9 @@
 
   /* ---------- refresh loop ---------- */
   async function refresh(){
-    const jobs = [loadOverview(), loadPortfolio(), loadHealth(), loadStatus()];
+    const jobs = [loadOverview(), loadPortfolio(), loadHealth(), loadStatus(),
+                  loadRisk(), loadSettings(), loadCredentials(), loadPerformance(),
+                  loadTelemetry()];
     const results = await Promise.allSettled(jobs);
     const failed = results.filter(r => r.status === 'rejected');
     if(failed.length) markDegraded(failed.map(f => f.reason).join('; '));

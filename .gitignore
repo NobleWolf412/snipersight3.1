@@ -23,3 +23,6 @@ Thumbs.db
 # Scratch
 scratchpad/
 *.tmp
+
+# API credentials — DPAPI ciphertext, never committed
+app/data/credentials.vault

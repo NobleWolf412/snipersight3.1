@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from unittest import mock
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -185,3 +186,53 @@ class TestStrategyRulesRemainFrozen(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetiredSymbolStalenessTest(unittest.TestCase):
+    """Staleness is only meaningful for a symbol we still track.
+
+    Switching the universe to perps retired 108 spot symbols and produced 108
+    permanent STALE_SERIES warnings — noise that would bury the one series
+    going quiet while it actually mattered. Same cry-wolf failure as the 1,364
+    blockers that wedged the scanner for days.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.con = store.connect(Path(self.tmp.name) / "stale.db")
+        # two symbols, both with old candles: one live, one retired
+        for sym in ("LIVEUSDT", "OLD-USD"):
+            for i in range(3):
+                self.con.execute(
+                    "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (sym, "1D", 86400 * i, "100", "102", "98", "100", "1",
+                     "coinbase", 86400 * i + 1))
+        self.con.commit()
+
+    def tearDown(self):
+        self.con.close()
+        self.tmp.cleanup()
+
+    def _stale_symbols(self):
+        rep = quality.audit_market_inputs(self.con, now=10 ** 9)
+        return {c["symbol"] for c in rep if c["code"] == "STALE_SERIES"}
+
+    def test_retired_symbol_is_not_reported_stale(self):
+        with mock.patch("engine.universe.current_symbols",
+                        return_value=["LIVEUSDT"]):
+            stale = self._stale_symbols()
+        self.assertIn("LIVEUSDT", stale, "a live stale series must still warn")
+        self.assertNotIn("OLD-USD", stale, "retired data reported as stale")
+
+    def test_fails_open_when_the_universe_is_unreadable(self):
+        """If we cannot tell what is live, warn rather than silently suppress."""
+        with mock.patch("engine.universe.current_symbols",
+                        side_effect=RuntimeError("no universe")):
+            stale = self._stale_symbols()
+        self.assertIn("LIVEUSDT", stale)
+        self.assertIn("OLD-USD", stale)
+
+    def test_live_set_is_not_shared_across_connections(self):
+        """A module-level cache keyed on nothing would let an audit of one
+        database suppress warnings in another."""
+        self.assertFalse(hasattr(quality, "_LIVE_CACHE"))

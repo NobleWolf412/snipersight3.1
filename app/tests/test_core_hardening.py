@@ -273,27 +273,46 @@ class TestFactLifecycleOrdering(TempStore):
 
 
 class TestCockpitHierarchy(unittest.TestCase):
-    def test_wallet_and_positions_are_persistent_landmarks(self):
-        html = (Path(__file__).parents[1] / "static" / "index.html").read_text()
-        self.assertIn('aria-label="Paper wallet summary"', html)
-        self.assertIn('aria-label="Active paper positions"', html)
-        self.assertIn('id="walletBalance"', html)
-        self.assertIn('id="baselineReset"', html)
-        self.assertIn('id="baselineLabel"', html)
-        self.assertIn('id="activePositions"', html)
-        self.assertIn('aria-label="Validated setup telemetry"', html)
-        self.assertIn('id="telemetryRecords"', html)
-        self.assertIn('aria-label="Pipeline quality and lineage"', html)
-        self.assertIn('id="pipelineStages"', html)
-        self.assertIn('id="evaluationGate"', html)
-        # S23: pipeline + setup-trace moved out of the trading rail into the
-        # diagnostics drawer, so the gate opens the drawer on its pipeline tab.
-        self.assertIn("evaluationGate.onclick=()=>openDiagnostics('pipeline')", html)
-        self.assertIn('data-dt="pipeline"', html)
-        self.assertIn('data-dt="trace"', html)
-        self.assertIn('aria-label="Open pipeline quality details"', html)
-        self.assertLess(html.index('id="activePositions"'),
-                        html.index('data-rt="feed"'))
+    """The account must be readable from anywhere, and the things that can stop
+    trading must always be reachable.
+
+    Retargeted from the legacy cockpit (retired 2026-07-29) to the shell. The
+    property is unchanged: equity, the forward window, and the halt are
+    persistent landmarks rather than something you navigate to find.
+    """
+
+    def setUp(self):
+        static = Path(__file__).parents[1] / "static"
+        self.html = (static / "shell.html").read_text(encoding="utf-8")
+        self.js = (static / "shell.js").read_text(encoding="utf-8")
+
+    def test_equity_is_visible_from_every_surface(self):
+        """It lives in the topbar, outside any <section class="surface">, so
+        the operator never has to navigate away to see what the risk % is a
+        percentage OF."""
+        self.assertIn('id="equityChip"', self.html)
+        self.assertLess(self.html.index('id="equityChip"'),
+                        self.html.index('<main class="stage">'))
+
+    def test_halt_is_always_reachable(self):
+        self.assertIn('id="btnHalt"', self.html)
+        self.assertLess(self.html.index('id="btnHalt"'),
+                        self.html.index('<main class="stage">'))
+        self.assertIn("btnHalt", self.js)
+
+    def test_forward_window_and_positions_are_surfaced(self):
+        for anchor in ('id="sbBaseline"', 'id="baselineChip"', 'id="deck"',
+                       'id="rEquity"', 'id="rDD"'):
+            self.assertIn(anchor, self.html, anchor)
+
+    def test_guardrails_and_telemetry_have_a_home(self):
+        self.assertIn('id="guardRows"', self.html)
+        self.assertIn('id="dTelemetry"', self.html)
+
+    def test_scanner_state_is_persistent_chrome(self):
+        self.assertIn('id="scanChip"', self.html)
+        self.assertLess(self.html.index('id="scanChip"'),
+                        self.html.index('<main class="stage">'))
 
 
 class TestSetupTelemetry(unittest.TestCase):

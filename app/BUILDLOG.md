@@ -1024,3 +1024,726 @@ source. Two surfaces had independently cached the same verdict, which is how
 they disagreed on 2026-07-26. Added `quality.cached_audit()` as the single
 shared verdict (background refresh, `force` for buttons); both the endpoint and
 the bridge now read it. Response time went from hanging to **7ms**. 89 tests green.
+
+---
+
+## S26 — Backend console + a real Run Scan button (phase 1 close-out)
+
+**Asked:** "i click run scan, is there some sort of console that can expose
+whats happening on the back end?"
+
+**Found first:** Run Scan was a **placeholder**. It POSTed the ApexShell `audit`
+verb and refreshed — it never scanned. The label lied about what the button did,
+which is the worst kind of UI bug in a system whose whole premise is that the
+screen tells the truth.
+
+**Built:**
+- `POST /api/scan` — runs `live.cycle(con, log)` in a daemon thread. Deliberately
+  the *same code path the live loop runs*, so a manual scan can never diverge
+  from an automatic one. Facts are content-hashed and idempotent, so overlapping
+  with the scanner's own tick duplicates nothing. Returns 409 if one is running.
+- `GET /api/console` — byte-offset tail of `data/engine.log`. Chose the shared
+  log file over an in-process ring buffer **because both the scanner process and
+  the server write there**; a ring buffer would have shown the operator half the
+  story.
+- COMMAND gets a Backend Console panel: severity-coloured, Following/Paused,
+  bounded buffer, and the scan state chip.
+
+**Three defects found by verifying instead of assuming — all real, all mine:**
+
+1. **Check-then-set race.** `if _scan["running"]` and the assignment were not
+   atomic, and uvicorn runs sync endpoints on a threadpool. Four concurrent
+   POSTs all passed the guard. Added `_scan_lock`; retest gave exactly one 202
+   and three 409s.
+
+2. **Cursor drifted BACKWARD every poll.** The console kept showing a fragment
+   like `"ckpit"` — the tail of "cockpit" — after every refresh. Cause: the log
+   is **CRLF**, and `open(..., "r")` universal-newline mode collapses `\r\n` to
+   `\n`, so `len(text.encode())` undercounted the file by **one byte per line**.
+   The cursor fell behind a byte per line and re-read already-painted bytes,
+   landing mid-word. Fixed by reading **binary** and decoding after slicing, so
+   the offset is byte-exact. This is the second time a Windows text-mode
+   assumption has cost real debugging time — offsets into a file must always be
+   computed in bytes.
+
+3. **Trailing and leading partial lines.** The engines are mid-write while we
+   read, and the first fetch seeks to `size-8192` which lands mid-line. Now the
+   read stops at the last `\n` (remainder reported as `pending`) and a clamped
+   first seek discards the half line it landed in. Client-side, overlapping
+   polls (the click handler's poll racing the 2s interval) fetched the same
+   offset twice and double-painted; added a `polling` re-entrancy guard.
+
+**Also:** the backend now owns "is a scan running", so reloading the page
+mid-scan shows the same button state as the tab that started it.
+
+**Verified:** 6 sequential polls — cursor monotonic, zero fragments. Live poll
+during an active scan — zero fragments, `pending` drains to 0. Browser after
+hard reload — 83 lines, **0 fragments**, 83 colourised, COMMAND intact
+(universe 37, equity $10,000).
+
+**Dud recorded:** my first verification loop declared the server up while the
+*old* process was still answering, then the connection refused mid-test. Waiting
+on `/api/status` is not proof of a restart when the thing you restarted is the
+process answering that endpoint.
+
+---
+
+## S27 — Phase 2: the CHART surface and the order ticket
+
+**Built:** `chart.js` (chart + overlays + draggable levels), `ticket-math.js`
+(the arithmetic, pure and testable), `GET /api/trade-config`, and the CHART
+markup/CSS. `tests/test_ticket_math.js` — 13 cases, run under node.
+
+**The chart owns the screen.** Symbol picker, five timeframes, five overlay
+toggles (swings, structure, zones, liquidity, cycle), regime and live price
+chips, and a 320px order ticket rail.
+
+**Levels are draggable.** `createPriceLine` draws them; DOM tags positioned by
+`series.priceToCoordinate()` are the grab targets. Dragging freezes
+`handleScroll/handleScale` — otherwise the viewport pans out from under the
+cursor. Every drag recomputes the ticket live.
+
+**Why the maths moved to its own file:** this is the code that decides how big
+a trade is, so it gets tested like it. `ticket-math.js` has no DOM, runs under
+node, and covers inverted stops, shorts, fee-dominated scalps, buying-power
+breaches, and the no-equity case. It reads `risk_pct`, `max_leverage` and the
+fee rates from `/api/trade-config`, which reads them off `engine/risk.py` and
+`engine/costs.py`. Hard-coding them in JS is precisely how two surfaces came to
+disagree about equity on 2026-07-26.
+
+**The ticket shows R:R AFTER FEES, not just gross.** This is the number that
+matters and the one the old UI never showed. Measured live:
+  · COTI-USD 1D SHORT (real engine setup): gross 6.10 → **net 5.77**. Wide
+    structural stop, fees are noise. Gross 6.10 matches the engine's own `rr`
+    field exactly — the ticket and the engine agree independently.
+  · BTC-USD 4H seeded 2R trade: gross 2.00 → **net 1.10**. Half the edge is fees.
+  · A 0.1% stop on a 60k asset: gross 3.00 → **net NEGATIVE**. A guaranteed
+    loser that looks like a 3R trade. That asymmetry — fees on notional against
+    a stop measured in ticks — is what sank the intraday book, and it is now on
+    screen instead of buried in a backtest.
+
+**Nothing hand-tuned is ever labelled "engine".** The ticket carries a source
+chip: `engine` (accent) only while untouched; `operator-modified` the instant
+anything is dragged, typed, flipped or trailed; `operator-seeded` where no
+setup exists. Where there is no engine setup the levels are seeded from the
+average 14-bar range and the WHY panel says outright that they are the
+operator's and count toward nothing.
+
+**Two defects found by exercising it, both real:**
+
+1. **Reset was a dead end.** Reset restored only *engine* levels, so on a symbol
+   with no setup an operator who dragged into an invalid state had no way back —
+   the button stayed disabled. Replaced `engineLevels`/`origin` with a single
+   `base` (kind `engine` or `seeded`) plus a `modified` flag. Whatever the chart
+   started from is now restorable, and Reset enables exactly when something was
+   changed.
+
+2. **Handle placement lived only inside the rAF loop.** A backgrounded tab
+   suspends rAF, so the grab tags would have been stale the moment the operator
+   came back. Extracted `placeHandles()`, called directly on every level change;
+   rAF now only tracks pan and zoom.
+
+**Verified:** deck "Open chart" carries symbol *and* timeframe and lands on the
+engine setup (`engine` · entry 0.01322). Switching COTI 1D → 4H correctly drops
+to seeded because no setup exists there. Edit → Reset → flip direction → Reset
+round-trips cleanly. Wrong-side stops and targets are refused with a plain
+sentence, never silently negated. Zero console errors. 89 python + 13 js green.
+
+**Not done, deliberately:** `/legacy` stays up. Its telemetry and account views
+have no replacement yet, and deleting a working tool before its replacement
+exists leaves you with neither. Arm stays disabled and reads its lock reason
+from `/api/trade-config` — the UI does not get to decide that live is allowed.
+
+**Environment note for future sessions:** the automated browser pane runs with
+`visibilityState: hidden`, so `requestAnimationFrame` never fires and
+lightweight-charts cannot paint or resolve `priceToCoordinate`. Chart *rendering*
+cannot be verified there — data, maths, state and wiring can. Do not read a
+0x0 `chartBox` as a layout bug.
+
+---
+
+## S28 — Operator feedback: zoom, dead toggles, and a setup the engine refused
+
+Three complaints, and the third exposed the worst UI defect built so far.
+
+**1. Chart opened unreadably zoomed out.** `fitContent()` squeezed 1500 bars
+into one screen. Now opens on a 120-bar working window via
+`setVisibleLogicalRange`; full history is still there to scroll back through.
+
+**2. Overlay toggles "don't seem to do anything" — they didn't.** Measured on
+COTI 4H: every one of the 12 structure facts is a `LABEL` event, and
+`drawOverlays()` did `if(f.event === 'LABEL') continue`. So the Structure toggle
+drew *nothing* on that chart. LABEL is HH/HL/LH/LL — that IS the market
+structure the strategy reads, and it was the one thing being thrown away.
+Liquidity and cycle genuinely have zero facts on that timeframe, and swings
+render only 17 of 257 because MICRO/LOCAL are noise tiers.
+
+Fixed by rendering labels, and by making each toggle carry its live fact count:
+`Swings 17`, `Structure 12`, `Zones 8`, and struck-through `Liquidity` /
+`Cycle` when nothing exists. A control that silently draws nothing is
+indistinguishable from a broken one; the count is the difference between "no
+data here" and "this button is dead". BTC 1D correctly shows `Cycle 35`.
+
+**3. "No universal account balance visible from any screen."** Correct — equity
+lived only on COMMAND and RESULTS, so on the chart the ticket said "risk $200"
+without ever showing what it was 2% *of*. Equity is now a topbar chip on every
+surface, with start equity and open risk in the tooltip.
+
+**The real find.** Chasing "it doesn't show the dollar amount", the deck's one
+active setup — COTI-USD 1D SHORT, R:R 6.10 — turned out to be **REJECTED by the
+risk authority** (`NOT_IN_POINT_IN_TIME_UNIVERSE`, `risk_usd: 0`). The dollar
+amount was missing *because the engine refused to size it*. The deck was
+presenting a refused setup as an opportunity, complete with an Open Chart button
+and no hint of the verdict. That is the single most dangerous thing this surface
+can do: invite the operator to size a trade the engine already declined.
+
+Both surfaces now carry the verdict, from the same fact:
+  · deck row dimmed, `REJECTED` chip, reason in plain words
+  · ticket shows `RISK AUTHORITY: REJECTED` above the rationale, ending
+    "This setup would not be traded. Anything below is analysis only."
+
+`kind=risk` had to be added to `KIND_VERSIONS` — the generic `/api/facts`
+allow-list rejected it with a 400, which would have blanked the chart. Caught
+before shipping by testing the endpoint rather than assuming it.
+
+**Scanner Setup / Risk** now reads live values from `/api/trade-config` instead
+of hard-coded prose, and states plainly why the fields are not yet editable:
+`risk.run()` rebuilds the account by replaying every setup, so changing the
+percentage in place would re-size the entire forward record under an unchanged
+`algo_version` — a §7 violation. The envelope is coupled too (total cap holds
+two concurrent, daily halt is ~3 stop-outs), so no value moves alone.
+
+**Open decision:** operator chose *auto-derive with override* for the coupled
+limits. How history is treated when risk changes is still undecided — the
+question was asked and answered with a different concern, so it stands.
+
+**Verified:** 89 python + 13 js green, zero console errors, deck and ticket agree.
+
+---
+
+## S29 — The universe was partly a coin flip (universe-v0.2-draft)
+
+Found while answering "if R:R was so great why did it refuse it?". The COTI
+answer was mundane — the coin entered the top-20 volume list 13 hours AFTER the
+trade was judged, and it was a short on spot besides. But the universe snapshots
+around it were churning 3-5 symbols between refreshes minutes apart.
+
+**Root cause, measured not guessed.** `rank_by_volume()` stats every online USD
+pair to rank it (388 calls). It ran 6 workers with no throttle and no retry —
+`REQUEST_PAUSE = 0.15` was defined at module level and never referenced. Probing
+Coinbase directly: 150 requests at 6 workers took 3.0s (~50 req/s against a
+~10 req/s public limit) and returned **59 HTTP 429s out of 150 — 39% refused**.
+
+Because a different subset failed each run, "top 20 by volume" was really "top
+20 of whichever two thirds answered". A pair could enter the top 20 purely
+because bigger rivals failed to load. `admitted_at()` gates every trade on that
+snapshot, so **trade eligibility was partly determined by which network calls
+happened to succeed** — and it silently polluted the forward record the whole
+project exists to produce.
+
+**Fix, in three parts:**
+1. `_RateLimiter` — process-global minimum spacing at 10 req/s. Deliberately
+   shared, not per-worker: N workers each sleeping 1/N s still burst N at once.
+2. `_get()` retries 429/5xx with exponential backoff, honouring `Retry-After`.
+   Retry matters as much as throttling — without it one 429 silently drops a
+   symbol, and a dropped symbol is indistinguishable from an illiquid one.
+3. **`refresh()` now fails CLOSED below 97% coverage.** It logs loudly and keeps
+   the previous universe rather than recording a plausible wrong one. v0.1 wrote
+   the bad snapshot every time; only a *total* fetch failure aborted.
+
+**Measured before → after:**
+  · coverage 72% → **100%** (387/387, 0 failures, 39s)
+  · 429s 39% → **0**
+  · membership churn between consecutive snapshots 3-5 symbols → **0**
+  · confirmed on three live production snapshots: churn 0, coverage 99.7-100%
+
+**Version bumped to universe-v0.2-draft** (§7). The admission *rules* are
+unchanged — only the completeness of their input — but the outputs differ, so
+reading v0.1 snapshots as if they came from the fixed sweep would be a lie. The
+bump costs almost nothing here: the forward baseline contained exactly 1 setup,
+1 (rejected) risk decision and 1 exec.
+
+**Tests:** `tests/test_universe_coverage.py`, 11 cases, no network. Covers global
+(not per-thread) limiter spacing, 429-retry-then-succeed, 404-never-retried,
+give-up-after-N, the coverage gate accepting/refusing either side of the floor,
+injected rankings bypassing the gate, and the version bump itself. 100 python +
+13 js green.
+
+**Noted, not fixed:** a full scan cycle takes ~250s but scanner liveness is
+judged at 150s, so the UI reports SCANNER DOWN mid-cycle on healthy runs. That
+is a false alarm in the liveness threshold, not a scanner fault.
+
+---
+
+## S30 — Per-trade risk override, honest liveness, and why the setups dried up
+
+**Per-trade risk override.** Operator directive: "if I decide to risk more for
+one particular trade it shouldn't affect any others." That is cleaner than any
+of the three history-handling options I offered — it needs no version bump and
+cannot touch the record. `ticketMath` takes `riskUsdOverride`; the engine keeps
+owning the 2% default. The override resets on every setup load and on symbol
+switch (verified: switching BTC→ETH returned to $200/2.00%). Breaches are coded
+not worded — `RISK_EXCEEDS_TOTAL_BUDGET`, `RISK_EXCEEDS_DAILY_HALT` — so the
+arithmetic stays testable without asserting on prose. 8 new tests, incl. that a
+later trade is unaffected and that `cfg` is never mutated. **Caught by test:** my
+fixture omitted `daily_loss_pct`, so the halt guard silently no-opped behind
+`|| 1`. Fixture now mirrors `/api/trade-config` and is asserted against it.
+
+**Scanner liveness.** The heartbeat was written only AFTER `cycle()` returned,
+so a ~250s pass left a 250s silence against a 150s threshold — healthy runs
+reported SCANNER DOWN. Raising the threshold would only have hidden real hangs.
+Instead the live loop now beats at every stage and the threshold DROPPED to 90s,
+which now genuinely means stuck. First attempt still false-alarmed at 92s: the
+universe stage beat once and then blocked for ~40s inside the throttled ranking
+sweep. Added a `progress` callback through `universe.refresh` → `rank_by_volume`
+(fires every 20 symbols, ~2s apart). Re-measured across a full cycle: worst
+heartbeat age **52s**, never falsely down. The phase is now surfaced in the UI —
+"SCANNER · UNIVERSE 200/387", "· ENGINES BTC-USD".
+
+### The setup drought — diagnosed, and it is structural
+
+6.7 days produced 1 setup. Breakdown of 400 rejections:
+`NO_ELIGIBLE_PLAYBOOK` 358, `UNECONOMIC_AFTER_COSTS` 35, `RR_BELOW_MINIMUM` 7.
+
+Split by whether the timeframe can even survive fees:
+
+| cause | 4H/1D/1W | 15m+1H |
+|---|---|---|
+| TRANSITION regime but no liquidity sweep | 23 | 161 |
+| RANGE regime has no playbook entry at all | 8 | 82 |
+| counter-trend (correctly skipped) | 8 | 74 |
+
+**317 of 358 misses are on 15m/1H — timeframes already proven uneconomic after
+fees.** On timeframes that can actually pay, there were only 41 misses in a week.
+The gates are not the main problem; higher-timeframe zone touches are just rare.
+
+**Three structural ceilings, measured:**
+1. **Only 19 Coinbase USD pairs clear the $3M liquidity floor.** `TOP_N` is 20,
+   so the cap is NOT the binding constraint — the floor is. Rank 20 is already
+   $2.97M, rank 30 is $1.6M. **Widening the universe on spot is impossible.**
+2. **31% of all validated setups are SHORTs (44 of 143), and every one is
+   rejected** — `ALLOW_SHORTS = False` on Coinbase spot. A third of the strategy
+   is dead on arrival at this venue.
+3. RANGE (18% of current symbol-timeframes) has no play at all; TRANSITION (43%)
+   trades only with a sweep. ~61% of market conditions are untradeable by design.
+
+**Conclusion: the throughput ceiling is the VENUE, not the calibration.** Longs
+only, 19 symbols, high timeframes — roughly one setup a week, which cannot
+produce forward evidence in any useful timescale. Phemex perps (operator
+confirmed it works from the US) restores shorts and lifts the liquidity ceiling.
+It should be reprioritised ahead of the settings work; it is the unlock, not a
+later feature. Loosening the sweep requirement is the alternative lever and is
+deliberately NOT taken here — it would be a strategy change made to manufacture
+volume, which is how you fool yourself.
+
+---
+
+## S31 — Phemex perp adapter, and a correction to S30
+
+**CORRECTION.** S30 concluded perps would "lift the liquidity ceiling". Measured
+against the live API, that is **wrong**. At the $3M/24h floor:
+  · Phemex USDT perps above floor: **20**
+  · Coinbase USD spot above floor: **21**
+Phemex is a mid-tier venue and its own turnover is not deeper than Coinbase's at
+the top of the book. The union is **27 symbols** (14 overlap), so adding it is a
+~29% widening, not a transformation. The real and still-decisive unlock is
+**shorts**: 31% of all validated setups (44 of 143) are currently rejected
+outright by `ALLOW_SHORTS = False`. Stated plainly so the reasoning does not
+outlive the evidence.
+
+  phemex-only above floor: AVAX BNB DEXE ENA 1000PEPE 1000SHIB
+  coinbase-only above floor: ACH COTI HYPE PUMP UNI VVV ZEC
+
+**Built `engine/phemex.py`** — public market data only. Endpoint contract
+verified live 2026-07-29; the v1 kline paths and the v2 `limit` form both return
+HTTP 400, and `/exchange/public/md/v2/kline/list?symbol&resolution&from&to` is
+the one that works. Same throttle/retry design as universe-v0.2 (process-global
+limiter, backoff on 429/5xx).
+
+**Measured live:**
+  · 466 USDT perps listed, ranking coverage 466/466 with **no fan-out** — one
+    ticker call covers every symbol, so the partial-coverage failure mode that
+    broke Coinbase ranking cannot occur here by construction.
+  · BTCUSDT 1D: **399 candles** (history gate needs 200), zero duplicate
+    open_ts, strictly ascending.
+  · 4H served **natively** — Coinbase forces aggregation, Phemex does not.
+  · Funding rate available per symbol (BTCUSDT 1.314e-05) — a real holding cost
+    on perps that belongs in the cost model, not a footnote.
+  · Cross-venue sanity: BTC last close 63,899.5 (Phemex) vs 63,847.1 (Coinbase),
+    0.08% apart — normal basis, and good evidence both feeds are sane.
+
+**Row layout trap, covered by test:** rows are
+`[ts, resolution, lastClose, open, high, low, close, volume]`. Element 2 is the
+PREVIOUS close, not this bar's open. Reading it as the open shifts every candle
+by one bar — silently, and in a way that would corrupt every structure fact
+downstream.
+
+**13 tests, no network.** Includes: USDC-settled and delisted contracts
+excluded; unlisted ticker symbols never ranked; forming candle never returned;
+dedupe + ascending; the field mapping above; a no-forward-progress guard so a
+misbehaving venue cannot spin the fetch loop; and a source-level assertion that
+the module contains no key/secret/hmac/signature/order strings — market data
+only, credentials stay the operator's and live stays locked.
+
+113 python + 21 js green.
+
+**Still to wire:** venue seam proper — `ALLOW_SHORTS` must become venue-derived
+rather than a global False, cost profile per venue including funding, and the
+universe/importer paths parameterised by venue. That is the remaining Phase 4
+work and it touches the risk authority, so it needs its own version bump.
+
+---
+
+## S32 — Venue seam: shorts unlocked, and the fee finding that dwarfs it
+
+**Built `engine/venues.py`** — the single place that knows what a market ALLOWS.
+Venue is derived from the symbol string (`BTC-USD` -> coinbase spot, `BTCUSDT` ->
+phemex perp), so no schema change was needed. An unrecognised symbol RAISES
+rather than defaulting, because guessing a venue means guessing whether shorting
+is allowed; `risk.py`'s wrappers then fall back to the SPOT answer (refuse the
+short, 1x) so an unknown symbol is never assumed shortable.
+
+**risk-v0.7-draft.** `ALLOW_SHORTS` and `MAX_LEVERAGE` are no longer process
+constants. Sizing rules (2%/4%/6%) are untouched, but SHORT setups on a
+shorts-capable venue now reach sizing instead of being rejected outright, so
+decisions differ — hence the bump. The `venue_contract` in the account fact is
+now a list of what each venue allows rather than one hard-coded Coinbase claim.
+
+**Liquidation gate** ported. On a leveraged perp the exchange can close a
+position before the stop is hit, at a loss LARGER than the one risked — which
+makes the stop decorative and every downstream R-multiple fiction. Modelled with
+a 0.5% maintenance allowance so liquidation sits NEARER than the naive
+1/leverage estimate; the failure to avoid is believing a stop is safe when it is
+not. Verified at 10x long from 100 (liquidation 90.50): stops at 96 and 92
+allowed, 90 and 85 rejected.
+
+**Funding** is charged per settlement (3/day on Phemex), not once. A perp held
+three days pays 0.09% of notional at a 0.01% rate; spot pays zero.
+
+### The fee finding — larger than the shorts unlock
+
+Perp round-trip fees are **0.07% of notional against 1.00% on spot, 14x cheaper**.
+Run through the actual ticket maths, holding gross R:R at 3.00:
+
+| stop distance | gross | net SPOT | net PERP |
+|---|---|---|---|
+| 0.1% (tight intraday) | 3.00 | **-7.00** | **+2.30** |
+| 0.3% | 3.00 | -0.33 | +2.77 |
+| 1% | 3.00 | +2.00 | +2.93 |
+| 3% (swing) | 3.00 | +2.67 | +2.98 |
+
+A tight intraday trade loses **seven times what it risks** on spot and makes
+2.30R on perps. This reframes S30's drought diagnosis: **317 of 358
+`NO_ELIGIBLE_PLAYBOOK` misses were on 15m/1H**, timeframes written off as
+uneconomic — and they were uneconomic *at spot fees*. Plus the 35 explicit
+`UNECONOMIC_AFTER_COSTS` rejections. So perps plausibly lift throughput by close
+to an order of magnitude, not the 29% symbol-widening I estimated in S31, and
+not primarily via shorts either. Both earlier estimates were too pessimistic for
+the same reason: I reasoned about symbol counts instead of cost structure.
+
+`/api/trade-config` now takes `?symbol=` and answers per venue; `chart.js`
+re-reads it on every symbol load. Showing spot fees on a perp chart would flip
+the sign of the net-R decision, so this is correctness, not polish. Unknown
+symbols fall back to the COSTLIER venue.
+
+**134 python + 21 js green** (21 new venue tests: resolution, unknown-symbol
+raising, conservative fallbacks, liquidation both directions, funding accrual,
+and that the declared perp cap stays <= 10x against the venue's own 100x).
+
+**Not yet done in Phase 4:** nothing ingests Phemex candles into the store yet —
+`universe.py` still ranks only Coinbase and `importer.py` still only fetches it.
+The adapter and the capability model are in place; the ingest path is next.
+
+---
+
+## S33 — Phemex ingest wired end to end (importer-v0.3, universe-v0.3)
+
+**importer-v0.3.** The fetch is routed by `venues.venue_for(symbol)`, and the
+`source` column now records WHICH venue served the bar. It was hard-coded
+`"coinbase"` — which would have labelled Phemex perp candles as spot data, and
+the quality audit's known-venue-gap allowances are keyed on source, so the
+mislabel would have applied Coinbase's gap rules to a venue that has none.
+`_fetch_rows()` normalises both shapes (Coinbase returns
+`[t, low, high, open, close, vol]` positionally, Phemex returns dicts) so the
+OHLC integrity check and the storage path stay venue-agnostic — two copies of
+that validation is exactly the duplication that drifts apart.
+
+**Deliberate non-optimisation:** Phemex *can* serve 4H natively and Coinbase
+cannot, but `native_tfs()` returns the same set for both and the aggregator
+builds 4H everywhere. A natively-fetched 4H would occupy the same
+`(symbol, tf, open_ts)` row the aggregator writes — two writers for one bucket,
+which is how they disagree at a gap and the audit reports a conflict it cannot
+explain. One saved request is not worth a second write path.
+
+**Live ingest verified** into a scratch DB: `BTCUSDT` 1D, **300 candles, 0 gaps,
+0 malformed**, `source='phemex-perp'`, first 2025-10-02 last 2026-07-28. The 1H
+-> 4H aggregation then ran on the same perp symbol: 59 candles, all
+`source='agg:1H'`, no duplicate writer.
+
+**universe-v0.3** ranks across venues via `rank_all_venues()`, deduped by
+underlying asset with the **perp preferred** where a coin trades on both. That
+is not taste: 0.07% vs 1.00% round-trip flips the same 3.00-gross trade from
+-7.00R to +2.30R, so routing an overlapping asset to spot would knowingly pick
+the version that loses money. Spot-only coins are kept — they have no perp.
+`ENABLE_PERPS = False` restores exact v0.2 behaviour. A perp-ranking failure
+degrades to spot-only with a loud warning rather than emptying the universe.
+
+**Bug caught before shipping:** the SEED block re-added `BTC-USD`/`ETH-USD`
+unconditionally. With perps preferred, `BTCUSDT` already represents BTC, so the
+seed would have put the SAME UNDERLYING in the universe twice — two positions on
+one coin, each counted separately against `MAX_CONCURRENT=2`. That is double
+exposure the risk envelope never agreed to. SEED now skips any base asset
+already present.
+
+**Merged top-20 measured live: 20 perp, 0 spot** — Phemex turnover exceeds
+Coinbase's on every overlapping coin. 21 pairs clear the $3M floor, same count
+as spot-only, but they are now the cheaper, shortable versions.
+
+138 python + 21 js green.
+
+**Operational consequence the operator must decide on:** every admitted symbol
+is now a perp the store has no history for, so all of them enter WARMING and
+need a 200+ daily-candle backfill from Phemex. The existing Coinbase history is
+not deleted (append-only) but stops being the traded set. This is a real change
+of what the forward record measures and should not be started silently.
+
+---
+
+## S34 — Perps live: 87 setups in one cycle, and two bugs the switch exposed
+
+Operator approved switching the traded universe to perps. Executed: universe
+refreshed across venues, all 20 admitted symbols onboarded from Phemex.
+
+**Bug 1 — the listing-date gap (silent, and it hit the timeframe that matters).**
+`DEXEUSDT` onboarded with **1D=0** while 1H=4320 and 15m=2880. Cause:
+`ingest.DAILY_SINCE` is 2022-01-01 and `phemex.fetch_candles` did `if not rows:
+break`. DEXE listed 2024-12-25, so the FIRST 1000-day window came back empty and
+the loop aborted before ever reaching the data. Any symbol listed after the
+first window silently got zero daily candles — and daily is exactly what the
+history gate counts, so those symbols would sit in WARMING forever, never
+admitted, with no error anywhere. An empty window means "nothing listed yet in
+this range", not "no data": the loop now skips the span and keeps looking,
+bounded by the range width so a fully-empty symbol still terminates. DEXEUSDT
+now backfills **582 daily candles from 2024-12-25**. Two tests added.
+
+**Bug 2 — one symbol's 429 killed the whole cycle.** `live cycle failed: HTTP
+Error 429` aborted the entire scan; every other symbol went unimported because
+one call failed. Two causes, both fixed:
+  · The rate limiter is process-global but NOT machine-global, and the scanner
+    and API server both hit Phemex. Two processes at 10/s each produced
+    sustained 429s that outlasted the retries. Phemex is now 5/s with 5 retries
+    and a 1s base backoff, leaving headroom for both processes.
+  · The import loop is now per-symbol fault-tolerant: a venue error skips that
+    symbol with a warning and the cycle continues. The next cycle retries it and
+    any resulting gap is recorded honestly either way.
+The same loop also stopped hard-coding `source='coinbase'` in its
+last-candle query (it now excludes `agg:%`), which would have re-imported every
+perp symbol's whole history on every single cycle.
+
+**Result, measured:**
+  · clean cycle: `330 new candles, 87 new setups (103.2s)` — against **1 setup
+    in 6.7 days** on spot. The cycle is also ~2.5x faster than the old 250s.
+  · zero errors, zero skipped imports across the monitored run
+  · scanner never falsely reported down; phase visible throughout
+    (`universe 300/388` -> `import ETHUSDT (2/20)` -> `engines DOGEUSDT (9/20)`)
+  · 20 perps admitted, 0 warming, all with >=200 daily candles
+
+**Setup population now on the store:** perp 142 LONG / 7 SHORT, spot 106 LONG /
+49 SHORT (spot figures are historical Coinbase data, retained not deleted).
+
+**Correctly zero risk decisions so far.** Every one of those 87 setups confirmed
+BEFORE the baseline reset at 2026-07-29 12:58, so none are eligible for the
+forward record — the engines were processing four years of newly-imported perp
+history. The forward record starts accumulating from the next live setup. The
+shorts capability is proven by test and by direct check (`BTCUSDT -> SHORT
+reaches sizing`), NOT yet by a recorded live decision; `SHORT_UNSUPPORTED = 0`
+in the store means "no decisions yet", not "shorts are passing".
+
+140 python + 21 js green.
+
+---
+
+## S35 — Notification discipline: the alerts were never trades
+
+Operator report: non-stop notifications. Measured the store before touching
+anything. Real VALIDATED setups over the preceding ten days: **4, 1, 2, 0, 0, 1,
+0, 0, 1, 0** — about one a day. The scanner was not the noise source.
+
+**Bug 1 — history announced as live.** `cycle()` collected every setup fact with
+`id > before` and announced it. Row-newness is not event-newness: onboarding a
+symbol backfills years of candles, the engines re-derive every setup those years
+contained, and all of them arrive as brand-new rows. That is the "87 setups in
+one cycle" from S34, and it was still running — the last twelve setup facts
+written were dated 2025-01-22, 2025-02-25, 2025-03-10, 2026-04-03, 2026-04-28.
+
+Two gates now, both already the house rule elsewhere: `confirmed_at >=`
+baseline start (the same filter every `/api` surface uses to decide visibility),
+and at most `ANNOUNCE_MAX_BARS = 2` late *in the setup's own timeframe*, so a
+3-hour-old 15m signal is history while a 3-hour-old 1D signal is fresh. What is
+filtered is logged with counts — suppression must never be silent, or the
+operator cannot tell a quiet market from a swallowed notifier.
+
+**Bug 2 — drift measured the importer, not the market.** `check_drift` compared
+live price against the last stored 15m close with no staleness check. When
+imports lag, the reference ages, a normal multi-day move reads as a violent
+intracandle spike, and since the dedupe only spaces alerts one per 15m bucket it
+re-fires every fifteen minutes indefinitely. Measured 07-26..29: **139 alerts,
+over half from two symbols** — COTI-USD and EUL-USD, whose reference closes were
+**2.8 and 3.5 days old**. `drift-v0.2-draft` mutes any symbol whose reference bar
+closed more than `DRIFT_MAX_REF_AGE_BARS = 2` bars ago, logs the mute once per
+bucket (a fix that trades an alert flood for a log flood is not a fix), and
+records `ref_age_s` on every alert fact.
+
+**Bug 3 — found while fixing 2: drift was 100% blind and merely noisy about it.**
+`live._spot()` and `marketdata.fetch_tickers()` both hard-coded the Coinbase
+ticker endpoint. Correct while the universe was spot; wrong the moment S34 made
+the traded set Phemex perps. `BTCUSDT` is not a Coinbase product, so every
+request 404'd: twenty warnings a minute in `engine.log`, zero drift coverage on
+the entire traded universe, and `/api/ticker` reporting DEGRADED for everything.
+Which is also why 100% of the spam came from leftover *spot* symbols — the perps
+threw before they could alert.
+
+`marketdata` is now venue-routed. Perps use a new `phemex.last_prices()`: one
+batched `/md/v2/ticker/24hr/all` call for every symbol rather than one request
+each, reading `closeRp` (last **traded** price — `markPriceRp` is an
+index-anchored fair value and comparing it against a traded close would report
+drift that never happened). A symbol the venue cannot price is absent from the
+mapping, never defaulted to zero.
+
+**Verified live:** 20/20 universe prices resolved (was 0/20), one dry cycle
+produced 0 alerts and 0 log lines.
+
+**Not changed — deliberately.** `ANNOUNCE_STATES` still includes FORMING, and the
+announce path still does not consult the risk authority's verdict, so a setup
+`risk.run()` rejected thirty lines earlier in the same cycle can still toast.
+Both are operator policy, not engine correctness; they are now single constants
+rather than inline literals so either is a one-line change once the operator
+decides.
+
+**Also measured while in here — the gate that actually matters:** of 8,102
+candidates rejected at the strategy gate, **7,149 (88%) are
+`NO_ELIGIBLE_PLAYBOOK`** — price touched a real zone but no playbook covers that
+regime. That is not a threshold to tune, it is the absence of a second strategy.
+
+164 python + 21 js green (17 new). The 9 failures in `test_cockpit_diagnostics`,
+`test_default_cockpit_route` and `TestCockpitHierarchy` are pre-existing:
+`static/index.html` is staged for deletion in the working tree while `server.py`
+still serves it at `/legacy`. Untouched here, but it needs resolving.
+
+---
+
+## S35 — Phases 3, 5 and 6: settings, guardrails, and /legacy retired
+
+### Phase 3 — operator settings (`engine/settings.py`)
+
+The tension: the system is built on versioned deterministic behaviour, but the
+operator wants to change things without editing code. Those coexist only if a
+change is RECORDED and its cost is stated. Three classes:
+
+  · **BEHAVIOURAL** (perps on/off, top_n, liquidity floor, strategy toggles) —
+    changes what the engines produce. Automatically **starts a new baseline**,
+    because a record spanning two configurations cannot say which one produced
+    which result. Nothing is deleted.
+  · **OPERATIONAL** (halt, drawdown limit, data-health gate) — changes WHEN
+    trading stops, not what counts as a valid trade. Audited, **never** resets
+    the baseline.
+  · PREFERENCE — per-trade risk override, which lives in the ticket.
+
+**Bug caught by building it:** `halted` was first classed BEHAVIOURAL, so the
+first halt started a new forward window. A safety control that destroys the
+evidence it protects punishes exactly the caution it exists to allow.
+Reclassified, with the reasoning in the code and a test that pins it.
+
+Settings are wired through, not decorative: `universe.refresh` reads top_n /
+min_volume / enable_perps once per refresh (once, so a mid-refresh edit cannot
+classify half the universe under each config), and `risk.run` reads the halt and
+strategy toggles once per run.
+
+**Credentials (`engine/credentials.py`)** — Windows DPAPI, encrypted to the
+operator's own account. `keyring` is not installed here; pywin32 is, so DPAPI is
+used directly. Verified: the plaintext does NOT appear in the vault file. No
+route can read a secret back — `status()` returns booleans, and a test parses
+`server.py`'s AST to assert no handler ever CALLS `read_secret` (a substring
+match failed on the docstring that documents the rule). Vault is gitignored.
+Claude never enters or transports keys; a stored key does not unlock live
+trading, which is a separate gate and still closed.
+
+### Phase 5 — guardrails
+
+**The total-drawdown halt did not exist.** `risk.py` had a DAILY loss halt and
+an open-risk cap, but nothing catching a slow bleed: a run of small losses can
+drain the account without any single day breaching -6%. Added: peak-equity
+tracking, a `DRAWDOWN_HALT` fact, and rejection of later entries with the
+breach in the reason. Default 20% from peak.
+
+**Data-health halt** — new entries are refused while the pipeline audit reports
+BLOCKED. Trading on data known to be broken produces a record attributable to
+the corruption as much as to the strategy. Fails OPEN if the gate itself errors,
+so a broken check cannot wedge trading.
+
+Driven to a real halt in test: eight stop-outs on eight separate days, none
+breaching the daily limit, cumulatively -15% against a 5% cap — halt fires and
+subsequent entries carry `DRAWDOWN_HALT` in their reasons. **Two fixture bugs
+found on the way**, both mine: `risk.run` scopes to symbols that have CANDLES
+(none inserted), and facts must post-date the baseline (mine used epoch-relative
+stamps). The same scoping that correctly excluded the 87 imported perp setups.
+
+An always-visible **HALT** sits in the topbar on every surface; the whole shell
+restates the state when engaged.
+
+### Phase 6 — /legacy retired
+
+Every surface it uniquely served now has a replacement: chart + ticket (CHART),
+equity curve and per-symbol/strategy breakdown (RESULTS), setup telemetry beside
+the rejection funnel (DIAGNOSTICS — the operator's "one place for debugging").
+Route removed and `static/index.html` deleted rather than left dark: a second UI
+over the same facts is a second place for them to disagree, which is exactly how
+two equity numbers diverged on 2026-07-26.
+
+Three test files asserted against the deleted file. **Retargeted rather than
+deleted** — the properties still matter: equity/halt/scanner state must be
+persistent chrome outside any surface (asserted by index position, before
+`<main class="stage">`), diagnostics must expose verdict + funnel + telemetry
+together, and no page may embed the app in itself.
+
+Curve and breakdown render honestly on an empty window — "no closed trades in
+this window yet" rather than a flat line implying data.
+
+**163 python + 21 js green.** Zero console errors. `/legacy` returns 404.
+
+---
+
+## S36 — Clean baseline, and 108 warnings that were crying wolf
+
+**Baseline #5 "Forward paper baseline"** started 2026-07-30 02:30 UTC under
+setup-v0.6 / risk-v0.7, replacing the stale `config change: halted` label left
+behind while `halted` was briefly misclassified. Non-destructive as always.
+
+**The 199 warnings, diagnosed.** 108 `STALE_SERIES`, and every one was on a
+retired Coinbase spot symbol — **zero on a live perp**. Switching the traded
+universe to perps meant those series correctly stopped updating, and the audit
+kept reporting them forever.
+
+That is not a cosmetic problem. 108 permanent warnings bury the ONE series that
+goes quiet while it still matters — the same cry-wolf failure as the 1,364
+blockers that wedged the scanner for days. Staleness is only meaningful for a
+symbol still in the scan universe: a symbol deliberately dropped has RETIRED
+data, not stale data. The check is now scoped to `universe.current_symbols`, and
+**fails OPEN** — if the universe cannot be read it warns rather than silently
+suppressing.
+
+**Bug found while fixing it, worse than the original.** My first pass cached the
+live-symbol set in a module global with a 30s TTL. That cache is keyed on
+nothing, so it is shared across CONNECTIONS — an audit of one database would
+suppress warnings in another. It surfaced as an unrelated test failing, because
+a previous test's cache leaked into it. Removed; the set is computed once per
+audit and passed down. A test now asserts `_LIVE_CACHE` does not exist.
+
+**Measured after:** warnings **199 -> 91**, all explained:
+  · `KNOWN_VENUE_GAPS` x90 — venue-acknowledged empty buckets, already a
+    documented SERVE_FLAG degradation, not corruption
+  · `UNATTRIBUTED_LEGACY_FACTS` x1 — pre-baseline history
+  · `STALE_SERIES` **x0**
+Blockers 0, evaluation allowed.
+
+183 python + 21 js green.
