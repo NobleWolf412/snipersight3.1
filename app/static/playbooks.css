@@ -1,0 +1,118 @@
+/* Playbook catalogue — the surface that answers "what strategies exist, how do
+   they work, and are they actually working?"
+
+   Lives in its own file rather than ss.css so the design system stays one
+   authority and this module can be removed without leaving orphans behind.
+   Every colour, radius and spacing value below is a token from ss.css; nothing
+   here invents a new one.
+
+   One rule from docs/DESIGN-SYSTEM.md is load-bearing here and worth naming:
+   GLOW IS STATE. var(--accent) and its halo mean "this surface is participating
+   in the current operating state" — a live, actionable signal. A strategy card
+   is a reference document, not a signal, so no card glows and no card carries
+   .panel-accent. The only accent in this file is the keyboard focus ring, which
+   is the shell's existing focus treatment. */
+
+/* ---------- header ---------- */
+.pb-head{display:flex;align-items:baseline;gap:var(--md);flex-wrap:wrap;
+  margin-bottom:var(--md)}
+.pb-head .pb-counts{margin-left:auto;display:flex;gap:6px;align-items:center}
+.pb-sub{font-family:var(--f-body);font-size:13px;line-height:1.55;
+  color:var(--fg-3);max-width:78ch;margin-bottom:var(--md)}
+
+/* ---------- card grid ----------
+   auto-fill rather than a fixed column count: the catalogue grows by one card
+   every time a playbook is planned, and a hard-coded cols-3 would strand the
+   last card in a half-empty row at some widths. */
+.pb-grid{display:grid;gap:var(--md);
+  grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+
+.pb-card{display:flex;flex-direction:column}
+.pb-card>.panel-head{gap:var(--sm)}
+.pb-card>.panel-body{display:flex;flex-direction:column;gap:var(--md);flex:1}
+.pb-name{font-family:var(--f-display);font-size:15px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--fg)}
+.pb-lede{font-family:var(--f-body);font-size:13px;line-height:1.55;color:var(--fg-2)}
+
+/* ---------- the five labels ----------
+   Identical on every card, in the same order, so two strategies can be compared
+   by reading down a column instead of reading two paragraphs. */
+.pb-rules{display:grid;gap:10px}
+.pb-rule{display:grid;grid-template-columns:88px minmax(0,1fr);gap:var(--md);
+  align-items:start}
+.pb-rule dt{font-family:var(--f-mono);font-size:10px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--fg-4);padding-top:2px}
+.pb-rule dd{font-family:var(--f-body);font-size:12.5px;line-height:1.5;
+  color:var(--fg-3)}
+/* narrow cards stack the label above its rule rather than squeezing prose into
+   a 120px column, which is where this layout would otherwise break first */
+@media(max-width:560px){
+  .pb-rule{grid-template-columns:minmax(0,1fr);gap:2px}
+}
+.pb-tfs{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.pb-note{font-family:var(--f-body);font-size:12px;line-height:1.5;
+  color:var(--fg-4);border-top:1px dotted var(--border-soft);padding-top:10px}
+
+/* ---------- the record ----------
+   margin-top:auto pins it to the bottom edge of every card regardless of how
+   much prose sits above it, so the records line up across a row and can be
+   scanned without reading anything else. */
+.pb-record{margin-top:auto;border-top:1px solid var(--border-soft);
+  padding-top:var(--md);display:flex;align-items:baseline;gap:var(--sm);
+  flex-wrap:wrap;font-family:var(--f-mono);font-size:11.5px;
+  font-variant-numeric:tabular-nums;color:var(--fg-3)}
+.pb-record .pb-k{font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--fg-4)}
+.pb-record b{color:var(--fg);font-weight:600}
+.pb-record .pb-sep{color:var(--fg-4)}
+/* Colour carries the sign, and only the sign. A losing playbook reads red on
+   its own card: the catalogue is not allowed to flatter itself. */
+.pb-record.up .pb-r{color:var(--green)}
+.pb-record.down .pb-r{color:var(--red)}
+.pb-record.flat .pb-r{color:var(--fg-3)}
+.pb-record.empty{color:var(--fg-4);display:block;line-height:1.6}
+
+/* ---------- planned cards ----------
+   Subdued but READABLE. The dashed border is the shell's existing "not built
+   yet" idiom (.stub in ss.css); opacity is deliberately not used, because a
+   planned card still has to be legible enough to explain why it is planned. */
+.pb-card.planned{border-style:dashed;
+  background:linear-gradient(135deg,rgba(0,0,0,.45),oklch(0.22 0.010 125 / .30))}
+.pb-card.planned .pb-name{color:var(--fg-3)}
+.pb-card.planned .pb-lede{color:var(--fg-3)}
+.pb-card.planned .pb-rule dd{color:var(--fg-4)}
+/* The gap box is the whole point of a planned card: it turns a roadmap item
+   into a measured explanation of what the scanner is currently walking past. */
+.pb-gap{margin-top:auto;border:1px solid rgba(255,194,102,.3);
+  background:rgba(255,194,102,.07);border-radius:var(--r-md);padding:10px 12px;
+  font-family:var(--f-mono);font-size:11px;line-height:1.6;color:var(--amber)}
+.pb-gap em{display:block;font-style:normal;font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--fg-4);margin-bottom:4px}
+
+/* ---------- enable toggle ---------- */
+.pb-toggle{margin-left:auto;flex:none;cursor:pointer;display:inline-flex;
+  align-items:center;gap:6px;padding:3px 10px;border-radius:var(--r-pill);
+  border:1px solid var(--border);background:rgba(255,255,255,.03);
+  color:var(--fg-4);font-family:var(--f-mono);font-size:10px;font-weight:600;
+  letter-spacing:.18em;text-transform:uppercase;
+  transition:color .15s,border-color .15s,background .15s}
+.pb-toggle::before{content:'';width:6px;height:6px;border-radius:50%;
+  background:currentColor;flex:none}
+.pb-toggle.on{color:var(--green);border-color:rgba(0,255,170,.35);
+  background:rgba(0,255,170,.10)}
+.pb-toggle:hover{border-color:var(--fg-3);color:var(--fg-2)}
+.pb-toggle.on:hover{border-color:var(--green);color:var(--green)}
+.pb-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pb-toggle:disabled{cursor:progress;opacity:.55}
+
+/* the confirmation step reuses .tk-warn / .tk-verdict from ss.css so this
+   warning looks identical to the one the settings panel already shows */
+.pb-actions{display:flex;gap:var(--sm)}
+.pb-actions .btn{flex:1}
+
+/* ---------- footnote ----------
+   Names the window the record covers and the corpus the gap percentages were
+   counted on. Without it the numbers are assertions rather than measurements. */
+.pb-foot{margin-top:var(--md);font-family:var(--f-mono);font-size:10px;
+  line-height:1.8;letter-spacing:.06em;color:var(--fg-4)}
+.pb-foot b{color:var(--fg-3);font-weight:600}

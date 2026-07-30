@@ -23,7 +23,32 @@ from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.7-draft"
+RISK_VERSION = "risk-v0.15-draft"
+# v0.13: cascade from exec-v0.14. The account replay is built from exec facts,
+# and exec-v0.14 corrects a crossing leg that booked market fills at a price the
+# bar never traded. Every equity figure downstream of those fills changes, so
+# this tag moves with them rather than covering two generations of the book.
+# v0.12: reads setup-v0.11 / exec-v0.13.
+
+# v0.11: reads exec-v0.12, which now charges funding. Net R per trade moves,
+# so equity and every sizing decision downstream of it moves.
+
+# v0.10: reads setup-v0.10 / exec-v0.11. Sizing rules unchanged, but the math
+# now lives in the pure `size_order` helper this module still owns (plan
+# Phase C ruling, option A) and setups.py calls it at arming time.
+
+# v0.9: sizing rules unchanged. Reads setup-v0.9 / exec-v0.10, plus the new
+# participation cap (D4). Different intents and a new constraint -> different
+# decisions.
+
+# v0.8: no sizing rule changed. Its INPUTS did — this engine reads setup facts
+# at SETUP_VERSION and exec facts at EXEC_VERSION, and S40 moved both
+# (setup-v0.8, exec-v0.9) after the tick fix reclassified regimes on 35 of 59
+# symbols. Different intents, different exits, different decisions. Leaving the
+# tag at v0.7 would have written a second incompatible book under a label that
+# already means something — the exact S37 defect, which this project has now
+# committed twice and should stop committing.
+
 # v0.7: shorting, leverage and the liquidation gate are venue-derived. Sizing
 # rules (2%/4%/6%) are unchanged, but SHORT setups on a shorts-capable venue now
 # reach sizing instead of being rejected outright, so decisions differ.
@@ -52,6 +77,17 @@ MAX_TOTAL_OPEN_RISK_PCT = Decimal("0.04")   # 4% of equity at risk at once
 MAX_LEVERAGE = Decimal("1")              # spot default; see venues.max_leverage
 ALLOW_SHORTS = False                     # spot default; see venues.allow_shorts
 MIN_NOTIONAL_USD = Decimal("1")
+# D4 — participation cap (SALVAGE §3.6). `universe.py` gates which SYMBOLS are
+# liquid enough to trade; nothing gated whether a given POSITION is too large
+# for the book it has to fill in. Those are different questions: a $3M/day pair
+# clears the universe floor and still cannot absorb a position sized off a very
+# tight stop without moving against you on both legs.
+#
+# Expressed as a share of the symbol's own 24h volume, which the universe fact
+# already records — so this reads a number the system owns rather than inventing
+# a second liquidity model. Inert in paper (no fills to move), which is exactly
+# why it must exist BEFORE live: it is a constraint the simulator cannot teach.
+MAX_PARTICIPATION = Decimal("0.005")          # 0.5% of 24h volume
 DAILY_LOSS_LIMIT_PCT = Decimal("0.06")      # realized -6% in a UTC day -> halt
 MIN_REDUCED_FRACTION = Decimal("0.25")      # reduce below 25% of intended -> reject
 QC = Decimal("0.01")
@@ -75,6 +111,100 @@ def _venue_max_leverage(symbol: str) -> Decimal:
         return venues.max_leverage(symbol)
     except ValueError:
         return MAX_LEVERAGE
+
+
+def size_order(*, equity, entry, sl, direction, symbol, risk_pct=None,
+               open_risk=Decimal(0), vol24=None, is_add=False) -> dict:
+    """PURE sizing. No I/O, no facts, no clock — equity and a bracket in, a
+    decision out.
+
+    Extracted per the `forming-armed-order-plan` Phase C ruling (option A):
+    §9 says the risk authority owns sizing, and it still does — this module owns
+    the code. What changes is that `setups.py` can now CALL it at the moment a
+    setup is armed, instead of the size being computed later at execution time.
+    That is the whole point of the armed order: the thing that gets executed is
+    the thing that was decided, provably, rather than something recomputed under
+    different conditions and hoped to match.
+
+    Everything the portfolio pass knows that this cannot — the kill switch, the
+    concurrency count, cooldowns, point-in-time universe eligibility — stays in
+    `run()`. Those are properties of the ACCOUNT at a moment; this is a property
+    of one order. Mixing them here would make sizing untestable and would let a
+    FORMING fact claim an approval the portfolio never granted.
+    """
+    reasons: list = []
+    decision = "APPROVED"
+    pct = risk_pct if risk_pct is not None else (SCALE_RISK_PCT if is_add else RISK_PCT)
+    intended = (equity * pct).quantize(QC)
+    risk_usd = intended
+    stop_dist = abs(entry - sl)
+    if stop_dist <= 0:
+        return {"decision": "REJECTED", "reasons": ["INVALID_STOP_DISTANCE"],
+                "risk_usd": Decimal(0), "units": Decimal(0),
+                "notional_usd": Decimal(0), "implied_leverage": Decimal(0),
+                "intended_risk_usd": str(intended)}
+
+    budget = (MAX_TOTAL_OPEN_RISK_PCT * equity - open_risk).quantize(QC)
+    if budget < intended:
+        if budget < intended * MIN_REDUCED_FRACTION:
+            return {"decision": "REJECTED", "reasons": ["EXPOSURE_LIMIT"],
+                    "risk_usd": Decimal(0), "units": Decimal(0),
+                    "notional_usd": Decimal(0), "implied_leverage": Decimal(0),
+                    "intended_risk_usd": str(intended)}
+        decision, reasons = "REDUCED", ["EXPOSURE_LIMIT"]
+        risk_usd = budget
+
+    venue_lev = _venue_max_leverage(symbol)
+    units = risk_usd / stop_dist
+    notional = units * entry
+    lev = notional / equity if equity > 0 else Decimal(0)
+    if lev > venue_lev:
+        risk_usd = (risk_usd * (venue_lev / lev)).quantize(QC)
+        units = risk_usd / stop_dist
+        notional = units * entry
+        lev = venue_lev
+        if decision == "APPROVED":
+            decision = "REDUCED"
+        reasons.append(f"LEVERAGE_CAP({venue_lev}x)")
+
+    ok, liq = venues.stop_survives_liquidation(entry, sl, lev, direction)
+    if not ok:
+        return {"decision": "REJECTED",
+                "reasons": [f"STOP_BEYOND_LIQUIDATION({liq.quantize(QC)}"
+                            f"@{lev.quantize(QC)}x)"],
+                "risk_usd": Decimal(0), "units": Decimal(0),
+                "notional_usd": Decimal(0), "implied_leverage": Decimal(0),
+                "intended_risk_usd": str(intended)}
+
+    if units * entry < MIN_NOTIONAL_USD:
+        return {"decision": "REJECTED", "reasons": ["BELOW_MIN_NOTIONAL"],
+                "risk_usd": Decimal(0), "units": Decimal(0),
+                "notional_usd": Decimal(0), "implied_leverage": Decimal(0),
+                "intended_risk_usd": str(intended)}
+
+    if vol24:
+        cap = MAX_PARTICIPATION * Decimal(str(vol24))
+        if notional > cap > 0:
+            risk_usd = (risk_usd * cap / notional).quantize(QC)
+            units = risk_usd / stop_dist
+            notional = units * entry
+            lev = notional / equity if equity > 0 else Decimal(0)
+            if decision == "APPROVED":
+                decision = "REDUCED"
+            reasons.append(
+                f"PARTICIPATION_CAP({float(MAX_PARTICIPATION)*100:.1f}%_of_24h)")
+            if risk_usd < intended * MIN_REDUCED_FRACTION:
+                return {"decision": "REJECTED", "reasons": ["PARTICIPATION_TOO_THIN"],
+                        "risk_usd": Decimal(0), "units": Decimal(0),
+                        "notional_usd": Decimal(0), "implied_leverage": Decimal(0),
+                        "intended_risk_usd": str(intended)}
+
+    return {"decision": decision, "reasons": reasons or ["WITHIN_LIMITS"],
+            "risk_usd": risk_usd,
+            "units": units.quantize(Decimal("0.00000001")),
+            "notional_usd": notional.quantize(QC),
+            "implied_leverage": lev.quantize(QC),
+            "intended_risk_usd": str(intended)}
 
 
 def _symbols(con):
@@ -195,6 +325,27 @@ def run(con) -> dict:
         # because refusing to close a position is not a safety feature.
         from . import settings as _settings
         opcfg = _settings.all_settings(con)
+        # Cooldowns are loaded ONCE and evaluated in memory. `active_at` runs a
+        # query; calling it per intent inside the loop below would issue two
+        # round-trips per candidate across hundreds of intents, on the hot path
+        # of every scan cycle.
+        from . import cooldowns as _cooldowns
+        _cd_facts = _cooldowns.load(con, baseline_start=baseline_start)
+        # 24h volume per symbol, read from the latest universe fact. One
+        # authority: `universe.py` already measures this to decide admission,
+        # and re-deriving it here would give two numbers that drift.
+        _vol24: dict = {}
+        try:
+            from .universe import UNIVERSE_VERSION
+            _row = con.execute(
+                "SELECT payload FROM facts WHERE kind='universe' AND algo_version=? "
+                "ORDER BY id DESC LIMIT 1", (UNIVERSE_VERSION,)).fetchone()
+            if _row:
+                for _m in json.loads(_row[0])["members"]:
+                    if _m.get("vol_usd"):
+                        _vol24[_m["symbol"]] = _m["vol_usd"]
+        except Exception:
+            _vol24 = {}          # no universe fact yet -> cap simply inert
         # Data-health gate. Trading on data the audit says is BROKEN produces a
         # forward record that proves nothing — the results would be attributable
         # to the corruption as much as to the strategy.
@@ -232,6 +383,17 @@ def run(con) -> dict:
                     f"DRAWDOWN_HALT({_dd_box[0]['drawdown_pct']}%)"]
             elif not _strategy_on.get(it["strategy"], True):
                 decision, reasons = "REJECTED", [f"STRATEGY_DISABLED({it['strategy']})"]
+            elif _cooldowns.blocked_at(_cd_facts, ts, it["symbol"],
+                                       it["direction"]) is not None:
+                # Re-entry control. Nothing stopped this system from buying a
+                # level again the bar after it stopped out — tolerable while
+                # REVERSAL fired 5 times in four years, not once it fires 471.
+                # The cooldown FACT is carried into the reason so the operator
+                # sees which exit caused the lockout, not just that one exists.
+                _cd = _cooldowns.blocked_at(_cd_facts, ts, it["symbol"],
+                                            it["direction"])
+                decision = "REJECTED"
+                reasons = [f"COOLDOWN({_cd['outcome']},{_cd['hours']}h)"]
             elif _day(ts) in halted:
                 decision, reasons = "REJECTED", ["DAILY_LOSS_HALT"]
             elif not it["universe_eligible"]:
@@ -283,6 +445,24 @@ def run(con) -> dict:
                     units = risk_usd / stop_dist
                     if units * entry < MIN_NOTIONAL_USD:
                         decision, reasons = "REJECTED", ["BELOW_MIN_NOTIONAL"]
+
+                # Participation cap. REDUCES rather than rejects: a position too
+                # large for the book is not a bad trade, it is a bad SIZE, and
+                # the correct answer to a bad size is a smaller one.
+                vol24 = _vol24.get(it["symbol"])
+                if decision != "REJECTED" and vol24 and risk_usd > 0:
+                    units = risk_usd / stop_dist
+                    notional = units * entry
+                    cap = MAX_PARTICIPATION * Decimal(str(vol24))
+                    if notional > cap > 0:
+                        risk_usd = (risk_usd * cap / notional).quantize(QC)
+                        if decision == "APPROVED":
+                            decision = "REDUCED"
+                        reasons.append(
+                            f"PARTICIPATION_CAP({float(MAX_PARTICIPATION)*100:.1f}%_of_24h)")
+                        if risk_usd < intended * MIN_REDUCED_FRACTION:
+                            decision, reasons = "REJECTED", ["PARTICIPATION_TOO_THIN"]
+                            risk_usd = Decimal(0)
 
             if decision == "REJECTED":
                 risk_usd = Decimal(0)

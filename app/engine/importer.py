@@ -16,7 +16,7 @@ import urllib.request
 from decimal import Decimal
 from datetime import datetime, timezone
 
-from . import phemex, venues
+from . import kraken, phemex, venues
 
 API = "https://api.exchange.coinbase.com"
 IMPORTER_VERSION = "importer-v0.3-draft"
@@ -75,6 +75,11 @@ def _fetch_rows(symbol: str, tf: str, gran: int, start_ts: int, end_ts: int):
         v = venues.venue_for(symbol)
     except ValueError:
         v = venues.COINBASE_SPOT
+    if v.key == "kraken-perp":
+        for c in kraken.fetch_candles(symbol, tf, start_ts, end_ts):
+            yield (int(c["open_ts"]), Decimal(c["open"]), Decimal(c["high"]),
+                   Decimal(c["low"]), Decimal(c["close"]), Decimal(c["volume"]))
+        return
     if v.is_perp:
         for c in phemex.fetch_candles(symbol, tf, start_ts, end_ts):
             yield (int(c["open_ts"]), Decimal(c["open"]), Decimal(c["high"]),
@@ -107,10 +112,12 @@ def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int) -> dict:
 
     from .runlog import get_logger
     seen: dict[int, tuple] = {}
+    served: set = set()          # every bucket the venue returned, kept or not
     n_bad = 0
     for t, op, hi, lo, cl, vol in _fetch_rows(symbol, tf, gran, start_ts, end_ts):
         if not (start_ts <= t < end_ts):
             continue
+        served.add(t)
         if not (hi >= lo and hi >= op and hi >= cl and lo <= op and lo <= cl
                 and lo > 0 and vol >= 0):
             n_bad += 1
@@ -129,8 +136,35 @@ def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int) -> dict:
         [(symbol, tf, t, *ohlcv, src, imported_at)
          for t, ohlcv in sorted(seen.items())])
 
-    expected = range(start_ts, end_ts, gran)
-    gaps = [t for t in expected if t not in seen]
+    # A GAP is a missing bucket INSIDE the span the venue actually served —
+    # not every bucket in the range we happened to ask for. The distinction is
+    # the same one S34 recorded for the fetch loop ("an empty window means
+    # nothing listed yet in THIS range, not no data at all"), and it was never
+    # applied to the gap accounting.
+    #
+    # Consequence measured 2026-07-30: a cold symbol asked for history from
+    # 1970 and logged EVERY bucket since as a gap — 6,187,847,452 fabricated
+    # gaps against 699,726 real ones, 99.99% of the metric. `/api/health` sums
+    # this column and `risk.py` halts on a BLOCKED data-health verdict, so the
+    # signal the risk authority trusts was almost entirely noise.
+    #
+    # Buckets before the first candle the venue ever served are PRE-LISTING, not
+    # missing. Recording them as gaps claims the venue lost data it never had —
+    # which is the mirror image of fabricating a candle, and just as dishonest.
+    # The span is defined by what the venue SERVED, not by what we kept. A bar
+    # the venue returned and we REJECTED as malformed is a genuine hole — that
+    # is the gap-honesty rule at the top of this module, and a test pins it.
+    # Only buckets the venue never returned at all are pre-listing.
+    if served:
+        first, last = min(served), max(served)
+        expected = range(first, last + gran, gran)
+        gaps = [t for t in expected if t not in seen]
+        pre_listing = len([t for t in range(start_ts, first, gran)])
+    else:
+        # Nothing served at all. That is not a range full of gaps; it is a
+        # symbol with no data in this window, and it is recorded as such.
+        gaps = []
+        pre_listing = len(range(start_ts, end_ts, gran))
     con.execute(
         "INSERT INTO import_log "
         "(symbol, tf, range_start, range_end, n_candles, n_gaps, gaps, source, run_at, n_bad) "
@@ -141,4 +175,4 @@ def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int) -> dict:
          json.dumps(gaps[:5000]), src, imported_at, n_bad))
     con.commit()
     return {"symbol": symbol, "tf": tf, "candles": len(seen), "gaps": len(gaps),
-            "bad": n_bad}
+            "bad": n_bad, "pre_listing": pre_listing}

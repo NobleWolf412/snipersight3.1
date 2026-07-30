@@ -13,15 +13,23 @@ import json
 from decimal import Decimal
 
 from . import store
-from .swings import compute_atr, SWING_VERSION
+from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-LIQ_VERSION = "liq-v0.8-draft"
+LIQ_VERSION = "liq-v0.9-draft"
+# v0.9: the pool break tolerance was max(TICK, 0.05*ATR) with TICK hard-coded to
+# 0.01 — right for BTC-USD, catastrophically wrong below a dollar, where a
+# tolerance wider than any move the instrument makes means no close ever breaks
+# a pool, so every pool resolves as a SWEEP or never resolves at all. The tick
+# is now derived per bar from the exponent of the venue's own price strings;
+# `swings.quote_ticks` is the single definition of it and carries the
+# measurement. Same rule, implemented honestly — it returns exactly 0.01
+# wherever 0.01 was right.
+
 # v0.2: pools cluster INTERMEDIATE+ swings (was LOCAL) — matches user's
 # macro liquidity ladder (golden-btc-1d.json).
 POOL_TIERS = ("INTERMEDIATE", "MAJOR")
 EQ_ATR = Decimal("0.10")
-TICK = Decimal("0.01")
 TOL_ATR = Decimal("0.05")
 MAX_BARS_APART = 100
 
@@ -31,6 +39,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
         ts_index = {c["open_ts"]: i for i, c in enumerate(candles)}
         atr = compute_atr(candles)
+        ticks = quote_ticks(candles)
 
         swings = {"HIGH": [], "LOW": []}
         for r in store.get_facts(con, symbol, tf, "swing", SWING_VERSION):
@@ -82,7 +91,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                     if bar_close_ts <= s["confirmed_at"]:
                         continue
                     hi, lo, close = Decimal(c["high"]), Decimal(c["low"]), Decimal(c["close"])
-                    tol = max(TICK, TOL_ATR * atr[j]) if atr[j] is not None else TICK
+                    tol = max(ticks[j], TOL_ATR * atr[j]) if atr[j] is not None else ticks[j]
                     if side == "HIGH":
                         broke, swept = close > level + tol, hi > level and close <= level
                     else:

@@ -70,7 +70,51 @@
     renderFunnel(o.rejection_funnel || {});
   }
 
-  /* one card per token; a token already showing keeps its slot (best rank wins) */
+  /* Higher-timeframe context as a LABEL, never folded into a score.
+     Three states, and UNKNOWN is its own — measured on 228 trades, unknown-HTF
+     setups ran 38.9% win / +0.404 R against genuinely opposed ones at 17.2% /
+     -0.616 R. Showing "not aligned" for a missing measurement would have
+     libelled the entire 1D book, which cannot have a 1W regime at all: that
+     needs MAJOR-tier weekly swings, and 194 weeks of perp history yields one or
+     two per symbol. A gap in the data is not a fact about the trade. */
+  function htfChip(s){
+    const c = s.confluence || {};
+    const state = c.htf_state ||
+      (c.htf_regime == null ? 'UNKNOWN'
+        : c.htf_regime_aligned == null ? 'UNKNOWN'
+        : c.htf_regime_aligned ? 'TRENDING' : 'FLAT');
+    const tf = c.htf_timeframe ? c.htf_timeframe + ' ' : '';
+    if(state === 'UNKNOWN') return `<span style="color:var(--fg-4)">${tf}not measured</span>`;
+    if(state === 'TRENDING') return `<span style="color:var(--green-soft)">${tf}trending</span>`;
+    return `<span style="color:var(--fg-3)">${tf}flat</span>`;
+  }
+
+  function expiresIn(ts, now){
+    if(!ts) return '';
+    const m = Math.round((ts - now) / 60);
+    if(m <= 0) return 'expiring now';
+    if(m < 60) return `expires in ${m}m`;
+    const h = Math.round(m / 60);
+    return h < 48 ? `expires in ${h}h` : `expires in ${Math.round(h / 24)}d`;
+  }
+
+  /* One card per token, ordered by EXPIRY URGENCY — which decision dies first.
+
+     The deck used to sort by `rank`. It no longer does, and the number is no
+     longer shown, because `rank` was graded against 228 closed trades and does
+     not survive:
+       · rank as a whole      r = +0.210  (noise floor +/-0.130)
+       · rank minus its HTF term  r = +0.111 — INSIDE the floor
+       · that HTF term alone      r = +0.261 — clears it
+     86% of the score's spread is its volume (+15) and R:R (+15) terms, neither
+     of which clears its own floor. Worse, the composite is NON-MONOTONE: the
+     modal bucket (rank 65, 51% of the deck) was the WORST at -0.643 R while
+     rank 50 ran +0.027 R. A score that sorts the deck backwards at its own mode
+     is not a confidence score, and presenting it as one invites the operator to
+     trust an ordering the data contradicts.
+
+     Expiry urgency makes no predictive claim. Setups die after ENTRY_MAX_BARS,
+     so "which of these expires first" is operationally true and useful. */
   function renderDeck(setups, funnel){
     const el = $('deck');
     if(!setups.length){
@@ -83,12 +127,14 @@
             r.replaceAll('_', ' ').toLowerCase()).join('<br>') : '') + '</div>';
       return;
     }
-    const best = new Map();                       // symbol -> highest-ranked setup
+    const expiry = s => s.expires_at_ts || Infinity;   // no expiry -> sorts last
+    const best = new Map();            // symbol -> the one expiring soonest
     for(const s of setups){
       const cur = best.get(s.symbol);
-      if(!cur || (s.rank || 0) > (cur.rank || 0)) best.set(s.symbol, s);
+      if(!cur || expiry(s) < expiry(cur)) best.set(s.symbol, s);
     }
-    el.innerHTML = [...best.values()].sort((a, b) => (b.rank || 0) - (a.rank || 0)).map(s => {
+    const now = Date.now() / 1000;
+    el.innerHTML = [...best.values()].sort((a, b) => expiry(a) - expiry(b)).map(s => {
       const long = s.direction === 'LONG';
       // The risk authority is the last word on whether a setup is tradeable.
       // Showing a rejected setup as if it were actionable is the worst thing
@@ -113,10 +159,13 @@
         <div>
           <div class="t-mono" style="font-size:13px;color:var(--fg)">${s.symbol.replace('-USD','')}</div>
           <div class="t-label">${s.tf} · ${s.strategy.replace('_',' ')}</div>
+          <!-- The sort key, made visible. A deck ordered by something the
+               operator cannot see is worse than one ordered by a bad score. -->
+          <div class="t-label" style="color:var(--amber)">${expiresIn(s.expires_at_ts, now)}</div>
         </div>
         <div>
           <span class="chip ${long ? 'chip-green' : 'chip-red'}">${s.direction}</span>
-          <div class="t-label" style="margin-top:4px">rank ${s.rank}</div>
+          <div class="t-label" style="margin-top:4px">${htfChip(s)}</div>
         </div>
         <div class="t-mono" style="color:var(--fg-3)">
           entry <b style="color:var(--fg)">${(+s.entry).toLocaleString()}</b> ·
@@ -196,25 +245,49 @@
       `${curve.length} settlements · start ${money(start)} · peak ${money(hi)} · now ${money(ys[ys.length-1])}`;
   }
 
-  function perfRows(rows, key){
+  /* `/api/performance` keys every row `key` and reports R as `sum_r`. This read
+     was `r[key]` / `r.net_r ?? r.total_r ?? 0` against fields the endpoint has
+     never emitted, so every row rendered an em-dash and `+0.00R` in GREEN —
+     a -3.91R book displayed as break-even, with `n` correct so the row looked
+     alive. A missing number must never default to zero and read as flat. */
+  function perfRows(rows){
     if(!rows || !rows.length) return '<div class="empty">no closed trades yet</div>';
     return rows.map(r => {
-      const pnl = +(r.net_r ?? r.total_r ?? 0);
+      const has = r.sum_r !== undefined && r.sum_r !== null;
+      const pnl = +r.sum_r;
       const good = pnl >= 0;
-      return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:var(--md);
+      const wr = (r.win_pct ?? null) === null ? '' : `${r.win_pct}% win`;
+      return `<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:var(--md);
         align-items:center;padding:8px var(--lg);border-bottom:1px solid var(--border-soft)"
         class="t-mono">
-        <span style="color:var(--fg-2)">${String(r[key] ?? '—').replace('-USD','')}</span>
-        <span style="color:var(--fg-4)">${r.n ?? r.trades ?? 0} trades</span>
-        <b style="color:${good ? 'var(--green)' : 'var(--red-2)'}">${good ? '+' : ''}${pnl.toFixed(2)}R</b>
+        <span style="color:var(--fg-2)">${String(r.key ?? '—').replace('-USD','')}</span>
+        <span style="color:var(--fg-4)">${r.n ?? 0} trades</span>
+        <span style="color:var(--fg-4)">${wr}</span>
+        <b style="color:${!has ? 'var(--fg-4)' : (good ? 'var(--green)' : 'var(--red-2)')}">${
+          has ? `${good ? '+' : ''}${pnl.toFixed(2)}R` : 'n/a'}</b>
       </div>`;
     }).join('');
   }
 
+  /* A SHADOW venue is warmed but never tradeable — `risk.py` refuses every one
+     of its intents. Its simulated record is evidence for admitting the venue,
+     so it stays visible, but it is fenced off and labelled rather than added
+     to the operator's track record. */
+  function shadowBlock(rows){
+    if(!rows || !rows.length) return '';
+    const sum = rows.reduce((a, r) => a + (+r.sum_r || 0), 0);
+    const n = rows.reduce((a, r) => a + (r.n || 0), 0);
+    return `<details style="border-top:1px solid var(--border-soft)">
+      <summary style="padding:8px var(--lg);color:var(--fg-4);cursor:pointer" class="t-mono">
+        + ${n} shadow trade${n === 1 ? '' : 's'} (${sum >= 0 ? '+' : ''}${sum.toFixed(2)}R) —
+        warmed venue, never tradeable, excluded above</summary>
+      ${perfRows(rows)}</details>`;
+  }
+
   async function loadPerformance(){
     const p = await api('/api/performance');
-    $('perfSymbol').innerHTML = perfRows(p.by_symbol, 'symbol');
-    $('perfStrategy').innerHTML = perfRows(p.by_strategy, 'strategy');
+    $('perfSymbol').innerHTML = perfRows(p.by_symbol) + shadowBlock(p.shadow_by_symbol);
+    $('perfStrategy').innerHTML = perfRows(p.by_strategy) + shadowBlock(p.shadow_by_strategy);
   }
 
   /* ---------- DIAGNOSTICS ---------- */

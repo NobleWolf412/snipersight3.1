@@ -16,11 +16,28 @@ import json
 from decimal import Decimal
 
 from . import store
-from .swings import compute_atr, SWING_VERSION
+from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-STRUCTURE_VERSION = "structure-v0.8-draft"
-TICK = Decimal("0.01")
+STRUCTURE_VERSION = "structure-v0.10-draft"
+# v0.9: the break tolerance was max(TICK, 0.05*ATR) with TICK hard-coded to
+# 0.01 — right for BTC-USD, catastrophically wrong below a dollar, where a
+# tolerance wider than any move the instrument makes means NO close ever breaks
+# ANY level. This engine is where that went blind, and the store showed it
+# plainly: u1000SHIBUSDT had 1 break against 127 labels, SHIB-USD 0 against 101,
+# PUMP-USD 0 against 145. Because `regime._classify` returns RANGE when
+# `last_break is None`, those symbols sat in a permanent false RANGE and
+# dominated the "27% of rejections are ranging markets" bucket. It was never a
+# ranging market; it was a blind structure engine.
+#
+# The tick is now derived per bar from the exponent of the venue's own price
+# strings. `swings.quote_ticks` is the SINGLE definition of it and carries the
+# measurement — deliberately not restated here, in zones.py or in liquidity.py,
+# because four copies of a figure measured against a growing store is four
+# things to drift. Same rule, implemented honestly: it returns exactly 0.01
+# wherever 0.01 was right, so the majors are untouched (BTCUSDT 47 breaks
+# before and after, ETHUSDT 52) while u1000SHIBUSDT goes 1 -> 52.
+
 TOL_ATR = Decimal("0.05")
 
 # v0.2 (user golden data 2026-07-21): BOS/CHoCH key off high-tier swings only —
@@ -28,7 +45,22 @@ TOL_ATR = Decimal("0.05")
 # MAJOR on 1D/1W; INTERMEDIATE on intraday TFs. A/B RESULT (see BUILDLOG S3):
 # v0.3 tried 1D=INTERMEDIATE -> 28 breaks vs golden 7, worse matches. v0.2 won
 # (4/7 golden breaks, 10 total). v0.3 facts remain in store as the A/B loser.
-TIER_BY_TF = {"1W": "MAJOR", "1D": "MAJOR",
+# v0.10: 1W drops to INTERMEDIATE. The golden-data A/B that chose MAJOR tested
+# 1D and grouped 1W in with it without separate evidence, and 1W cannot support
+# the tier: MAJOR is a DOUBLE recursion (local -> intermediate -> major) and the
+# perp book holds 194 weekly bars, which yields 14 MAJOR pivots across 11
+# symbols — one or two each, never an alternating sequence. So 1W structure
+# existed for 1 perp symbol of 21, 1W regime for 1, and therefore the ENTIRE 1D
+# book had no higher-timeframe regime at all.
+#
+# That is not a cosmetic gap. `htf_regime_aligned` is the only confluence factor
+# ever measured above the noise floor (r=+0.261 against a +/-0.130 floor), and it
+# was unmeasurable on 1D — the timeframe carrying the book. Setups there were
+# additionally docked for the missing value until S39 made UNKNOWN its own state.
+# At INTERMEDIATE, 18 of 21 perps have enough pivots to form a sequence.
+# 1D stays MAJOR: that one WAS tested (v0.3 tried INTERMEDIATE -> 28 breaks
+# against golden 7, and lost).
+TIER_BY_TF = {"1W": "INTERMEDIATE", "1D": "MAJOR",
               "4H": "INTERMEDIATE", "1H": "INTERMEDIATE", "15m": "INTERMEDIATE"}
 
 
@@ -51,6 +83,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         if not swings or len(candles) < 20:
             return {"symbol": symbol, "tf": tf, "labels": 0, "breaks": 0}
         atr = compute_atr(candles)
+        ticks = quote_ticks(candles)
 
         # --- labels ---
         n_labels = 0
@@ -90,7 +123,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 si += 1
             if atr[i] is None:
                 continue
-            tol = max(TICK, (TOL_ATR * atr[i]))
+            tol = max(ticks[i], (TOL_ATR * atr[i]))
             close = Decimal(c["close"])
             for side, cmp_up in (("HIGH", True), ("LOW", False)):
                 lvl = active[side]

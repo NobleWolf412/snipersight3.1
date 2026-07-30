@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from engine import store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
+from engine import registry, store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
 
 KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "structure": structure.STRUCTURE_VERSION,
@@ -268,6 +268,284 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
         con.close()
 
 
+def _trace_stage(key: str, label: str, status: str, value=None,
+                 expected=None, detail: str = "", facts: dict | None = None) -> dict:
+    """One gate in a setup's journey.
+
+    `value` is mandatory-by-convention rather than by type: a stage that renders
+    only a tick tells the operator the gate ran, not why it decided what it
+    decided. Every caller below passes the number the gate actually compared.
+    """
+    return {"key": key, "label": label, "status": status,
+            "value": value, "expected": expected, "detail": detail,
+            "facts": facts or {}}
+
+
+@app.get("/api/setup-trace/{setup_id}")
+def setup_trace(setup_id: str):
+    """One setup's stage-by-stage journey — "why didn't THIS one fire?".
+
+    The rejection funnel answers the aggregate question ("why is nothing
+    firing?"). This answers the one an operator actually asks, about the single
+    setup in front of them, and it carries the ACTUAL value at each gate —
+    the R:R that was measured against the minimum, the regime the playbook was
+    chosen for, the equity the risk authority sized against.
+
+    Read-only join over immutable facts, exactly like /api/setup-telemetry.
+    Nothing here is consulted by any engine. An unknown id is a 404 rather than
+    an empty skeleton: a trace that renders blank looks like "this setup sailed
+    through", which is the opposite of the truth.
+    """
+    con = store.connect()
+    try:
+        baseline = store.get_active_baseline(con)
+
+        # Facts are keyed by (symbol, tf, kind) and the setup_id lives inside the
+        # payload, so there is no index to seek on. Scanning the four relevant
+        # kinds is cheap at this store's size and keeps the query honest — no
+        # LIKE-matching on serialized JSON, which would silently miss a payload
+        # written with different separators.
+        #
+        # Deliberately NOT pinned to the current algo_version, unlike the funnel
+        # endpoints. A trace is asked about one setup the operator can see; if
+        # the engine version has since moved on, "404 unknown setup" would be a
+        # lie about a setup that plainly exists. Instead every fact reports the
+        # version it was written under and `stale_versions` names the mismatch,
+        # so the drawer can say "recorded under an older engine" out loud.
+        def payloads(kind: str) -> list[dict]:
+            out = []
+            rows = con.execute(
+                "SELECT symbol,tf,market_time,confirmed_at,algo_version,payload "
+                "FROM facts WHERE kind=? ORDER BY confirmed_at,id", (kind,)).fetchall()
+            for sym, timeframe, market_time, confirmed_at, algo_version, raw in rows:
+                p = json.loads(raw)
+                if p.get("setup_id") != setup_id:
+                    continue
+                out.append({"symbol": sym, "tf": timeframe,
+                            "market_time": market_time,
+                            "confirmed_at": confirmed_at,
+                            "algo_version": algo_version, **p})
+            return out
+
+        setup_facts = payloads("setup")
+        if not setup_facts:
+            raise HTTPException(
+                404, f"no setup recorded with id {setup_id!r}")
+
+        # The last fact is the setup's current truth; the earlier ones are its
+        # state history (FORMING -> VALIDATED, or -> CANCELLED).
+        setup = setup_facts[-1]
+        risk_facts = [p for p in payloads("risk")
+                      if p.get("event") == "DECISION"]
+        order_facts = payloads("order")
+        exec_facts = payloads("exec")
+        risk_fact = risk_facts[-1] if risk_facts else None
+        order_fact = order_facts[-1] if order_facts else None
+        exec_fact = exec_facts[-1] if exec_facts else None
+
+        # One authority for the lifecycle verdict: the same telemetry builder the
+        # funnel counts with, so the drawer can never disagree with the funnel.
+        record = telemetry.build_record(setup, risk_fact, order_fact, exec_fact)
+        lifecycle = {k: record[k] for k in
+                     ("stage", "failure_code", "failure_owner", "detail",
+                      "classification")}
+
+        state = setup.get("state")
+        rr = record.get("computed_rr")
+        min_rr = float(setups.MIN_RR)
+        stages = [
+            _trace_stage(
+                "CANDIDATE", "Candidate found", "pass",
+                value=f"{setup['symbol']} {setup['tf']}",
+                detail=setup.get("why") or "a price zone was touched",
+                facts={"zone_id": setup.get("zone_id"),
+                       "zone_strength": setup.get("zone_strength"),
+                       "market_time": setup["market_time"],
+                       "confirmed_at": setup["confirmed_at"]}),
+            _trace_stage(
+                "PLAYBOOK", "Strategy matched", "pass",
+                value=f"{setup.get('strategy') or 'UNKNOWN'} · {setup.get('direction') or '—'}",
+                expected="a strategy whose conditions cover this regime",
+                detail=f"regime at the time was {setup.get('regime') or 'unrecorded'}",
+                facts={"strategy": setup.get("strategy"),
+                       "direction": setup.get("direction"),
+                       "regime": setup.get("regime"),
+                       "rank": setup.get("rank")}),
+            _trace_stage(
+                "BRACKET", "Entry, stop and target",
+                "pass" if record["stop_distance"] else "fail",
+                value=(f"entry {setup.get('entry')} · stop {setup.get('sl')} "
+                       f"· target {setup.get('tp')}"),
+                expected="a stop a non-zero distance from the entry",
+                detail=("stop is "
+                        f"{record['stop_distance']} away, target is "
+                        f"{record['reward_distance']} away"),
+                facts={"entry": setup.get("entry"), "sl": setup.get("sl"),
+                       "tp": setup.get("tp"),
+                       "stop_distance": record["stop_distance"],
+                       "reward_distance": record["reward_distance"]}),
+            _trace_stage(
+                "RR_GATE", "Reward against risk",
+                "pass" if rr is not None and rr >= min_rr else "fail",
+                value=rr, expected=f">= {min_rr}",
+                detail=(f"the target is {rr}x the stop distance"
+                        if rr is not None else
+                        "R:R could not be computed from this setup's bracket"),
+                facts={"computed_rr": rr, "recorded_rr": setup.get("rr"),
+                       "min_rr": str(setups.MIN_RR)}),
+            _trace_stage(
+                "VALIDATION", "Setup validated",
+                {"VALIDATED": "pass", "FORMING": "pending",
+                 "CONFIRMING": "pending", "CANCELLED": "fail",
+                 "EXPIRED": "fail"}.get(state, "skip"),
+                value=state, expected="VALIDATED",
+                detail={"VALIDATED": "price reached the zone and every entry gate passed",
+                        "FORMING": "price is approaching the zone but has not reached it",
+                        "CONFIRMING": "price reached the zone; waiting for the confirming close",
+                        "CANCELLED": "the structure this setup relied on broke first",
+                        "EXPIRED": "the entry window closed before price confirmed"
+                        }.get(state, "no recorded state"),
+                facts={"state": state, "armed": setup.get("armed"),
+                       "expires_at_ts": setup.get("expires_at_ts")}),
+        ]
+
+        if risk_fact:
+            decision = risk_fact.get("decision")
+            reasons = risk_fact.get("reasons") or []
+            stages.append(_trace_stage(
+                "RISK", "Risk authority",
+                {"APPROVED": "pass", "REDUCED": "warn",
+                 "REJECTED": "fail"}.get(decision, "skip"),
+                value=decision,
+                expected="APPROVED or REDUCED to place an order",
+                detail=" · ".join(reasons) if reasons else "no reason recorded",
+                facts={"decision": decision, "reasons": reasons,
+                       "risk_usd": risk_fact.get("risk_usd"),
+                       "intended_risk_usd": risk_fact.get("intended_risk_usd"),
+                       "equity_at": risk_fact.get("equity_at"),
+                       "units": risk_fact.get("units"),
+                       "notional_usd": risk_fact.get("notional_usd"),
+                       "implied_leverage": risk_fact.get("implied_leverage")}))
+        else:
+            stages.append(_trace_stage(
+                "RISK", "Risk authority", "skip", value=None,
+                expected="APPROVED or REDUCED to place an order",
+                detail="the risk authority has not ruled on this setup yet"))
+
+        if order_fact:
+            event = order_fact.get("event")
+            stages.append(_trace_stage(
+                "ORDER", "Order placed",
+                "pass" if event in ("PLACED", "FILLED") else "fail",
+                value=event, expected="PLACED",
+                detail=(f"{order_fact.get('order_type') or 'order'} at "
+                        f"{order_fact.get('limit_price')}"),
+                facts={"event": event, "order_type": order_fact.get("order_type"),
+                       "limit_price": order_fact.get("limit_price"),
+                       "available_at": order_fact.get("available_at"),
+                       "max_entry_bars": order_fact.get("max_entry_bars"),
+                       # every order in this build is a shadow simulation; the
+                       # drawer must never imply a real order went to a venue
+                       "scope": "SHADOW_SIMULATION"}))
+            filled = event == "FILLED"
+            stages.append(_trace_stage(
+                "FILL", "Filled", "pass" if filled else "fail",
+                value=order_fact.get("fill_price") if filled else "not filled",
+                expected="price trades through the limit inside the entry window",
+                detail=("filled after "
+                        f"{order_fact.get('bars_to_fill')} bars" if filled else
+                        "price never came back to the entry before the order expired"),
+                facts={"fill_price": order_fact.get("fill_price"),
+                       "bars_to_fill": order_fact.get("bars_to_fill")}))
+        else:
+            for key, label in (("ORDER", "Order placed"), ("FILL", "Filled")):
+                stages.append(_trace_stage(
+                    key, label, "skip", value=None,
+                    detail="no order simulated for this setup"))
+
+        if exec_fact:
+            outcome = exec_fact.get("outcome")
+            net_r = exec_fact.get("r_multiple")
+            won = record["failure_code"] == "WINNER"
+            stages.append(_trace_stage(
+                "EXIT", "Closed",
+                "pass" if won else ("skip" if outcome == "MISSED" else "fail"),
+                value=("not filled" if outcome == "MISSED"
+                       else f"{outcome} · {net_r}R net"),
+                expected="a positive net R after costs",
+                # Deliberately NOT lifecycle["detail"]: on a risk-rejected setup
+                # that reads "NOT_IN_POINT_IN_TIME_UNIVERSE" on the exit row,
+                # which describes a different gate entirely.
+                detail=("the limit was never touched inside the entry window"
+                        if outcome == "MISSED" else
+                        f"held {exec_fact.get('bars_held')} bars · "
+                        f"{exec_fact.get('r_gross')}R gross became {net_r}R "
+                        f"after {exec_fact.get('costs_r')}R of costs"),
+                facts={"outcome": outcome, "net_r": net_r,
+                       "gross_r": exec_fact.get("r_gross"),
+                       "costs_r": exec_fact.get("costs_r"),
+                       "mae_r": exec_fact.get("mae_r"),
+                       "mfe_r": exec_fact.get("mfe_r"),
+                       "bars_held": exec_fact.get("bars_held"),
+                       "exit_price": exec_fact.get("exit_price")}))
+        else:
+            stages.append(_trace_stage(
+                "EXIT", "Closed", "skip", value=None,
+                detail="no terminal exit fact recorded yet"))
+
+        # A fact written by a superseded engine is still a real fact, but the
+        # thresholds it was judged against may no longer be the running ones.
+        # Name every mismatch instead of quietly rendering old numbers as fresh.
+        stale = []
+        for kind, fact, current in (
+                ("setup", setup, (setups.SETUP_VERSION, scalein.SCALE_VERSION)),
+                ("risk", risk_fact, (risk.RISK_VERSION,)),
+                ("order", order_fact, (execsim.EXEC_VERSION,)),
+                ("execution", exec_fact, (execsim.EXEC_VERSION,))):
+            if fact and fact["algo_version"] not in current:
+                stale.append({"kind": kind, "recorded": fact["algo_version"],
+                              "current": current[0]})
+
+        return {
+            "diagnostic_only": True,
+            "setup_id": setup_id,
+            "symbol": setup["symbol"], "tf": setup["tf"],
+            "market_time": setup["market_time"],
+            "confirmed_at": setup["confirmed_at"],
+            "algo_version": setup["algo_version"],
+            "strategy": setup.get("strategy"), "direction": setup.get("direction"),
+            "state": state, "regime": setup.get("regime"),
+            "rank": setup.get("rank"), "why": setup.get("why"),
+            "baseline": baseline,
+            # A setup confirmed before the active baseline is real history, not a
+            # missing record. Say which it is rather than hiding it.
+            "in_baseline": setup["confirmed_at"] >= baseline["started_at"],
+            "lifecycle": lifecycle,
+            "stages": stages,
+            "history": [{"state": f.get("state"),
+                         "market_time": f["market_time"],
+                         "confirmed_at": f["confirmed_at"]} for f in setup_facts],
+            "risk": risk_fact, "order": order_fact, "execution": exec_fact,
+            "diagnostics": record["diagnostics"],
+            "missing_evidence": record["missing_evidence"],
+            "thresholds": {"min_rr": str(setups.MIN_RR)},
+            "versions": {
+                "recorded": {"setup": setup["algo_version"],
+                             "risk": risk_fact["algo_version"] if risk_fact else None,
+                             "order": order_fact["algo_version"] if order_fact else None,
+                             "execution": exec_fact["algo_version"] if exec_fact else None},
+                "current": {"setup": setups.SETUP_VERSION,
+                            "scale_in": scalein.SCALE_VERSION,
+                            "risk": risk.RISK_VERSION,
+                            "execution": execsim.EXEC_VERSION}},
+            # Named so the drawer can say "this trace predates the running
+            # engine" rather than presenting stale numbers as current ones.
+            "stale_versions": stale,
+        }
+    finally:
+        con.close()
+
+
 @app.get("/api/portfolio")
 def portfolio():
     """Paper account state from risk-authority facts (§9/§13 dashboard)."""
@@ -468,18 +746,34 @@ def performance():
                             and p["decision"] in ("APPROVED", "REDUCED")):
                         sized[p["setup_id"]] = float(p["risk_usd"])
 
+        # A SHADOW symbol is imported and derived but never tradeable, and
+        # `risk.py` rejects every one of its intents with
+        # NOT_IN_POINT_IN_TIME_UNIVERSE. Counting those exec facts into the
+        # operator's track record was reporting a book that could not have been
+        # placed: measured 2026-07-30, 5 of the 6 baseline trades (83%) were
+        # Kraken PF_* shadow symbols. Only the $-column excluded them, because
+        # `sized` reads the risk decision and the R-columns did not.
+        #
+        # They are still SEPARATED rather than dropped — a warmed venue's
+        # simulated record is the evidence for admitting it, so it has to remain
+        # visible. It just must not be added to the traded book.
+        shadow = set(universe.shadow_symbols(con))
+
         def blank():
             return {"n": 0, "wins": 0, "sum_r": 0.0, "pos_r": 0.0, "neg_r": 0.0,
                     "sized": 0, "pnl_usd": 0.0}
         by_sym, by_strat = {}, {}
+        sh_sym, sh_strat = {}, {}
         for sym in universe.all_tracked_symbols(con):
+            is_shadow = sym in shadow
             for tf in ("15m", "1H", "4H", "1D", "1W"):
                 for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
                     p = json.loads(r["payload"])
                     if p["setup_id"] not in eligible or p["outcome"] == "MISSED":
                         continue
                     rm = float(p["r_multiple"])
-                    for key, bucket in ((sym, by_sym), (p["strategy"], by_strat)):
+                    tgt = ((sh_sym, sh_strat) if is_shadow else (by_sym, by_strat))
+                    for key, bucket in ((sym, tgt[0]), (p["strategy"], tgt[1])):
                         a = bucket.setdefault(key, blank())
                         a["n"] += 1
                         a["wins"] += rm > 0
@@ -490,19 +784,259 @@ def performance():
                             a["sized"] += 1
                             a["pnl_usd"] += ru * rm
 
-        def rows(bucket):
+        def rows(bucket, is_shadow=False):
             out = []
             for k, a in bucket.items():
                 pf = round(a["pos_r"] / abs(a["neg_r"]), 2) if a["neg_r"] < 0 and a["pos_r"] > 0 else None
                 out.append({"key": k, "n": a["n"], "win_pct": round(100 * a["wins"] / a["n"]) if a["n"] else 0,
-                            "pf": pf, "sum_r": round(a["sum_r"], 1),
-                            "sized": a["sized"], "pnl_usd": round(a["pnl_usd"], 2)})
-            out.sort(key=lambda x: x["pnl_usd"])
+                            "pf": pf, "sum_r": round(a["sum_r"], 2),
+                            "sized": a["sized"], "pnl_usd": round(a["pnl_usd"], 2),
+                            "shadow": is_shadow})
+            out.sort(key=lambda x: x["sum_r"])
             return out
-        return {"baseline": baseline, "by_symbol": rows(by_sym),
-                "by_strategy": rows(by_strat)}
+        return {"baseline": baseline,
+                "by_symbol": rows(by_sym), "by_strategy": rows(by_strat),
+                "shadow_by_symbol": rows(sh_sym, True),
+                "shadow_by_strategy": rows(sh_strat, True),
+                "shadow_symbols": sorted(shadow)}
     finally:
         con.close()
+
+
+# ── Playbook catalogue ──────────────────────────────────────────────────────
+# The catalogue answers the three questions a new operator actually has: what
+# strategies exist, how does each one work, and is it working. The third is why
+# this endpoint calls performance() rather than counting exec facts itself — a
+# catalogue with its own arithmetic could disagree with the Results page, and
+# the operator would have no way to know which one was lying.
+#
+# The prose below lives here, beside the endpoint that serves it, but every
+# NUMBER and every rule with a constant behind it is read from the engine. A
+# card describing rules the code stopped following is worse than no card.
+
+# `record_key` on each card is the strategy name the engines stamp on a fact,
+# and it is what joins the card to its row in performance()'s by_strategy
+# bucket. A planned playbook has no record_key because it has produced nothing.
+#
+# A planned playbook has to justify itself with a measured gap, not a promise.
+# Each one names the regime whose rejections size it. The regime is the design
+# decision; the percentage is counted at request time (see below).
+_PLANNED_GAP = {
+    "range_fade": ("RANGE", "a market going sideways, with no trend to follow"),
+    "reversal_rework": ("TRANSITION", "a market between trends"),
+}
+
+
+def _entry_rules() -> dict:
+    """CONFIRMS / STOP GOES text, read from whichever entry model is loaded.
+
+    setups.py is mid-version: v0.6 opened the trade on the zone touch, v0.7
+    waits for a closing bar to prove the level held. The catalogue has to
+    describe the engine that is actually running, so the branch tests for a
+    capability the module either has or does not, never a version string.
+    """
+    if hasattr(setups, "confirms"):
+        # 0.66 of the range measured from the far side == a close in the top 34%
+        tail = int(round((1 - float(setups.REJECTION_FRACTION)) * 100))
+        return {
+            "confirms": (
+                f"A candle has to close back OUT of the zone, finishing in the "
+                f"last {tail}% of its own range. That is the market rejecting "
+                f"the level, not drifting off it. {setups.CONFIRM_MAX_BARS} bars "
+                f"to do it, or the setup is dropped."),
+            "stop_goes": (
+                f"Just past the candle that did the rejecting: "
+                f"{setups.SL_BUFFER_ATR} ATR beyond its low to buy, its high to "
+                f"sell — a fraction of that market's usual daily movement. A "
+                f"price the market has already tested and turned away from."),
+        }
+    return {
+        "confirms": (
+            "Nothing beyond the touch itself: the trade opens the moment price "
+            "reaches the zone. This is the weakest part of the current engine "
+            "and the entry rework exists to fix it."),
+        "stop_goes": (
+            f"A fraction of that market's typical daily movement "
+            f"({setups.SL_ATR} ATR) beyond the far edge of the zone — the price "
+            f"at which the reason for the trade has been proven wrong."),
+    }
+
+
+def _rejection_regime_share(con) -> dict:
+    """How the candidates the scanner turned down split by market condition.
+
+    This is what lets a PLANNED playbook state its own size instead of
+    promising value. The percentages are COUNTED on every request and never
+    written down: a hard-coded "27% of candidates are ranging" would go on
+    claiming 27% long after the market moved, which is precisely the kind of
+    confident stale number this surface exists to replace.
+    """
+    rows = con.execute(
+        "SELECT payload FROM facts WHERE kind='setup_rejection' "
+        "AND algo_version=?", (setups.SETUP_VERSION,)).fetchall()
+    basis = setups.SETUP_VERSION
+    if not rows:
+        # A version bump leaves the new engine with no rejection history of its
+        # own for a while. Falling back to the whole corpus keeps the gap
+        # measurable AND says which corpus produced it — reporting 0% here
+        # would read as "this gap does not exist", which is a different claim.
+        rows = con.execute(
+            "SELECT payload FROM facts WHERE kind='setup_rejection'").fetchall()
+        basis = "every recorded setup version"
+    by_regime, no_playbook = Counter(), 0
+    for (raw,) in rows:
+        p = json.loads(raw)
+        if p.get("reason") != "NO_ELIGIBLE_PLAYBOOK":
+            continue
+        no_playbook += 1
+        by_regime[(p.get("details") or {}).get("regime") or "UNCLASSIFIED"] += 1
+    total = len(rows)
+    return {"total": total, "no_playbook": no_playbook, "basis": basis,
+            "by_regime": {k: {"n": v, "pct": round(100 * v / total, 1)}
+                          for k, v in by_regime.items()}}
+
+
+@app.get("/api/playbooks")
+def playbooks():
+    """Every strategy: what it hunts, how it works, and its live record.
+
+    The record comes from /api/performance, scoped to the active baseline like
+    everything else on Results. Losing strategies report their losses — a
+    catalogue that hid them would be a sales page, and the operator would be
+    choosing between strategies on advertising rather than evidence.
+    """
+    from engine import settings as _settings
+    con = store.connect()
+    try:
+        values = _settings.all_settings(con)
+        share = _rejection_regime_share(con)
+        baseline = store.get_active_baseline(con)
+    finally:
+        con.close()
+
+    perf = performance()
+    by_strategy = {r["key"]: r for r in perf["by_strategy"]}
+
+    def record(name):
+        r = by_strategy.get(name)
+        if r is None:
+            # No closed trade under this baseline. n=0 with a null win rate,
+            # because a "0% win rate" is a claim about trades that happened.
+            return {"n": 0, "win_pct": None, "pf": None, "sum_r": 0.0,
+                    "sized": 0, "pnl_usd": 0.0}
+        return {k: v for k, v in r.items() if k != "key"}
+
+    def gap(key):
+        regime, plain = _PLANNED_GAP[key]
+        entry = share["by_regime"].get(regime)
+        if not entry or not share["total"]:
+            # Loud fallback: no measurement means no percentage. Inventing one
+            # to make the card look finished is the failure this rule prevents.
+            return {"gap": "Not measured yet — the scanner has recorded no "
+                           "rejections to size this gap against.",
+                    "gap_pct": None, "gap_n": 0}
+        return {"gap": (f"{entry['pct']}% of every candidate the scanner turned "
+                        f"down was {plain} ({entry['n']:,} of "
+                        f"{share['total']:,}). No live playbook covers one."),
+                "gap_pct": entry["pct"], "gap_n": entry["n"]}
+
+    rules = _entry_rules()
+    horizon = ("As long as the timeframe that found it: a 15m setup is usually "
+               "over inside a day, a 1D setup can run for weeks.")
+
+    cards = [
+        {"key": registry.PULLBACK.key, "name": registry.PULLBACK.name,
+         "status": registry.PULLBACK.status,
+         "record_key": registry.PULLBACK.key.upper(),
+         "setting": registry.PULLBACK.setting,
+         "one_liner": "Buy the dip in an uptrend, sell the bounce in a downtrend.",
+         "hunts": ("Trending markets. The engine's read has to be an uptrend to "
+                   "buy and a downtrend to sell, including trends that are "
+                   "weakening but not yet broken."),
+         "triggers": ("Price comes back to a zone that turned it before — a "
+                      "demand zone underneath in an uptrend, a supply zone "
+                      "overhead in a downtrend."),
+         "confirms": rules["confirms"], "stop_goes": rules["stop_goes"],
+         "holds_for": horizon,
+         "timeframes": list(importer.TF_SECONDS),
+         "notes": (f"Every candidate has to offer at least {setups.MIN_RR} of "
+                   f"reward for every 1 it puts at risk, and has to risk at "
+                   f"least {setups.MIN_RISK_COST_MULT}x what the trade will cost "
+                   f"in exchange fees, or it is turned down before you see it.")},
+        {"key": registry.REVERSAL.key, "name": registry.REVERSAL.name,
+         "status": registry.REVERSAL.status,
+         "record_key": registry.REVERSAL.key.upper(),
+         "setting": registry.REVERSAL.setting,
+         "one_liner": "Fade a move that has just run out of buyers, or sellers.",
+         "hunts": ("Markets in transition — the old trend has broken down and "
+                   "a new one has not formed yet."),
+         "triggers": (f"A zone touch while the market is in transition, "
+                      f"supported by {_reversal_rule_words()}. A transition on "
+                      f"its own is not a trade — but one piece of evidence is "
+                      f"not enough either, so two must agree."),
+         "confirms": rules["confirms"], "stop_goes": rules["stop_goes"],
+         "holds_for": horizon,
+         "timeframes": list(importer.TF_SECONDS),
+         "notes": ("Starts 10 rank points below Pullback. Catching a turn is a "
+                   "harder claim than following a trend, and the ranking says so.")},
+        {"key": registry.SCALE_IN.key, "name": registry.SCALE_IN.name,
+         "status": registry.SCALE_IN.status,
+         "record_key": registry.SCALE_IN.key.upper(),
+         "setting": registry.SCALE_IN.setting,
+         "one_liner": "Add to a trade that is already working, at no extra risk.",
+         "hunts": "Trades this system already has open and already in profit.",
+         "triggers": (f"A {scalein.TRIGGER_TF} break of structure in the same "
+                      f"direction as an open "
+                      f"{' or '.join(scalein.PARENT_TFS)} trade, once that "
+                      f"trade has already moved a full R your way. The add is "
+                      f"bought with the market's progress, not with hope."),
+         "confirms": (f"The break itself: a {scalein.TRIGGER_TF} candle closing "
+                      f"beyond the previous structure, inside the window the "
+                      f"parent trade is open."),
+         "stop_goes": ("At the original trade's entry price. If the add fails, "
+                       "the position it was added to is already at breakeven."),
+         "holds_for": ("Until the parent trade closes. It shares that trade's "
+                       f"target and never outlives it. At most "
+                       f"{scalein.MAX_ADDS} adds per trade."),
+         "timeframes": [scalein.TRIGGER_TF],
+         "notes": ("Each add is sized as brand new exposure rather than folded "
+                   "into the trade it joins, so a run of good luck cannot "
+                   "quietly turn into one oversized bet.")},
+        {"key": "range_fade", "name": "Range Fade", "status": "planned",
+         "record_key": None, "setting": None,
+         "one_liner": "Sell the ceiling and buy the floor while a market goes nowhere.",
+         "hunts": "Markets stuck between a ceiling and a floor, with no trend.",
+         "triggers": ("Planned: price reaching the edge of an established range "
+                      "rather than a trend continuation zone."),
+         "confirms": "Planned. Nothing is being traded on this yet.",
+         "stop_goes": "Planned: beyond the range edge, where the range is broken.",
+         "holds_for": "Planned.",
+         "timeframes": [], "notes": None},
+        # The 'Reversal, Reworked' planned card was REMOVED, not edited: the
+        # work shipped in S38. Its 2-of-4 evidence gate replaced the sweep-only
+        # rule and took REVERSAL from 5 setups in four years to several hundred.
+        # A roadmap that still lists a delivered item as planned is a roadmap
+        # nobody can trust — and this one described the OLD rule while the live
+        # Reversal card described the new one, so the page contradicted itself.
+
+    ]
+
+    out = []
+    for c in cards:
+        card = dict(c)
+        if card["status"] == "live":
+            card["enabled"] = bool(values.get(card["setting"], True))
+            card["record"] = record(card["record_key"])
+        else:
+            card["enabled"] = None
+            card["record"] = None
+            card.update(gap(card["key"]))
+        out.append(card)
+
+    return {"baseline": baseline, "playbooks": out,
+            "entry_model": getattr(setups, "ENTRY_MODEL", "ZONE_TOUCH_LIMIT"),
+            "setup_version": setups.SETUP_VERSION,
+            "rejection_sample": share}
 
 
 @app.get("/api/cycles")
@@ -574,6 +1108,293 @@ def multi_timeframe_context(
         con.close()
 
 
+# ── Market Weather ───────────────────────────────────────────────────────────
+# Regime is a chip on the chart and nothing else, so a user who has never traded
+# has no way to know what it is FOR. Meanwhile the scanner produces roughly one
+# setup a day and the silence reads as a fault. This endpoint exists to make the
+# silence explain itself: per symbol, the recorded regime on each timeframe and
+# — the whole point — what that condition means for whether anything is
+# tradeable right now.
+#
+# Every eligibility claim below is PROBED from setups.playbook() rather than
+# restated. A second copy of "a bull trend means pullback longs" would drift
+# from the engine's copy the first time the playbook changed, and this strip
+# would start advertising trades the scanner refuses to take.
+WEATHER_TFS = ("1D", "4H")
+
+# Display nouns only. regime.py owns the classification; this owns the wording.
+REGIME_LABELS = {"BULL_TREND": "Bull trend", "BEAR_TREND": "Bear trend",
+                 "WEAKENING_BULL": "Bull weakening",
+                 "WEAKENING_BEAR": "Bear weakening",
+                 "TRANSITION": "Transition", "RANGE": "Range"}
+
+
+def _cap(s: str) -> str:
+    return s[:1].upper() + s[1:]
+
+
+def _side_word(direction: str | None) -> str:
+    return {"LONG": "longs", "SHORT": "shorts"}.get(direction, "trades")
+
+
+def _strategy_words(plays: list[dict]) -> str:
+    """'pullback', or 'pullback or reversal' — names taken from the engine."""
+    return " or ".join(sorted({p["strategy"].replace("_", " ").lower()
+                               for p in plays}))
+
+
+def _play_phrase(plays: list[dict]) -> str:
+    """'pullback longs' — assembled from playbook()'s own return tuple, so a
+    playbook added tomorrow describes itself here without an edit."""
+    sides = sorted({_side_word(p["direction"]) for p in plays})
+    return f"{_strategy_words(plays)} {' and '.join(sides)}"
+
+
+def _reversal_rule_words() -> str:
+    """The REVERSAL gate in words, derived from the engine's own constants.
+
+    Restating it as prose is how the copy came to claim "needs a liquidity
+    sweep" for a full session after setup-v0.7 replaced that rule with 2-of-4
+    evidence. A user reading the old sentence would have been told a trade was
+    impossible when it was merely conditional.
+    """
+    names = {"CHOCH": "a structural break", "SWEEP": "a liquidity sweep",
+             "VOLUME": "heavy volume", "STRENGTH": "a strong zone"}
+    parts = [names.get(c, c.lower()) for c in
+             getattr(setups, "REVERSAL_COMPONENTS",
+                     ("CHOCH", "SWEEP", "VOLUME", "STRENGTH"))]
+    n = getattr(setups, "REVERSAL_MIN_EVIDENCE", 2)
+    return f"at least {n} of: {', '.join(parts)}"
+
+
+def _regime_plays(reg: str | None, enabled: set | None) -> list[dict]:
+    """What setups.playbook() would trade in this regime. Probed, not restated."""
+    import inspect
+    # setups.py is mid-version and gained an `enabled` parameter with S-series
+    # strategy switches. Testing for the capability rather than a version string
+    # keeps this endpoint working across the change, the same way _entry_rules
+    # does for the confirmation model.
+    params = inspect.signature(setups.playbook).parameters
+    takes_enabled = "enabled" in params
+    # setup-v0.7 replaced the sweep-only REVERSAL gate with "2 of {CHOCH, SWEEP,
+    # VOLUME, STRENGTH}", because sweep-alone produced 5 setups in four years.
+    # Probing with a lone sweep would now report TRANSITION as untradeable —
+    # which is wrong, and would tell the operator no playbook exists when one
+    # does. The second probe therefore supplies a SUFFICIENT evidence set rather
+    # than a single component. Still probed from the engine, never restated.
+    takes_evidence = "rev_evidence" in params
+    sufficient = (["CHOCH", "VOLUME"] if takes_evidence else None)
+
+    def _probe(zone_type, conditional):
+        if takes_evidence:
+            ev = sufficient if conditional else []
+            return setups.playbook(zone_type, reg, conditional, enabled, ev)
+        if takes_enabled:
+            return setups.playbook(zone_type, reg, conditional, enabled)
+        return setups.playbook(zone_type, reg, conditional)
+
+    found: dict[tuple, dict] = {}
+    for zone_type in ("DEMAND", "SUPPLY"):
+        # unconditional first: a play that survives with NO extra evidence is
+        # always live, and the conditional pass must never downgrade it back.
+        for swept in (False, True):
+            play = _probe(zone_type, swept)
+            if play is None:
+                continue
+            strategy, direction, _base_rank = play
+            cur = found.get((strategy, direction))
+            if cur is None:
+                found[(strategy, direction)] = {
+                    "strategy": strategy, "direction": direction,
+                    "zone_type": zone_type, "requires_sweep": swept}
+            elif not swept:
+                cur["requires_sweep"] = False
+    return sorted(found.values(),
+                  key=lambda p: (p["requires_sweep"], p["strategy"],
+                                 p["direction"]))
+
+
+def _tf_weather(tf: str, reg: str | None, enabled: set | None) -> dict:
+    """One timeframe's cell: the regime, and whether it can be traded."""
+    plays = _regime_plays(reg, enabled)
+    # The same probe ignoring the operator's switches. The difference between
+    # the two is the honest distinction between "we never built a play for this"
+    # and "you turned that play off" — two very different reasons for silence.
+    switched_off = sorted({p["strategy"] for p in _regime_plays(reg, None)}
+                          - {p["strategy"] for p in plays})
+    live = [p for p in plays if not p["requires_sweep"]]
+    gated = [p for p in plays if p["requires_sweep"]]
+    label = (REGIME_LABELS.get(reg) or
+             ("Not mapped" if reg is None else _cap(reg.replace("_", " ").lower())))
+    dirs = {p["direction"] for p in live}
+
+    because = detail = None
+    if not live:
+        if reg is None:
+            because = "the scanner has not classified this timeframe yet"
+            detail = (f"No regime fact exists for {tf}. That is missing data, "
+                      f"not a calm market.")
+        elif switched_off and not plays:
+            names = " and ".join(s.replace("_", " ").lower()
+                                 for s in switched_off)
+            because = f"{names} is switched off"
+            detail = (f"A {label.lower()} is tradeable, but {names} is turned "
+                      f"off in Scanner Setup, so nothing here is eligible.")
+        elif not plays:
+            because = f"no playbook covers a {label.lower()} yet"
+            detail = (f"A {label.lower()} produces no candidates at all — no "
+                      f"live playbook takes one. The playbook catalogue lists "
+                      f"what is planned for it.")
+        else:
+            because = (f"a {_strategy_words(gated)} here needs supporting "
+                       f"evidence first")
+            detail = (f"The only play in a {label.lower()} is a "
+                      f"{_strategy_words(gated)}, and it counts only with "
+                      f"{_reversal_rule_words()}. A transition on its own is "
+                      f"not a trade.")
+    return {"tf": tf, "regime": reg, "label": label, "plays": plays,
+            "live": bool(live), "requires_sweep": bool(gated) and not live,
+            "bias": (dirs.pop() if len(dirs) == 1 else "BOTH") if dirs else None,
+            "phrase": _play_phrase(live) if live else None,
+            "switched_off": switched_off,
+            "blocked_because": because, "blocked_detail": detail}
+
+
+def _weather_tier(tfs: list[dict], state: str) -> int:
+    """Rank of usefulness, 0 best. Drives both the sort and the row styling, so
+    the UI never has to re-derive 'is this one worth looking at'."""
+    if (state and state != "ADMITTED") or any(t["regime"] is None for t in tfs):
+        return 4                                  # no data — not a calm market
+    live = [t for t in tfs if t["live"]]
+    if len(live) == len(tfs) and len({t["bias"] for t in live}) == 1:
+        return 0                                  # every timeframe wants the same side
+    if live:
+        return 1                                  # tradeable somewhere
+    if any(t["requires_sweep"] for t in tfs):
+        return 2                                  # conditional on a sweep that rarely comes
+    return 3                                      # no playbook at all
+
+
+def _weather_meaning(tfs: list[dict], state: str) -> tuple[str, str]:
+    """The right-hand column: what this condition means, in one sentence."""
+    if state and state != "ADMITTED":
+        return ("Not scanned yet — still warming up",
+                "The symbol is in the universe but has too little daily history "
+                "to map structure, so no playbook runs on it yet.")
+    # Loud fallback: an unmapped timeframe is missing data. Rendering it as a
+    # quiet market would be the confident-looking zero this house forbids.
+    unmapped = [t["tf"] for t in tfs if t["regime"] is None]
+    if unmapped:
+        return ("No regime recorded on " + " and ".join(unmapped),
+                "The scanner has not classified this symbol there yet. Missing "
+                "data, not a quiet market.")
+
+    live = [t for t in tfs if t["live"]]
+    blocked = [t for t in tfs if not t["live"]]
+    if not live:
+        reasons = {t["blocked_because"] for t in blocked}
+        details = list(dict.fromkeys(t["blocked_detail"] for t in blocked))
+        if len(reasons) == 1:
+            return _cap(reasons.pop()), " ".join(details)
+        return ("Nothing to trade — " +
+                ", ".join(f"{t['tf']} {t['label'].lower()}" for t in tfs),
+                " ".join(details))
+
+    if len(live) == len(tfs):
+        if len({t["bias"] for t in live}) == 1:
+            return (_cap(live[0]["phrase"]) + " are live",
+                    "Both timeframes want the same side, so a setup on the "
+                    "lower one also earns the higher-timeframe agreement it is "
+                    "scored on. The scanner is waiting for price to return to a "
+                    "zone and close back out of it.")
+        return ("Timeframes disagree — " +
+                ", ".join(f"{t['tf']} wants {_side_word(t['bias'])}" for t in tfs),
+                "Either can still produce a setup — the engine trades each "
+                "timeframe on its own — but the lower one is ranked down, "
+                "because the timeframe above it disagrees.")
+
+    on = live[0]
+    return (_cap(on["phrase"]) + f" live on {on['tf']} only",
+            " ".join(f"{t['tf']}: {t['blocked_detail']}" for t in blocked))
+
+
+@app.get("/api/weather")
+def weather():
+    """Market Weather — regime per timeframe, and what it means for trading.
+
+    One batched query for the whole universe. Per-symbol /api/context calls
+    would be 40 round trips against a 1GB store every refresh, for a strip that
+    sits above the fold.
+    """
+    import time as _t
+    con = store.connect()
+    try:
+        enabled = (setups.enabled_strategies(con)
+                   if hasattr(setups, "enabled_strategies") else None)
+        urow = con.execute(
+            "SELECT payload FROM facts WHERE kind='universe' AND algo_version=? "
+            "ORDER BY id DESC LIMIT 1", (universe.UNIVERSE_VERSION,)).fetchone()
+        if urow:
+            members = [{"symbol": m["symbol"], "rank": m.get("rank"),
+                        "state": m.get("state", "ADMITTED")}
+                       for m in json.loads(urow[0])["members"]]
+        else:
+            # No ranking snapshot yet. Everything with candles is a truer answer
+            # than an empty strip, and the missing ranks say so by being null.
+            members = [{"symbol": s, "rank": None, "state": "ADMITTED"}
+                       for s in universe.all_tracked_symbols(con)]
+
+        latest: dict[tuple, str] = {}
+        syms = [m["symbol"] for m in members]
+        if syms:
+            rows = con.execute(
+                "SELECT symbol, tf, payload FROM facts WHERE kind='regime' "
+                "AND algo_version=? AND symbol IN (%s) AND tf IN (%s) "
+                "ORDER BY confirmed_at, id"
+                % (",".join("?" * len(syms)), ",".join("?" * len(WEATHER_TFS))),
+                (regime.REGIME_VERSION, *syms, *WEATHER_TFS)).fetchall()
+            for sym, tf, payload in rows:
+                latest[(sym, tf)] = payload      # ordered scan: last one wins
+    finally:
+        con.close()
+
+    out = []
+    for m in members:
+        tfs = []
+        for tf in WEATHER_TFS:
+            raw = latest.get((m["symbol"], tf))
+            tfs.append(_tf_weather(
+                tf, json.loads(raw)["regime"] if raw else None, enabled))
+        by_tf = {t["tf"]: t for t in tfs}
+        for t in tfs:
+            # setups.py scores a setup up when the timeframe above it agrees.
+            # "Agrees" there means the parent regime offers a play in the same
+            # direction — which is exactly what `bias` already is, so this reads
+            # the factor off the same probe instead of copying its condition.
+            parent = by_tf.get(getattr(setups, "HTF_LADDER", {}).get(t["tf"]))
+            t["htf"] = parent["tf"] if parent else None
+            t["htf_agrees"] = (None if parent is None or t["bias"] is None
+                               or parent["bias"] is None
+                               else parent["bias"] == t["bias"])
+        meaning, why = _weather_meaning(tfs, m["state"])
+        out.append({"symbol": m["symbol"], "rank": m["rank"],
+                    "state": m["state"], "timeframes": tfs,
+                    "live": any(t["live"] for t in tfs),
+                    "tier": _weather_tier(tfs, m["state"]),
+                    "meaning": meaning, "why": why})
+
+    # Opportunity first: the strip should surface what can be traded, not read
+    # top to bottom as a liquidity ranking.
+    out.sort(key=lambda s: (s["tier"],
+                            9999 if s["rank"] is None else s["rank"], s["symbol"]))
+    return {"generated_at": int(_t.time()), "timeframes": list(WEATHER_TFS),
+            "symbols": out, "n_live": sum(1 for s in out if s["live"]),
+            "n_total": len(out),
+            "enabled_strategies": sorted(enabled) if enabled else None,
+            "regime_version": regime.REGIME_VERSION,
+            "strategy_version": setups.SETUP_VERSION}
+
+
 @app.get("/api/overview")
 def overview():
     """One call for the cockpit rails: watchlist, setup feed, engine health."""
@@ -603,41 +1424,51 @@ def overview():
         # rank order: by universe rank, unranked last
         symbols.sort(key=lambda s: (s["rank"] is None, s["rank"] or 0))
 
+        # BULK, not per-symbol. This built the feed with a query per
+        # (symbol x timeframe x fact kind) — ~1,520 round trips once the
+        # universe reached 76 symbols, and `/api/overview` took **36.7s** on the
+        # live store while returning in 0.6s against a warm cache in-process.
+        # It is the Command surface, so that is the whole app feeling broken.
+        #
+        # Three queries now, filtered by version in SQL and grouped in Python.
+        # The output is byte-identical; only the number of round trips changed.
         feed = []
-        for sym in universe.all_tracked_symbols(con):
-            for tf in ("15m", "1H", "4H", "1D", "1W"):
-                last_state = {}
-                for ver in (setups.SETUP_VERSION, scalein.SCALE_VERSION):
-                    for r in store.get_facts(con, sym, tf, "setup", ver):
-                        p = json.loads(r["payload"])
-                        if p.get("setup_id") not in eligible:
-                            continue
-                        last_state[p["setup_id"]] = {"symbol": sym, "tf": tf,
-                                                     "market_time": r["market_time"], **p}
-                outs = {}
-                for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
-                    p = json.loads(r["payload"])
-                    if p.get("setup_id") not in eligible:
-                        continue
-                    outs[p["setup_id"]] = {"outcome": p["outcome"],
-                                           "r_multiple": p["r_multiple"]}
-                for s in last_state.values():
-                    s["result"] = outs.get(s["setup_id"])
-                    feed.append(s)
+        last_state: dict = {}
+        for sym, tf, mt, raw in con.execute(
+                "SELECT symbol, tf, market_time, payload FROM facts "
+                "WHERE kind='setup' AND algo_version IN (?,?) "
+                "ORDER BY confirmed_at, id",
+                (setups.SETUP_VERSION, scalein.SCALE_VERSION)).fetchall():
+            p = json.loads(raw)
+            if p.get("setup_id") not in eligible:
+                continue
+            # later rows win, matching the previous loop's last-write-wins
+            last_state[p["setup_id"]] = {"symbol": sym, "tf": tf,
+                                         "market_time": mt, **p}
+        outs: dict = {}
+        for (raw,) in con.execute(
+                "SELECT payload FROM facts WHERE kind='exec' AND algo_version=? "
+                "ORDER BY confirmed_at, id", (execsim.EXEC_VERSION,)).fetchall():
+            p = json.loads(raw)
+            if p.get("setup_id") in eligible:
+                outs[p["setup_id"]] = {"outcome": p["outcome"],
+                                       "r_multiple": p["r_multiple"]}
+        for st in last_state.values():
+            st["result"] = outs.get(st["setup_id"])
+            feed.append(st)
         feed.sort(key=lambda s: -s["market_time"])
 
         # attach the risk authority's sizing decision to each feed item
         risk_by_setup = {}
-        for sym in universe.all_tracked_symbols(con):
-            for tf in ("15m", "1H", "4H", "1D", "1W"):
-                for r in store.get_facts(con, sym, tf, "risk", risk.RISK_VERSION):
-                    p = json.loads(r["payload"])
-                    if (p.get("event") == "DECISION" and
-                            p.get("setup_id") in eligible):
-                        risk_by_setup[p["setup_id"]] = {
-                            "decision": p["decision"], "risk_usd": p.get("risk_usd"),
-                            "units": p.get("units"), "leverage": p.get("implied_leverage"),
-                            "reasons": p.get("reasons")}
+        for (raw,) in con.execute(
+                "SELECT payload FROM facts WHERE kind='risk' AND algo_version=? "
+                "ORDER BY confirmed_at, id", (risk.RISK_VERSION,)).fetchall():
+            p = json.loads(raw)
+            if p.get("event") == "DECISION" and p.get("setup_id") in eligible:
+                risk_by_setup[p["setup_id"]] = {
+                    "decision": p["decision"], "risk_usd": p.get("risk_usd"),
+                    "units": p.get("units"), "leverage": p.get("implied_leverage"),
+                    "reasons": p.get("reasons")}
         for s in feed:
             s["risk"] = risk_by_setup.get(s["setup_id"])
 
@@ -815,6 +1646,37 @@ def post_settings(payload: dict):
         con.close()
 
 
+@app.get("/api/edge-stats")
+def edge_stats(algo_version: str | None = None, symbol: str | None = None,
+               tf: str | None = None, venue_state: str | None = "TRADED",
+               resamples: int = Query(5000, ge=500, le=20000)):
+    """Is the recorded book distinguishable from zero?
+
+    Bootstrap CI on per-trade expectancy plus the breakeven fee. The UI shows
+    this beside the equity curve because a curve alone cannot answer it — a
+    losing run and an unlucky run look identical on a chart, and the difference
+    decides whether you change the strategy or wait for sample.
+
+    Resamples default lower than the CLI's 20k: this is a request path, and the
+    CI barely moves above ~5k. The value used is returned so the number on
+    screen is never mistaken for the deeper offline one.
+
+    Defaults to the TRADED book. This panel sits beside the equity curve, which
+    implies the two describe the same trades — and until 2026-07-30 they did
+    not: 276 of 639 (43.2%) were Kraken SHADOW symbols `risk.py` refuses to
+    size. `counts` still reports both halves, and `?venue_state=` overrides for
+    research (SHADOW, or empty for the combined book).
+    """
+    from engine import edgestats
+    con = store.connect()
+    try:
+        return edgestats.report(con, algo_version=algo_version, symbol=symbol,
+                                tf=tf, venue_state=venue_state or None,
+                                resamples=resamples)
+    finally:
+        con.close()
+
+
 @app.get("/api/baseline")
 def baseline_status():
     con = store.connect()
@@ -859,13 +1721,33 @@ def health():
             age_s = max(0, now - (last_open + sec))
             series.append({"symbol": symbol, "tf": tf, "last_open": last_open,
                            "age_s": age_s, "stale": age_s > 2 * sec})
+        # Gap rows whose requested range STARTS before 2000 are artefacts of the
+        # cold-start bug fixed 2026-07-30: a symbol with no candles asked the
+        # venue for history from 1970 and logged every bucket since as missing.
+        # They are quarantined at the read site rather than deleted — the log is
+        # evidence of what happened, including of the bug — but they must not
+        # reach this metric: 6,187,847,452 fabricated gaps against 699,726 real
+        # ones made `gaps_logged` 99.99% noise, and `risk.py` halts on the
+        # data-health verdict this feeds.
+        PRE_2000 = 946_684_800
         bad, gaps = con.execute(
-            "SELECT COALESCE(SUM(n_bad),0), COALESCE(SUM(n_gaps),0) FROM import_log"
-        ).fetchone()
+            "SELECT COALESCE(SUM(n_bad),0), COALESCE(SUM(n_gaps),0) "
+            "FROM import_log WHERE range_start >= ?", (PRE_2000,)).fetchone()
+        quarantined = con.execute(
+            "SELECT COUNT(*), COALESCE(SUM(n_gaps),0) FROM import_log "
+            "WHERE range_start < ?", (PRE_2000,)).fetchone()
         return {"status": "OK" if integrity == "ok" and not any(
                     s["stale"] for s in series) else "DEGRADED",
                 "database": integrity, "bad_candles_rejected": bad,
-                "gaps_logged": gaps, "series": series,
+                "gaps_logged": gaps,
+                "quarantined_gap_rows": quarantined[0],
+                "quarantined_gaps": quarantined[1],
+                "quarantine_reason": (
+                    "import_log rows requesting history from before 2000 are "
+                    "cold-start artefacts (fixed 2026-07-30); excluded from "
+                    "gaps_logged but retained in the log"
+                ) if quarantined[0] else None,
+                "series": series,
                 "stale_series": [s for s in series if s["stale"]]}
     finally:
         con.close()

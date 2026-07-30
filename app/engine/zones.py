@@ -20,13 +20,25 @@ import json
 from decimal import Decimal
 
 from . import store
-from .swings import compute_atr, SWING_VERSION
+from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-ZONE_VERSION = "zone-v0.9-draft"
+ZONE_VERSION = "zone-v0.11-draft"
+# v0.11: LOOKAHEAD CLOSED. The creation-time cluster count included swings that
+# were not yet confirmed, so `formation_quality` — and therefore `strength`,
+# which gates the REVERSAL playbook — was computed from the future on 7.9% of
+# zones, inflated every time. Now filtered on `confirmed_at <= zone's own`.
+# v0.10: the zone break tolerance was max(TICK, 0.05*ATR) with TICK hard-coded
+# to 0.01 — right for BTC-USD, catastrophically wrong below a dollar, where a
+# tolerance wider than any move the instrument makes means no close ever breaks
+# the far edge and a zone can never leave FRESH by breaking. The tick is now
+# derived per bar from the exponent of the venue's own price strings;
+# `swings.quote_ticks` is the single definition of it and carries the
+# measurement. Same rule, implemented honestly — it returns exactly 0.01
+# wherever 0.01 was right, so majors' zone facts are unchanged.
+
 ZONE_TIERS = ("INTERMEDIATE", "MAJOR")
 ZONE_ATR = Decimal("0.25")
-TICK = Decimal("0.01")
 TOL_ATR = Decimal("0.05")
 MAX_TOUCH_FACTS = 10
 
@@ -56,6 +68,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
         ts_index = {c["open_ts"]: i for i, c in enumerate(candles)}
         atr = compute_atr(candles)
+        ticks = quote_ticks(candles)
         n_created = n_events = 0
 
         swings = []
@@ -85,10 +98,25 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 continue
             kind_z, bottom, top = bands[k]
             i = ts_index[s["market_time"]]
-            # cluster: other same-type anchors whose price falls inside this band
+            # Cluster: other same-type anchors whose price falls inside this
+            # band AND which were already knowable when this zone was created.
+            #
+            # The `confirmed_at` filter was missing, so the count included
+            # swings that had not happened yet — and the fact is written with
+            # `confirmed_at = s["confirmed_at"]`, meaning a fact stamped at time
+            # T carried a value derived from information that only existed after
+            # T. That is the causality rule this project is built on, broken in
+            # the engine that feeds the strategy layer.
+            #
+            # Measured before the fix, 12 symbols x 4H/1D/1W, 2,006 zones: 159
+            # (7.9%) counted future swings, and 96 of those got a different
+            # formation_quality — inflated in every single case, never
+            # deflated. Worst observed: a zone rated 90 on a cluster of 18, of
+            # which ZERO were knowable at its own creation time.
             cluster = sum(1 for m, o in enumerate(swings)
                           if m != k and bands[m] is not None and bands[m][0] == kind_z
-                          and bottom <= o["price"] <= top)
+                          and bottom <= o["price"] <= top
+                          and o["confirmed_at"] <= s["confirmed_at"])
             zone_id = f"{symbol}|{tf}|{kind_z}|{s['market_time']}"
             base = {"zone_id": zone_id, "zone_type": kind_z,
                     "bottom": str(bottom), "top": str(top),
@@ -113,7 +141,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 if bar_close_ts <= s["confirmed_at"]:
                     continue
                 hi, lo, close = Decimal(c["high"]), Decimal(c["low"]), Decimal(c["close"])
-                tol = max(TICK, TOL_ATR * atr[j]) if atr[j] is not None else TICK
+                tol = max(ticks[j], TOL_ATR * atr[j]) if atr[j] is not None else ticks[j]
                 broken = (close < bottom - tol) if kind_z == "DEMAND" else (close > top + tol)
                 if broken:
                     fresh = freshness(episodes, j - i, broken=True)

@@ -23,7 +23,7 @@ import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from . import phemex, store
+from . import kraken, phemex, store
 from .runlog import RunRecorder
 
 # v0.2: the ranking sweep is throttled, retried, and now fails CLOSED on poor
@@ -59,6 +59,28 @@ MIN_RANK_COVERAGE = 0.97
 # Perps are ranked alongside spot. Turned off, the universe is spot-only and the
 # system behaves exactly as v0.2 did.
 ENABLE_PERPS = True
+# Operator ruling 2026-07-30: use Kraken. It runs CFTC-regulated perps for US
+# traders, which settles the redesign plan's open question #1 — "Phemex may
+# restrict US users" — that had gone unanswered while the whole book depended
+# on it. Turned off, the universe behaves exactly as it did before.
+ENABLE_KRAKEN = True
+# Operator ruling 2026-07-30, second part: Phemex WORKS today, for an unknown
+# remaining duration, and the stated priority is good data.
+#
+# So Kraken is warmed but NOT traded. The reasoning is that the expensive part
+# of a venue switch is not the code — it is that a new symbol enters WARMING and
+# needs MIN_DAILY_CANDLES before it is tradeable. Discovering that under time
+# pressure means weeks of dead forward record. Carrying Kraken as a SHADOW venue
+# means the switch is a flag, not a project.
+#
+# SHADOW symbols are imported, aggregated and run through every descriptive
+# engine. They are NOT admitted, so `admitted_at` refuses them and the risk
+# authority will not size a trade on one. The forward record stays a Phemex
+# record; the Kraken history accumulates beside it.
+#
+# Flip this to False and Kraken becomes a normal ranked venue that can win
+# admission — that is the one-line switch this exists to make cheap.
+KRAKEN_SHADOW_ONLY = True
 LAST_RANK_HEALTH = {"attempted": 0, "succeeded": 0, "failed": 0}
 _UA = {"User-Agent": "snipersight/0.1"}
 # stablecoin bases have no tradeable structure (ported from prior project's
@@ -173,13 +195,28 @@ def rank_by_volume(progress=None) -> list[tuple[str, float]]:
     return rows
 
 
+#: Ticker spellings that mean the same underlying. Kraken writes Bitcoin as XBT
+#: (the ISO-4217-style code) while everyone else writes BTC — so PF_XBTUSD and
+#: BTCUSDT are one coin under two names. Without this the dedupe below sees two
+#: candidates, admits both, and the account holds the same exposure twice while
+#: MAX_CONCURRENT counts it once. That is precisely the bug S33 caught between
+#: BTC-USD and BTCUSDT, and it would have returned the moment Kraken was added.
+_BASE_ALIASES = {"XBT": "BTC", "XDG": "DOGE"}
+
+
 def _base_asset(symbol: str) -> str:
     """The underlying, so the same coin on two venues is one candidate."""
-    if symbol.endswith("-USD"):
-        return symbol[:-4]
-    if symbol.endswith("USDT"):
-        return symbol[:-4]
-    return symbol
+    if symbol.startswith("PF_"):
+        base = symbol[3:]
+        if base.upper().endswith("USD"):
+            base = base[:-3]
+    elif symbol.endswith("-USD"):
+        base = symbol[:-4]
+    elif symbol.endswith("USDT"):
+        base = symbol[:-4]
+    else:
+        base = symbol
+    return _BASE_ALIASES.get(base.upper(), base.upper())
 
 
 def rank_all_venues(progress=None, enable_perps: bool | None = None) -> list[tuple[str, float]]:
@@ -207,8 +244,53 @@ def rank_all_venues(progress=None, enable_perps: bool | None = None) -> list[tup
             from .runlog import get_logger
             get_logger().warning(
                 f"perp ranking unavailable, spot-only this refresh: {exc}")
+    if ENABLE_KRAKEN and not KRAKEN_SHADOW_ONLY:
+        # Kraken merged LAST, so it WINS any overlap. That is the operator's
+        # ruling as precedence rather than a flag: where the same coin trades on
+        # both perp venues, hold the CFTC-regulated one.
+        #
+        # This deliberately OVERRIDES volume. Everywhere else here the deeper
+        # book wins, because thin books do not fill structural stops. Regulatory
+        # access outranks depth: an unfillable order is a bad trade, but an
+        # inaccessible venue is not a trade at all.
+        try:
+            for pid, vol in kraken.rank_by_volume():
+                merged[_base_asset(pid)] = (pid, vol)
+        except Exception as exc:
+            from .runlog import get_logger
+            get_logger().warning(
+                f"kraken ranking unavailable this refresh; the universe keeps "
+                f"its Phemex/spot membership, which may include venues the "
+                f"operator cannot access: {exc}")
     out = sorted(merged.values(), key=lambda r: -r[1])
     return out
+
+
+def shadow_candidates() -> list[tuple[str, float]]:
+    """Kraken perps carried for DATA ONLY, alongside the traded universe.
+
+    Deliberately NOT part of `rank_all_venues`. Merging them there displaced the
+    traded venue for every overlapping coin — and since those winners then
+    classify as SHADOW, the tradeable set collapsed to the three junk symbols
+    Kraken does not list. BTC, ETH and SOL all went dark in a preview, which is
+    the whole book.
+
+    So warming and trading are two questions with two answers. A shadow symbol
+    does not compete for an admission slot; it rides alongside, and the
+    underlying it duplicates keeps trading wherever it already traded. That is
+    safe here precisely because SHADOW never reaches the risk authority — the
+    double-exposure rule the dedupe exists to enforce is about POSITIONS, and a
+    shadow symbol cannot hold one.
+    """
+    if not (ENABLE_KRAKEN and KRAKEN_SHADOW_ONLY):
+        return []
+    try:
+        return [(pid, vol) for pid, vol in kraken.rank_by_volume()
+                if vol >= MIN_VOLUME_USD]
+    except Exception as exc:
+        from .runlog import get_logger
+        get_logger().warning(f"kraken shadow ranking unavailable: {exc}")
+        return []
 
 
 def current_symbols(con) -> list[str]:
@@ -225,6 +307,26 @@ def current_symbols(con) -> list[str]:
     have = [r[0] for r in con.execute(
         "SELECT DISTINCT symbol FROM candles WHERE tf='1D'").fetchall()]
     return have or list(SEED)
+
+
+def shadow_symbols(con) -> list[str]:
+    """Symbols carried for data only — imported and derived, never traded."""
+    row = con.execute(
+        "SELECT payload FROM facts WHERE kind='universe' AND algo_version=? "
+        "ORDER BY id DESC LIMIT 1", (UNIVERSE_VERSION,)).fetchone()
+    if not row:
+        return []
+    return [m["symbol"] for m in json.loads(row[0])["members"]
+            if m["state"] == "SHADOW"]
+
+
+def scan_symbols(con) -> list[str]:
+    """Everything the engines should RUN over: traded plus shadow.
+
+    Deliberately distinct from `current_symbols`, which is the TRADEABLE set.
+    Collapsing the two is how a shadow venue would quietly start trading.
+    """
+    return sorted(set(current_symbols(con)) | set(shadow_symbols(con)))
 
 
 def all_tracked_symbols(con) -> list[str]:
@@ -322,6 +424,19 @@ def refresh(con, ranked: list[tuple[str, float]] | None = None,
                                 "reason": "seed_anchor"})
                 if n < MIN_DAILY_CANDLES:
                     warming.append(pid)
+
+        # Shadow members are appended AFTER the traded set is settled, so they
+        # cannot consume a TOP_N slot. They are warmed, never admitted.
+        for pid, vol in shadow_candidates():
+            if _base_asset(pid) in {_base_asset(m["symbol"]) for m in members
+                                    if m["state"] == "SHADOW"}:
+                continue
+            n_daily = candle_counts.get(pid, 0)
+            members.append({"symbol": pid, "rank": None, "vol_usd": round(vol),
+                            "n_daily": n_daily, "state": "SHADOW",
+                            "reason": "warming_for_venue_switch"})
+            if n_daily < MIN_DAILY_CANDLES:
+                warming.append(pid)
 
         store.insert_fact(con, symbol="PORTFOLIO", tf="ALL", kind="universe",
                           market_time=int(time.time()), confirmed_at=int(time.time()),

@@ -7,12 +7,12 @@ import argparse
 import time
 from datetime import datetime, timezone
 
-from engine import store, importer, aggregator, swings, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, quality
+from engine import store, importer, aggregator, risk, quality, pipeline
 
-ENGINES = [("swings", swings), ("structure", structure), ("zones", zones),
-           ("liquidity", liquidity), ("regime", regime), ("setups", setups),
-           ("execsim", execsim), ("scalein", scalein), ("execsim2", execsim),
-           ("cycles", cycles)]
+# One roster, declared in `engine/pipeline.py`. Names are derived from the
+# modules rather than typed beside them, so a label can no longer disagree with
+# the engine it labels.
+ENGINES = list(zip(pipeline.names(), pipeline.PER_SYMBOL))
 
 SYMBOLS = ["BTC-USD", "ETH-USD"]
 TF_SECONDS = importer.TF_SECONDS

@@ -9,6 +9,13 @@ Venue is derived from the symbol string, which is unambiguous across the two
 venues we support and needs no schema change:
     BTC-USD   -> coinbase spot   (dash, USD quote)
     BTCUSDT   -> phemex perp     (no dash, USDT quote)
+    PF_XBTUSD -> kraken perp     (PF_ prefix, USD quote)
+
+Kraken's prefix is checked FIRST and is unambiguous: no other venue here mints a
+symbol starting `PF_`. Note Kraken writes Bitcoin as XBT, so `PF_XBTUSD` and
+`BTCUSDT` are the same underlying under two spellings — `universe._base_asset`
+has to know that or the same coin enters the universe twice, which is the exact
+double-exposure bug S33 caught between BTC-USD and BTCUSDT.
 
 Adding a venue means adding a descriptor here plus an adapter module. Nothing
 else in the engine should branch on venue by name.
@@ -19,7 +26,12 @@ from decimal import Decimal
 # Cost profiles live with the venue because they are venue facts. Historical
 # reports must never silently rewrite these — introduce a new profile version
 # instead of editing one in place.
-VENUES_VERSION = "venues-v0.1-draft"
+VENUES_VERSION = "venues-v0.2-draft"
+# v0.2: Kraken Futures added (operator ruling 2026-07-30 — CFTC-regulated US
+# perps settle the access question Phemex left open), and `margin_mode` is now
+# DECLARED rather than implied. The liquidation model was always the isolated
+# formula; it simply never said so, and an undeclared assumption under a gate
+# that decides whether a stop is safe is the kind that surprises you once.
 
 
 @dataclass(frozen=True)
@@ -35,6 +47,14 @@ class Venue:
     # Perps charge funding while a position is open. Spot does not.
     funding_settlements_per_day: int
     cost_profile: str
+    #: ISOLATED or CROSS. Operator ruling 2026-07-30: **isolated**, and the
+    #: reason is the whole point — under cross margin every position is backed
+    #: by the entire account balance, so one bad trade can take all of it. Under
+    #: isolated, a position can only lose the margin posted to it. The risk
+    #: envelope in risk.py sizes by "distance to stop" and caps total open risk;
+    #: cross margin would make both of those advisory, because the exchange
+    #: could close a position at a loss far larger than the one that was risked.
+    margin_mode: str = "ISOLATED"
 
     @property
     def is_perp(self) -> bool:
@@ -74,7 +94,26 @@ PHEMEX_PERP = Venue(
     cost_profile="phemex-perp-v1",
 )
 
-ALL = (COINBASE_SPOT, PHEMEX_PERP)
+KRAKEN_PERP = Venue(
+    key="kraken-perp",
+    kind="perp",
+    # PF_ contracts are USD-quoted and multi-collateral.
+    quote="USD",
+    allow_shorts=True,
+    # Same reasoning as Phemex: the venue permits far more, and we declare 10
+    # deliberately. Size here is derived from RISK and leverage is the
+    # CONSEQUENCE of the notional that risk implies; a high cap does not
+    # increase edge, it only widens how badly a sizing mistake ends.
+    max_leverage=Decimal("10"),
+    # Kraken Futures retail taker/maker. Conservative: assumes no fee tier.
+    maker_rate=Decimal("0.0002"),
+    taker_rate=Decimal("0.0005"),
+    slippage_atr=Decimal("0.05"),
+    funding_settlements_per_day=24,      # hourly, unlike Phemex's 8-hourly
+    cost_profile="kraken-perp-v1",
+)
+
+ALL = (COINBASE_SPOT, PHEMEX_PERP, KRAKEN_PERP)
 _BY_KEY = {v.key: v for v in ALL}
 
 
@@ -85,6 +124,8 @@ def venue_for(symbol: str) -> Venue:
         raise ValueError("empty symbol")
     if symbol.endswith("-USD"):
         return COINBASE_SPOT
+    if symbol.startswith("PF_") and symbol.upper().endswith("USD"):
+        return KRAKEN_PERP
     if "-" not in symbol and symbol.endswith("USDT"):
         return PHEMEX_PERP
     raise ValueError(f"cannot determine venue for symbol {symbol!r}")
@@ -111,14 +152,35 @@ def round_trip_cost_rate(symbol: str) -> Decimal:
 
 
 def liquidation_price(entry: Decimal, leverage: Decimal, direction: str,
-                      maintenance_margin: Decimal = Decimal("0.005")) -> Decimal | None:
-    """Approximate liquidation price for a leveraged perp position.
+                      maintenance_margin: Decimal = Decimal("0.005"),
+                      margin_mode: str = "ISOLATED") -> Decimal | None:
+    """Approximate liquidation price for a leveraged perp position, ISOLATED.
+
+    `(1/leverage) - maintenance` is the isolated-margin formula: the price move
+    that exhausts the margin posted to THIS position. That is what the code has
+    always computed — it simply never declared which mode it was pricing, which
+    is how an assumption becomes a surprise.
+
+    Under CROSS margin the answer would be different and much worse to get
+    wrong: liquidation is then a function of total account equity, so the
+    distance depends on every other open position and on the balance, and one
+    trade can consume the whole account. Isolated bounds a position's loss to
+    its own margin, which is the only mode under which `risk.py`'s "2% per
+    trade" means what it says.
+
+    Operator ruling 2026-07-30: isolated. This function REFUSES to price cross
+    rather than returning the isolated number under a cross label — a
+    liquidation estimate that is wrong in the optimistic direction is worse than
+    no estimate, because the stop-safety gate is built on top of it.
 
     Returns None at 1x — an unleveraged position cannot be liquidated by price.
-    The maintenance-margin allowance makes this CONSERVATIVE (liquidation is
-    modelled as nearer than the naive 1/leverage estimate), because the failure
-    we must avoid is believing the stop is safe when it is not.
     """
+    if margin_mode != "ISOLATED":
+        raise ValueError(
+            f"liquidation_price models ISOLATED margin only; got {margin_mode!r}. "
+            f"Cross-margin liquidation depends on total account equity and every "
+            f"other open position, and returning the isolated number here would "
+            f"understate the danger the stop-safety gate exists to catch.")
     if leverage is None or leverage <= 1:
         return None
     move = (Decimal("1") / leverage) - maintenance_margin
@@ -129,7 +191,8 @@ def liquidation_price(entry: Decimal, leverage: Decimal, direction: str,
 
 
 def stop_survives_liquidation(entry: Decimal, sl: Decimal, leverage: Decimal,
-                              direction: str) -> tuple[bool, Decimal | None]:
+                              direction: str,
+                              margin_mode: str = "ISOLATED") -> tuple[bool, Decimal | None]:
     """Would the stop trigger BEFORE liquidation?
 
     Ported intent from the prior project's liquidation gate. If liquidation sits
@@ -137,7 +200,8 @@ def stop_survives_liquidation(entry: Decimal, sl: Decimal, leverage: Decimal,
     larger than the one that was risked — the stop becomes decorative and the
     whole R-multiple accounting is fiction. Returns (ok, liquidation_price).
     """
-    liq = liquidation_price(entry, leverage, direction)
+    liq = liquidation_price(entry, leverage, direction,
+                            margin_mode=margin_mode)
     if liq is None:
         return True, None
     return (sl > liq, liq) if direction == "LONG" else (sl < liq, liq)

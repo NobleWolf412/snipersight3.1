@@ -1,0 +1,647 @@
+/* Diagnostics UI — funnel, per-setup tracer, diagnose wizard.
+
+   Owned by funnel.js / tracer.js / wizard.js and injected by them. Kept out of
+   ss.css so the design system and these three surfaces can be edited
+   independently.
+
+   Every colour, radius, font and spacing value below is a token from ss.css.
+   Nothing new is invented. Two rules from docs/DESIGN-SYSTEM.md are load-bearing
+   here and are easy to break by accident:
+
+     · The Glow-Is-State Rule. Glow means "participating in the current
+       operating state". A funnel bar is a historical count, not a live signal,
+       so nothing in the funnel glows. The only accent tint in this file marks
+       the operator's own live selection and the one actionable CTA.
+     · No side-stripe borders. Status is carried by a full border + tint, a
+       chip, or a corner tag — never `border-left: 4px solid <colour>`.
+
+   Saturated colour is rationed: the bottleneck pill and the drop-off segments
+   are the only places it appears at size, which is what makes the bottleneck
+   the thing your eye lands on first. */
+
+/* Once the staged funnel has rendered real data, the flat reason list that
+   shell.js writes into #dFunnel is superseded — two lists of the same numbers
+   is the "wall of numbers" this surface exists to replace. The class is added
+   by funnel.js only AFTER a successful render, so if this module ever fails to
+   load or throws, the original list is still there. Never hide a fallback you
+   have not yet replaced. */
+body.dx-funnel-live #dFunnel { display: none; }
+
+/* ══════════════════════════════════════════════════════════════════
+   shared primitives
+   ══════════════════════════════════════════════════════════════════ */
+
+.dx-load,
+.dx-empty {
+  padding: var(--lg);
+  color: var(--fg-4);
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  line-height: 1.8;
+}
+
+/* The loud fallback. A diagnostic that lies is worse than no diagnostic, so a
+   failed fetch gets a full red-bordered box naming the endpoint and the status
+   — never a zero, never an empty state that reads as "all clear". */
+.dx-fail {
+  border: 1px solid rgba(248, 113, 113, .4);
+  background: rgba(248, 113, 113, .08);
+  border-radius: var(--r-md);
+  padding: var(--md);
+  color: var(--red-2);
+  font-family: var(--f-mono);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.dx-fail b { display: block; letter-spacing: .16em; text-transform: uppercase; font-size: 10px; }
+.dx-fail code { color: var(--fg-3); word-break: break-all; }
+.dx-fail .dx-fail-what {
+  font-family: var(--f-body);
+  font-size: 12.5px;
+  color: var(--fg-2);
+  margin-top: 6px;
+  display: block;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   1 — bottleneck funnel
+   ══════════════════════════════════════════════════════════════════ */
+
+/* #funnelRoot is a direct child of .panel (not .panel-body), so it carries its
+   own padding rather than inheriting one. */
+.dx-funnel { padding: 0 var(--lg) var(--lg); }
+
+/* ---- the bottleneck pill: the single most important element on the page ---- */
+.dx-bottleneck {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--md);
+  align-items: center;
+  padding: var(--md) var(--lg);
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(255, 194, 102, .35);
+  background: rgba(255, 194, 102, .07);
+  margin-bottom: var(--lg);
+}
+/* Red only when the bottleneck is a genuine system defect rather than expected
+   attrition — most attrition is normal and should not read as an alarm. */
+.dx-bottleneck.bad {
+  border-color: rgba(248, 113, 113, .4);
+  background: rgba(248, 113, 113, .08);
+}
+/* Nothing is dying anywhere: still say so, in the same slot, so the operator
+   learns where to look. */
+.dx-bottleneck.ok {
+  border-color: rgba(0, 255, 170, .3);
+  background: rgba(0, 255, 170, .06);
+}
+
+.dx-bn-mark {
+  font-family: var(--f-display);
+  font-size: 22px;
+  line-height: 1;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+.dx-bottleneck.bad .dx-bn-mark { color: var(--red-2); }
+.dx-bottleneck.ok  .dx-bn-mark { color: var(--green); }
+
+.dx-bn-copy { min-width: 0; }
+.dx-bn-kicker {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--fg-4);
+  margin-bottom: 3px;
+}
+/* Genuine prose — the one place on this surface where Inter is correct. */
+.dx-bn-line {
+  font-family: var(--f-body);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--fg);
+}
+.dx-bn-sub {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  color: var(--fg-3);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.dx-bn-cta { flex: none; white-space: nowrap; }
+
+/* ---- stage rows ---- */
+.dx-stages { display: flex; flex-direction: column; gap: 6px; }
+
+.dx-stage {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  padding: 7px 9px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color .15s, background .15s;
+}
+.dx-stage:hover { background: rgba(255, 255, 255, .03); border-color: var(--border-soft); }
+/* The operator's live selection IS current state, so the accent is earned. */
+.dx-stage.on {
+  border-color: rgba(var(--accent-rgb), .45);
+  background: rgba(var(--accent-rgb), .06);
+}
+.dx-stage:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.dx-stage-top {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sm);
+  margin-bottom: 5px;
+}
+.dx-stage-name {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.dx-stage.on .dx-stage-name { color: var(--accent); }
+.dx-stage-count {
+  margin-left: auto;
+  font-family: var(--f-display);
+  font-size: 15px;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+/* the drop-off, stated as a number rather than left to be read off the bar */
+.dx-stage-drop {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dx-stage-drop.none { color: var(--fg-4); }
+
+/* The track is the PREVIOUS stage's count; the fill is what survived into this
+   one. The gap between them is the loss, drawn rather than described — that is
+   the whole point of the bar. */
+.dx-stage-track {
+  position: relative;
+  height: 14px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(135deg,
+      rgba(255, 194, 102, .16) 0 5px,
+      rgba(255, 194, 102, .05) 5px 10px);
+  border: 1px solid var(--border-soft);
+}
+/* the bottleneck row's loss is the one the operator must see first */
+.dx-stage.bottleneck .dx-stage-track {
+  background:
+    repeating-linear-gradient(135deg,
+      rgba(248, 113, 113, .26) 0 5px,
+      rgba(248, 113, 113, .08) 5px 10px);
+  border-color: rgba(248, 113, 113, .35);
+}
+.dx-stage-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .20), rgba(255, 255, 255, .11));
+  border-right: 1px solid rgba(255, 255, 255, .28);
+  transition: width .5s cubic-bezier(.22, .9, .3, 1);
+}
+/* survivors of the whole gauntlet: the one stage where green is a fact */
+.dx-stage.terminal .dx-stage-fill {
+  background: linear-gradient(180deg, rgba(0, 255, 170, .34), rgba(0, 255, 170, .16));
+  border-right-color: rgba(0, 255, 170, .5);
+}
+.dx-stage-tag {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--f-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--red-2);
+}
+
+.dx-stage-foot {
+  display: flex;
+  gap: var(--sm);
+  align-items: baseline;
+  margin-top: 4px;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--fg-4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the detail list a stage click filters ---- */
+.dx-detail {
+  margin-top: var(--md);
+  border-top: 1px solid var(--border-soft);
+  padding-top: var(--md);
+}
+.dx-detail-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sm);
+  margin-bottom: var(--sm);
+  font-family: var(--f-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--fg-4);
+}
+.dx-reason {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sm) var(--md);
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.dx-reason:last-child { border-bottom: 0; }
+.dx-reason-code {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--fg-2);
+}
+.dx-reason-n {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+/* the plain-English translation, which is the reason this list exists */
+.dx-reason-plain {
+  grid-column: 1 / -1;
+  font-family: var(--f-body);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-3);
+}
+
+/* individual setups that died here — the bridge into the tracer */
+.dx-samples { margin-top: var(--md); }
+.dx-sample {
+  display: flex;
+  align-items: center;
+  gap: var(--sm);
+  width: 100%;
+  text-align: left;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.dx-sample:hover { border-color: var(--border); background: rgba(255, 255, 255, .03); color: var(--fg-2); }
+.dx-sample:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dx-sample b { color: var(--fg-2); font-weight: 600; }
+.dx-sample .dx-sample-go { margin-left: auto; color: var(--fg-4); }
+.dx-sample-note {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--fg-4);
+  margin-top: 6px;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .dx-bottleneck { grid-template-columns: auto minmax(0, 1fr); }
+  .dx-bn-cta { grid-column: 1 / -1; justify-self: start; }
+  .dx-stage-count { font-size: 14px; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   2 — per-setup trace drawer
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Below #gloss (z 9000) on purpose: glossary terms must still explain
+   themselves inside the drawer. */
+.dx-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  background: rgba(0, 0, 0, .6);
+  backdrop-filter: blur(3px);
+}
+
+.dx-drawer {
+  position: fixed;
+  z-index: 8001;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+  border-left: 1px solid var(--border);
+  /* the earned heavy shadow — this surface is lifted above the shell */
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+  animation: dxSlide .18s cubic-bezier(.22, .9, .3, 1);
+}
+@keyframes dxSlide { from { transform: translateX(18px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.dx-drawer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sm);
+  padding: var(--md) var(--lg);
+  border-bottom: 1px solid var(--border-soft);
+  flex: none;
+  flex-wrap: wrap;
+}
+.dx-drawer-title {
+  font-family: var(--f-display);
+  font-size: 15px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--fg);
+}
+.dx-drawer-sub {
+  width: 100%;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--fg-4);
+  word-break: break-all;
+}
+.dx-drawer-body { overflow: auto; padding: var(--lg); flex: 1; }
+.dx-drawer-x { margin-left: auto; }
+
+/* an explicit amber state, never a silently empty drawer */
+.dx-note {
+  border: 1px solid rgba(255, 194, 102, .35);
+  background: rgba(255, 194, 102, .07);
+  border-radius: var(--r-md);
+  padding: var(--md);
+  margin-bottom: var(--md);
+  color: var(--amber);
+  font-family: var(--f-mono);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.dx-note .dx-note-what {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--f-body);
+  font-size: 12.5px;
+  color: var(--fg-2);
+}
+
+.dx-verdict {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: rgba(0, 0, 0, .35);
+  padding: var(--md);
+  margin-bottom: var(--lg);
+}
+.dx-verdict-line {
+  font-family: var(--f-body);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--fg);
+  margin-top: 6px;
+}
+.dx-verdict-owner {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--fg-4);
+  margin-top: 6px;
+}
+
+/* ---- the stage ladder ---- */
+.dx-trace { display: flex; flex-direction: column; }
+.dx-tstage {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: var(--sm) var(--md);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.dx-tstage:last-child { border-bottom: 0; }
+.dx-tglyph {
+  font-family: var(--f-mono);
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--fg-4);
+}
+.dx-tstage.pass    .dx-tglyph { color: var(--green-soft); }
+.dx-tstage.fail    .dx-tglyph { color: var(--red-2); }
+.dx-tstage.warn    .dx-tglyph { color: var(--amber); }
+.dx-tstage.pending .dx-tglyph { color: var(--cyan); }
+
+.dx-tlabel {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+/* The actual value the gate compared. Without this the ladder is a row of
+   ticks, which is the failure mode this component exists to fix. */
+.dx-tvalue {
+  font-family: var(--f-mono);
+  font-size: 12.5px;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+  margin-top: 2px;
+}
+.dx-tstage.skip .dx-tvalue { color: var(--fg-4); }
+.dx-texpect {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--fg-4);
+  margin-top: 2px;
+}
+.dx-tdetail {
+  font-family: var(--f-body);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-3);
+  margin-top: 4px;
+}
+.dx-tfacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 6px;
+}
+.dx-tfact {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--fg-4);
+  font-variant-numeric: tabular-nums;
+}
+.dx-tfact b { color: var(--fg-3); font-weight: 600; }
+
+@media (max-width: 620px) {
+  .dx-drawer { width: 100%; border-left: 0; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   3 — diagnose wizard
+   ══════════════════════════════════════════════════════════════════ */
+
+.dx-modal-wrap {
+  position: fixed;
+  z-index: 8001;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lg);
+  pointer-events: none;
+}
+.dx-modal {
+  pointer-events: auto;
+  width: min(760px, 100%);
+  max-height: min(86vh, 900px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+  animation: dxLift .18s cubic-bezier(.22, .9, .3, 1);
+}
+@keyframes dxLift { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.dx-modal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sm);
+  padding: var(--md) var(--lg);
+  border-bottom: 1px solid var(--border-soft);
+  flex: none;
+}
+.dx-modal-title {
+  font-family: var(--f-display);
+  font-size: 16px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--fg);
+}
+.dx-modal-body { overflow: auto; padding: var(--lg); }
+.dx-modal-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sm);
+  padding: var(--md) var(--lg);
+  border-top: 1px solid var(--border-soft);
+  flex: none;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--fg-4);
+  letter-spacing: .1em;
+}
+
+/* one-line summary of the run, so the modal answers before it explains */
+.dx-summary {
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-soft);
+  background: rgba(0, 0, 0, .35);
+  padding: var(--md) var(--lg);
+  margin-bottom: var(--lg);
+  font-family: var(--f-body);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+.dx-summary.bad { border-color: rgba(248, 113, 113, .35); background: rgba(248, 113, 113, .07); }
+.dx-summary.warn { border-color: rgba(255, 194, 102, .3); background: rgba(255, 194, 102, .06); }
+.dx-summary.ok { border-color: rgba(0, 255, 170, .28); background: rgba(0, 255, 170, .05); }
+.dx-summary b { color: var(--fg); }
+
+.dx-steps { display: flex; flex-direction: column; }
+.dx-step {
+  display: grid;
+  grid-template-columns: 26px 18px minmax(0, 1fr);
+  gap: var(--sm) var(--md);
+  padding: var(--md) 0;
+  border-bottom: 1px solid var(--border-soft);
+  align-items: start;
+}
+.dx-step:last-child { border-bottom: 0; }
+.dx-step-n {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--fg-4);
+  font-variant-numeric: tabular-nums;
+  padding-top: 1px;
+}
+.dx-step-glyph { font-family: var(--f-mono); font-size: 13px; text-align: center; color: var(--fg-4); }
+.dx-step.pass    .dx-step-glyph { color: var(--green-soft); }
+.dx-step.fail    .dx-step-glyph { color: var(--red-2); }
+.dx-step.warn    .dx-step-glyph { color: var(--amber); }
+.dx-step.unknown .dx-step-glyph { color: var(--fg-4); }
+
+.dx-step-title {
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-2);
+}
+.dx-step.fail .dx-step-title { color: var(--fg); }
+/* the measured value, so a step is never just a tick */
+.dx-step-value {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+  margin-top: 3px;
+}
+/* what it means and what to do — the reason the wizard exists at all */
+.dx-step-means {
+  font-family: var(--f-body);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--fg-3);
+  margin-top: 5px;
+}
+.dx-step-do {
+  font-family: var(--f-body);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--fg-2);
+  margin-top: 4px;
+}
+.dx-step-do b {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--fg-4);
+  display: block;
+  font-weight: 600;
+}
+.dx-step-cta { margin-top: var(--sm); display: inline-flex; gap: var(--sm); flex-wrap: wrap; }
+
+@media (max-width: 620px) {
+  .dx-modal-wrap { padding: 0; }
+  .dx-modal { max-height: 100vh; height: 100%; border-radius: 0; border: 0; }
+  .dx-step { grid-template-columns: 20px 16px minmax(0, 1fr); }
+}

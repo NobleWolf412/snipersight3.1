@@ -49,6 +49,8 @@
     <div class="nav-sep"></div>
     <a href="#setup"                data-s="setup">Scanner Setup</a>
     <a href="#diagnostics"          data-s="diagnostics">Diagnostics<span class="nav-count" id="nDiag"></span></a>
+    <div class="nav-sep"></div>
+    <a href="#learn"                data-s="learn">Learn</a>
   </nav>
 
   <!-- ══ stage ══ -->
@@ -78,6 +80,9 @@
         </div>
       </div>
 
+      <!-- first-run orientation; lessons.js owns it and self-hides once dismissed -->
+      <div id="orientRoot"></div>
+
       <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head">
           <span class="t-section">Setup Deck</span>
@@ -85,6 +90,9 @@
         </div>
         <div id="deck"><div class="empty">loading…</div></div>
       </div>
+
+      <!-- Market Weather: regime x timeframe, and what it MEANS. weather.js owns it. -->
+      <div id="weatherRoot" style="margin-bottom:var(--lg)"></div>
 
       <div class="panel">
         <div class="panel-head">
@@ -213,6 +221,10 @@
     <!-- ─── SCANNER SETUP ─── -->
     <section class="surface" id="s-setup">
       <div class="surface-head"><h1 class="t-page">Scanner Setup</h1><p>What is the bot allowed to do?</p></div>
+      <!-- Playbook catalogue: what each strategy hunts, and its live record —
+           losses included. playbooks.js owns it and reads /api/playbooks. -->
+      <div id="playbookRoot" style="margin-bottom:var(--lg)"></div>
+
       <div class="grid cols-2">
         <div class="panel">
           <div class="panel-head"><span class="t-section">Venue &amp; Credentials</span>
@@ -295,8 +307,11 @@
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Why nothing fired</span></div>
+          <div class="panel-head"><span class="t-section">Why nothing fired</span>
+            <button class="btn" id="btnDiagnose" style="margin-left:auto">Diagnose</button></div>
           <div class="panel-body" id="dFunnel"><span class="t-mono" style="color:var(--fg-4)">loading…</span></div>
+          <!-- funnel.js appends the stage bars + bottleneck pill here -->
+          <div id="funnelRoot"></div>
         </div>
       </div>
       <div class="grid cols-2">
@@ -311,9 +326,24 @@
           <div id="dTelemetry"><div class="empty">loading…</div></div>
         </div>
       </div>
+
+      <!-- Edge statistics: is the recorded book distinguishable from zero?
+           edgeview.js owns it and reads /api/edge-stats. -->
+      <div id="edgeRoot" style="margin-top:var(--lg)"></div>
+    </section>
+
+    <!-- ─── LEARN ─── -->
+    <section class="surface" id="s-learn">
+      <div class="surface-head"><h1 class="t-page">Learn</h1>
+        <p>What do these words mean, and why do they work?</p></div>
+      <div id="learnRoot"><div class="empty">loading…</div></div>
     </section>
 
   </main>
+
+  <!-- overlay mounts: modals/drawers render here, above the shell -->
+  <div id="tracerRoot"></div>
+  <div id="wizardRoot"></div>
 
   <!-- ══ status bar ══ -->
   <footer class="statusbar">
@@ -330,5 +360,15 @@
 <script src="/static/glossary.js?v=1"></script>
 <script src="/static/chart.js?v=1"></script>
 <script src="/static/shell.js?v=1"></script>
+<!-- Each module owns exactly one mount point and boots itself. Kept separate so
+     they can be built, cached and broken independently — a failure in one must
+     never blank a surface that another owns. -->
+<script src="/static/playbooks.js?v=1"></script>
+<script src="/static/weather.js?v=1"></script>
+<script src="/static/lessons.js?v=1"></script>
+<script src="/static/funnel.js?v=1"></script>
+<script src="/static/tracer.js?v=1"></script>
+<script src="/static/wizard.js?v=1"></script>
+<script src="/static/edgeview.js?v=1"></script>
 </body>
 </html>

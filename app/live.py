@@ -18,17 +18,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import notify
-from engine import (store, importer, aggregator, swings, structure, zones,
-                    liquidity, regime, setups, execsim, risk, scalein, cycles,
-                    universe, ingest, quality, marketdata)
+from engine import (store, importer, aggregator, risk, universe, ingest,
+                    quality, marketdata, pipeline)
 from engine.runlog import get_logger
 
 NATIVE_TFS = ("15m", "1H", "1D")
 _last_universe_refresh = 0.0
 ALL_TFS = ("15m", "1H", "4H", "1D", "1W")
-ENGINES = (swings, structure, zones, liquidity, regime, setups, execsim,
-           scalein, execsim,  # execsim runs again after scalein to fill adds
-           cycles)            # observational satellite — BTC 1D only, no consumers
+# The roster lives in `engine/pipeline.py` and is imported by all three runners
+# (live, ingest, backfill). It used to be maintained here and copied there, and
+# the copies drifted — `cooldowns` was in none of them, so the re-entry lockout
+# `risk.py` consumes has never fired once. See that module for the measurements.
+ENGINES = pipeline.PER_SYMBOL
 POLL_SECONDS = 60
 
 # Price-drift monitor (ported concept from user's prior project): between
@@ -73,16 +74,65 @@ def refresh_universe(con, log, beat=None):
     r = universe.refresh(con, progress=prog)
     if r["source"] == "unavailable":
         log.warning("universe refresh: rank source unavailable — unchanged")
-        return
-    for sym in r["warming"]:
+    else:
+        for sym in r["warming"]:
+            try:
+                res = ingest.onboard(con, sym)
+                log.info(f"UNIVERSE onboarded {sym}: {res['candles'].get('1D',0)} daily candles")
+                notify.toast("＋ New symbol added", f"{sym} joined the scan universe")
+            except Exception as e:
+                log.warning(f"onboard failed for {sym}: {e}")
+        if r["warming"]:
+            universe.refresh(con)      # re-classify: warmed symbols -> admitted
+    # Runs whether or not the ranking answered. A hole in the candle store is
+    # not a fact about whether the rank endpoint was up this hour, and the
+    # symbols needing repair are already-tracked ones — the scan set survives a
+    # failed refresh untouched.
+    repair_short_history(con, log, beat)
+
+
+def repair_short_history(con, log, beat=None):
+    """Hourly: re-import timeframes a PARTIAL onboard left short.
+
+    The onboarding retry above is keyed on `r["warming"]`, and membership of
+    that list is decided by the DAILY candle count alone. A symbol whose 1D
+    series is warm is therefore never re-onboarded no matter what its 1H and
+    15m hold — which is how PF_XLMUSD ran 24 cycles with 1D warm and both
+    intraday timeframes at zero, in `warming` on no refresh.
+
+    `ingest.history_floor` stopped the live loop asking for 1970, and it does
+    repair a timeframe that is entirely EMPTY, because the watermark is NULL and
+    `cycle` falls through to the floor. What it cannot repair is a series that
+    is merely SHORT: a partial onboard leaves a non-NULL watermark and the loop
+    only ever walks FORWARD from it, so the history behind it stays missing for
+    as long as the symbol is tracked.
+
+    Deliberately outside the `source == "unavailable"` early return above: a
+    hole in the candle store is not a fact about whether the ranking endpoint
+    answered this hour.
+    """
+    for sym in universe.scan_symbols(con):
         try:
-            res = ingest.onboard(con, sym)
-            log.info(f"UNIVERSE onboarded {sym}: {res['candles'].get('1D',0)} daily candles")
-            notify.toast("＋ New symbol added", f"{sym} joined the scan universe")
-        except Exception as e:
-            log.warning(f"onboard failed for {sym}: {e}")
-    if r["warming"]:
-        universe.refresh(con)          # re-classify: warmed symbols -> admitted
+            short = ingest.missing_history(con, sym)
+            if not short:
+                continue
+            if beat:
+                beat(f"repair {sym}")
+            gained = {tf: n for tf, n in
+                      ingest.repair_history(con, sym, short).items() if n}
+            if not gained:
+                # Not a failure: the venue's history simply starts where it
+                # starts. `missing_history` records the productive attempt and
+                # will not ask again, so this line appears once per symbol.
+                log.info(f"history probe {sym} {short}: venue served nothing "
+                         f"older — series starts where the venue's does")
+                continue
+            log.warning(f"REPAIRED short history for {sym}: {gained} — "
+                        f"onboarding had left these timeframes incomplete")
+            ingest.run_engines(con, sym)
+        except Exception as exc:
+            log.warning(f"history repair skipped {sym}: "
+                        f"{type(exc).__name__} {exc}")
 
 
 def check_drift(con, log, threshold=DRIFT_ALERT_PCT, dry=False):
@@ -170,7 +220,12 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
 
     now = int(time.time())
     new_candles = 0
-    scan = universe.current_symbols(con)
+    # SCAN covers traded + shadow symbols; only the traded ones can reach the
+    # risk authority. `admitted_at` gates every sizing decision on ADMITTED
+    # membership, so a SHADOW venue accumulates candles, facts and even setups
+    # without a dollar of paper risk touching it. Using `current_symbols` here
+    # would leave Kraken cold and defeat the whole point of warming it.
+    scan = universe.scan_symbols(con)
     for i, sym in enumerate(scan, 1):
         _beat(f"import {sym} ({i}/{len(scan)})")
         # One symbol's transient venue error must not abort the scan. A single
@@ -181,10 +236,14 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
             for tf, gran in importer.native_tfs(sym).items():
                 last = con.execute(
                     "SELECT MAX(open_ts) FROM candles WHERE symbol=? AND tf=? "
-                    "AND source NOT LIKE 'agg:%'", (sym, tf)).fetchone()[0] or 0
+                    "AND source NOT LIKE 'agg:%'", (sym, tf)).fetchone()[0]
                 closed_until = now - now % gran
-                if last + gran < closed_until:
-                    r = importer.backfill(con, sym, tf, last + gran, now)
+                # A cold symbol has no MAX(open_ts). Falling back to 0 asked the
+                # venue for history from 1970 and imported nothing while logging
+                # ~2M fabricated gaps per cycle — see ingest.history_floor.
+                start = (last + gran) if last else ingest.history_floor(tf, now)
+                if start < closed_until:
+                    r = importer.backfill(con, sym, tf, start, now)
                     new_candles += r["candles"]
                     if r["gaps"]:
                         log.warning(f"live import {sym} {tf}: {r['gaps']} gaps")
@@ -206,12 +265,35 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
         _beat(f"aggregate {sym} ({i}/{len(tracked)})")
         for tf in ("4H", "1W"):
             aggregator.aggregate(con, sym, tf)
+    # The import loop above guards each symbol because "one symbol's transient
+    # error must not abort the scan". This loop did not, and
+    # `quality.assert_market_ready` RAISES — so a single BLOCKED symbol skipped
+    # every remaining symbol's engines, `risk.run(con)` AND `quality.audit(...)`
+    # for that poll. Measured in data/engine.log: 364 aborted cycles against 584
+    # completed (38%), all of them EUL-USD: SEQUENCE_GAPS.
+    #
+    # A blocked symbol must still be SKIPPED — that is the gate doing its job,
+    # and it stays loud. It just cannot take the other 74 symbols and the risk
+    # authority down with it.
+    blocked_syms = []
     for i, sym in enumerate(scan, 1):
         _beat(f"engines {sym} ({i}/{len(scan)})")
-        quality.assert_market_ready(con, sym, now)
+        try:
+            quality.assert_market_ready(con, sym, now)
+        except Exception as exc:
+            blocked_syms.append(f"{sym} ({type(exc).__name__}: {exc})")
+            continue
         for mod in ENGINES:
             for tf in ALL_TFS:
-                mod.run(con, sym, tf, importer.TF_SECONDS[tf])
+                try:
+                    mod.run(con, sym, tf, importer.TF_SECONDS[tf])
+                except Exception as exc:
+                    log.warning(f"engine {mod.__name__} failed on {sym} {tf}: "
+                                f"{type(exc).__name__} {exc}")
+    if blocked_syms:
+        log.warning(f"market-data quality blocked {len(blocked_syms)}/{len(scan)} "
+                    f"symbols this cycle (engines skipped, rest of the scan "
+                    f"continued): {'; '.join(blocked_syms[:4])}")
 
     _beat("risk")
     risk.run(con)

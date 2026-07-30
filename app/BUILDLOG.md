@@ -1747,3 +1747,1542 @@ audit and passed down. A test now asserts `_LIVE_CACHE` does not exist.
 Blockers 0, evaluation allowed.
 
 183 python + 21 js green.
+
+---
+
+## S36 — Confirmed entry: the defect is fixed, the edge is not (yet) there
+
+**setup-v0.7-draft.** `TOUCH -> CONFIRMING -> VALIDATED`. A zone touch no longer
+IS a trade; it is a candidate that must be proved by a closed bar which engages
+the zone, closes back out of it, AND closes in the top third of its own range
+(rejection, not drift). Entry moves to the next bar's OPEN — a price that
+demonstrably traded, so no fill assumption is needed. Stop moves to the
+confirmation bar's own extreme, a level the market visibly rejected. Targets cap
+at 3R, with `tp_uncapped` recorded alongside so the cap can be graded later.
+
+**Measured geometry change:** stop distance went from **0.30x to 0.93x** the
+trigger bar's range. The v0.6 stop sat inside the noise of the bar that created
+the signal; that is why 59% of stop-outs landed on the fill bar.
+
+**The 2x2 (`engine/abtest.py`).** Entry and exit both changed, so a single
+before/after could not attribute the result. The harness calibrates first —
+replaying v0.6 under the production cost model and comparing against the exec
+facts execsim actually wrote — and refuses to report if it cannot reproduce
+them. It reproduced 142 trades / -102.8R as 141 / -101.6R, 1.2% drift.
+
+On the traded universe (20 perps):
+
+| cell | n | win% | expectancy | same-bar |
+|---|---|---|---|---|
+| touch + hold (v0.6) | 53 | 11.3% | -0.433 R | **57.4%** |
+| touch + managed | 53 | 30.2% | -0.028 R | 70.3% |
+| **confirmed + hold** | **114** | **30.7%** | **-0.017 R** | **13.9%** |
+| confirmed + managed | 115 | 31.3% | -0.171 R | 20.3% |
+
+**The managed exit (partials + trail + breakeven) is REJECTED by its own gate.**
+It makes the confirmed entry worse. It was specced from excursion data measured
+on the broken entry: a 1.53R median MFE was a symptom of trades dying early, not
+proof that 1.5R is where to cut them. Once the stop is wide enough for a trade to
+run, cutting half at 1.5R and moving to breakeven caps the winners.
+
+**The near-miss.** Across all history the touch+managed cell read +0.322R, PF
+1.69, P(>0) 99.4%. Then the concentration check: **96% of that profit came from
+three illiquid retired spot alts** — LSETH-USD, DIA-USD, COTI-USD, two of them
+the same symbols whose stale candles produced the S35 drift spam. Dropping the
+top 3 trades left +0.189R with a CI including zero. A confident statistic, and
+wrong.
+
+**Honest verdict:** confirmation fixed the defect it was built for and made the
+book measurable. It did not create an edge. -0.017R with a CI straddling zero is
+flat. What it bought is a fair test for the strategy work that follows.
+
+### Two bugs found along the way, both in production code
+
+**1. The cost profile was venue-blind.** Every one of the 232 exec facts carried
+`coinbase-retail-v1` (1.00% round trip) while the traded universe has been 100%
+Phemex perps (0.07%) since S34 — a 14x over-charge. It bit hardest in the GATE
+direction: `MIN_RISK_COST_MULT` demands risk >= K x round-trip cost, so an
+inflated cost demanded a ~14x wider stop before a setup counted as economic.
+`costs.profile_for(symbol)` is now venue-derived and falls back to the COSTLIER
+profile on an unknown symbol. `UNECONOMIC_AFTER_COSTS` rejections on the perp
+book went **675 -> 0**; those were real setups screened out on another venue's
+fees.
+
+**2. `quality._AUDIT_CACHE` answered questions about one store using another's
+verdict.** It was a single module-level dict keyed on nothing, and its background
+refresh called `store.connect()` with NO argument — so it audited the DEFAULT
+store regardless of which connection the caller passed. Invisible with one
+database. Not invisible with two: `risk.py`'s data-health gate read a cached
+BLOCKED verdict belonging to a different store, rejected every intent as
+DATA_HEALTH_BLOCKED, and a drawdown-halt test then observed no halt — because no
+position ever opened to draw the account down. It failed only when run alongside
+other tests. Now keyed by database path, and the background refresh runs ONLY
+against the default store; any other store gets an honest `None` (pending)
+rather than a borrowed answer. Six regression tests pin it.
+
+**Also wired:** `settings.strategy_pullback` / `_reversal` / `_scale_in` have
+existed as BEHAVIOURAL settings with a working API since S34 and nothing ever
+read them — the switches were inert. `setups.playbook()` now honours them and
+the active set is recorded in the strategy manifest.
+
+**315 python tests green**, 1 skipped.
+
+**Open, deliberately not done here:** `execsim.py` still holds to SL/TP; since
+the managed exit is rejected, that is now correct rather than pending. Confluence
+is recorded on every v0.7 setup and gates nothing — `engine/factorstats.py`
+grades it before any of it is allowed to become a filter.
+
+---
+
+## S37 — Version collision, and the book turns gross-positive
+
+**Two defects, one root cause: identity.**
+
+`setup_id` was `{symbol}|{tf}|{strategy}|{zone_id}` with NO version component, so
+setup-v0.6 and setup-v0.7 minted the SAME id for the same zone. Measured on the
+live store the moment both versions were resident: **136 ids present in BOTH
+books; 130 of 346 exec facts joined to a setup that existed twice.** One order
+came back FILLED and MISSED at once. Every downstream join — execsim, risk,
+telemetry, the trace endpoint — merged them silently, because a join on a
+colliding key cannot tell that it is merging. Ids are now version-scoped.
+
+The other half: **execsim kept writing `exec-v0.7-draft` while simulating v0.7
+plans**, so one version label covered two strategy generations. A version tag
+whose meaning changes underneath it is worse than none, because every consumer
+trusts it. `exec-v0.8-draft` separates them, and it was overdue on its own
+merits — the spec had already stated that setups/execsim/risk/scalein must bump
+together or the pipeline reads new facts under old assumptions. It did exactly
+that for one session.
+
+**exec-v0.8 also fixes two things the version bump made unavoidable:**
+  · cost profile is venue-derived (was Coinbase spot on a 100%-perp universe —
+    a 14x over-charge on fees AND on the slippage that prices every stop)
+  · fee role follows the strategy's DECLARED entry model. setup-v0.7 enters
+    MARKET at the next bar's open, which pays TAKER; charging maker understated
+    cost by ~0.045 R/trade while claiming a fill model the plan never asked for.
+
+**Production pipeline re-run end to end (58 symbols, all timeframes):**
+
+| | v0.6 + exec-v0.7 | v0.7 + exec-v0.8 |
+|---|---|---|
+| filled trades | 142 | **304** |
+| MISSED orders | 90 (39%) | **0** |
+| win rate | 12.8% | **30.3%** |
+| expectancy | -0.641 R | **-0.084 R** |
+
+**The finding that changes what to do next.** On the live book
+(n=217, `/api/edge-stats`):
+
+```
+mean net    -0.037 R    CI95 [-0.260, +0.195]   P(>0) 37.1%
+mean GROSS  +0.093 R
+mean costs   0.130 R
+break-even fee  0.033% per side
+```
+
+**The strategy is now gross-POSITIVE and cost-negative.** That is a different
+problem from the one this session started with, and a better one: the entry no
+longer donates to noise, and what remains is an execution-cost problem with
+known levers — maker entry instead of taker, fewer and larger trades, or a
+venue with a better fee tier. The break-even fee sits at 0.033%/side against
+Phemex maker 0.01% / taker 0.06%: entering maker rather than taker would put
+the book above water on these numbers alone.
+
+Stated plainly so it is not over-read: the CI still crosses zero. This is not a
+proven edge. It is a book that is no longer proven to be losing, with the
+remaining gap attributable to a cost line rather than to the thesis.
+
+**Also shipped this session (six parallel workstreams):** `edgestats` (bootstrap
+CI, break-even fee), `factorstats` (five-axis factor grading incl. pairwise
+redundancy), `entrystats` (fill rate, adverse selection, entry-location probe),
+`abtest` (the calibrated 2x2), Learn surface (8 chapters, 8 interactive SVG
+widgets, each stamped with the engine version it documents), playbook catalogue,
+Market Weather, staged rejection funnel with bottleneck pill, per-setup trace
+drawer, diagnose wizard, and `/api/edge-stats` + its panel.
+
+**315 python + 50 js tests green.**
+
+---
+
+## S38 — Maker-then-market entry, and the TRANSITION gate finally fires
+
+### 1. Entry model, chosen by measurement
+
+Three variants through `abtest`, confirmed entry + hold exit, perps, n=228:
+
+| model | expectancy | P(>0) | missed |
+|---|---|---|---|
+| MARKET_NEXT_OPEN | -0.017 R | 43.6% | 0 |
+| MAKER_PULLBACK | +0.074 R | 70.8% | 32 |
+| **MAKER_THEN_MARKET** | **+0.115 R** | **82.2%** | **0** |
+
+**A first attempt at the maker variant was wrong and had to be thrown away.** It
+rested the limit AT the next bar's open, which is marketable — it crosses the
+spread and pays TAKER — so it was claiming a maker rebate the exchange would
+never have granted. It scored +0.028 R on a free lunch invented by the model.
+The honest version rests 0.10 R BETTER than the market and must genuinely wait.
+
+That honest version is **adversely selected**, exactly as v0.6's resting limits
+were: its 32 unfilled orders would have made **+0.365 R each** at market against
+**+0.074 R** for the ones that filled. Price walks away precisely when the trade
+is right. Saving a fee by declining those trades pays for the fee with the edge.
+
+So: post passive, cross if unfilled after 2 bars. Both legs load-bearing — the
+passive leg because the book's break-even fee is 0.033%/side against a 0.06%
+taker, the crossing leg because the passive leg alone forfeits the winners.
+Production confirms both fire: 169 maker fills, 249 crosses.
+
+### 2. TRANSITION: 5 setups in four years -> 429
+
+The REVERSAL playbook demanded a liquidity sweep within 10 bars. The entire
+store holds **98 SWEEP facts** across every symbol and timeframe, so the play
+fired five times, ever — while TRANSITION accounted for 2,959 of 7,149
+`NO_ELIGIBLE_PLAYBOOK` rejections (41%). That was not a confluence requirement,
+it was a lottery ticket.
+
+Replaced with **2 of 4 independent components**, one per information type:
+`CHOCH` (structure) · `SWEEP` (liquidity) · `VOLUME` (participation) ·
+`STRENGTH` (location). One is noise; all four reproduces the original problem at
+a new threshold. Rejections now record WHICH components were present, so the
+funnel can say "you were one component away" instead of "no playbook".
+
+**Measured, perps only, exec-v0.8:**
+
+| strategy | n | win% | sum R | expectancy | CI95 | P(>0) |
+|---|---|---|---|---|---|---|
+| PULLBACK | 339 | 30.1% | +0.1 | +0.0004 R | [-0.187, +0.193] | 50.0% |
+| **REVERSAL** | **209** | **34.9%** | **+67.6** | **+0.324 R** | **[+0.055, +0.598]** | **99.1%** |
+| ALL | 549 | 31.9% | +66.7 | +0.122 R | [-0.033, +0.280] | 93.6% |
+
+**This is the first confidence interval this project has produced that clears
+zero.** It was put through the same concentration check that killed the last
+99% result:
+
+  · top 3 TRADES = 15% of profit (the retired-spot artifact was 43%)
+  · CI still clears zero after dropping the top 3 trades; straddles at top 5
+  · positive on ALL FOUR timeframes (15m +23.4, 1H +34.2, 1D +8.6, 4H +1.4) —
+    the artifact was 1D-only
+  · 11 of 17 symbols positive
+  · **top 3 SYMBOLS = 82% of profit** (ETHUSDT, XRPUSDT, AAVEUSDT) — high, and
+    the reason this is promising rather than proven. Unlike the artifact these
+    are major liquid perps in the ACTIVE universe, not retired illiquid alts,
+    but 82% from 3 of 17 needs forward confirmation before it is believed.
+
+PULLBACK at +0.0004 R is exactly flat, consistent with every other measurement
+of it this session. The book is carried entirely by the strategy that could not
+previously fire.
+
+### 3. Copy that had started lying
+
+Changing the gate made three user-facing strings false — the Market Weather
+cell, the Reversal playbook card, and the planned-card rationale all still said
+"needs a liquidity sweep within 10 bars". A user reading that would be told a
+trade was impossible when it had become merely conditional. All three now derive
+from `setups.REVERSAL_COMPONENTS` / `REVERSAL_MIN_EVIDENCE` via one helper,
+and the tests assert the RULE as the engine states it rather than a sentence.
+
+Four tests encoded the old rule. All four were **updated to encode the new one**,
+not deleted — the property each protected (TRANSITION must not trade on regime
+alone; the UI must state the real condition) is unchanged.
+
+**354 python tests green**, 1 skipped.
+
+---
+
+## S39 — `rank` retired. It sorted the deck backwards at its own mode.
+
+`engine/factorstats.py` graded every v0.7 confluence field against 228 closed
+`exec-v0.8` trades. The composite the deck sorted on does not survive.
+
+**The ablation is the whole argument** (book-wide noise floor +/-0.130):
+
+| score | r vs realised R | verdict |
+|---|---|---|
+| `rank` as shipped | +0.210 | clears |
+| `rank` MINUS its +10 HTF term | **+0.111** | **inside the floor** |
+| that +10 HTF term ALONE | **+0.261** | clears |
+
+A single 10-point term outscores the whole 100-point composite. The other 86% of
+the score's variance is `pts_volume` (45.1% of variance, r=+0.09) and
+`pts_rr_good` (40.6%, r=+0.03) — neither clears its own floor, and together they
+do not merely fail to help, they DILUTE the one term that works.
+
+**And it is non-monotone, which a correlation hides:**
+
+```
+rank 50   n= 30   win 40.0%   +0.027 R
+rank 65   n=116   win 13.8%   -0.643 R   <- worst bucket, 51% of the deck
+rank 75   n= 32   win 56.2%   +1.082 R
+rank 80   n= 40   win 45.0%   +0.641 R
+```
+
+The lowest bucket beats the modal bucket by 0.67 R/trade. A number that orders
+the deck backwards where most of the deck sits is not a confidence score, and
+showing it as one invites the operator to trust an ordering the data contradicts.
+
+**Rebuilding it was considered and rejected**, because the obvious replacement
+inputs are one signal wearing four names: `zone_quality` is algebraically
+`50 + min(30, 10*cluster) + TF_WEIGHT[tf]` and `zone_strength` is
+`(quality + freshness)//2` — the identity verified on 228/228 trades. Pearson
+only caught the pair at r=1.00 because the clamp breaks linearity elsewhere.
+Rebuilding from "strength + quality + cluster" would triple-count the cluster and
+smuggle the timeframe in three times. That is the previous project's 26-factor
+failure reproducing itself inside one 10-field block.
+
+**Shipped instead:**
+  · The deck sorts by **expiry urgency** — which decision dies first. Setups
+    expire after `ENTRY_MAX_BARS`, so it is operationally true and claims
+    nothing it cannot support. The countdown is rendered ON the card: a deck
+    ordered by an invisible key is worse than one ordered by a bad score.
+  · `rank` stays in the payload (history must stay readable) but is no longer
+    displayed or sorted on, with the measurement recorded at the site.
+  · HTF context is a **three-state label** — TRENDING / FLAT / **UNKNOWN**.
+
+### The UNKNOWN state is a bug fix, not a display choice
+
+`if conf.get("htf_regime_aligned")` scored None identically to False, so a
+MISSING measurement was penalised exactly like a CONTRARY one. Measured: unknown
+-HTF trades ran **38.9% win / +0.404 R**, genuinely opposed ones **17.2% /
+-0.616 R**. Folding them together is a 1.02 R/trade libel.
+
+And it fell entirely on one book. `htf_regime` is None on 74/230 setups, and
+**68 of those are the whole 1D book** — the only profitable timeframe. Root
+cause traced: `HTF_LADDER["1D"] = "1W"`, 1W regime needs `structure` facts,
+`structure.TIER_BY_TF["1W"] = "MAJOR"`, and 194 weeks of perp history yields
+**14 MAJOR swings across 11 symbols** — one or two each, far too few to form an
+alternating sequence. So 1W structure exists for 1 perp symbol out of 21, and
+the 1D book cannot have an HTF regime at all. It was being docked 10 points for
+a data gap it has no way to close.
+
+A missing measurement must never be scored as a bad measurement.
+
+**Not yet done, and named so it is not lost:** backfill deeper 1W history (or
+demote `TIER_BY_TF["1W"]` under a structure version bump) so the 1D book becomes
+measurable, then re-grade. `htf_trending` (r=+0.473, n=156) currently beats
+`htf_regime_aligned` (+0.42), which hints the real signal is "the higher
+timeframe is trending at all" rather than "it agrees" — but trend-but-opposed is
+n=16 and was correctly REFUSED, so direction remains untested.
+
+**357 python + 50 js tests green.**
+
+---
+
+## S40 — The tick floor: 44 of 59 symbols could not see a break
+
+Commissioned a range-detection engine to attack the "27% of rejections are
+ranging markets" gap. It came back with the gap's actual cause instead.
+
+**`TICK = Decimal("0.01")` is hard-coded in `structure.py`, `zones.py` and
+`liquidity.py`, and the break rule is `max(TICK, 0.05*ATR)`.** That is the right
+tick for BTC-USD and catastrophically wrong below a dollar. Measured across all
+59 tracked symbols: **on 44 of them `0.05*ATR` is SMALLER than 0.01** on at
+least one timeframe — 185 of the 293 symbol/tf series in the store, evaluated at
+each series' latest ATR-bearing bar.
+
+State the method with the number, because the number MOVES: ATR is
+re-measured every bar, so a borderline symbol crosses the 0.01 line in both
+directions as data arrives, and a figure quoted without its method cannot be
+reproduced later. Earlier passes in this section recorded 34 and 35 for the same
+predicate; 44 is what the same query returns now. The conclusion is not
+sensitive to that drift, which is the point of recording it.
+
+Per-symbol, on 15m, taking the median ATR over the series:
+
+```
+SHIB-USD        median ATR 4.0e-8      0.05*ATR 2.0e-9      floor is 5,000,000x larger
+PUMP-USD        median ATR 0.00001284  0.05*ATR 6.420e-7    floor is    15,576x larger
+u1000PEPEUSDT   median ATR 0.00001331  0.05*ATR 6.655e-7    floor is    15,026x larger
+u1000SHIBUSDT   median ATR 0.00001577  0.05*ATR 7.885e-7    floor is    12,682x larger
+```
+
+A tolerance larger than any move the instrument makes means **no close ever
+breaks any level**. The store shows exactly that: SHIB-USD had **0 breaks against
+101 labels**, PUMP-USD **0 against 145**. And `regime._classify` returns RANGE
+when `last_break is None` — so those symbols sat in a permanent, false RANGE, and
+that is where most of the "ranging market" bucket came from. It was never a
+ranging market. It was a blind structure engine.
+
+**Fix:** the tick is read from the exponent of the venue's own price strings
+(`swings.quote_ticks`), as a RUNNING maximum over past bars so it stays causal
+and idempotent — a later bar quoted to more decimals can never change an already
+emitted fact. It returns exactly 0.01 wherever 0.01 was right.
+
+One landmine closed on the way in: the original returned `Decimal(1)` when a
+series carried no fractional digits, which would inflate the tolerance *worse
+than the bug being fixed*. An unknown tick now returns ZERO and lets the ATR term
+govern — the conservative direction. No real venue row in the store is
+integer-quoted; a test fixture was, which is exactly when a landmine matters.
+
+**And it stayed open in a second copy.** `ranges.py`, where the derivation was
+first written, kept its own `quote_ticks` returning `Decimal(1)` for that case
+after the shared one in `swings.py` had been corrected to `0` — two
+implementations of one convention, already disagreeing, in the exact way that
+having one definition is supposed to prevent. `ranges.py` now imports the shared
+one and the copy is deleted. Verified a no-op before deleting it: the two
+functions return identical tick vectors on all **295** candle series in the
+store, so no range fact changes and `ranges-v0.1` does not need a bump — the
+disagreement was confined to a case no real venue row reaches. The dead
+`TICK = Decimal("0.01")` constants left behind in `structure.py`, `zones.py` and
+`liquidity.py` are removed too, and `ranges.break_tolerance` now REQUIRES its
+`tick` argument rather than defaulting it to 0.01, so the constant cannot creep
+back in via a caller that forgets to pass one.
+
+**Version cascade, all forced:** `structure-v0.9`, `zone-v0.10`, `liq-v0.9`,
+`regime-v0.9` (no rule change — it classifies FROM breaks), `setup-v0.8`,
+`exec-v0.9`. Not one of these changed a rule. Every one changed its facts, and
+S37 already recorded what happens when a version tag covers two generations.
+
+### Measured effect
+
+Re-measured against the persisted store, old version vs new, so every figure
+below is a query someone else can re-run rather than a number from a scratch
+recomputation. Structure breaks, `structure-v0.8` -> `structure-v0.9`, label
+count unchanged in every case (labels do not depend on the tolerance):
+
+```
+u1000SHIBUSDT   1 -> 52   (127 labels)      XLMUSDT    20 -> 53
+DOGEUSDT       10 -> 44                     ADAUSDT    22 -> 48
+ENAUSDT        14 -> 50                     ONDOUSDT   32 -> 51
+OPUSDT         17 -> 47                     XRPUSDT    36 -> 45
+```
+
+And the control — symbols where 0.01 already WAS the tick are byte-identical,
+which is the claim `swings.quote_ticks` makes about itself:
+
+```
+BTCUSDT  47 -> 47     ETHUSDT  52 -> 52     BNBUSDT  55 -> 55     AAVEUSDT  50 -> 50
+```
+
+The headline the range engine was commissioned against, strictly like-for-like
+on the 20 symbols that carry both generations of rejection facts:
+
+```
+NO_ELIGIBLE_PLAYBOOK        3,535 -> 1,109
+...of which regime=RANGE    1,010 ->   176      (877 -> 176 on the same 20 symbols: -80%)
+RANGE as a share of NEP      28.6% -> 15.9%
+```
+
+u1000SHIBUSDT alone accounted for 290 of the old 877 and now accounts for 6. The
+176 that remain are the real ranging population, and they are no longer
+concentrated in the sub-dollar symbols: 74% sit on tick-affected symbols now
+versus 92% before, i.e. what is left is spread across the book rather than being
+one instrument's blindness.
+
+**Not fixed in the store, and worth knowing:** `live.cycle` runs the engines over
+`universe.current_symbols` — the **20-symbol scan universe** — not over the 59
+`all_tracked_symbols`. SHIB-USD, PUMP-USD and u1000PEPEUSDT are tracked but not
+scanned, so they have **no `structure-v0.9` facts at all** and their persisted
+structure is still the blinded v0.8 generation showing 0 breaks against 101 and
+145 labels. An earlier draft of this section reported "SHIB-USD 0->35, PUMP-USD
+0->40" as measured effect; those came from an ad-hoc recomputation, never from
+the store, and the store contradicts them. The fix is correct for those symbols
+— it simply has not been run on them. Re-running the cascade over all tracked
+symbols is a backfill decision, not a code one, and it is deliberately not
+bundled here.
+
+**The REVERSAL result survived a change that reclassified a third of the market,
+and got MORE robust:**
+
+| | before tick fix | after |
+|---|---|---|
+| n | 209 | **250** |
+| expectancy | +0.324 R | +0.277 R |
+| CI95 | [+0.055, +0.598] | **[+0.036, +0.521]** |
+| P(>0) | 99.1% | 98.8% |
+| top-3 symbol concentration | 82% | **72%** |
+| symbols positive | 11/17 | **13/21** |
+
+CI still clears zero after dropping the top 3 trades. The top symbols also
+CHANGED (XRPUSDT out, ENAUSDT in), which is the useful part: a result that holds
+while its own composition turns over is not a story about three symbols.
+
+PULLBACK fell to n=98 / -0.061 R — many BULL/BEAR_TREND classifications became
+TRANSITION, so the book moved from the flat strategy to the one with an edge.
+
+### Range fade: NOT built, and the evidence says do not
+
+`ranges.py` (v0.1, 21 tests) detects 1,882 ranges across the store. Of the
+RANGE-regime rejections, **3 had a live detected range at the moment of
+rejection; one had the touched zone inside the band.** Of the rejections on
+structure-SOUND symbols, **zero** did. A range fade has essentially nothing to
+trade. The engine is kept as the measurement that proves it, and because the
+question becomes live again once ranges are defined over something longer-lived
+than four consecutive local pivots — a 6-bar median box describes a sub-box
+inside a macro range, never the range itself.
+
+**378 python green (1 skipped, 27 subtests); js suites green.** The consolidation
+added no new test function — it is a deletion, and the existing tick tests in
+`test_ranges.py` now exercise the shared `swings.quote_ticks` through `ranges`
+rather than a private copy. `test_break_tolerance_floors_at_one_tick` gained one
+assertion: that calling `break_tolerance` WITHOUT a tick raises. That assertion
+is the only thing standing between the shared derivation and a silent 0.01
+default creeping back in.
+
+---
+
+## S41 — Completion pass: the backlog closed, and a guard so one bug stops recurring
+
+Worked the outstanding items A-to-Z. Two were closed by evidence rather than
+built, which is recorded here as the deliverable rather than as a gap.
+
+### A — correctness debt, self-inflicted
+
+`risk.py` and `scalein.py` still carried v0.7/v0.2 after S40 moved setup-v0.8 and
+exec-v0.9. Both import those constants, so their FACTS changed while their TAGS
+did not. **That is the S37 defect committed a second time — while writing the
+note explaining the first one.**
+
+Fixed, and then fixed properly: **`tests/test_version_cascade.py` is a version
+lockfile.** Any version move now fails the suite until the tuple is updated,
+which forces a deliberate look at everything downstream. It also asserts the
+consumer map describes the CODE (each listed consumer must actually reference the
+constant it claims to read), that no two engines share a version string, and that
+every version names its own engine. The fix for this bug was never vigilance.
+
+It earned its keep within the hour: the E1 change below tripped it immediately
+and drove a five-engine cascade that would otherwise have been missed again.
+
+`ranges.py` was also built, tested and **never wired into `live.ENGINES`** —
+dead in production. Now runs.
+
+### B — cooldowns (SPEC §1.7, never built)
+
+Nothing prevented re-entering a level that had just stopped the system out.
+Tolerable at 5 REVERSAL setups in four years; not at 471. `cooldowns.py`:
+
+  · **stop-out -> long lockout** (4h scalp / 12h intraday / 24h swing). The level
+    was INVALIDATED; re-entering re-buys a refuted thesis.
+  · **target or time exit -> short lockout** (0.25h / 0.5h / 1h). The level
+    RESOLVED, it did not fail. One number for both necessarily gets one wrong.
+
+Per (symbol, direction) — not per zone, because a stopped-out demand zone sits in
+a cluster and its neighbour is the same trade wearing a different `zone_id`.
+DERIVED from exec facts rather than held as live state: mutable state cannot be
+replayed, and a cooldown that cannot be replayed silently changes which trades a
+historical run would have taken. Wired into `risk.py` as a rejection reason that
+names the exit which caused it.
+
+Two bugs caught by its own tests: `record()` reported success even when the
+content-hash made the insert a no-op (so a re-run would report fresh cooldowns
+forever), and the first `risk` integration issued two queries per intent inside
+the hot loop.
+
+### C — measurement
+
+**C1 confound guard** in `edgestats`. Every slice is tagged with the engine
+generations behind it; a slice living entirely on one side of a version boundary
+is CONFOUNDED and labelled, never silently compared. Six versions moved in S40
+and that re-measurement was done by hand. Includes a **materiality floor** —
+3 orphan rows out of 340 were flagging 3 of 4 timeframes, and a label that cries
+wolf gets ignored, which costs more than the label is worth.
+
+**C2 — the rejected exit bundle, graded component by component.** A bundle
+verdict is not a component verdict:
+
+| exit | n | win% | sum R | expectancy | P(>0) |
+|---|---|---|---|---|---|
+| **hold to SL/TP (shipped)** | 348 | 31.6% | **+63.3** | **+0.182** | 96.1% |
+| + partials only | 348 | 45.7% | +43.3 | +0.125 | 94.5% |
+| + time stop only | 352 | 41.2% | +26.1 | +0.074 | 81.6% |
+| **+ trail/breakeven only** | 351 | 34.8% | **-13.8** | **-0.039** | 24.8% |
+| all three (rejected bundle) | 352 | 37.2% | -3.6 | -0.010 | 42.7% |
+
+**Trail/breakeven is the poison** — the only component negative alone. And the
+shape is diagnostic: win rate RISES with every component added (31.6 -> 45.7%)
+while expectancy FALLS. That is cutting winners early, exactly. Holding remains
+correct, now for a measured reason rather than an unexamined default.
+
+### D — confluence candidates, recorded and gating nothing
+
+D1 premium/discount (where price sits in its range — orthogonal to zone quality,
+which measures a level, not a location). D2 HTF composite (three correlated
+readings at r up to 0.93 collapsed to one three-state field, so a future scorer
+cannot count one signal thrice). D3 **VETO pattern** — gates are not weights; a
+veto cannot be outscored, and the two implemented describe trades that cannot be
+EXECUTED as planned rather than ones that are unattractive. D4
+`participation_rate` — REDUCES rather than rejects, because a position too large
+for the book is a bad size, not a bad trade. Inert in paper by nature, which is
+exactly why it had to exist before live.
+
+**D5 sessions/kill zones — closed with cause.** Perps trade 24/7; the concept
+earns its keep at the equities/forex boundary. Adding an ungraded factor to a
+book that cannot test it is the failure this project keeps documenting.
+
+### E — the 1W blind spot, closed
+
+`structure.TIER_BY_TF["1W"] = "MAJOR"` needed a DOUBLE recursion the data cannot
+support: 194 weekly bars yield 14 MAJOR pivots across 11 symbols, one or two
+each. So 1W structure existed for 1 perp of 21, 1W regime for 1, and the ENTIRE
+1D book had no higher-timeframe regime — while `htf_regime_aligned` was the only
+confluence factor ever measured above the noise floor.
+
+The golden-data A/B that chose MAJOR tested **1D** and grouped 1W in without
+separate evidence. 1W now uses INTERMEDIATE (18 of 21 perps have enough pivots);
+1D stays MAJOR, because that one was tested and won.
+
+Result: 1W regime for **20 perp symbols (was 1)**. The 1D book went from 100%
+UNKNOWN to **54 TRENDING / 70 FLAT / 19 UNKNOWN** — and the factor now separates
+outcomes across the whole book:
+
+```
+TRENDING   n=198   win 35.9%   meanR +0.258
+FLAT       n=380   win 26.8%   meanR -0.108
+UNKNOWN    n= 45   win 24.4%   meanR -0.244
+```
+
+A 0.37 R/trade spread, both groups far above the n>=30 floor — and it confirms
+the S39 hypothesis that the real signal is **"is the higher timeframe trending
+at all"**, not "does it agree". Still recorded, still gating nothing:
+`factorstats` grades it before it earns a weight.
+
+REVERSAL held at **+0.277 R, CI [+0.037, +0.520], P(>0) 98.8%** through this
+cascade — its fourth consecutive survival of a change to its own inputs.
+
+### F — strategy registry, deliberately thin
+
+Wave 2.1 specifies a registry where each strategy owns its bracket. This one does
+not build that, and the reason is the point: PULLBACK and REVERSAL share every
+mechanic and differ only in which regime admits them, range fade is closed by
+evidence, so a bracket-owning interface would today hold two identical brackets —
+the speculative generality this codebase argues against everywhere.
+
+What DOES exist is a real duplication with a real cost: strategy metadata was
+hand-written in `server.py` while behaviour lived in `setups.py`, and they drifted
+(the "needs a liquidity sweep" copy survived a full session after the engine
+stopped requiring one). `registry.py` is the single declaration both read, held
+against the ENGINE by tests rather than against prose. The full Wave 2.1 shape
+becomes correct when a strategy needs a different bracket — that is the trigger,
+not a version number.
+
+Also removed: the "Reversal, Reworked" PLANNED card, whose work shipped in S38.
+It described the OLD rule while the live Reversal card described the new one, so
+the roadmap contradicted the catalogue on the same page.
+
+### Operational
+
+The scanner had been in a **crash-restart loop** (rc=1 every ~30s since 05:58).
+Cause: the watchdog respawning a process that imports `engine/*.py` **while those
+files were being rewritten** — by two background tasks and by this session at
+once. Not a code defect; a concurrency hazard worth naming, because the watchdog
+faithfully turns a transient half-written module into a tight restart loop.
+Verified stable after edits settled: 100s clean run, `--once` exit 0, and the
+live store now carries setup-v0.9 / exec-v0.10 / structure-v0.10 / regime-v0.10.
+
+**393 python + 50 js tests green.** 992,592 facts.
+
+---
+
+## S42 — Indicator engines: the three confluence categories structure cannot see
+
+`ma`, `momentum`, `volatility`, `volume` — v0.1 each. They fill TIMING,
+CONDITION and PARTICIPATION; the structure layer already owned LOCATION and
+DIRECTION, and those three rows had no measurement at all.
+
+**Every one emits on STATE CHANGE, never per bar**, which is what keeps them
+affordable: RSI is defined on every bar and interesting on few. A per-bar design
+over 570,061 bars would have written millions of rows into a 992k-fact store.
+
+| engine | fires on | facts | % of bars |
+|---|---|---|---|
+| `ma` | ribbon state tuple (stack, position, slope) changes | 121,577 | 21.3% |
+| `momentum` | RSI band · MACD signal · MACD zero · divergence at a pivot pair | 99,093 | 17.4% |
+| `volatility` | squeeze ON/OFF · ATR regime LOW/NORMAL/HIGH | 59,050 | 10.4% |
+| `volume` | RVOL *arrival* of HOT/DRY · VWAP cross · POC move >= 1 ATR | 156,772 | 27.5% |
+
+Every threshold pair is a **Schmitt trigger** (enter 70 / exit 65; enter 2.0x /
+exit 1.5x; +/-0.25 ATR slope deadband), with the reason measured rather than
+asserted: a raw one-bar EMA20 slope sign flips on **14.2% of bars** (73,091
+times); deadbanded over 5 bars it flips on 3.3%.
+
+`volume` came in at **215,605 on its first pass — over the ceiling — and was
+redesigned rather than shipped**: emitting the RETURN to normal RVOL was 24.5%
+of every bar, a per-bar emitter wearing a state machine. Emitting only the
+ARRIVAL of unusual participation brought it to 156,772.
+
+### Three findings recorded rather than smoothed over
+
+**The house break tolerance does nothing for chatter here.** Applying
+`max(1 tick, 0.05*ATR)` to `ma.position` moved it 85,153 -> 85,834 — *up*,
+because widening the INSIDE band splits some ABOVE->BELOW flips into two.
+Raising it 20x to a full ATR buys 19%. Price genuinely crosses this ribbon every
+~7 bars; that is a property of the market, not of the threshold. Kept anyway,
+because on a sub-dollar symbol a bare comparison flips on a quote tick — the
+S40 failure one layer up.
+
+**ATR percentile ties take the MIDRANK.** The obvious "count everything at or
+below" rule labels a dead-flat market as the *100th* percentile, and the regime
+machine would then have classified silence as HIGH volatility.
+
+**SMA200 silences 1W on 40 of 59 symbols** (19 have 200 weekly bars; median
+188). Correct, not a gap: 200 weeks is 3.8 years and most of these instruments
+are younger than their own slow average. Emitting a partial average that looks
+like a real one is how a backtest lies.
+
+Also fixed mid-build: zero-volume daily bars crashed the rolling volume profile
+(a bin evicted the moment its volume hit zero left nothing to subtract when the
+bar left the window). Regression test added.
+
+### The wiring, which is where the last two engines died
+
+Both `ranges.py` and all four of these were built, tested — and **not in
+`live.ENGINES`**. An engine that never runs emits nothing to grade, so it cannot
+earn the promotion the whole discipline is built around. All five are wired now.
+Cost measured on the ADMITTED set rather than the backfill, since that is what a
+live cycle actually pays: **25s**, idempotent across two consecutive passes.
+
+### One coupling the version lockfile could not see
+
+`momentum`, `volatility` and `volume` all `from .ma import ema, plain, sig`.
+That is a CODE-level dependency with no `*_VERSION` constant to grep for, so the
+lockfile's generic import check passed it vacuously — a change to the EMA
+formula would silently change three other engines' facts. Now declared in
+`CONSUMERS["ma"]` with its own assertion.
+
+**489 python + 50 js tests green.**
+
+---
+
+## S43 — Armed order completed (plan Phases E–K), and the backlog reconciled
+
+Circled back through every open item from earlier sessions. Most of the spec
+track turned out to be answerable from the build rather than from a working
+session, and the one genuinely actionable plan — `forming-armed-order-plan.md`,
+approved 2026-07-24 with both user rulings already in — had never been executed
+past its scaffolding.
+
+### What the reconciliation found
+
+Three of the six §30 methodology questions have been **answered by measurement**
+since they were queued:
+
+  · **swing confirmation** — `swing-v0.8` composite Major Score, calibrated
+    against the user's golden data (S3–S5).
+  · **BOS/CHoCH tier** — settled twice by A/B. 1D=MAJOR won against
+    INTERMEDIATE (S3); 1W=INTERMEDIATE adopted in S41 because 194 weekly bars
+    yield 14 MAJOR pivots across 11 symbols, which cannot form a sequence.
+  · **HTF influence** — measured S41: TRENDING +0.258 R / FLAT -0.108 R /
+    UNKNOWN -0.244 R across n=198/380/45.
+
+Item I-6 (design annex, tokens, replay screen) is superseded by the shipped
+five-surface shell and Learn surface. Still genuinely open and recorded as
+documentation debt: §30 protected-high/low, zone flip, structural displacement;
+Item D persistence spec; Items G/H; and the two user rulings under Item I.
+
+### The armed order — "no runtime decision at execution"
+
+Before: FORMING announced a zone approach with every armed field `None`, and
+VALIDATED **recomputed** entry/SL/TP at touch. The bracket that executed was
+therefore not provably the bracket that was decided — ATR, structure and equity
+all move in between, so "computed the same way" is a weaker claim than
+"inherited".
+
+**Phase E** — `risk.size_order(...)` extracted as a PURE function (plan Phase C
+ruling, option A). §9 is preserved: `risk.py` still owns the code; `setups.py`
+now calls it at arming time. The split is deliberate — order-level constraints
+(exposure, leverage, liquidation, min-notional, participation) go in the helper;
+account-level ones (kill switch, concurrency, cooldowns, point-in-time
+eligibility) stay in `risk.run`, because a FORMING fact must never claim an
+approval the portfolio never granted.
+
+**Phase F** — VALIDATED inherits the armed bracket verbatim by `setup_id`.
+15m/1H have no FORMING pass by design and still compute.
+
+**Phases G/H** — `forming_id`, `armed_at`, `armed_size_units`,
+`armed_risk_decision` and `expires_at_ts` ride on every order and exec fact,
+including MISSED. MISSED additionally records `bars_armed_exceeded` and
+`armed_lead_bars`, so `MAX_ENTRY_BARS` can finally be judged against real arming
+lead times instead of assumed correct.
+
+### Phase J — the replay diff, and the two defects it caught
+
+This is what the phase exists for, and it earned it twice.
+
+**1. The version collision, a third time.** Wiring Phase E changed what
+`setup-v0.9` produces without bumping it. The replay showed **107 armed and 107
+unarmed FORMING rows describing the same 1D zones** — two payload generations
+under one tag. Bumped to `setup-v0.10`, cascading `exec-v0.11`, `risk-v0.10`,
+`scale-v0.5`. The version lockfile flagged the cascade immediately.
+
+**2. Inheritance was 0% on every timeframe, including the three that arm.**
+`armed_by_id` was read from the store BEFORE the FORMING pass ran, so on a fresh
+store nothing could ever inherit — a zone arms and validates inside one
+invocation. Now populated by the FORMING pass itself and seeded from prior runs.
+
+**After the fix:**
+
+```
+FORMING armed at approach     1D 107 · 4H 47 · 1W 17   (all APPROVED)
+VALIDATED inherited           1D  20 · 4H  5 · 1W  4
+Phase F acceptance            29 inherited setups, 0 bracket mismatches
+```
+
+Byte-identical to the armed order in every inherited case.
+
+**The honest number: 29 of 171 armed orders produced an inherited VALIDATED**,
+and on 1D only 20 of 46 validated setups inherited. That is expected rather than
+broken — a zone only arms if price came within 1 ATR *and* the regime aligned at
+approach, and the regime can differ by the time it is touched, which produces a
+different strategy and therefore a different `setup_id`. But it means the armed
+path currently covers under half the 1D book, and that ratio is now measurable
+for the first time.
+
+### Phase K
+
+Substantive review against the plan's own criteria: the VALIDATED order IS
+provably inherited (asserted, 0 mismatches); `forming_id` is present on order
+and exec facts including MISSED; the replay diff is explained above. Formal
+Auditor-persona sign-off is a separate seat and remains outstanding.
+
+**500 python + 50 js tests green.**
+
+---
+
+## S44 — Item D specced, breakout-retest MEASURED AND REFUSED, and a flaw in my own method
+
+### Item D — Persistence & Retention (`docs/SPEC-persistence-retention.md`)
+
+Measured first: **1.4 GB, 1,432,051 facts, and 38.1% of them belong to engine
+versions nothing reads.** `swing` and `zone` alone are 63.5% of the store; the
+facts that constitute the actual track record — setup, exec, order, risk — are
+under 2%.
+
+The policy resolves append-only against retention by scoping the promise:
+append-only governs how the system WRITES; what must stay reconstructable is a
+DECISION, not every intermediate fact a superseded engine generation produced.
+Four classes, and **retention is measured in VERSIONS, not days** — a time-based
+rule would delete the four years of perp history that make a backtest meaningful
+while leaving last week's dead generation untouched.
+
+**Nothing is implemented, deliberately.** 1.4 GB is not a problem; every
+deletion mechanism is a chance to delete the wrong thing. The cheap wins the
+spec named were done instead and **found nothing**: `ANALYZE` had never been run
+(now has), two composite indexes already cover the hot query shapes, and the hot
+query measures sub-millisecond before and after. Triggers for revisiting are
+written down.
+
+### Breakout-retest — built, graded, and NOT enabled
+
+`breakout.py` (v0.1) is the first strategy whose TRIGGER is structural rather
+than zonal: it fires when price returns to a level that was just broken and the
+level holds from the other side. It lives in its own module for a concrete
+reason — `setups.py`'s loop is `for zone_id, z in zones.items()` and a
+structural trigger has no zone to iterate; `scalein.py` set that precedent.
+
+Deliberately SHARED by import, not reimplemented: `setups.confirms`,
+`setups.vetoes`, the bracket shape, the entry model. So this changes WHERE a
+trade comes from and nothing about how it is executed or sized — which means any
+difference in results is attributable to the trigger rather than to a hundred
+small divergences in the machinery around it.
+
+**Then it was graded on the same harness REVERSAL had to clear:**
+
+```
+n=55   win 27.3%   sumR -4.2   expectancy -0.076 R
+CI95 [-0.545, +0.426]   P(>0) 37.4%   same-bar stop-outs 27.5%
+symbols positive 6/18
+```
+
+Indistinguishable from zero. **It does not ship.** REVERSAL cleared this bar
+with a CI above zero; this did not, so it is wired to KEEP EMITTING FACTS —
+neither `execsim` nor `risk` reads `BREAKOUT_VERSION`, so it trades nothing —
+and its sample keeps growing for a later re-grade.
+
+That required a third registry status. `measured` is not `planned`: the engine
+EXISTS and runs. Collapsing the two would hide a strategy already producing
+gradeable evidence behind a label that says it does not exist yet.
+
+Its same-bar stop-out rate (27.5%) is also notably worse than the confirmed
+zone strategies (13.9%), which suggests a retest of a LINE is weaker evidence
+than a rejection from a BAND. That is a hypothesis, recorded, not acted on.
+
+### A flaw in my own measurement method
+
+Every measurement this project takes runs against a copy of the store. Those
+copies were being made with `shutil.copy` after `PRAGMA wal_checkpoint(FULL)` —
+and that is wrong on a 1.4 GB WAL-mode database with a live scanner writing to
+it. The checkpoint is an instant; the copy takes seconds; the writer does not
+stop.
+
+Caught when a copy failed `quick_check` with hundreds of **"Rowid out of order"**
+errors on the facts B-tree and every engine run against it raised `database disk
+image is malformed`. **The live store passed a full `integrity_check` — the
+corruption existed only in the copy**, which is precisely the dangerous version:
+a measurement can be taken from a broken snapshot and look like a result.
+
+`engine/snapshot.py` uses `sqlite3.Connection.backup()`, which holds a read
+transaction and restarts if a writer intervenes, then **verifies the result with
+`quick_check` and raises** rather than returning a corrupt file. Silently
+handing back a bad snapshot would be strictly worse than the `shutil.copy` it
+replaces, which at least failed loudly on first use. Cost: 7s instead of ~3s.
+
+Mitigating note, stated because it matters for everything reported earlier: the
+`abtest` calibration step reproduced the recorded book exactly (drift 0.0) on
+those copies, which is strong evidence they were consistent. "Strong evidence"
+is not "guaranteed", and it is now guaranteed.
+
+**500 python + 50 js tests green.**
+
+---
+
+## S45 — Phase 4 (Perps) closed out: funding was defined and never charged
+
+The operator asked whether there was still a Phase 4. There was, and it was not
+finished. `REDESIGN-PLAN.md` §6 lists Phase 4 as *Perps: Phemex adapter, shorts,
+leverage, liquidation model + safety gate, funding costs*. Four of those five
+shipped in S32–S34. The fifth did not.
+
+### `venues.funding_cost_rate` had ZERO callers
+
+It was written in S32 with the reasoning spelled out — *"funding is charged
+repeatedly, not once. A perp held over a weekend pays every settlement, and on a
+tight target that can exceed the edge"* — and then nothing ever called it. Eight
+sessions of perp simulation charged **no funding at all**.
+
+Measured before fixing, at a 0.01%/settlement model against the recorded book:
+
+```
+15m ~0.00 R   1H ~0.01 R   4H ~0.01 R   1D ~0.03 R   1W ~0.12 R
+```
+
+Small beside the 14x cost-profile error of S37, but 0.03 R is roughly 17% of the
+1D book's expectancy — and an unmodelled cost that only ever flatters is exactly
+the kind that survives review.
+
+**Charged in `exec-v0.13`.** Effect on the perp book:
+
+| | n | win | sum R | expectancy | CI95 | P(>0) |
+|---|---|---|---|---|---|---|
+| before | 342 | 30.4% | +48.0 | +0.1405 | [-0.066, +0.355] | 90.8% |
+| after | 340 | 30.3% | +42.5 | **+0.1251** | [-0.081, +0.338] | 88.3% |
+
+Two limitations stated rather than buried. The rate is a **modelled constant**:
+real funding varies per settlement, Phemex publishes it, and this store holds no
+historical series — `phemex.funding_rate()` fetches only the CURRENT rate, which
+cannot price a trade from 2024. And it is charged to **both directions**, though
+in reality the paying side flips with the sign of the rate; a short receives
+funding when longs are paying. Charging both is the pessimistic reading, which
+is this engine's standing rule for costs.
+
+### And it was missing from the pre-trade gate too
+
+The plan is explicit — *"funding cost enters the fee-aware gate — a multi-day
+swing long pays funding repeatedly, which changes whether a setup is economic"*
+— and `costs.estimated_round_trip_cost` priced only fees and slippage. On a
+perp the gate cost rises steeply with the timeframe once funding is in it:
+
+```
+1H +7.6%   4H +30.5%   1D +183%   1W +1282%
+```
+
+Spot is unchanged, by venue declaration (0 settlements/day) rather than by a
+branch.
+
+**And it is non-binding at current geometry** — re-running every setup changed
+exactly one 15m candidate and no 1D/4H/1W ones, because confirmed-entry stops
+are already wide enough to clear the higher bar. Worth recording precisely
+because it is the opposite of the S37 finding: there, a wrong cost model was
+rejecting real setups; here, a corrected one rejects almost nothing. The fix was
+for correctness, not because the gate was misbehaving.
+
+### A version bump with byte-identical output
+
+`setup-v0.11` produces the same facts as v0.10 on today's book. It is still
+correct to bump: the RULES changed, a tighter-stopped setup would now be judged
+differently, and a version tag identifies the rules that produced a fact rather
+than the bytes that came out. Cascaded to exec-v0.13, risk-v0.12, scale-v0.7,
+breakout-v0.2 — the lockfile forced all five.
+
+### Phase 4 status
+
+| element | |
+|---|---|
+| Phemex adapter | done S33 |
+| shorts | done S32 |
+| leverage + cap | done S32 |
+| liquidation model + safety gate | done S32 |
+| **funding costs** | **done here — S45** |
+
+**Still open and NOT ours to close:** the plan's own question #1, *"Phemex may
+restrict US users — operator's call"*, remains unanswered, and the entire traded
+universe is Phemex. Question #2 (margin mode: isolated vs cross) is also still
+open; the liquidation model assumes a 0.5% maintenance allowance without
+declaring which mode it prices.
+
+**509 python + 50 js tests green.**
+
+---
+
+## S46 — Kraken adopted, margin declared ISOLATED (operator rulings 2026-07-30)
+
+Two rulings, both of which had been open questions in `REDESIGN-PLAN.md` since
+2026-07-28 while the whole book depended on the answers.
+
+### Ruling 1 — isolated margin, not cross
+
+The operator's reasoning, verbatim: *"that could wipe your whole acct."* Correct,
+and it is the reason this matters more than a config flag. Under CROSS margin
+every position is backed by the entire account balance, so liquidation distance
+depends on every other open position and one trade can take everything. Under
+ISOLATED a position can only lose the margin posted to it.
+
+`risk.py` sizes by "distance to stop" and caps total open risk at 4%. **Both of
+those are advisory under cross margin**, because the exchange can close a
+position at a loss far larger than the one that was risked. Isolated is the only
+mode under which "2% per trade" means what it says.
+
+The model was ALREADY isolated — `(1/leverage) - maintenance` prices the move
+that exhausts this position's own margin — it simply never declared which mode
+it was pricing. Now `Venue.margin_mode` states it, and `liquidation_price`
+**raises on CROSS rather than returning the isolated number under a cross
+label**. A liquidation estimate wrong in the optimistic direction is worse than
+none, because the stop-safety gate is built on top of it.
+
+### Ruling 2 — use Kraken
+
+`engine/kraken.py`, contract VERIFIED against the live API rather than assumed:
+
+```
+/derivatives/api/v3/instruments   281 tradeable perps, PF_XBTUSD style
+/derivatives/api/v3/tickers       volumeQuote = 24h USD notional
+/api/charts/v1/trade/{sym}/{res}  all five resolutions native
+```
+
+Three things the live check settled:
+
+  · **`countriesBanned` is empty** on PF_XBTUSD and no perp on the venue flags
+    US. Recorded as a data point, not interpreted as legal advice — but it is
+    the first evidence either way on a question that has been open for two days.
+  · **The venue publishes `maintenanceMargin: 0.005`** at tier one — the exact
+    figure `venues.liquidation_price` has assumed as a conservative default
+    since S32. The model was right, and is now corroborated by the venue rather
+    than trusted.
+  · Kraken serves all five timeframes natively, and we still import only three
+    and let the aggregator build 4H/1W — same reasoning as Phemex. Two writers
+    for one `(symbol, tf, open_ts)` bucket is how they disagree at a gap.
+
+**Kraken WINS overlaps, and that deliberately overrides volume.** Everywhere
+else in `universe.py` the deeper book wins, because thin books do not fill
+structural stops. Here regulatory access outranks depth: an unfillable order is
+a bad trade, but an inaccessible venue is not a trade at all.
+
+**The XBT trap, caught before it bit.** Kraken writes Bitcoin as XBT, so
+`PF_XBTUSD` and `BTCUSDT` are one coin under two spellings. Without an alias the
+dedupe sees two candidates, admits both, and the account holds the same exposure
+twice while `MAX_CONCURRENT` counts it once — precisely the S33 double-exposure
+bug returning through a different spelling. `_BASE_ALIASES` maps XBT->BTC and
+XDG->DOGE; verified 0 duplicate underlyings across 665 merged candidates.
+
+**Measured effect on the universe:**
+
+```
+Kraken USD perps ranked            271 (health 271/271, one request)
+clearing the $3M liquidity floor    16
+merged top 25                       17 kraken · 5 phemex · 3 coinbase
+would be admitted (top 20)          18 -> 16 kraken, 2 phemex
+```
+
+### The cost of the ruling, stated plainly
+
+The tradeable universe **shrinks**. Only 16 Kraken perps clear the $3M floor
+against 21 on Phemex, so the admitted set becomes smaller and more concentrated
+in majors. That is the price of trading somewhere the operator can actually
+trade, and it is the right trade — but it is a real narrowing and should not be
+discovered later as a surprise.
+
+Also note a genuine difference in cost structure: **Kraken funds hourly (24
+settlements/day) against Phemex's 8-hourly (3)**. Same nominal rate, eight times
+the accrual. Funding now being charged (S45) is what makes that visible instead
+of invisible.
+
+**512 python + 50 js tests green.** Nothing has been re-onboarded yet — the
+store holds no Kraken candles, so the next universe refresh will place every
+admitted Kraken symbol into WARMING and backfill it. That is a real change of
+what the forward record measures and should not start silently.
+
+---
+
+## S47 — Kraken carried as a SHADOW venue: warmed, measured, never traded
+
+Operator: *"phemex works for me fyi. for how long I don't know so you say the
+word. good data is what I want."*
+
+The call, and the reasoning matters more than the answer.
+
+**Trade Phemex.** It works today, 21 symbols clear the liquidity floor against
+Kraken's 16, the books are deeper, and it funds 3x/day against Kraken's 24. On
+pure data quality today it is the better venue.
+
+**But the thing that would actually cost is a broken record, not a worse venue.**
+Everything measured so far is replayed history; the forward baseline is hours old
+with zero closed trades. If Phemex access disappears mid-record we do not lose a
+venue, we lose CONTINUITY — and the expensive part of a switch is not the code,
+it is that a new symbol enters WARMING needing 200 daily candles. A switch under
+pressure costs weeks of dead forward record.
+
+So: **SHADOW venue.** Kraken symbols are imported, aggregated and run through
+every descriptive engine, and are never admitted. `admitted_at` gates every
+sizing decision on ADMITTED membership, so a shadow symbol can accumulate
+candles, facts and even setups without one dollar of paper risk reaching it.
+`KRAKEN_SHADOW_ONLY = False` is the whole switch, and by then the history is
+already warm.
+
+`live.cycle` now scans `universe.scan_symbols` (traded ∪ shadow) rather than
+`current_symbols` (traded). Keeping those two as separate functions is the
+safety property — collapsing them is exactly how a shadow venue quietly becomes
+a traded one, and a test asserts they are not the same object.
+
+### The interaction that nearly went out
+
+First implementation merged Kraken into the ranking (winning overlaps, per the
+S46 precedence) and THEN classified the winners as SHADOW. Preview:
+
+```
+SHADOW 16 · ADMITTED/WARMING 3 · REJECTED 1
+traded: ['u1000SHIBUSDT', 'CAP-USD', 'u1000PEPEUSDT', 'ZAMAUSDT']
+```
+
+**Every overlapping coin was won by Kraken and immediately made untradeable.**
+BTC, ETH, SOL and the rest went dark; the tradeable set collapsed to the three
+junk symbols Kraken does not list. That is the whole book, silently, with no
+error anywhere.
+
+Cause: warming and trading were being answered by one mechanism. They are two
+questions. `shadow_candidates()` is now separate from `rank_all_venues()` —
+shadow symbols ride alongside and never compete for a TOP_N slot, and the
+underlying they duplicate keeps trading wherever it already traded. Safe
+precisely because SHADOW cannot hold a position: the double-exposure rule the
+dedupe enforces is about POSITIONS, and the S46 dedupe still applies in full to
+the traded set.
+
+After the fix:
+
+```
+TRADED  20 symbols, unchanged  (BTCUSDT, ETHUSDT, SOLUSDT, ...)
+SHADOW  16 Kraken perps warming (PF_XBTUSD, PF_ETHUSD, PF_SOLUSD, ...)
+```
+
+The post-switch tests from S46 still assert Kraken-wins behaviour, now correctly
+scoped to `KRAKEN_SHADOW_ONLY = False`, and a regression test pins the collapse
+so it cannot come back.
+
+### What this buys
+
+  · the better venue is traded today
+  · the fallback is warm the day it is needed, not 200 days later
+  · a free venue A/B: the same strategies run on both books under
+    venue-derived costs, so "is Kraken's 24x funding accrual actually worse in
+    R" becomes a measurement rather than an argument
+
+**523 python + 50 js tests green.**
+
+---
+
+## S48 — Kraken warmed, and a cold-start bug that had been poisoning data health
+
+### The backfill
+
+16 Kraken perps imported into the live store, all clearing the 200-day gate —
+most with four years of history (PF_XBTUSD/ETH/SOL/XRP/ADA/UNI back to
+2022-03-23, the venue's own earliest). Native timeframes only; 4H and 1W built
+by the aggregator, so `source` reads `kraken-perp` on all 135,889 native rows
+and `agg:*` on the rest — zero rows written by two writers.
+
+`PRAGMA quick_check` ok before, after, and on re-check. **Zero malformed candles.
+Zero in-life gaps** — verified by walking each daily series from its own first
+candle rather than from the requested start. 79 seconds total.
+
+The universe now classifies exactly as intended: **19 ADMITTED (all Phemex/spot),
+16 SHADOW (all Kraken), zero Kraken admitted.**
+
+### The cold-start bug — found by the backfill, not by the tests
+
+`live.cycle` computed its incremental start as `MAX(open_ts) + granularity`, and
+`MAX` is NULL for a symbol with no candles. The fallback was `or 0`, so a cold
+symbol asked the venue for history **from 1970-01-01**. The adapter's
+no-forward-progress guard then aborted the walk in the 1990s, before reaching
+real data, and nothing imported — forever, every cycle.
+
+`PF_XLMUSD` had been failing this way on **24 consecutive cycles**.
+
+The wasted requests were the small part. The real damage:
+
+```
+/api/health gaps_logged      6,188,547,178
+of which fabricated          6,187,847,452   (99.99%)
+actually real                      699,726
+affected import_log rows             7,401
+```
+
+`risk.py` halts on a BLOCKED data-health verdict, and that verdict is fed by
+this column. **A single cold symbol could poison the signal the risk authority
+trusts.** It went unnoticed because a bigger number in a gap counter reads as
+diligence.
+
+Three fixes, at three different depths:
+
+**1. The floor.** `ingest.history_floor(tf, now)` — one definition, used by both
+onboarding and the live loop, so they cannot disagree about how much history a
+cold symbol gets. 1D from 2022-01-01, 1H 180 days, 15m 30 days.
+
+**2. The accounting, which was the actual defect.** `importer.backfill` counted
+every bucket in the RANGE IT ASKED FOR as a gap. A gap is a missing bucket
+inside the span the venue actually SERVED; buckets before the venue's first bar
+are pre-listing, and recording them as gaps claims the venue lost data it never
+had — the mirror image of fabricating a candle, and just as dishonest.
+
+A test caught a real error in the first version of this fix: a bar the venue
+**served and we rejected as malformed** IS a gap, and my first cut silently
+reclassified it as pre-listing. The span is now defined by what was SERVED, not
+by what was KEPT. That distinction is the gap-honesty rule, and the suite
+defended it.
+
+**3. The historical poison.** Quarantined at the read site rather than deleted —
+the log is evidence of what happened, including of the bug. `/api/health` now
+reports `gaps_logged: 699,726` with `quarantined_gap_rows: 7,401` and a stated
+reason beside it, so nothing is hidden and nothing is fabricated.
+
+**529 python + 50 js tests green.**
+
+## S49 — two audits: the operator-facing lies, and the guardrails never wired
+
+Two adversarial passes ran against a verified snapshot: a full-stack correctness
+audit and a second-pass salvage sweep of the retired project. The engine layer
+held — no lookahead, no fabricated candle, no version tag covering two
+generations. **Every confirmed defect was at a boundary**: numbers that left the
+engine correct and were degraded on the way to the operator, and guardrails that
+were built, tested, documented and never scheduled.
+
+### The Results page reported a losing book as break-even, in green
+
+`shell.js perfRows` read `r.net_r ?? r.total_r ?? 0` and `r[key]` where key was
+`symbol`/`strategy`. `/api/performance` has never emitted any of those four
+names — rows are keyed `key` and report R as `sum_r`. Both reads fell through,
+so a **−3.91 R** forward book rendered `+0.00R` on every row, in green, with an
+em-dash for the symbol. `n` was correct, which made the row look alive rather
+than broken.
+
+A missing number defaulted to zero, and zero read as flat rather than as absent.
+Neither type-checking nor coverage would have caught it: the code ran every time
+and produced a confident wrong answer.
+
+Fixed at the read, and locked with `tests/test_ui_field_contract.py` — it parses
+the field names the JS reads off each row, calls the endpoint, and requires
+every one to exist. Verified against the old source: it fails on
+`net_r, total_r, trades`. Deliberately a python test rather than a JS one;
+`test_ticket_math.js` asserts the ticket's fee maths against a constant copied
+into the test file, which cannot fail when the engine moves.
+
+### The track record counted a venue that can never be traded
+
+`_baseline_setup_ids` filtered on baseline + VALIDATED and never consulted
+admission. Measured: **5 of the 6 baseline trades (83%)** were Kraken `PF_*`
+SHADOW symbols. `risk.py` rejected every one with
+`NOT_IN_POINT_IN_TIME_UNIVERSE` — and their R was counted into `n`, `win_pct`
+and `sum_r` anyway. Only the dollar column excluded them, because `sized` reads
+the risk decision and the R columns did not. `/api/edge-stats` applied no filter
+at all: **276 of 639 trades, 43.2%**, sitting beside the equity curve implying it
+described the same book.
+
+S47's safety property — "`admitted_at` gates every sizing decision" — held in
+`risk.py` and was absent from every read surface.
+
+Shadow is now SEPARATED rather than dropped. A warmed venue's simulated record
+is the evidence for admitting it, so it stays visible; it just cannot be added
+to the traded book. `/api/edge-stats` defaults to `venue_state="TRADED"` and
+always reports both halves, so a filtered report still says what it left out.
+
+**This changed a headline.** Split by tradability:
+
+| | n | mean | CI95 | P(>0) |
+|---|---|---|---|---|
+| TRADED | 363 | +0.1455 R | [−0.049, +0.356] | 92.9% |
+| SHADOW | 276 | +0.1664 R | [−0.056, +0.383] | 92.7% |
+| combined | 639 | +0.1545 R | [+0.002, +0.308] | 97.6% |
+
+**Neither half clears zero on its own.** The combined CI cleared only because
+pooling two venues doubled the sample. Per strategy, tradeable symbols only:
+
+| | n | mean | CI95 | P(>0) |
+|---|---|---|---|---|
+| REVERSAL traded | 259 | **+0.2544 R** | **[+0.013, +0.500]** | 98.1% |
+| REVERSAL shadow | 215 | +0.1412 R | [−0.106, +0.392] | 86.7% |
+| PULLBACK traded | 102 | **−0.1080 R** | [−0.477, +0.303] | 28.5% |
+| PULLBACK shadow | 58 | +0.3062 R | [−0.185, +0.814] | 88.0% |
+
+REVERSAL **survives the strictest cut available** — it clears zero on symbols
+the risk authority will actually size, a harder test than the one it had passed.
+PULLBACK's mildly-positive combined figure was entirely shadow flattery; on the
+traded book it is negative.
+
+### edgestats stripped funding out of the scenario its verdict reads
+
+`execsim` folds funding into `fees_price_units`. edgestats built
+`r_ex_fee = r_net + fees_r`, adding funding back, then re-charged **fees only**
+in the venue-real scenario — the one `_verdict` reads. Measured across all 639
+trades: **+0.2262 R shipped against +0.1545 R restored, a +0.0717 R/trade
+overstatement (46%)**, with 84% of it on the Kraken half whose 24×/day
+settlement makes funding the dominant term.
+
+S45's defect one layer up: a cost charged in the simulator and subtracted back
+out in the engine that grades it. `funding_price_units` was already recorded per
+fact, so the fix carries it as `funding_r` and re-charges it.
+`edgestats-v0.1 → v0.2`; a reported number moved, so the tag moved with it.
+
+Two stale claims removed with it: the docstring asserting funding "is not
+modelled ANYWHERE in this engine" (which had stopped being a limitation and
+become a bug), and the one asserting the store's cost profile is Coinbase for
+every symbol (fixed in S37). The venue-real scenario now reproduces the recorded
+book exactly, which is itself the check that the two agree.
+
+### Three engine rosters, and the guardrail in none of them
+
+`live.ENGINES`, `ingest.PER_SYMBOL_ENGINES` and `backfill.ENGINES` were three
+hand-maintained copies of one sequence. They had drifted, silently, because
+nothing compared them:
+
+* **`cooldowns` was in none of them.** Built in S41, tested, documented, and
+  consumed by `risk.py` — which read an empty list on every pass. Measured:
+  **0 cooldown facts** in the store, and `cooldowns` absent from `engine_runs`
+  entirely while all sixteen other engines were present. The rejection branch
+  was unreachable code wearing a guardrail's clothes. Counterfactual on the
+  recorded book: **86 of 1,007 VALIDATED intents (8.5%) would have been
+  blocked**, all by a prior stop-out on the same symbol+direction; the 53 that
+  filled returned **−5.19 R**. Precisely the re-entry-after-stop-out pattern S41
+  built it to stop.
+* `ranges, ma, momentum, volatility, volume, breakout` were in `live` only, so a
+  symbol onboarded today got full history for the older engines and forward-only
+  facts for these six — two populations in one fact store, nothing marking which.
+
+Now one authority: `engine/pipeline.py`, imported by all three runners. Order is
+load-bearing and preserved (`execsim` twice, `cooldowns` last so scale-in exits
+are visible to the lockout). `tests/test_pipeline_roster.py` locks it, including
+a generalised check that walks `risk.py`'s imports by AST and asserts every
+per-symbol engine it consumes is actually scheduled.
+
+Third module to die this way — `ranges` sat dead for the same reason, and the
+four indicator engines were one release from it.
+
+### One BLOCKED symbol aborted the whole cycle, including the risk pass
+
+The import loop guards each symbol with the comment *"one symbol's transient
+venue error must not abort the scan."* The engine loop immediately below it did
+not, and `quality.assert_market_ready` **raises**. Measured in `data/engine.log`:
+**364 aborted cycles against 584 completed (38%)**, 454 `blocked by market-data
+quality` events, every one `EUL-USD: SEQUENCE_GAPS`. Each abort skipped the
+remaining symbols' engines, `risk.run(con)` **and** `quality.audit(...)`.
+
+A blocked symbol is still skipped — that is the gate working, and it stays loud
+— but it can no longer take the other 74 symbols and the risk authority with it.
+
+### Carried forward: measured, not yet fixed
+
+* **Funding is per-*settlement* against venues whose schedules differ 8×.**
+  `FUNDING_RATE_PER_SETTLEMENT = 0.0001` applied identically to Phemex (3/day)
+  and Kraken (24/day). Measured: Kraken 0.0100%/h against Phemex 0.00125%/h —
+  exactly 8×, entirely an artifact of the constant. S47's rationale ("is
+  Kraken's 24× accrual actually worse in R becomes a measurement rather than an
+  argument") is defeated at the constant. Two constants for one quantity
+  (`execsim.FUNDING_RATE_PER_SETTLEMENT`, `costs.DEFAULT_FUNDING_RATE`), neither
+  reading the other.
+* **`scalein.py` missed the venue-cost migration** — still on `COST_PROFILE`
+  (Coinbase spot, 1.00% round trip) on a 100%-perp universe, and passes neither
+  `symbol` nor `tf_seconds`, so the one strategy that adds to an open position
+  prices no funding at all. 5 adds at `scale-v0.7` across the whole store; the
+  ~14× inflated gate is a plausible cause.
+* **`ticket-math.js` is a second authority for position size** and diverges from
+  `risk.size_order` in the permissive direction every time: renders un-reduced
+  size where the engine reduces for leverage, has no `open_risk` parameter at
+  all, and omits the liquidation gate, min-notional and participation cap
+  (`/api/trade-config` does not even expose `MAX_PARTICIPATION`). Its fee figure
+  also omits slippage and funding — funding alone is **49.1% of modelled cost
+  per trade** across the exec book.
+* **`risk.run()` does not call `size_order()`.** The armed order is sized by a
+  separate inline reimplementation using `START_EQUITY` (10,000 against a live
+  9,772) with no `open_risk`. All **220** armed orders report `APPROVED /
+  WITHIN_LIMITS` while the risk authority's real decisions include participation
+  reductions and universe rejections. Weakens the S43 claim that "the thing that
+  gets executed is the thing that was decided" — the bracket is inherited, the
+  *size* is two independent computations.
+* **`chart.js`** renders a stale chart and a full order ticket after a failed
+  load (the error text is written into an element only ever unhidden on the
+  success path), and freezes equity for the page's lifetime (the guard is on
+  `cfg`, the fetch is for `equity`) while `shell.js` refreshes it every 30s.
+* **`/api/overview` takes 34.5s over HTTP** against 0.65s in-process. De-N+1'd
+  (1,520 queries → 3) with no effect. Suspect remains the background audit
+  thread holding the GIL. Unconfirmed.
+
+### From the salvage sweep — two corrections to what was already taken
+
+* **The participation cap was salvaged; its refutation was not.**
+  `MAX_PARTICIPATION = 0.005` came from the old project's `participation_rate`
+  — which that project then measured and discredited: 24h volume is not
+  instantaneous book depth. Their witness: NEAR at $5M/24h with **~$2 at the
+  touch**. They shipped a per-scan depth-at-touch gate instead. Keep the volume
+  cap as a cheap pre-filter; it is necessary and not sufficient. Cost is real —
+  no venue adapter here reads an order book at all.
+* **Premium/discount was salvaged as "cheap, genuinely orthogonal"; it was
+  measured, and its endorsement inverts in trends.** n=123: P/D favouring the
+  direction returned **−4.42** avg; P/D opposing with an aligned BOS returned
+  **+1.71**. Premium during an uptrend is just price advancing. If it goes in it
+  must be conditioned on structure, or it will score highest on the losing
+  cohort.
+
+Worth taking, in order: **the validation-instrument gap** (a simulator blind to
+thin books cannot validate thin-book safety — grounded here by one flat
+`market_slippage_atr = 0.05` across all venues and symbols); **Phemex venue
+facts** (measured minimum order **BTC ~$59.67** against this system's global
+`MIN_NOTIONAL_USD = 1`, and lot-step flooring against a fixed 1e-8 quantize — we
+currently size positions the venue would reject); **the reachability probe**
+(feed a gate the input that must trip it, assert it did something — the old
+project hit dead-safety-feature four independent times); and the **stuck-value
+cardinality audit** (a recorded field with cardinality 1 across N facts is dead,
+defaulted, or broken — one partitioning surfaced two independent bugs, and it is
+a `GROUP BY` over an append-only store).
+
+The most portable artifact in the retired project is not a file: it is
+`decisions/`, 81 dated entries each carrying "why it matters next time",
+including a permanent **REFUTED** section recording hypotheses that were
+disproven. This BUILDLOG does much of that already; the refuted-hypothesis
+register is the piece it does not have.
+
+**538 python + 50 js tests green.**
+
+## S50 — the simulator was inventing fills, and two thirds of the edge with them
+
+A 13-agent audit of the three position-sizing authorities also swept for dead
+gates and stuck fields. The sizing findings were the expected ones. The finding
+that mattered was somewhere else entirely, and it invalidates every expectancy
+number this project has reported.
+
+### The crossing leg booked market fills at prices the bar never traded
+
+`execsim` line 193: when the passive limit did not fill, the cross set
+`fill_i = wait_end` and `entry_role = "TAKER"` — and **never touched `entry`**.
+So the market order was priced at the PLAN's entry, `candles[ci+1]["open"]`,
+while `order_i = ci+1` and `MAKER_WAIT_BARS = 2` put the cross on bar `ci+3`.
+A market fill, booked at a print from two bars earlier, with no range check
+against the bar it was filling on.
+
+Measured on exec-v0.13, verified independently three times (two agents plus my
+own queries):
+
+* **95 crossed orders; 78 of them (82.1%) booked outside their own fill bar's
+  `[low, high]`.**
+* The direction was **never adverse** — 94 of 95 filled better than the
+  crossing bar's open.
+* One ETHUSDT long booked at **2075.49 on a bar whose LOW was 2094.69**. It
+  bought below the bar.
+
+The tell had been sitting in the store for eight sessions: **`MISSED` has not
+occurred once since exec-v0.8** — 90 in v0.7, zero across 2,569 facts after. A
+cross that always fills, at a favourable stale price, can never miss. Line 219
+proves it structurally: it references `entry_end`, bound only in the `else`
+branch, so reaching it from the passive path would `NameError`.
+
+Restated, re-simulating the cross at the crossing bar's open with identical
+SL/TP/costs:
+
+| | as shipped | honest fills |
+|---|---|---|
+| whole book | +95.85 R / 642 | **+31.95 R** |
+| per trade | +0.1493 R | **+0.0498 R** |
+| **REVERSAL (traded)** | +0.266 R, CI **[+0.038, +0.498]** | **+0.152 R, CI [-0.070, +0.372]** |
+| PULLBACK (traded) | -0.139 R | -0.228 R |
+
+**Two thirds of the book's apparent edge was the simulator handing trades free
+entries, and REVERSAL — the one result this project has been reporting as real
+— stops clearing zero.** It remains the best thing here at P(>0) 91.1%, but it
+does not clear the bar the project set for itself.
+
+Fixed: the cross fills at the crossing bar's OPEN and pays market slippage, like
+every other market order in the model. `MISSED` is alive again (2 recorded).
+`tests/test_cross_fill_honesty.py` pins the general invariant — **no recorded
+fill may be priced outside the bar it filled on**, slippage allowance included.
+Nothing about that is specific to the crossing leg, which is why it would have
+caught this the day it shipped.
+
+### A real lookahead, in the engine that feeds the strategy layer
+
+`zones.run` computed a zone's creation-time cluster over EVERY swing in the
+series with no `confirmed_at` filter, then wrote the fact with
+`confirmed_at = s["confirmed_at"]`. A zone created in 2023 could be rated on
+swings from 2025.
+
+Measured, 12 symbols x 4H/1D/1W, 2,006 zones: **159 (7.9%) counted future
+swings**, and 96 of those got a different `formation_quality` — **inflated in
+every single case, never deflated**. Worst: quality 90 from a cluster of 18, of
+which zero were knowable at that zone's own creation.
+
+The previous session's audit reported no lookahead anywhere. It was wrong.
+
+Fixed and cascaded (`zone-v0.11 -> setup-v0.12`, which pulls exec/risk/scale),
+pinned by `tests/test_zone_causality.py` at both the unit and the store level.
+
+**And it changed the outcome numbers by exactly zero.** +0.1523 R before, and
++0.1523 R after. Which leads directly to:
+
+### The STRENGTH evidence component can never be false
+
+`formation_quality` feeds `strength`, and `strength` is one of the four
+components `setups.reversal_evidence` counts against `REVERSAL_MIN_EVIDENCE = 2`.
+So the lookahead fed a gate — and the gate cannot fail:
+
+    strength   = (quality + freshness) // 2
+    freshness  = 100 at creation, always, and the setup reads the CREATION value
+    quality    >= 55 (the weakest zone the engine can build: cluster 0, 15m)
+    => strength >= 77,  against REVERSAL_MIN_ZONE_STRENGTH = 60
+
+Every timeframe, every cluster count, including zero. Which is why `STRENGTH`
+appears in **985 of 985** VALIDATED REVERSAL setups — cardinality 1, precisely
+the stuck-value signature the salvage sweep said to look for.
+
+REVERSAL's "2-of-4 evidence" is therefore **1-of-3 plus a free point**, and
+**81.3%** of its setups were admitted on a single real piece of evidence.
+
+The obvious remedy is the wrong one. Splitting the traded book by REAL evidence,
+excluding the always-true component:
+
+| REVERSAL (traded) | n | mean | CI95 | P(>0) |
+|---|---|---|---|---|
+| 2+ real evidence | 63 | **+0.020 R** | [-0.388, +0.444] | 51.9% |
+| 1 real evidence | 214 | **+0.191 R** | [-0.053, +0.451] | 93.4% |
+
+**More confluence performed worse.** Demanding genuine 2-of-3 would cut the book
+to 63 trades and roughly erase the edge. That is the confluence-stacking trap
+this project was built to avoid, found in this project's own gate. The threshold
+is left alone pending an operator ruling; tightening it looks actively wrong on
+the evidence, and it is a strategy decision rather than a defect fix.
+
+### And then I committed the S37 defect myself
+
+Re-simulating under `exec-v0.14` happened BEFORE `SETUP_VERSION` moved to v0.12.
+The zone fix then bumped setups, and the same exec tag simulated those plans
+too — **637 facts from setup-v0.11 plans and 637 from setup-v0.12 plans under
+one `algo_version`**, which double-counted every statistic read off it. The mean
+was identical at exactly double the sample, which is what gave it away.
+
+`exec-v0.15` exists so the corrected generation has a tag that means one thing.
+`exec-v0.14` stays in the store as the record of what happened and no consumer
+may join on it. The lesson is ordering: **bump every version in the cascade
+BEFORE re-deriving, never between passes.**
+
+The lockfile did its job three times this session — it is the reason each
+cascade was deliberate rather than discovered later.
+
+### Where the numbers stand
+
+    zone-v0.11 | setup-v0.12 | exec-v0.15 | risk-v0.14 | scale-v0.9 | cooldown-v0.3
+
+| traded book | n | mean | CI95 | P(>0) |
+|---|---|---|---|---|
+| all strategies | 411 | +0.0648 R | [-0.108, +0.247] | 76.8% |
+| **REVERSAL** | 277 | **+0.1523 R** | [-0.070, +0.372] | 91.1% |
+| PULLBACK | 109 | -0.1391 R | [-0.472, +0.226] | 21.4% |
+
+**No strategy clears zero.** This session removed fictitious edge rather than
+adding any, which is the correct outcome for an audit and the uncomfortable one
+for the operator. The system now measures itself honestly, which it did not
+before; the remaining +0.15 R on REVERSAL is something to test forward, not
+something to trust.
+
+**555 python + 50 js tests green.**

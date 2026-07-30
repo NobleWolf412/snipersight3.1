@@ -28,7 +28,21 @@ from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.2-draft"
+SCALE_VERSION = "scale-v0.10-draft"
+# v0.8: cascade from exec-v0.14. An add is only placed against a position the
+# simulator says is open, so a corrected fill price changes which adds exist and
+# what they are worth.
+# v0.7: parents are setup-v0.11; windows close on exec-v0.13 exits.
+
+# v0.6: parent windows close on exec-v0.12 exits.
+
+# v0.5: parents are setup-v0.10; windows close on exec-v0.11 exits.
+
+# v0.4: parents are setup-v0.9 setups; windows close on exec-v0.10 exits.
+
+# v0.3: same reason as risk-v0.8. Parents are SETUP_VERSION setups and the
+# window closes on EXEC_VERSION exits; S40 moved both, so the adds differ.
+
 PARENT_TFS = ("4H", "1D")
 TRIGGER_TF = "1H"
 TRIGGER_MIN_R = Decimal(1)

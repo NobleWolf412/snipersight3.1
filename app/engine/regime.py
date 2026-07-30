@@ -19,7 +19,19 @@ from . import store
 from .structure import STRUCTURE_VERSION
 from .runlog import RunRecorder
 
-REGIME_VERSION = "regime-v0.8-draft"
+REGIME_VERSION = "regime-v0.10-draft"
+# v0.10: no rule change. structure-v0.10 dropped 1W to INTERMEDIATE, so 1W
+# breaks now exist for 18 of 21 perps instead of 1 — and this engine
+# classifies FROM breaks. A 1W regime is what makes the 1D book measurable.
+
+# v0.9: no rule change here at all — structure-v0.9 fixed a tick floor that
+# suppressed breaks entirely on most sub-dollar symbols (see `swings.quote_ticks`
+# and BUILDLOG S40 for the measurement), and this engine classifies FROM breaks.
+# `_classify` returns RANGE when `last_break is None`, so those symbols were
+# reported as permanently ranging when the truth was that nothing downstream
+# could see a break. Same code, different inputs, different facts — which is
+# exactly what a version bump is for.
+
 
 
 def _classify(last_break, last_hi, last_lo):

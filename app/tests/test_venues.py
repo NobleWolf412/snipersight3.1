@@ -149,19 +149,81 @@ class MultiVenueUniverseTest(unittest.TestCase):
         with mock.patch.object(self.u, "rank_by_volume",
                                return_value=[("BTC-USD", 500.0), ("ACH-USD", 9.0)]), \
              mock.patch.object(self.u.phemex, "rank_by_volume",
-                               return_value=[("BTCUSDT", 400.0)]):
+                               return_value=[("BTCUSDT", 400.0)]),              mock.patch.object(self.u.kraken, "rank_by_volume",
+                               return_value=[]):
             out = self.u.rank_all_venues()
         syms = [s for s, _ in out]
         self.assertIn("BTCUSDT", syms)
         self.assertNotIn("BTC-USD", syms, "same underlying listed twice")
         self.assertIn("ACH-USD", syms, "spot-only coin must be kept")
 
+    def test_kraken_wins_over_phemex_for_the_same_underlying(self):
+        """Operator ruling 2026-07-30. This deliberately OVERRIDES volume —
+        Phemex is given the deeper book here and still loses, because the
+        precedence is regulatory access, not depth. An unfillable order is a
+        bad trade; an inaccessible venue is not a trade at all.
+
+        POST-SWITCH path — what happens the day KRAKEN_SHADOW_ONLY goes off.
+        While shadow-only is ON, Kraken does not compete for admission at
+        all; see the next test for why that separation had to exist."""
+        from unittest import mock
+        with mock.patch.object(self.u, "KRAKEN_SHADOW_ONLY", False),              mock.patch.object(self.u, "rank_by_volume", return_value=[]),              mock.patch.object(self.u.phemex, "rank_by_volume",
+                               return_value=[("BTCUSDT", 900.0)]),              mock.patch.object(self.u.kraken, "rank_by_volume",
+                               return_value=[("PF_XBTUSD", 100.0)]):
+            out = self.u.rank_all_venues()
+        syms = [s for s, _ in out]
+        self.assertEqual(syms, ["PF_XBTUSD"])
+        self.assertNotIn("BTCUSDT", syms)
+
+    def test_shadow_only_leaves_the_traded_universe_untouched(self):
+        """The bug this separation exists to prevent, pinned.
+
+        With Kraken merged into the ranking AND then classified SHADOW, every
+        overlapping coin was won by Kraken and immediately made untradeable. A
+        preview collapsed the tradeable set to the three junk symbols Kraken
+        does not list — BTC, ETH and SOL all went dark, which is the whole book.
+        Warming and trading are two questions and they get two answers.
+        """
+        from unittest import mock
+        with mock.patch.object(self.u, "KRAKEN_SHADOW_ONLY", True),              mock.patch.object(self.u, "rank_by_volume", return_value=[]),              mock.patch.object(self.u.phemex, "rank_by_volume",
+                               return_value=[("BTCUSDT", 900.0)]),              mock.patch.object(self.u.kraken, "rank_by_volume",
+                               return_value=[("PF_XBTUSD", 100.0)]):
+            out = self.u.rank_all_venues()
+        self.assertEqual([s for s, _ in out], ["BTCUSDT"],
+                         "shadow-only must not displace the traded venue")
+
+    def test_xbt_and_btc_are_one_underlying_not_two(self):
+        """Kraken writes Bitcoin as XBT. Without the alias the dedupe sees two
+        coins, admits both, and the account holds the same exposure twice while
+        MAX_CONCURRENT counts it once — the S33 double-exposure bug returning
+        through a different spelling."""
+        for sym in ("PF_XBTUSD", "BTCUSDT", "BTC-USD"):
+            self.assertEqual(self.u._base_asset(sym), "BTC", sym)
+        self.assertEqual(self.u._base_asset("PF_XDGUSD"),
+                         self.u._base_asset("DOGEUSDT"))
+
+    def test_a_kraken_outage_says_the_universe_may_be_inaccessible(self):
+        """Degrading to Phemex-only is not neutral once the operator has ruled
+        for Kraken on access grounds — the warning has to say what the fallback
+        means, not just that one happened. (Post-switch path.)"""
+        import logging
+        from unittest import mock
+        with mock.patch.object(self.u, "KRAKEN_SHADOW_ONLY", False),              mock.patch.object(self.u, "rank_by_volume", return_value=[]),              mock.patch.object(self.u.phemex, "rank_by_volume",
+                               return_value=[("BTCUSDT", 900.0)]),              mock.patch.object(self.u.kraken, "rank_by_volume",
+                               side_effect=RuntimeError("down")):
+            with self.assertLogs(level=logging.WARNING) as cm:
+                out = self.u.rank_all_venues()
+        self.assertEqual([s for s, _ in out], ["BTCUSDT"])
+        self.assertTrue(any("cannot access" in m for m in cm.output),
+                        "the fallback must name its consequence")
+
     def test_perp_ranking_failure_degrades_to_spot_only(self):
         from unittest import mock
         with mock.patch.object(self.u, "rank_by_volume",
                                return_value=[("BTC-USD", 500.0)]), \
              mock.patch.object(self.u.phemex, "rank_by_volume",
-                               side_effect=RuntimeError("venue down")):
+                               side_effect=RuntimeError("venue down")),              mock.patch.object(self.u.kraken, "rank_by_volume",
+                               return_value=[]):
             out = self.u.rank_all_venues()
         self.assertEqual([s for s, _ in out], ["BTC-USD"])
 
@@ -171,7 +233,8 @@ class MultiVenueUniverseTest(unittest.TestCase):
              mock.patch.object(self.u, "rank_by_volume",
                                return_value=[("BTC-USD", 500.0)]), \
              mock.patch.object(self.u.phemex, "rank_by_volume",
-                               return_value=[("BTCUSDT", 900.0)]):
+                               return_value=[("BTCUSDT", 900.0)]),              mock.patch.object(self.u, "ENABLE_KRAKEN", False),              mock.patch.object(self.u.kraken, "rank_by_volume",
+                               return_value=[("PF_XBTUSD", 900.0)]):
             out = self.u.rank_all_venues()
         self.assertEqual([s for s, _ in out], ["BTC-USD"])
 

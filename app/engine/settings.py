@@ -43,6 +43,18 @@ SPEC = {
     "strategy_pullback": ("BEHAVIOURAL", bool, True, "Trade PULLBACK setups."),
     "strategy_reversal": ("BEHAVIOURAL", bool, True, "Trade REVERSAL setups."),
     "strategy_scale_in": ("BEHAVIOURAL", bool, True, "Allow SCALE_IN adds."),
+    # Declared but PLANNED — `registry.RANGE_FADE`. The switch exists so the
+    # catalogue can render its toggle in a disabled state against a real
+    # setting rather than a placeholder, and defaults OFF because the strategy
+    # does not exist: `ranges.py` measured that almost no RANGE-regime
+    # rejection has a detected range at the moment it is rejected.
+    "strategy_breakout_retest": ("BEHAVIOURAL", bool, False,
+                                "Trade BREAKOUT RETEST setups. Measured and OFF: "
+                                "n=55, -0.076 R, CI crosses zero. The engine runs "
+                                "and records; nothing consumes it."),
+    "strategy_range_fade": ("BEHAVIOURAL", bool, False,
+                            "Trade RANGE FADE setups. Planned — no engine "
+                            "implements it yet; enabling it changes nothing."),
     # OPERATIONAL, deliberately: halting stops new entries but changes no rule.
     # Classing it BEHAVIOURAL reset the forward baseline on every halt/resume,
     # which would have made the safety control destroy the evidence it protects.

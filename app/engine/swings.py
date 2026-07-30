@@ -84,6 +84,54 @@ def compute_atr(candles: list) -> list:
     return atr
 
 
+
+def quote_ticks(candles: list) -> list:
+    """Per-bar minimum price increment, read off the venue's own quoting.
+
+    "1 tick" in structure.py, zones.py and liquidity.py is the literal
+    constant 0.01. That is the correct tick for BTC-USD and it is
+    catastrophically wrong for a sub-dollar instrument. Measured across the 59
+    tracked symbols: on 34 of them 0.05*ATR is SMALLER than 0.01 — by 859x on
+    u1000SHIBUSDT and by 944,882x on SHIB-USD. A "tolerance" larger than any
+    move the instrument makes means no close ever breaks any level, and the
+    store shows exactly that: structure.py has emitted ONE break in
+    u1000SHIBUSDT's entire history against 127 labels, and ZERO in SHIB-USD's
+    against 101. `regime._classify` returns RANGE when there is no break, so
+    those symbols are permanently labelled RANGE — and 89% of the RANGE
+    rejections this engine was built for belong to those 34 symbols (498 of
+    554 at the snapshot that motivated it, 898 of 1,010 now). Most of that
+    "27% of the market is ranging" is not a ranging market. It is a blind
+    structure engine, and the fix belongs in the shared constant rather than
+    here.
+
+    So this is not a new rule; it is the SAME convention implemented honestly.
+    The tick is the smallest increment the venue quotes, taken from the
+    exponent of the price strings it sent. For every symbol where 0.01 was
+    right it returns 0.01.
+
+    It is a RUNNING maximum over bars 0..j, which matters twice: the tick a
+    fact was computed with depends only on that fact's past (§5), and
+    appending a bar quoted to more decimals can never change an already
+    emitted fact, so re-runs stay idempotent.
+    """
+    out, seen = [], 0
+    for c in candles:
+        for field in ("open", "high", "low", "close"):
+            exp = Decimal(c[field]).as_tuple().exponent
+            if isinstance(exp, int) and -exp > seen:
+                seen = -exp
+        # No fractional digits observed yet -> the tick is UNKNOWN, and an
+        # unknown tick returns ZERO rather than 1. `max(tick, 0.05*ATR)` exists
+        # so a tolerance is never finer than one tick; a guessed-large tick
+        # would inflate the tolerance and reproduce, at a different scale, the
+        # exact bug this function fixes. Zero simply lets the ATR term govern,
+        # which is the conservative direction (more breaks, not fewer).
+        # No real venue row in the store is integer-quoted; this is reachable
+        # from synthetic data and must not be a landmine when it is.
+        out.append(Decimal("0." + "0" * (seen - 1) + "1") if seen else Decimal(0))
+    return out
+
+
 def detect_micro(candles: list) -> list[dict]:
     """Strict 2-left/2-right fractal swings, in bar order."""
     out = []

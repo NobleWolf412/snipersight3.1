@@ -59,10 +59,90 @@ class TestManifestsAndCosts(TempStore):
 
 
 class TestStrategyGuards(unittest.TestCase):
-    def test_transition_requires_liquidity_sweep(self):
+    def test_transition_requires_real_evidence_not_regime_alone(self):
+        """The property this has always protected: TRANSITION must not trade on
+        regime alone.
+
+        The THRESHOLD moved in S50 and the trades did not. v0.7 demanded 2 of
+        {CHOCH, SWEEP, VOLUME, STRENGTH} — but STRENGTH cannot be false
+        (`zones.strength` floors at 77 against a gate of 60), so it was present
+        on 985 of 985 setups and "2 of 4" was really "1 of 3". The gate now says
+        that: 1 of {CHOCH, SWEEP, VOLUME}, with STRENGTH still recorded on the
+        fact but not counted. Proven equivalent over all 8 reachable inputs.
+
+        This test previously asserted that a lone SWEEP was refused. It never
+        was — the real engine always also had STRENGTH on the same zone, so it
+        passed. The assertion described a rule the engine did not follow.
+        """
+        # regime alone, no evidence at all: refused, and that is the invariant
         self.assertIsNone(setups.playbook("DEMAND", "TRANSITION", swept=False))
-        self.assertEqual(setups.playbook("DEMAND", "TRANSITION", swept=True)[:2],
-                         ("REVERSAL", "LONG"))
+        self.assertIsNone(setups.playbook("DEMAND", "TRANSITION", rev_evidence=[]))
+        # STRENGTH alone is NOT evidence — it is the component that cannot fail
+        self.assertIsNone(
+            setups.playbook("DEMAND", "TRANSITION", rev_evidence=["STRENGTH"]),
+            "STRENGTH is structurally always-true; on its own it must not "
+            "clear the bar, or the gate is unconditional")
+        # any ONE real component: a play, in the direction the zone implies
+        for ev in (["CHOCH"], ["SWEEP"], ["VOLUME"]):
+            self.assertEqual(
+                setups.playbook("DEMAND", "TRANSITION", rev_evidence=ev)[:2],
+                ("REVERSAL", "LONG"), f"{ev} should clear the bar")
+        self.assertEqual(
+            setups.playbook("SUPPLY", "TRANSITION",
+                            rev_evidence=["SWEEP", "STRENGTH"])[:2],
+            ("REVERSAL", "SHORT"))
+
+    def test_strength_is_recorded_but_never_counted(self):
+        """It stays on the fact so a grader can measure it later; it just does
+        not gate. House rule: evidence is recorded, not filtered on — a factor
+        must be graded before it can gate, and this one has now been graded."""
+        self.assertNotIn("STRENGTH", setups.REVERSAL_COMPONENTS)
+        self.assertIn("STRENGTH", setups.REVERSAL_RECORDED_COMPONENTS)
+        ev = setups.reversal_evidence(choch_recent=False, swept=False,
+                                      vol_ratio=None, zone_strength=95)
+        self.assertEqual(ev, ["STRENGTH"], "still reported on the fact")
+        self.assertIsNone(setups.playbook("DEMAND", "TRANSITION", rev_evidence=ev),
+                          "but it must not, by itself, produce a trade")
+
+    def test_the_new_gate_takes_exactly_the_same_trades_as_the_old_one(self):
+        """S50 equivalence proof, kept as a test rather than a claim.
+
+        OLD: len(components incl. STRENGTH) >= 2, where STRENGTH is always
+        present. NEW: len(components excl. STRENGTH) >= 1. Enumerated over
+        every reachable combination — the two agree on all 8.
+        """
+        import itertools
+        real = ("CHOCH", "SWEEP", "VOLUME")
+        for r in range(len(real) + 1):
+            for combo in itertools.combinations(real, r):
+                ev = list(combo) + ["STRENGTH"]     # STRENGTH always fires
+                old = len(ev) >= 2
+                new = setups.playbook("DEMAND", "TRANSITION",
+                                      rev_evidence=ev) is not None
+                self.assertEqual(old, new,
+                                 f"{combo}: old={old} new={new} — the change "
+                                 f"was supposed to alter no trades")
+
+    def test_reversal_evidence_reads_each_component_independently(self):
+        ev = setups.reversal_evidence(
+            choch_recent=True, swept=False,
+            vol_ratio=setups.REVERSAL_VOL_RATIO,
+            zone_strength=setups.REVERSAL_MIN_ZONE_STRENGTH)
+        self.assertEqual(set(ev), {"CHOCH", "VOLUME", "STRENGTH"})
+        # a component that is absent must not be invented, and a malformed
+        # volume reading must not be counted as present
+        self.assertEqual(
+            setups.reversal_evidence(choch_recent=False, swept=False,
+                                     vol_ratio=None, zone_strength=None), [])
+        self.assertNotIn("VOLUME", setups.reversal_evidence(
+            choch_recent=False, swept=False, vol_ratio="not-a-number",
+            zone_strength=None))
+        # strictly below either threshold does not count
+        self.assertEqual(
+            setups.reversal_evidence(
+                choch_recent=False, swept=False,
+                vol_ratio=setups.REVERSAL_VOL_RATIO - Decimal("0.01"),
+                zone_strength=setups.REVERSAL_MIN_ZONE_STRENGTH - 1), [])
 
     def test_zone_freshness_decays_instead_of_rising(self):
         self.assertGreater(zones.freshness(0, 0), zones.freshness(1, 0))

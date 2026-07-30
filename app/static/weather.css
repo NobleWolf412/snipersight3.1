@@ -1,0 +1,125 @@
+/* Market Weather — owned by weather.js, injected by it.
+   Kept out of ss.css on purpose: this strip must be able to fail, or be
+   rebuilt, without touching the stylesheet the other four surfaces share.
+
+   Design-system rules this file is bound by (docs/DESIGN-SYSTEM.md):
+     · Only tokens. No literal colour, no invented spacing step.
+     · Glow means STATE. Nothing here glows — the strip reports context, it is
+       not the one live actionable signal, and taking the accent halo would
+       steal attention from the Setup Deck above it.
+     · Flat at rest. No shadows, no side-stripe status borders. */
+
+.wx{ --wx-cols: 112px 132px 132px minmax(0, 1fr); }
+.wx .panel-head{ gap: var(--md); }
+
+/* orientation line: what the strip is for, said once */
+.wx-sub{ font-family: var(--f-mono); font-size: 10px; letter-spacing: .1em;
+  color: var(--fg-4); text-transform: lowercase; }
+.wx .panel-head .chip{ margin-left: auto; flex: none; }
+
+.wx-body{ padding: var(--sm) var(--sm) var(--md); }
+
+.wx-row{ display: grid; grid-template-columns: var(--wx-cols);
+  align-items: stretch; border-radius: var(--r-md); }
+.wx-row.wx-data{ cursor: pointer; }
+.wx-row.wx-data:hover{ background: rgba(255,255,255,.03); }
+.wx-row.wx-data:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* column headings */
+.wx-head{ padding-bottom: 6px; }
+.wx-head .t-label{ padding: 0 12px; }
+.wx-head .t-label.mean{ padding-left: 22px; }
+
+/* ---- symbol ---- */
+.wx-sym{ display: flex; align-items: center; padding: 6px 12px;
+  font-family: var(--f-mono); font-size: 12.5px; letter-spacing: .04em;
+  color: var(--fg); min-width: 0; }
+.wx-sym span{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- one timeframe ----
+   The 2px rule under each cell is the engine's own higher-timeframe agreement
+   factor made visible: it is coloured by the side the playbook would take, so
+   two cells that want the same thing draw ONE unbroken line and two that
+   disagree draw a broken one. Agreement is then readable without reading. */
+.wx-tf{ position: relative; display: flex; align-items: center; gap: 7px;
+  padding: 6px 12px 12px; min-width: 0; }
+.wx-tf::after{ content: ''; position: absolute; left: 0; right: 0; bottom: 5px;
+  height: 2px; background: var(--wx-bias); opacity: .85; }
+.wx-tf.split::after{ left: 7px; }              /* the break = they disagree */
+.wx-tf .tfk{ font-family: var(--f-mono); font-size: 9.5px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--fg-4); flex: none; }
+.wx-tf .reg{ font-family: var(--f-mono); font-size: 11.5px; color: var(--wx-tone);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* regime tone — direction by colour, conviction by weight of that colour */
+.r-bull  { --wx-tone: var(--green); }
+.r-bull-w{ --wx-tone: var(--green-soft); }
+.r-bear  { --wx-tone: var(--red); }
+.r-bear-w{ --wx-tone: var(--red-2); }
+.r-trans { --wx-tone: var(--amber); }
+.r-range { --wx-tone: var(--fg-3); }
+.r-none  { --wx-tone: var(--fg-4); }
+
+/* what the playbook would DO here — the colour of the rule underneath */
+.b-long  { --wx-bias: var(--green); }
+.b-short { --wx-bias: var(--red); }
+.b-gated { --wx-bias: var(--amber); }
+.b-flat  { --wx-bias: var(--fg-4); }
+.wx-tf.b-gated::after{ opacity: .5; }
+.wx-tf.b-flat::after { opacity: .28; }
+/* no regime recorded: a dashed rule, because absent data must not look flat */
+.wx-tf.b-unknown::after{ opacity: .5; background: repeating-linear-gradient(
+  90deg, var(--fg-4) 0 3px, transparent 3px 7px); }
+
+/* ---- what this means: the only prose on the strip, so the only Inter ---- */
+.wx-mean{ display: flex; align-items: center; gap: 9px; min-width: 0;
+  padding: 6px 12px 6px 10px; font-family: var(--f-body); font-size: 12.5px;
+  line-height: 1.45; color: var(--fg-3); }
+.wx-row.live .wx-mean{ color: var(--fg-2); }
+.wx-arrow{ font-family: var(--f-mono); color: var(--fg-4); flex: none; }
+.wx-row.tier-3 .wx-mean, .wx-row.tier-4 .wx-mean{ color: var(--fg-4); }
+.wx-row.tier-4 .wx-sym{ color: var(--fg-3); }
+
+/* the full reason, revealed on click — kept out of the resting layout so
+   twenty rows still fit above the fold */
+.wx-why{ display: none; grid-column: 2 / -1; padding: 0 12px 11px 10px;
+  font-family: var(--f-body); font-size: 12px; line-height: 1.55;
+  color: var(--fg-3); max-width: 78ch; }
+.wx-row.open .wx-why{ display: block; }
+.wx-row.open{ background: rgba(255,255,255,.03); }
+
+/* ---- footer: the sentence that explains the silence ---- */
+.wx-foot{ display: flex; align-items: center; gap: var(--md); flex-wrap: wrap;
+  padding: var(--md) var(--lg); border-top: 1px solid var(--border-soft); }
+.wx-foot p{ font-family: var(--f-body); font-size: 12px; line-height: 1.5;
+  color: var(--fg-3); margin: 0; flex: 1; min-width: 220px; max-width: 78ch; }
+.wx-ver{ font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .12em;
+  color: var(--fg-4); text-transform: uppercase; }
+
+/* ---- loud fallback ----
+   A strip that renders nothing looks identical to a calm market, and this one
+   exists precisely to stop a quiet screen being misread. So it says so. */
+.wx-fail{ border-color: rgba(248,113,113,.4); }
+.wx-failbody{ padding: var(--lg); font-family: var(--f-body); font-size: 12.5px;
+  line-height: 1.6; color: var(--fg-3); display: flex; flex-direction: column;
+  gap: var(--sm); max-width: 78ch; }
+.wx-failbody b{ color: var(--red-2); font-weight: 600; }
+.wx-failbody code{ font-family: var(--f-mono); font-size: 11px;
+  color: var(--fg-4); word-break: break-all; }
+
+/* ---- responsive ---- */
+@media (max-width: 1180px){ .wx{ --wx-cols: 96px 118px 118px minmax(0, 1fr); } }
+@media (max-width: 1000px){
+  .wx-sub{ display: none; }
+  .wx{ --wx-cols: 88px 112px 112px minmax(0, 1fr); }
+  .wx-mean{ font-size: 12px; }
+}
+/* stacked: symbol on its own line, the two timeframes still side by side so the
+   agreement rule stays readable, meaning underneath */
+@media (max-width: 780px){
+  .wx-row{ grid-template-columns: 1fr 1fr; padding: 4px 0 6px; }
+  .wx-head{ display: none; }
+  .wx-sym{ grid-column: 1 / -1; padding-bottom: 2px; }
+  .wx-mean{ grid-column: 1 / -1; padding-top: 8px; align-items: flex-start; }
+  .wx-why{ grid-column: 1 / -1; }
+}

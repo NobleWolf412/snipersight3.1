@@ -136,12 +136,50 @@ def _stage_rung(checks, stage):
     return max(relevant, key=RUNG_ORD.get) if relevant else "SERVE"
 
 
-_AUDIT_CACHE: dict = {"at": 0.0, "report": None, "refreshing": False}
+# Keyed BY DATABASE PATH. It was a single global, and the background refresh
+# below called store.connect() with no argument — so a caller passing any other
+# store got back a verdict audited from the DEFAULT one. With a single
+# production database that is invisible; it is still a violation of the rule
+# this module exists to enforce, because an audit belongs to the store it
+# audited and to no other.
+#
+# Found 2026-07-30 by a test that could not fail on its own: risk.py's
+# data-health gate read a cached BLOCKED verdict belonging to a different
+# database, rejected every intent as DATA_HEALTH_BLOCKED, and the drawdown halt
+# it was testing therefore never fired. Silent, order-dependent, and it would
+# have behaved the same way against any second store — a replay copy, a
+# scratch DB, an A/B run.
+_AUDIT_CACHE: dict = {}
 AUDIT_TTL = 300
 
 
+def _db_key(con) -> str:
+    """Identify the store behind a connection, so a verdict cannot cross stores."""
+    try:
+        for _, name, path in con.execute("PRAGMA database_list").fetchall():
+            if name == "main":
+                return path or ":memory:"
+    except Exception:
+        pass
+    return f"unknown-{id(con)}"
+
+
+def _slot(key: str) -> dict:
+    return _AUDIT_CACHE.setdefault(
+        key, {"at": 0.0, "report": None, "refreshing": False})
+
+
+def _default_db_key() -> str:
+    """Path of the production store, resolved the same way store.connect does."""
+    try:
+        from . import store
+        return str(store.DB_PATH)
+    except Exception:
+        return "unresolvable-default"
+
+
 def cached_audit(con, force: bool = False):
-    """The one verdict every surface reads.
+    """The one verdict every surface reads, for THIS store.
 
     A full audit was measured at 72s cold while contending with the scanner's
     writes. Any HTTP handler that calls audit() directly therefore hangs its
@@ -152,32 +190,41 @@ def cached_audit(con, force: bool = False):
     render that as "pending", never as a confident zero.
     """
     import threading
+    key = _db_key(con)
+    slot = _slot(key)
     if force:
-        _AUDIT_CACHE["report"] = audit(con, persist=True)
-        _AUDIT_CACHE["at"] = time.time()
-        return _AUDIT_CACHE["report"]
+        slot["report"] = audit(con, persist=True)
+        slot["at"] = time.time()
+        return slot["report"]
 
-    stale = (_AUDIT_CACHE["report"] is None
-             or time.time() - _AUDIT_CACHE["at"] > AUDIT_TTL)
-    if stale and not _AUDIT_CACHE["refreshing"]:
-        _AUDIT_CACHE["refreshing"] = True
+    stale = (slot["report"] is None or time.time() - slot["at"] > AUDIT_TTL)
+    # The background refresh exists for ONE reason: keeping the production
+    # request path off a 72s audit. It is therefore only ever run against the
+    # default store. Backgrounding a thread into whatever database a caller
+    # happened to pass is how this function came to hold a temporary store open
+    # past its owner's lifetime — and, before the cache was keyed, how it came
+    # to answer questions about one database using another's verdict.
+    # Any other store gets the honest answer: None, meaning "pending". A caller
+    # that needs a real verdict for it uses force=True or audit() directly.
+    if stale and not slot["refreshing"] and key == _default_db_key():
+        slot["refreshing"] = True
 
-        def _bg():
+        def _bg(target=slot):
             from . import store
             try:
                 c = store.connect()
                 try:
-                    _AUDIT_CACHE["report"] = audit(c)
-                    _AUDIT_CACHE["at"] = time.time()
+                    target["report"] = audit(c)
+                    target["at"] = time.time()
                 finally:
                     c.close()
             except Exception:
                 pass
             finally:
-                _AUDIT_CACHE["refreshing"] = False
+                target["refreshing"] = False
 
         threading.Thread(target=_bg, daemon=True).start()
-    return _AUDIT_CACHE["report"]
+    return slot["report"]
 
 
 def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
