@@ -224,7 +224,7 @@
         <div class="tile"><span class="t-label">Closed trades</span>
           <span class="t-metric">${b.n ?? '—'}</span>
           <span class="t-sub">${esc(denom)}</span></div>
-        <div class="tile"><span class="t-label">Expectancy per trade</span>
+        <div class="tile"><span class="t-label"><span class="term" data-t="expectancy">Expectancy</span> per trade</span>
           <span class="t-metric" style="color:${sign(exp)}">${num(exp)} R</span></div>
         <div class="tile"><span class="t-label">Win rate</span>
           <span class="t-metric">${b.win_rate == null ? '—' : (b.win_rate * 100).toFixed(1) + '%'}</span></div>

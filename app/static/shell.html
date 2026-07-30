@@ -17,7 +17,7 @@
       <img src="/static/assets/snipersight-logo.png" alt="SniperSight">
     </div>
 
-    <label class="t-label" style="display:flex;align-items:center;gap:8px">VENUE
+    <label class="t-label" style="display:flex;align-items:center;gap:8px"><span class="term" data-t="perps">VENUE</span>
       <select id="venue" class="btn" style="text-transform:none;letter-spacing:.08em">
         <option value="coinbase">Coinbase · spot</option>
         <option value="phemex">Phemex · perps</option>
@@ -121,8 +121,8 @@
           <button data-o="swings"    data-label="Swings"    class="on">Swings</button
           ><button data-o="structure" data-label="Structure" class="on">Structure</button
           ><button data-o="zones"     data-label="Zones"     class="on">Zones</button
-          ><button data-o="liquidity" data-label="Liquidity">Liquidity</button
-          ><button data-o="cycle"     data-label="Cycle">Cycle</button>
+          ><button data-o="liquidity" data-label="Liquidity" title="stop clusters inferred from the chart's own shape — a likely place for stops, not a measured one">Liquidity</button
+          ><button data-o="cycle"     data-label="Cycle" title="daily and weekly cycle lows — observational, never traded">Cycle</button>
         </div>
       </div>
 
@@ -167,10 +167,16 @@
               <span class="t-label">Trail distance (R)</span>
               <input id="tkTrailR" class="t-mono" value="1.0" inputmode="decimal"></label>
 
+            <div class="tk-why t-body" id="tkWhy"></div>
+          </div>
+
+          <!-- The cost picture and the control that commits the trade live
+               OUTSIDE .ticket-body's scroll region, deliberately. An operator
+               must never scroll to find the number that decides the trade or
+               the button that acts on it. Inputs scroll; economics do not. -->
+          <div class="ticket-foot">
             <div class="tk-out" id="tkOut"></div>
             <div class="tk-warn" id="tkWarn" hidden></div>
-
-            <div class="tk-why t-body" id="tkWhy"></div>
 
             <div class="tk-actions">
               <button class="btn" id="tkReset" disabled>Reset to engine</button>

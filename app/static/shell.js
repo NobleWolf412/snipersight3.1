@@ -230,7 +230,7 @@
           <div class="t-label">${s.tf} · ${s.strategy.replace('_',' ')}</div>
           <!-- The sort key, made visible. A deck ordered by something the
                operator cannot see is worse than one ordered by a bad score. -->
-          <div class="t-label" style="color:var(--amber)">${expiresIn(s.expires_at_ts, now)}</div>
+          <div class="t-label" style="color:var(--amber)" title="how long this setup stays live"><span class="term" data-t="horizon">${expiresIn(s.expires_at_ts, now)}</span></div>
         </div>
         <div>
           <span class="chip ${long ? 'chip-green' : 'chip-red'}">${s.direction}</span>
