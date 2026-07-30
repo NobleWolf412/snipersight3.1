@@ -365,6 +365,16 @@ window.SSChart = (() => {
       }
     }
 
+    /* POOL and BROKEN used to be fetched, parsed, and dropped by a `continue`
+       — 87% of what the liquidity engine computes, discarded by its only
+       consumer. The glossary defines "liquidity pool" as the POOL ("clusters
+       of stop-loss orders resting above highs or below lows, price often
+       reaches for them before reversing"), and the chart showed only the
+       sweep, which is the event that definition does not describe.
+
+       The pool is the FORWARD-looking object — stops are resting there. The
+       sweep is retrospective — it already happened. Showing only sweeps meant
+       the operator saw the tail of a story whose head was suppressed. */
     for(const f of facts.liq){
       if(f.event !== 'SWEEP') continue;
       n.liquidity++;
@@ -408,6 +418,31 @@ window.SSChart = (() => {
                                   ['bottom', demand ? z.zone_type : '']])
         zoneLines.push(series.createPriceLine({price: +z[edge], color: col,
           lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title}));
+    }
+
+    /* Active liquidity pools, drawn on the SAME line primitive as zones and
+       tracked with the same last-fact-wins map.
+
+       The BROKEN filter is load-bearing and not a tidiness choice: a pool line
+       left on the chart after the stops behind it are gone is the most
+       confident possible lie this chart can tell — it marks a magnet that no
+       longer exists. `state !== 'ACTIVE'` covers BROKEN and both SWEPT states.
+
+       Amber, not red: red is the sweep-and-loss colour throughout this app,
+       and a pool is neither. Measured density is a median of 1 active pool per
+       symbol/timeframe and a maximum of 2, so the clutter objection does not
+       survive contact with the data. */
+    const pState = {};
+    for(const f of facts.liq) if(f.pool_id) pState[f.pool_id] = f;
+    const pools = Object.values(pState)
+      .filter(p => p.state === 'ACTIVE' && p.market_time >= first);
+    n.liquidity += pools.length;
+    if(overlays.liquidity) for(const p of pools){
+      zoneLines.push(series.createPriceLine({
+        price: +p.level, color: 'rgba(245,158,11,.55)',
+        lineWidth: 1, lineStyle: 2,             // dashed: inferred, not measured
+        axisLabelVisible: true,
+        title: p.side === 'HIGH' ? 'STOPS ABOVE' : 'STOPS BELOW'}));
     }
 
     markers.sort((a, b) => a.time - b.time);

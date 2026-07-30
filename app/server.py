@@ -1451,11 +1451,29 @@ def overview():
             regs = store.get_facts(con, sym, "1D", "regime", regime.REGIME_VERSION)
             reg = json.loads(regs[-1]["payload"])["regime"] if regs else None
             m = umembers.get(sym, {})
+            # A symbol with candles but NO universe row is not admitted — it is
+            # a symbol we still hold history for. Defaulting it to "ADMITTED"
+            # inflated the headline count from 19 to 76, and the UI then
+            # filtered that list itself and rendered 75, while Market Weather
+            # 200px below reported 34 from the universe fact. Three
+            # irreconcilable universe sizes on one screen, all describing the
+            # same store.
             symbols.append({"symbol": sym, "price": price, "change_pct": chg,
-                            "regime": reg, "state": m.get("state", "ADMITTED"),
+                            "regime": reg, "state": m.get("state", "UNTRACKED"),
                             "rank": m.get("rank"), "vol_usd": m.get("vol_usd")})
         # rank order: by universe rank, unranked last
         symbols.sort(key=lambda s: (s["rank"] is None, s["rank"] or 0))
+
+        # The engine owns this number. The UI was re-deriving it with its own
+        # filter — the same "one authority per number" breach as ticket-math.js,
+        # and it disagreed for the same reason: a filter is not a definition.
+        universe_counts = {
+            "admitted": sum(1 for s in symbols if s["state"] == "ADMITTED"),
+            "shadow": sum(1 for s in symbols if s["state"] == "SHADOW"),
+            "warming": sum(1 for s in symbols if s["state"] == "WARMING"),
+            "untracked_with_candles": sum(1 for s in symbols
+                                          if s["state"] == "UNTRACKED"),
+        }
 
         # BULK, not per-symbol. This built the feed with a query per
         # (symbol x timeframe x fact kind) — ~1,520 round trips once the
@@ -1529,6 +1547,7 @@ def overview():
             rejection_funnel[reason] = rejection_funnel.get(reason, 0) + 1
 
         return {"baseline": baseline, "symbols": symbols, "feed": feed[:40], "scanner": scanner,
+                "universe_counts": universe_counts,
                 "rejection_funnel": rejection_funnel,
                 "engines": [{"engine": e, "last_run": t, "ms": ms}
                             for e, t, ms in engines]}

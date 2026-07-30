@@ -113,6 +113,27 @@
       means: 'No new entries open until the next day. This is the automatic ' +
              'halt working, not a fault.',
       cta: SETUP_SURFACE },
+
+    /* `cooldown(sl,12.0h)` has been rendering raw and lowercased on the deck
+       and in the order ticket with no glossary entry and no card here, while
+       DAILY_LOSS_HALT and RISK_REJECTED both had hand-written ones. `baseCode`
+       already strips the bracket, so this entry needs no parser work.
+
+       Explaining it is not cosmetic. An operator who reads an unexplained
+       refusal as arbitrary goes to the chart and sizes the trade by hand —
+       which is precisely the failure a guardrail creates when it does not say
+       why. The setup was VALID; it was refused on TIMING. */
+    COOLDOWN: {
+      plain: 'this symbol and direction were still resting after a recent exit',
+      means: 'The last trade on this symbol in this direction closed recently, ' +
+             'and the engine sits out a fixed window rather than re-entering ' +
+             'the same idea straight away. The brackets name the exit that ' +
+             'started the rest and how long it lasts — a stop-out rests much ' +
+             'longer than a target, because a stop means the level was proven ' +
+             'wrong rather than simply finished. ' +
+             'This rule is NEW and has never been checked against outcomes: ' +
+             'it is a rule of thumb the engine applies, not a proven improvement.',
+      cta: RESULTS_SURF },
     NOT_IN_POINT_IN_TIME_UNIVERSE: {
       plain: 'the token was not in the tradeable list when the setup confirmed',
       means: 'Membership is judged at the moment the setup confirmed, not now. ' +

@@ -42,19 +42,6 @@
 
   /* Phrases worth explaining, longest first so "liquidity sweep" is claimed
      before "sweep" can take half of it. */
-  const TERMS = [
-    [/\bliquidity sweeps?\b/i, 'sweep'],
-    [/\bhigher[- ]timeframe\b/i, 'timeframe'],
-    [/\btimeframes?\b/i, 'timeframe'],
-    [/\bpullbacks?\b/i, 'pullback'],
-    [/\breversals?\b/i, 'reversal'],
-    [/\bplaybooks?\b/i, 'playbook'],
-    [/\btransitions?\b/i, 'transition'],
-    [/\branges?\b/i, 'range'],
-    [/\bzones?\b/i, 'zone'],
-    [/\bregimes?\b/i, 'regime'],
-    [/\bsetups?\b/i, 'setup'],
-  ];
 
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -62,13 +49,13 @@
   /* Underline the first occurrence of each known term so the sentence teaches
      its own vocabulary. First occurrence only: a paragraph with nine dotted
      underlines is decoration, not help. */
+  /* Delegates to the single term table in glossary.js. This used to own its own
+     copy; the setup deck then needed the same markup, and two tables of the
+     same terms is how they drift. Falls back to plain escaped text if glossary
+     has not loaded — losing an underline is acceptable, rendering raw HTML is
+     not. */
   function teach(text) {
-    let out = esc(text);
-    for (const [re, key] of TERMS) {
-      if (!window.GLOSSARY[key]) continue;   // never underline what cannot explain itself
-      out = out.replace(re, m => `<span class="term" data-t="${key}">${m}</span>`);
-    }
-    return out;
+    return window.SSTeach ? window.SSTeach(text) : esc(text);
   }
 
   /* ---------- presentation lookups ----------
@@ -112,7 +99,109 @@
       `<div class="wx-why">${teach(s.why)}</div></div>`;
   }
 
+  /* ---------- Bitcoin cycle backdrop ----------
+     The nested-cycle model has been computed and served since S31 and rendered
+     nowhere: `/api/cycles` had zero callers in the whole of static/, while
+     glossary.js already defined `dcl`, `wcl` and `translation` — someone
+     intended this and stopped.
+
+     It goes HERE, once, at the top of Market Weather, and it is BITCOIN ONLY.
+     The alt basket correlates ~0.65 to BTC at lag 0, which licenses a shared
+     BACKDROP and specifically forbids the alternative: a per-symbol cycle stage
+     fanned across 33 deck rows would be 33 copies of one reading, each looking
+     like independent confirmation. That is the confluence trap the glossary
+     already warns about, rebuilt in the UI.
+
+     Every row carries its own evidence class. `mechanical` means arithmetic on
+     detected swings; `heuristic` means a community rule of thumb fitted to two
+     or three samples. The engine labels these in its own docstring and the
+     labels travel with the numbers rather than sitting in a footnote. */
+  let cyc = null;
+  let lastWeather = null;   // so the backdrop can re-render without a refetch
+
+  const D = ts => new Date(ts * 1000).toLocaleDateString(undefined,
+    {day: 'numeric', month: 'short', year: 'numeric'});
+  const DSTR = s => {
+    const [y, m, dd] = String(s).split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, dd)).toLocaleDateString(undefined,
+      {day: 'numeric', month: 'short', year: 'numeric'});
+  };
+
+  function cycleLede(c) {
+    if (!c || c.unavailable) return '';
+    const wk = (c.weekly && c.weekly.cycles) || [];
+    const last = wk[wk.length - 1];
+    const w = c.windows || {};
+    const rows = [];
+
+    if (last) {
+      // Counted from the data, never asserted. The plan for this panel claimed
+      // the latest cycle was the first to peak early AND the first to break;
+      // it is the first to peak EARLY (1 of 7 left-translated) but the third
+      // to break (3 of 7 failed, two of them right-translated). Conflating the
+      // two would have been a false claim in the first sentence on screen.
+      const nLeft = wk.filter(x => x.translation === 'left').length;
+      const nFail = wk.filter(x => x.failed).length;
+      const pct = Math.round(last.fraction * 1000) / 10;
+      const early = last.translation === 'left';
+      rows.push(`<div class="cy-row">
+        <div class="cy-k">Weekly <span class="term" data-t="translation">cycle</span></div>
+        <div class="cy-v">
+          <b class="${early ? 'cy-warn' : ''}">${early ? 'Peaked early' : 'Peaked late'}${last.failed ? ', then broke' : ''}</b>
+          <div class="cy-note">The weekly cycle that ran ${D(last.start_ts)} → ${D(last.end_ts)}
+            put its high <b>${pct}%</b> of the way through itself
+            ${early ? `— the ${nLeft === 1 ? 'only one of' : `${nLeft} of`} ${wk.length} to peak early.`
+                    : `, which is late — ${wk.length - nLeft} of ${wk.length} have.`}
+            ${last.failed ? `It also closed below the low it started from, which
+              ${nFail} of ${wk.length} have done.` : ''}</div>
+          <div class="cy-tag">mechanical · ${wk.length} weekly cycles observed</div>
+        </div></div>`);
+    }
+
+    if (w.low_to_low && w.halving_anchored) {
+      const now = Date.now() / 1000;
+      const openState = s => {
+        const t = Date.parse(s + 'T00:00:00Z') / 1000;
+        const days = Math.round((now - t) / 86400);
+        return days >= 0 ? `open now, day ${days}` : `opens in ${-days} days`;
+      };
+      rows.push(`<div class="cy-row">
+        <div class="cy-k"><span class="term" data-t="fourYear">Four-year</span> low window</div>
+        <div class="cy-v">
+          <div class="cy-win"><span>Low-to-low</span>
+            <b>${DSTR(w.low_to_low.start)} → ${DSTR(w.low_to_low.end)}</b>
+            <em>${openState(w.low_to_low.start)}</em></div>
+          <div class="cy-win"><span>Halving-anchored</span>
+            <b>${DSTR(w.halving_anchored.start)} → ${DSTR(w.halving_anchored.end)}</b>
+            <em>${openState(w.halving_anchored.start)}</em></div>
+          <div class="cy-note">Two ways of estimating when Bitcoin's four-year low is
+            due, from different anchors. They disagree by about three months. Both are
+            shown and neither is averaged — the gap between them is the honest width of
+            the estimate.</div>
+          <div class="cy-tag">heuristic · fitted to ${(c.accepted_4y_lows || []).length - 1}
+            completed four-year cycles · the halving date is itself an estimate</div>
+        </div></div>`);
+    }
+
+    if (!rows.length) return '';
+    return `<div class="wx-lede">
+      <div class="cy-head">
+        <span class="t-section">Bitcoin backdrop</span>
+        <span class="wx-sub">where the market sits in its own longer rhythm</span>
+        <span class="chip">observational</span>
+      </div>
+      ${rows.join('')}
+      <div class="cy-foot">Never consumed by any trading engine — nothing here
+        opens, sizes or blocks a trade. Read from
+        <b>${esc(c.source_symbol || '—')}</b>, ${esc(String(c.candles || '—'))} daily
+        candles${c.last_candle_ts ? ' to ' + D(c.last_candle_ts) : ''} ·
+        ${esc(c.algo_version || '')}. A different Bitcoin series gives a slightly
+        different reading; this is one series, not a fact about Bitcoin.</div>
+    </div>`;
+  }
+
   function render(d) {
+    lastWeather = d;
     const rows = showAll ? d.symbols : d.symbols.slice(0, COLLAPSED);
     const hidden = d.symbols.length - rows.length;
     // The sentence that does the actual explaining. Regime eligibility is
@@ -126,6 +215,7 @@
         `that symbol's zones and confirms there, so quiet days are normal.`;
 
     root.innerHTML = `<div class="panel wx">
+      ${cycleLede(cyc)}
       <div class="panel-head">
         <span class="t-section">Market Weather</span>
         <span class="wx-sub">what the market is doing &middot; and whether anything can be traded</span>
@@ -192,6 +282,16 @@
 
   async function load() {
     try {
+      /* The cycle backdrop is SUPPLEMENTARY. It is fetched alongside the
+         weather but its failure must never take the strip down with it — the
+         strip answers "why is my screen empty?", which is the load-bearing
+         question here. A missing backdrop drops one block; a thrown backdrop
+         would drop the answer. */
+      fetch('/api/cycles')
+        .then(r => (r.ok ? r.json() : null))
+        .then(c => { cyc = c; if (lastWeather) render(lastWeather); })
+        .catch(() => { /* backdrop absent; the strip stands on its own */ });
+
       const res = await fetch('/api/weather');
       if (!res.ok) throw new Error('/api/weather → ' + res.status);
       const data = await res.json();

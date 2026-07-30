@@ -123,3 +123,37 @@
   .wx-mean{ grid-column: 1 / -1; padding-top: 8px; align-items: flex-start; }
   .wx-why{ grid-column: 1 / -1; }
 }
+
+/* ---------- Bitcoin cycle backdrop ----------
+   Sits ABOVE the per-symbol rows, not below them: it is the market-level
+   reading and must not appear to be a footnote to eight individual symbols.
+   Rendered once, Bitcoin only — see cycleLede() for why a per-symbol fan-out
+   would be 33 copies of one number wearing the costume of confluence. */
+.wx-lede{ padding: var(--md) var(--lg); border-bottom: 1px solid var(--border-soft);
+  background: rgba(0,0,0,.18) }
+.cy-head{ display: flex; align-items: baseline; gap: var(--md); flex-wrap: wrap;
+  margin-bottom: var(--sm) }
+.cy-row{ display: grid; grid-template-columns: 148px 1fr; gap: var(--md);
+  padding: 7px 0; align-items: start }
+.cy-row + .cy-row{ border-top: 1px dashed var(--border-soft) }
+.cy-k{ font-family: var(--f-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--fg-4);
+  padding-top: 2px }
+.cy-v b{ font-family: var(--f-display); font-size: 14px; color: var(--fg) }
+/* Amber, never red. A cycle peaking early is a reading, not a loss. */
+.cy-v b.cy-warn{ color: var(--amber) }
+.cy-note{ font-family: var(--f-body); font-size: 12px; line-height: 1.5;
+  color: var(--fg-3); margin-top: 3px; max-width: 70ch }
+/* The evidence class travels WITH the number it qualifies. `mechanical` and
+   `heuristic` are not decoration — one is arithmetic on detected swings, the
+   other is a rule of thumb fitted to two samples, and an operator who cannot
+   tell them apart is being misled by the more confident-looking one. */
+.cy-tag{ font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--fg-4); margin-top: 5px }
+.cy-win{ display: flex; gap: var(--sm); align-items: baseline; flex-wrap: wrap;
+  font-family: var(--f-mono); font-size: 12px; padding: 1px 0 }
+.cy-win span{ color: var(--fg-4); min-width: 132px }
+.cy-win b{ font-family: var(--f-mono); font-size: 12px; color: var(--fg-2) }
+.cy-win em{ font-style: normal; color: var(--amber); font-size: 11px }
+.cy-foot{ font-family: var(--f-body); font-size: 11px; line-height: 1.5;
+  color: var(--fg-4); margin-top: var(--sm); max-width: 78ch }

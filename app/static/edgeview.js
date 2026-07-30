@@ -27,6 +27,19 @@
   .ev-scn td,.ev-scn th{padding:6px 10px;border-bottom:1px solid var(--border-soft);text-align:right}
   .ev-scn th:first-child,.ev-scn td:first-child{text-align:left}
   .ev-warn{color:var(--amber);margin-top:var(--sm)}
+  /* Per-timeframe rows. One shared scale across all five — a per-row scale
+     would make a wide interval and a narrow one look the same width, which is
+     the one thing this panel exists to prevent. */
+  .ev-tf{display:grid;grid-template-columns:44px 62px 76px 1fr;gap:var(--sm);
+    align-items:center;padding:5px 0;border-bottom:1px solid var(--border-soft)}
+  .ev-tf-bar{position:relative;height:14px}
+  .ev-tf-track{position:absolute;inset:6px 0 auto 0;height:3px;border-radius:var(--r-pill);
+    background:var(--card-2)}
+  .ev-tf-band{position:absolute;top:6px;height:3px;border-radius:var(--r-pill)}
+  .ev-tf-mean{position:absolute;top:2px;width:2px;height:11px;background:var(--fg-2)}
+  .ev-tf-zero{position:absolute;top:0;width:1px;height:14px;background:var(--fg-4)}
+  .ev-tf-none{color:var(--fg-4);grid-column:2 / -1}
+  .ev-flow{margin-top:var(--sm);color:var(--fg-3)}
   `;
   if (!document.getElementById('ev-css')) {
     const st = document.createElement('style');
@@ -65,6 +78,87 @@
     </div>`;
   }
 
+  /* Timeframe order is FIXED — shortest to longest, the ladder the operator
+     already thinks in. Never sorted by expectancy: a table that reorders itself
+     so the best number is on top is an argument, not a report. */
+  const TF_ORDER = ['15m', '1H', '4H', '1D', '1W'];
+
+  /* The same book cut five ways. This is the single highest-value figure the
+     API serves and `edgeview.js` used to throw it away.
+
+     Three deliberate refusals, each preventing a specific misreading:
+       · rows never sort — see TF_ORDER
+       · the MEAN is never coloured. Colour goes on the interval, and only when
+         it clears zero. A green -0.35 that happens to have a wide interval
+         reads as a result; it is not one.
+       · a slice below the sample floor prints the engine's own refusal string
+         verbatim and NO mean. Printing a mean for n=3 beside four real ones
+         invites exactly the comparison the floor exists to forbid. */
+  function byTimeframe(byTf, confound) {
+    const rows = TF_ORDER.filter(tf => byTf && byTf[tf]).map(tf => [tf, byTf[tf]]);
+    if (!rows.length) return '';
+
+    // One shared scale across every row, so widths are comparable.
+    let min = 0, max = 0;
+    rows.forEach(([, s]) => {
+      const b = s.bootstrap;
+      if (!b) return;
+      min = Math.min(min, b.ci_lo); max = Math.max(max, b.ci_hi);
+    });
+    const pad = Math.max(0.1, (max - min) * 0.12);
+    min -= pad; max += pad;
+    const pct = v => ((v - min) / (max - min)) * 100;
+
+    let cleared = 0, measured = 0;
+    const body = rows.map(([tf, s]) => {
+      const b = s.bootstrap;
+      if (!b || s.mean_r == null) {
+        // Verbatim. The engine wrote a sentence explaining the refusal; this
+        // panel does not paraphrase it and does not blank it.
+        return `<div class="ev-tf t-mono">
+          <b>${esc(tf)}</b><span style="color:var(--fg-4)">n=${s.n ?? 0}</span>
+          <span class="ev-tf-none t-label">${esc(s.refusal || 'no verdict reported')}</span>
+        </div>`;
+      }
+      measured++;
+      const crosses = b.ci_lo <= 0 && b.ci_hi >= 0;
+      if (!crosses) cleared++;
+      const col = crosses ? 'var(--amber)' : (b.ci_hi < 0 ? 'var(--red)' : 'var(--green)');
+      const cf = (confound && confound.slices && confound.slices[tf]) || {};
+      // Only when actually confounded. A reassuring note on every row trains
+      // the eye to skip the one row that will eventually matter.
+      const note = cf.confounded
+        ? `<div class="t-label" style="grid-column:2 / -1;color:var(--amber)">⚠ ${esc(cf.note || 'version-confounded slice')}</div>`
+        : '';
+      return `<div class="ev-tf t-mono">
+        <b>${esc(tf)}</b>
+        <span style="color:var(--fg-4)">n=${s.n}</span>
+        <span style="color:var(--fg-2)">${num(s.mean_r, 3)} R</span>
+        <div class="ev-tf-bar">
+          <div class="ev-tf-track"></div>
+          <div class="ev-tf-band" style="left:${pct(b.ci_lo)}%;width:${pct(b.ci_hi) - pct(b.ci_lo)}%;background:${col}"></div>
+          <div class="ev-tf-mean" style="left:${pct(s.mean_r)}%"></div>
+          <div class="ev-tf-zero" style="left:${pct(0)}%"></div>
+        </div>
+        ${note}
+      </div>`;
+    }).join('');
+
+    const lede = cleared === 0
+      ? `Not one of these ${measured} has cleared break even, and their intervals overlap each other heavily.`
+      : `${cleared} of ${measured} clear break even on their own interval.`;
+
+    return `<div style="margin-top:var(--lg)">
+      <div class="t-section">By timeframe</div>
+      <div class="t-label" style="color:var(--fg-4);margin-bottom:var(--xs)">
+        the same book cut five ways, against the same break-even line</div>
+      ${body}
+      <div class="t-body ev-flow">${lede}
+        This is one book cut five ways after the fact — with five slices, one will
+        look best by chance. Read the spread as a place to look, not a result.</div>
+    </div>`;
+  }
+
   function render(d) {
     if (!(d.sufficient ?? (d.book || {}).sufficient)) {
       panel(`<div class="empty">Not enough closed trades to say anything honest yet.
@@ -78,18 +172,58 @@
     const hasCI = typeof lo === 'number' && typeof hi === 'number';
     const crosses = hasCI && lo <= 0 && hi >= 0;
 
-    const verdict = !hasCI ? 'Not enough sample for an interval.'
-      : hi < 0 ? 'This book is losing, and the sample is large enough to say so. '
-               + 'The interval sits entirely below break even — this is not bad luck.'
-      : lo > 0 ? 'This book is profitable and the interval clears break even. '
-               + 'Check concentration before trusting it: a handful of trades can carry a mean.'
-      : 'Indistinguishable from break even. The interval crosses zero, so the '
-        + 'honest answer is "not yet known" — neither a win nor a proven loss.';
+    /* The verdict is the ENGINE's, not this file's.
+       `edgestats._verdict` names the fee basis it was computed on; the prose
+       that used to live here did not, and rebuilding an interpretation from
+       `lo`/`hi` in the browser is a second authority for the one number this
+       panel exists to state carefully — the same breach as ticket-math.js, in
+       the one place that can least afford it. They agreed by luck.
+
+       If the engine did not return a verdict, REFUSE. Falling back to
+       locally-written prose is how the second authority came back. */
+    const ev = d.verdict || {};
+    const verdict = ev.text
+      ? `<b>${esc(ev.code || '')}</b> ${esc(ev.text)}`
+      : '<span style="color:var(--amber)">The engine did not return a verdict for '
+        + 'this book. The figures above are shown; the sentence that interprets '
+        + 'them is not, because this panel does not write one.</span>';
+
+    /* The denominator. "Closed trades 401" invites the reading that 401 is
+       everything the simulator produced. 243 of 644 ran on a warmed venue the
+       risk authority will not size — excluded by VENUE, not by outcome, and an
+       operator who does not know that cannot reconcile this panel with
+       Results. Phrase reused verbatim from shell.js shadowBlock(). */
+    const ct = d.counts || {};
+    const excl = [];
+    if (ct.shadow_venue) excl.push(`${ct.shadow_venue} on a warmed venue, never tradeable`);
+    if (ct.unfilled_missed) excl.push(`${ct.unfilled_missed} never filled`);
+    if (ct.excluded_no_stop_distance) excl.push(`${ct.excluded_no_stop_distance} with no stop distance`);
+    if (ct.excluded_no_fee_record) excl.push(`${ct.excluded_no_fee_record} with no cost record`);
+    if (ct.filtered_out_strategy) excl.push(`${ct.filtered_out_strategy} filtered by strategy`);
+    const denom = ct.exec_facts
+      ? `${b.n ?? '—'} of ${ct.exec_facts} simulated${excl.length ? ' · ' + excl.join(' · ') : ''}`
+      : '';
+
+    /* Where the edge goes. The interval is computed on NET; showing gross
+       beside it explains the width instead of leaving costs as an unexplained
+       subtraction. Deliberately not framed as "cut fees and you profit" —
+       mean_r_gross has no interval of its own and is not a demonstrated edge. */
+    const g = b.mean_r_gross, cst = b.mean_costs_r;
+    const costLine = (typeof g === 'number' && typeof cst === 'number' && g !== 0)
+      ? `<div class="t-body ev-flow"><b>Where the edge goes</b> — gross
+         ${num(g)} R → costs ${num(-Math.abs(cst))} R → net ${num(b.mean_r)} R.
+         Costs are consuming ${Math.round(100 * Math.abs(cst) / Math.abs(g))}% of the gross figure.
+         ${(typeof b.avg_win_r === 'number' && typeof b.avg_loss_r === 'number')
+            ? `Average win ${num(b.avg_win_r, 2)} R against average loss ${num(b.avg_loss_r, 2)} R —
+               a low-hit-rate, high-payoff book, so long losing runs are normal in that
+               shape rather than a sign something broke.` : ''}</div>`
+      : '';
 
     panel(`
       <div class="ev-grid">
         <div class="tile"><span class="t-label">Closed trades</span>
-          <span class="t-metric">${b.n ?? '—'}</span></div>
+          <span class="t-metric">${b.n ?? '—'}</span>
+          <span class="t-sub">${esc(denom)}</span></div>
         <div class="tile"><span class="t-label">Expectancy per trade</span>
           <span class="t-metric" style="color:${sign(exp)}">${num(exp)} R</span></div>
         <div class="tile"><span class="t-label">Win rate</span>
@@ -106,6 +240,8 @@
           · ${ci.resamples ? Number(ci.resamples).toLocaleString() : '—'} resamples</div>` : ''}
 
       <div class="ev-verdict t-body">${verdict}</div>
+      ${costLine}
+      ${byTimeframe(d.by_tf, d.confound)}
 
       ${(d.scenarios || []).length ? `<table class="ev-scn t-mono">
         <tr><th>fee scenario</th><th>expectancy</th><th>P(&gt;0)</th></tr>

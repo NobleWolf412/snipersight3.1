@@ -13,7 +13,7 @@ window.GLOSSARY = {
   zone:       "A price band where buyers or sellers previously stepped in hard. Demand zones sit under price, supply zones above.",
   demand:     "A zone below price where buying previously overwhelmed selling — a candidate area to go long from.",
   supply:     "A zone above price where selling previously overwhelmed buying — a candidate area to go short from.",
-  liquidity:  "Clusters of stop-loss orders resting above highs or below lows. Price often reaches for them before reversing.",
+  liquidity:  "Clusters of stop-loss orders resting above highs or below lows. Price often reaches for them before reversing. SniperSight infers these from the chart's own shape — repeated highs or lows at nearly the same price — so it is a LIKELY place for stops, not a measured one: nothing here can see the real order book. No playbook trades them, so treat a marked pool as context, not a target.",
   sweep:      "Price pushed past a high or low, triggered the stops there, then came straight back. Often a reversal signal rather than a real break.",
   regime:     "The market's current weather: trending up, trending down, ranging, or transitioning. Different regimes call for different playbooks.",
 
@@ -33,6 +33,8 @@ window.GLOSSARY = {
   expectancy: "What one trade is worth on average, in units of what you risked. Add up every result in R and divide by the number of trades — positive means the edge pays, and the honest question is whether it sits far enough from zero to be told apart from luck.",
   trailing:   "A stop that follows price as the trade moves your way, locking in gains instead of sitting still.",
   setup:      "A trade opportunity the scanner found: a direction, an entry, a target, a stop, and the reasoning behind it.",
+  cooldown:   "A rest period after a trade closes, per symbol and direction. A stop-out rests far longer than a target: a stop means the level was proven wrong, and re-entering an idea that just failed is one of the easiest ways to turn one loss into three. A setup refused this way was VALID — it was refused on timing, not on quality. This rule is new and has never been checked against outcomes: it is a rule of thumb the engine applies, not a proven improvement.",
+  universe:   "The symbols the scanner is allowed to trade right now. Shadow symbols are watched, scored and simulated but never sized — their record is evidence for whether to admit that venue, not part of yours. Warming ones are still backfilling history. Symbols we merely still hold candles for are not in the count at all.",
   playbook:   "A named set of rules for one kind of trade: the market condition it needs, what triggers it, where the stop goes, how long it's held. The scanner only produces a setup when a playbook covers what the market is doing — so a quiet day usually means the market is in a state nothing here has a play for, not that nothing is happening.",
   horizon:    "How long a trade is meant to be held. It comes from the timeframe that found it: a 15-minute setup is usually over within a day, a daily one can run for weeks. The horizon is a policy, not a label — it decides how much patience a trade is given before it's closed as going nowhere.",
   confirmation:"Proof that a level held, before the trade opens. Price touching a zone isn't enough; SniperSight waits for a candle to close back out of it, finishing near the far end of its own range. Costs a little of the move, avoids a lot of the losses.",
@@ -99,4 +101,44 @@ window.GLOSSARY = {
     if(t){ show(t); e.stopPropagation(); } else hide();
   });
   window.addEventListener('scroll', hide, true);
+
+  /* Mark up engine-authored prose so its jargon explains itself.
+
+     Lives HERE, next to the definitions, because it was written inside
+     weather.js's closure and the setup deck needed the same thing — and a
+     second copy of a term table is precisely the drift this codebase keeps
+     paying for (three engine rosters, two sizing authorities, two verdict
+     writers). One table, one matcher, loaded before every consumer.
+
+     Each regex is non-global on purpose: the FIRST occurrence of a term is
+     underlined and later ones are left alone. A paragraph where every instance
+     of "zone" is dotted reads as noise and gets skipped wholesale. */
+  const TERMS = [
+    [/\bliquidity sweeps?\b/i, 'sweep'],
+    [/\bhigher[- ]timeframe\b/i, 'timeframe'],
+    [/\btimeframes?\b/i, 'timeframe'],
+    [/\bpullbacks?\b/i, 'pullback'],
+    [/\breversals?\b/i, 'reversal'],
+    [/\bplaybooks?\b/i, 'playbook'],
+    [/\btransitions?\b/i, 'transition'],
+    [/\branges?\b/i, 'range'],
+    [/\bzones?\b/i, 'zone'],
+    [/\bregimes?\b/i, 'regime'],
+    [/\bsetups?\b/i, 'setup'],
+    [/\bconfirmed\b/i, 'confirmation'],
+    [/\bstops?\b/i, 'structuralStop'],
+  ];
+
+  const escHtml = s => String(s).replace(/[&<>"]/g, c =>
+    ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+  window.SSTeach = function teach(text) {
+    if (text == null) return '';
+    let out = escHtml(text);
+    for (const [re, key] of TERMS) {
+      if (!window.GLOSSARY[key]) continue;   // never underline what cannot explain itself
+      out = out.replace(re, m => `<span class="term" data-t="${key}">${m}</span>`);
+    }
+    return out;
+  };
 })();

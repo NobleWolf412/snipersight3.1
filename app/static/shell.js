@@ -40,10 +40,32 @@
   }
 
   /* ---------- COMMAND + status bar ---------- */
+  /* The last overview payload, so `renderDeck` can tell an unexamined window
+     from a quiet market. It needs `scanner.cycles` and the admitted count, and
+     re-fetching them there would be a second request for data this function
+     already holds — and could disagree with what is on screen. */
+  let lastOverview = null;
+
   async function loadOverview(){
     const o = await api('/api/overview');
-    const admitted = o.symbols.filter(s => s.state !== 'WARMING');
-    $('mUniverse').textContent = admitted.length;
+    lastOverview = o;
+    /* READ the count, do not re-derive it. This filtered `state !== 'WARMING'`
+       and rendered 75 while the engine held 19 admitted — because the server
+       defaulted every symbol with candles but no universe row to "ADMITTED",
+       and the UI's filter was a different definition again. Market Weather
+       200px below reported 34 from the universe fact. Three universe sizes on
+       one screen. The engine owns this number now (`universe_counts`).
+
+       75 also made "no setups right now" read as a malfunction: 19 symbols
+       producing nothing is the ordinary case, 75 producing nothing is not. */
+    const uc = o.universe_counts || {};
+    $('mUniverse').textContent = uc.admitted ?? '—';
+    const sub = [];
+    if (uc.shadow) sub.push(`${uc.shadow} shadow`);
+    if (uc.warming) sub.push(`${uc.warming} warming`);
+    $('mUniverseSub').textContent = sub.length
+      ? sub.join(' · ') + ' — never sized'
+      : '';
 
     const active = o.feed.filter(f => f.state === 'VALIDATED' && !f.result);
     $('mSetups').textContent = active.length;
@@ -118,13 +140,36 @@
   function renderDeck(setups, funnel){
     const el = $('deck');
     if(!setups.length){
+      /* THE EMPTY-WINDOW RULE, site 4 of 4.
+         The informative branch was gated on `total > 0`, so on a FRESH
+         BASELINE — when nothing has been rejected because nothing has been
+         examined — it was unreachable, and the operator got four bare words.
+         That is precisely the moment after every rule change, when "no setups
+         right now" is most likely to be read as "the scanner is broken".
+
+         Three distinct states, three different messages. Two of them are the
+         OPPOSITE of each other and were collapsed into the same sentence:
+         a quiet market and an unexamined one. */
       const rows = Object.entries(funnel).sort((a, b) => b[1] - a[1]).slice(0, 3);
       const total = Object.values(funnel).reduce((s, n) => s + n, 0);
-      el.innerHTML = '<div class="empty">no setups right now' +
-        (total ? '<br><span style="color:var(--fg-3)">' + fmt(total) +
+      const cycles = (lastOverview && lastOverview.scanner && lastOverview.scanner.cycles) || 0;
+      const nSyms = (lastOverview && (lastOverview.universe_counts || {}).admitted) || 0;
+      let body;
+      if(total){
+        body = '<br><span style="color:var(--fg-3)">' + fmt(total) +
           ' candidates rejected since baseline</span><br>' +
           rows.map(([r, n]) => '<span style="color:var(--amber)">' + fmt(n) + '</span> ' +
-            r.replaceAll('_', ' ').toLowerCase()).join('<br>') : '') + '</div>';
+            r.replaceAll('_', ' ').toLowerCase()).join('<br>');
+      } else if(!cycles){
+        body = '<br><span style="color:var(--fg-3)">Nothing has been rejected ' +
+          'either, because nothing has been examined in this window yet.</span>';
+      } else {
+        body = '<br><span style="color:var(--fg-3)">' + nSyms + ' symbols scanned. ' +
+          'None are in a state any ' +
+          '<span class="term" data-t="playbook">playbook</span> has a play for — ' +
+          'Market Weather below shows which regimes they are in.</span>';
+      }
+      el.innerHTML = '<div class="empty">no setups right now' + body + '</div>';
       return;
     }
     const expiry = s => s.expires_at_ts || Infinity;   // no expiry -> sorts last
@@ -172,6 +217,8 @@
           tp <b style="color:var(--green)">${(+s.tp).toLocaleString()}</b> ·
           sl <b style="color:var(--red-2)">${(+s.sl).toLocaleString()}</b> ·
           <span class="term" data-t="rr">R:R</span> ${s.rr}
+          ${s.why ? `<div class="t-body deck-why">${
+            window.SSTeach ? window.SSTeach(s.why) : esc(s.why)}</div>` : ''}
         </div>
         <div>${verdict}</div>
         <button class="btn" data-sym="${s.symbol}" data-tf="${s.tf}">Open chart</button>
@@ -196,26 +243,73 @@
   /* ---------- RESULTS ---------- */
   async function loadPortfolio(){
     const p = await api('/api/portfolio');
+    const d = p.decisions || {};
+
+    /* THE EMPTY-WINDOW RULE, site 1 of 4.
+       A count of ZERO OBSERVATIONS must never share a treatment with a count
+       of zero problems. `up = p.return_pct >= 0` put 0.0 on the POSITIVE
+       branch, so a forward window in which the risk authority has not ruled on
+       a single setup rendered `+0%` in GREEN with `class="tile up"`. This
+       file's own header promises it "never renders a confident-looking zero",
+       and a baseline reset is exactly when the operator is most anxious and
+       least able to tell a starting value from a result. */
+    const ruled = (d.APPROVED || 0) + (d.REDUCED || 0) + (d.REJECTED || 0);
     const up = p.return_pct >= 0;
+
     $('equityTxt').textContent = money(p.equity);
-    $('equityRet').textContent = '  ' + (up ? '+' : '') + p.return_pct + '%';
+    $('equityRet').textContent = ruled ? '  ' + (up ? '+' : '') + p.return_pct + '%' : '';
     $('equityChip').title = `account equity (paper) — start ${money(p.start_equity)}, ` +
       `open risk ${money(p.open_risk_usd || 0)}`;
     $('mEquity').textContent = money(p.equity);
     $('rEquity').textContent = money(p.equity);
-    $('rReturn').textContent = (up ? '+' : '') + p.return_pct + '%';
-    $('rReturn').parentElement.className = 'tile ' + (up ? 'up' : 'down');
-    $('rDD').textContent = (p.max_drawdown_pct ?? '—') + '%';
+
+    if(!ruled){
+      // Em-dash, never 0% and never —%. The sub-line carries the denominator.
+      $('rReturn').textContent = '—';
+      $('rReturn').parentElement.className = 'tile';
+      $('rDD').textContent = '—';
+      setSub('rReturn', 'no closed trades');
+      setSub('rDD', 'no closed trades');
+      setSub('rEquity', 'starting balance');
+    } else {
+      $('rReturn').textContent = (up ? '+' : '') + p.return_pct + '%';
+      $('rReturn').parentElement.className = 'tile ' + (up ? 'up' : 'down');
+      $('rDD').textContent = (p.max_drawdown_pct ?? '—') + '%';
+      setSub('rReturn', ''); setSub('rDD', ''); setSub('rEquity', '');
+    }
     $('rHalt').textContent = p.kill_switch_days ?? 0;
     if(p.config) $('mRisk').textContent = money(p.config.next_risk_usd);
     drawCurve(p.curve, p.start_equity);
-    const d = p.decisions || {};
-    $('resultsNote').innerHTML =
-      `Risk authority decisions: <b>${d.APPROVED || 0}</b> approved,
-       <b>${d.REDUCED || 0}</b> reduced, <b>${d.REJECTED || 0}</b> rejected.
-       Sizing runs at ${p.config ? p.config.risk_pct : '—'}% per trade with a
-       ${p.config ? p.config.max_total_risk_pct : '—'}% total cap.
-       Everything here is <span class="term" data-t="paper">paper</span>.`;
+
+    const startedAt = (p.baseline || {}).started_at;
+    const started = startedAt
+      ? new Date(startedAt * 1000).toLocaleDateString(undefined, {day: 'numeric', month: 'short'})
+      : null;
+    $('resultsNote').innerHTML = ruled
+      ? `Risk authority decisions: <b>${d.APPROVED || 0}</b> approved,
+         <b>${d.REDUCED || 0}</b> reduced, <b>${d.REJECTED || 0}</b> rejected.
+         Sizing runs at ${p.config ? p.config.risk_pct : '—'}% per trade with a
+         ${p.config ? p.config.max_total_risk_pct : '—'}% total cap.
+         Everything here is <span class="term" data-t="paper">paper</span>.`
+      : `<b>This forward window is empty.</b> It opened${started ? ' ' + started : ''}
+         and the risk authority has not ruled on a single setup, so every number
+         above is a starting value, not a result.
+         Everything here is <span class="term" data-t="paper">paper</span>.`;
+  }
+
+  /* Write a tile's sub-line, creating it on first use. The qualifier has to sit
+     next to the number it qualifies — a caveat one surface away is not one. */
+  function setSub(metricId, text){
+    const metric = $(metricId);
+    if(!metric) return;
+    const tile = metric.parentElement;
+    let sub = tile.querySelector('.t-sub');
+    if(!sub){
+      sub = document.createElement('span');
+      sub.className = 't-sub';
+      tile.appendChild(sub);
+    }
+    sub.textContent = text || '';
   }
 
   /* ---------- RESULTS: curve + per-symbol/strategy breakdown ---------- */
@@ -294,12 +388,49 @@
   async function loadHealth(){
     const h = await api('/api/pipeline-health');
     const blockers = (h.blockers || []).length, warns = (h.warnings || []).length;
+
+    /* THE EMPTY-WINDOW RULE, site 3 of 4 — and the most consequential, because
+       this orb is always visible and governs trust in every other number.
+       `good = h.evaluation_allowed && !blockers` is TRUE while the audit is
+       PENDING, because the endpoint reports `evaluation_allowed: true` with
+       empty arrays until the first (~72s) pass finishes. An audit that has not
+       run was displayed as an audit that passed. The endpoint has always
+       shipped `pending: true` and this file ignored it. */
+    if(h.pending){
+      $('healthOrb').className = 'orb warn';
+      $('healthTxt').textContent = 'AUDITING…';
+      $('dVerdict').textContent = 'AUDITING…';
+      $('dVerdict').style.color = 'var(--amber)';
+      $('dCounts').textContent = 'the audit has not produced a verdict yet — ' +
+        'about a minute on this store. Nothing below has been checked.';
+      $('nDiag').textContent = '';
+      $('dIssues').innerHTML = '<div class="empty">waiting for the first audit pass</div>';
+      return;
+    }
+
     const good = h.evaluation_allowed && !blockers;
     $('healthOrb').className = 'orb ' + (blockers ? 'bad' : (warns ? 'warn' : 'good'));
     $('healthTxt').textContent = h.status;
     $('dVerdict').textContent = h.status + (h.evaluation_allowed ? '' : ' · BLOCKED');
     $('dVerdict').style.color = good ? 'var(--green)' : (blockers ? 'var(--red)' : 'var(--amber)');
-    $('dCounts').textContent = `${blockers} blockers · ${warns} warnings`;
+
+    /* `DEGRADED · 0 blockers · 92 warnings` reads far worse than the state is.
+       The engine already grades severity on a ladder and the UI dropped it:
+       SERVE_FLAG is the mildest non-clean rung — data used, with a mark on it,
+       nothing held back or switched off. The rung says HOW bad, which is a
+       different question from whether it is acceptable, so the colour above
+       stays amber and the warning count stays on screen. */
+    const RUNG = {
+      SERVE: 'served clean', SERVE_FLAG: 'flagged',
+      QUARANTINE: 'held back', AUTO_DISABLE: 'switched off', HALT: 'halted',
+    };
+    const rc = h.rung_counts || {};
+    const counted = Object.keys(rc).length
+      ? Object.entries(rc).map(([k, v]) => `${RUNG[k] || k.toLowerCase()} ${v}`).join(' · ')
+      : `${blockers} blockers · ${warns} warnings`;
+    $('dCounts').textContent = h.worst_rung
+      ? `worst severity: ${RUNG[h.worst_rung] || h.worst_rung} — ${counted}`
+      : counted;
     $('nDiag').textContent = blockers || '';
 
     const groups = {};
@@ -501,9 +632,24 @@
     const stages = t.stages || {}, fails = t.failure_points || {};
     const rows = Object.entries(stages).length ? Object.entries(stages)
       : Object.entries(fails);
+    /* THE EMPTY-WINDOW RULE, site 2 of 4.
+       `defects ? ... : 'clean'` in green made an EMPTY record set
+       indistinguishable from a checked-and-clean one — while the panel body
+       directly beneath it said "no candidates recorded in this window yet".
+       Chip and body contradicted each other, and the chip is what gets read.
+       The denominator IS the caveat: a verdict without one is not a verdict. */
+    const n = (t.records || []).length;
     const defects = (t.records || []).reduce((s, r) => s + (r.defect_count || 0), 0);
-    $('telChip').textContent = defects ? defects + ' defects' : 'clean';
-    $('telChip').className = 'chip ' + (defects ? 'chip-red' : 'chip-green');
+    if(!n){
+      $('telChip').textContent = 'no data';
+      $('telChip').className = 'chip';                    // grey: nothing checked
+    } else if(defects){
+      $('telChip').textContent = defects + ' defects';
+      $('telChip').className = 'chip chip-red';
+    } else {
+      $('telChip').textContent = 'clean · ' + n + ' checked';
+      $('telChip').className = 'chip chip-green';
+    }
     $('dTelemetry').innerHTML = rows.length
       ? rows.sort((a, b) => b[1] - a[1]).map(([k, n]) =>
           `<div style="display:flex;justify-content:space-between;padding:7px var(--lg);

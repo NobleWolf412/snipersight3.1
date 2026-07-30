@@ -131,6 +131,53 @@ def test_shadow_trades_are_not_in_the_track_record():
         "separately — that trades one lie for a blind spot")
 
 
+def test_setup_why_reaches_the_deck_and_dims_when_refused():
+    """The engine writes one plain sentence saying what each setup IS, and the
+    Command deck rendered none of it — `grep why static/shell.js` was zero hits
+    while `/api/overview` had been spreading it into every feed item all along.
+    The operator had to open the Chart to read the one line that explains the
+    row they are looking at.
+
+    Two properties, and the second matters more: a persuasive rationale shown
+    at full contrast on a setup the RISK AUTHORITY REFUSED is the worst thing
+    this deck can render.
+    """
+    from engine import setups, store
+    con = store.connect()
+    try:
+        row = con.execute(
+            "SELECT payload FROM facts WHERE kind='setup' AND algo_version=? "
+            "AND json_extract(payload,'$.state')='VALIDATED' LIMIT 1",
+            (setups.SETUP_VERSION,)).fetchone()
+    finally:
+        con.close()
+    if row:
+        assert "why" in json.loads(row[0]), "engine stopped writing the why string"
+
+    js = (STATIC / "shell.js").read_text(encoding="utf-8")
+    assert "s.why" in js, "the deck does not read the engine's why string"
+
+    css = (STATIC / "ss.css").read_text(encoding="utf-8")
+    assert ".deck-why" in css, "no style for the why line"
+    assert ".deck-row.dead .deck-why" in css, (
+        "the why line has no dimmed treatment on a REJECTED row — a rationale "
+        "at full contrast under a refusal invites the operator to override it")
+
+
+def test_one_glossary_term_table_not_two():
+    """`teach()` owned a private copy of the term table inside weather.js, and
+    the setup deck needed the same markup. Two tables of the same terms is how
+    they drift — this project has already paid for three engine rosters and two
+    sizing authorities."""
+    gl = (STATIC / "glossary.js").read_text(encoding="utf-8")
+    wx = (STATIC / "weather.js").read_text(encoding="utf-8")
+    assert "window.SSTeach" in gl, "the shared markup helper is not exported"
+    assert "const TERMS = [" in gl, "the term table should live beside the definitions"
+    assert "const TERMS = [" not in wx, (
+        "weather.js still carries its own term table — that is the second "
+        "authority this move existed to remove")
+
+
 def test_edge_stats_defaults_to_the_tradeable_book():
     """This panel renders beside the equity curve, which implies they describe
     the same trades. Until 2026-07-30 they did not: 276 of 639 (43.2%) were
