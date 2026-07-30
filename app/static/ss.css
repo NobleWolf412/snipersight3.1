@@ -271,9 +271,12 @@ body{
 .tk-out .v{color:var(--fg);font-variant-numeric:tabular-nums}
 .tk-out .v.good{color:var(--green)} .tk-out .v.bad{color:var(--red-2)}
 .tk-out .v.warn{color:var(--amber)}
+/* Breach notes sit in the pinned foot, so they get their own scroll rather
+   than pushing Arm off the panel when several fire at once. */
 .tk-warn{border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);
   border-radius:var(--r-md);padding:9px 11px;color:var(--red-2);
-  font-family:var(--f-mono);font-size:11px;line-height:1.6}
+  font-family:var(--f-mono);font-size:11px;line-height:1.6;
+  max-height:132px;overflow:auto}
 .tk-why{color:var(--fg-3);font-size:12px}
 .tk-verdict{border-radius:var(--r-md);padding:8px 10px;margin-bottom:var(--md);
   font-family:var(--f-mono);font-size:11px;line-height:1.6}
@@ -283,7 +286,7 @@ body{
 .tk-verdict.bad{background:rgba(248,113,113,.08);color:var(--red-2);border:1px solid rgba(248,113,113,.35)}
 .tk-why em{color:var(--fg-4);font-style:normal;font-family:var(--f-mono);font-size:10px;
   letter-spacing:.16em;text-transform:uppercase;display:block;margin-bottom:3px}
-.tk-actions{display:flex;gap:var(--sm);margin-top:auto}
+.tk-actions{display:flex;gap:var(--sm)}
 .tk-actions .btn{flex:1}
 .tk-lock{color:var(--fg-4);font-size:10px;line-height:1.6;text-align:center}
 
