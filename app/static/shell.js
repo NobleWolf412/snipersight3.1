@@ -137,6 +137,30 @@
 
      Expiry urgency makes no predictive claim. Setups die after ENTRY_MAX_BARS,
      so "which of these expires first" is operationally true and useful. */
+  /* Rejection reasons, made explicable rather than merely lowercased.
+
+     `COOLDOWN(SL,12.0h)` rendered as "cooldown(sl,12.0h)" — a refusal the
+     operator had no way to understand, on a guardrail that silently removes
+     tradeable setups from the deck. An unexplained refusal is the fastest
+     route to someone overriding a rule they do not understand.
+
+     The bracket carries real information (which exit started the rest, and how
+     long), so it is kept and spelled out rather than stripped. The glossary
+     entry does the rest. */
+  function reasonText(reasons){
+    if(!reasons || !reasons.length) return 'no reason given';
+    return reasons.map(raw => {
+      const s = String(raw);
+      const m = /^COOLDOWN\(([^,]+),\s*([^)]+)\)$/i.exec(s);
+      if(m){
+        const exit = m[1].toUpperCase() === 'SL' ? 'a stop-out' :
+                     m[1].toUpperCase() === 'TP' ? 'a target' : m[1].toLowerCase();
+        return `<span class="term" data-t="cooldown">resting</span> after ${exit} — ${m[2]} left`;
+      }
+      return s.replaceAll('_', ' ').toLowerCase();
+    }).join(', ');
+  }
+
   function renderDeck(setups, funnel){
     const el = $('deck');
     if(!setups.length){
@@ -193,7 +217,7 @@
         ? `<span class="chip ${chip}">${dec}</span>` +
           (dec === 'REJECTED'
             ? `<div class="t-label" style="margin-top:4px;color:var(--red-2)">${
-                (r.reasons || []).join(', ').replaceAll('_', ' ').toLowerCase() || 'no reason given'}</div>`
+                reasonText(r.reasons)}</div>`
             : `<div class="t-label" style="margin-top:4px">risks ${money(r.risk_usd) || '—'}${
                 r.units ? ' · ' + Number(r.units).toLocaleString() + ' units' : ''}</div>`)
         : '<span class="chip">unsized</span><div class="t-label" style="margin-top:4px">no risk decision</div>';
