@@ -30,9 +30,15 @@
 
     <div class="spacer"></div>
 
+    <!-- the account, readable from every surface — you should never have to
+         navigate away to find out what the risk % is a percentage OF -->
+    <span class="chip chip-cyan" id="equityChip" title="account equity (paper)">
+      <span id="equityTxt">—</span><span id="equityRet" style="opacity:.7"></span></span>
     <span class="chip" id="healthChip" title="pipeline audit"><span class="orb" id="healthOrb"></span><span id="healthTxt">—</span></span>
     <span class="chip" id="scanChip"><span class="orb" id="scanOrb"></span><span id="scanTxt">SCANNER —</span></span>
     <span class="t-mono" id="clock" style="color:var(--fg-4)">—</span>
+    <!-- always visible, on every surface: the operator can always stop it -->
+    <button class="btn btn-red" id="btnHalt" title="stop sizing new entries">HALT</button>
   </header>
 
   <!-- ══ left rail: five surfaces, each with one job ══ -->
@@ -72,28 +78,99 @@
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head">
           <span class="t-section">Setup Deck</span>
           <span class="chip" style="margin-left:auto">One per token · best replaces pending</span>
         </div>
         <div id="deck"><div class="empty">loading…</div></div>
       </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <span class="t-section">Backend Console</span>
+          <span class="chip" id="consoleState" style="margin-left:auto">idle</span>
+          <button class="btn" id="btnFollow" title="follow new output">Following</button>
+        </div>
+        <pre id="console" class="t-mono">connecting…</pre>
+      </div>
     </section>
 
     <!-- ─── CHART ─── -->
     <section class="surface" id="s-chart">
-      <div class="surface-head"><h1 class="t-page">Chart</h1><p>Is this trade good, and what are my levels?</p></div>
-      <div class="stub">
-        <b>Phase 2.</b><br>
-        Chart owns the screen. <span class="term" data-t="entry">Entry</span>,
-        <span class="term" data-t="tp">TP</span> and <span class="term" data-t="sl">SL</span> plotted and draggable —
-        dragging recomputes <span class="term" data-t="rr">R:R</span>, position size, and on
-        <span class="term" data-t="perps">perps</span> the <span class="term" data-t="liquidation">liquidation</span> distance.<br>
-        Order ticket with <span class="term" data-t="trailing">trailing stop</span> toggle.
-        Overlay toggles for structure, zones, <span class="term" data-t="liquidity">liquidity</span> and
-        <span class="term" data-t="dcl">cycle</span> lows.<br>
-        The working chart is still live at <a href="/legacy" style="color:var(--accent)">/legacy</a> until it moves here.
+      <div class="chart-top">
+        <select id="cSym" class="btn" style="text-transform:none;letter-spacing:.06em"></select>
+        <div class="seg" id="cTfs">
+          <button data-tf="15m">15m</button><button data-tf="1H">1H</button
+          ><button data-tf="4H" class="on">4H</button><button data-tf="1D">1D</button
+          ><button data-tf="1W">1W</button>
+        </div>
+        <span class="chip" id="cRegime">—</span>
+        <span class="chip" id="cPrice">—</span>
+        <div style="margin-left:auto"></div>
+        <!-- data-label is the base text; chart.js appends the live fact count -->
+        <div class="seg seg-toggle" id="cOverlays">
+          <button data-o="swings"    data-label="Swings"    class="on">Swings</button
+          ><button data-o="structure" data-label="Structure" class="on">Structure</button
+          ><button data-o="zones"     data-label="Zones"     class="on">Zones</button
+          ><button data-o="liquidity" data-label="Liquidity">Liquidity</button
+          ><button data-o="cycle"     data-label="Cycle">Cycle</button>
+        </div>
+      </div>
+
+      <div class="chart-main">
+        <div class="panel chart-pane" id="chartPane">
+          <div id="chartBox"></div>
+          <div id="chartHandles"></div>
+          <div class="chart-empty" id="chartEmpty">select a symbol</div>
+        </div>
+
+        <!-- order ticket: the only surface that turns a setup into a decision -->
+        <aside class="panel ticket" id="ticket">
+          <div class="panel-head">
+            <span class="t-section">Order Ticket</span>
+            <span class="chip" id="tkSrc" style="margin-left:auto">engine</span>
+          </div>
+          <div class="ticket-body">
+            <div class="seg seg-dir" id="tkDir">
+              <button data-d="LONG">Long</button><button data-d="SHORT">Short</button>
+            </div>
+
+            <label class="fld"><span class="t-label"><span class="term" data-t="entry">Entry</span></span>
+              <input id="tkEntry" class="t-mono" inputmode="decimal" autocomplete="off"></label>
+            <label class="fld"><span class="t-label"><span class="term" data-t="tp">Take profit</span></span>
+              <input id="tkTp" class="t-mono" inputmode="decimal" autocomplete="off"></label>
+            <label class="fld"><span class="t-label"><span class="term" data-t="sl">Stop loss</span></span>
+              <input id="tkSl" class="t-mono" inputmode="decimal" autocomplete="off"></label>
+
+            <!-- per-trade risk: affects THIS trade only, never the default -->
+            <div class="fld">
+              <span class="t-label">Risk on this trade
+                <span id="tkRiskPct" style="color:var(--fg-3)"></span></span>
+              <div class="fld-row">
+                <input id="tkRisk" class="t-mono" inputmode="decimal" autocomplete="off">
+                <button class="btn" id="tkRiskReset" title="back to the engine default" disabled>Default</button>
+              </div>
+            </div>
+
+            <label class="row-toggle"><input type="checkbox" id="tkTrail">
+              <span class="t-label"><span class="term" data-t="trailing">Trailing stop</span></span></label>
+            <label class="fld fld-inline" id="tkTrailRow" hidden>
+              <span class="t-label">Trail distance (R)</span>
+              <input id="tkTrailR" class="t-mono" value="1.0" inputmode="decimal"></label>
+
+            <div class="tk-out" id="tkOut"></div>
+            <div class="tk-warn" id="tkWarn" hidden></div>
+
+            <div class="tk-why t-body" id="tkWhy"></div>
+
+            <div class="tk-actions">
+              <button class="btn" id="tkReset" disabled>Reset to engine</button>
+              <button class="btn btn-cyan" id="tkArm" disabled>Arm</button>
+            </div>
+            <div class="t-mono tk-lock" id="tkLock"></div>
+          </div>
+        </aside>
       </div>
     </section>
 
@@ -106,9 +183,29 @@
         <div class="tile"><span class="t-label">Max <span class="term" data-t="drawdown">drawdown</span></span><span class="t-metric" id="rDD">—</span></div>
         <div class="tile"><span class="t-label"><span class="term" data-t="killSwitch">Halt</span> days</span><span class="t-metric" id="rHalt">—</span></div>
       </div>
-      <div class="panel">
-        <div class="panel-head"><span class="t-section">Forward Record</span>
+      <div class="panel" style="margin-bottom:var(--lg)">
+        <div class="panel-head"><span class="t-section">Equity Curve</span>
           <span class="chip" id="baselineChip" style="margin-left:auto">—</span></div>
+        <div class="panel-body">
+          <svg id="eqCurve" viewBox="0 0 800 160" preserveAspectRatio="none"
+               style="width:100%;height:160px;display:block"></svg>
+          <div class="t-mono" id="eqNote" style="color:var(--fg-4);margin-top:var(--sm)"></div>
+        </div>
+      </div>
+
+      <div class="grid cols-2" style="margin-bottom:var(--lg)">
+        <div class="panel">
+          <div class="panel-head"><span class="t-section">By Symbol</span></div>
+          <div id="perfSymbol"><div class="empty">loading…</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="t-section">By Strategy</span></div>
+          <div id="perfStrategy"><div class="empty">loading…</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><span class="t-section">Forward Record</span></div>
         <div class="panel-body t-body" id="resultsNote">loading…</div>
       </div>
     </section>
@@ -118,34 +215,68 @@
       <div class="surface-head"><h1 class="t-page">Scanner Setup</h1><p>What is the bot allowed to do?</p></div>
       <div class="grid cols-2">
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Venue &amp; Credentials</span></div>
-          <div class="panel-body stub">
-            <b>Phase 3.</b> API keys entered by you, stored in OS credential storage —
-            never in the fact store, logs, or git. Read-only keys until
-            <span class="term" data-t="live">live</span> unlocks.
+          <div class="panel-head"><span class="t-section">Venue &amp; Credentials</span>
+            <span class="chip" id="credChip" style="margin-left:auto">—</span></div>
+          <div class="panel-body">
+            <div id="credFields"></div>
+            <p class="t-body" style="margin-top:var(--md);color:var(--fg-3)">
+              Keys are encrypted with Windows DPAPI, tied to your user account.
+              They are never written to the fact store, the log, or git, and no
+              endpoint can read one back — the app can only tell you whether one
+              is set. <b>Use read-only keys.</b> A stored key does not enable
+              <span class="term" data-t="live">live</span> trading; that gate is
+              separate and still locked.
+            </p>
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Risk</span></div>
-          <div class="panel-body stub">
-            <b>Phase 3.</b> <span class="term" data-t="riskPerTrade">Risk per trade</span>,
-            total <span class="term" data-t="drawdown">drawdown</span> limit, concurrent positions,
-            <span class="term" data-t="leverage">leverage</span> (per venue).<br>
-            Live today in code: 2% per trade, 4% total, 6% daily halt.
+          <div class="panel-head"><span class="t-section">Risk</span>
+            <span class="chip" id="riskVer" style="margin-left:auto">—</span></div>
+          <div class="panel-body">
+            <div class="tk-out" id="riskNow"></div>
+            <p class="t-body" style="margin-top:var(--md);color:var(--fg-3)">
+              These are the live numbers the risk authority sizes with, read from
+              the engine. They are not editable here yet — and not because the
+              field is missing. Changing
+              <span class="term" data-t="riskPerTrade">risk per trade</span> re-sizes
+              the <em>entire</em> forward record, because the account is recomputed
+              by replaying every setup. Doing that in place would rewrite your paper
+              track record under the same
+              <span class="term" data-t="algoVersion">engine version</span>, which is
+              exactly what the versioning rule forbids. The envelope is also coupled:
+              the total cap holds two concurrent trades and the daily halt is about
+              three stop-outs, so one value cannot move alone.
+            </p>
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Strategies</span></div>
-          <div class="panel-body stub">
-            <b>Phase 3.</b> Toggle Pullback / Reversal / Scale-in.
-            Cycle joins only if the measurement earns it.
+          <div class="panel-head"><span class="t-section">Strategies &amp; Universe</span>
+            <span class="chip" id="setDirty" style="margin-left:auto" hidden>unsaved</span></div>
+          <div class="panel-body">
+            <div id="setFields"></div>
+            <div class="tk-warn" id="setWarn" hidden></div>
+            <div class="tk-actions" style="margin-top:var(--md)">
+              <button class="btn" id="setReset" disabled>Discard</button>
+              <button class="btn btn-cyan" id="setApply" disabled>Apply</button>
+            </div>
+            <div class="t-mono" style="color:var(--fg-4);margin-top:var(--sm);line-height:1.6">
+              Changing a rule starts a new forward window, because a record that
+              spans two configurations can't tell you which one produced which
+              result. Nothing is deleted.
+            </div>
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Auto Mode</span></div>
-          <div class="panel-body stub">
-            <b>Phase 5.</b> Arm with timer, total <span class="term" data-t="drawdown">drawdown</span> halt,
-            data-health halt, and a always-visible HALT ALL.
+          <div class="panel-head"><span class="t-section">Guardrails</span>
+            <span class="chip" id="guardChip" style="margin-left:auto">—</span></div>
+          <div class="panel-body">
+            <div class="tk-out" id="guardRows"></div>
+            <p class="t-body" style="margin-top:var(--md);color:var(--fg-3)">
+              Every one of these blocks NEW entries only. Open positions still
+              settle — refusing to close a position is not a safety feature, it
+              is just a different way to lose control of it. Live order
+              submission stays locked regardless.
+            </p>
           </div>
         </div>
       </div>
@@ -168,10 +299,17 @@
           <div class="panel-body" id="dFunnel"><span class="t-mono" style="color:var(--fg-4)">loading…</span></div>
         </div>
       </div>
-      <div class="panel">
-        <div class="panel-head"><span class="t-section">Open Issues</span>
-          <span class="chip" style="margin-left:auto"><span class="term" data-t="telemetry">telemetry</span></span></div>
-        <div id="dIssues"><div class="empty">loading…</div></div>
+      <div class="grid cols-2">
+        <div class="panel">
+          <div class="panel-head"><span class="t-section">Open Issues</span></div>
+          <div id="dIssues"><div class="empty">loading…</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="t-section">Setup
+            <span class="term" data-t="telemetry">Telemetry</span></span>
+            <span class="chip" id="telChip" style="margin-left:auto">—</span></div>
+          <div id="dTelemetry"><div class="empty">loading…</div></div>
+        </div>
       </div>
     </section>
 
@@ -187,7 +325,10 @@
 
 </div>
 
+<script src="/static/lightweight-charts.js"></script>
+<script src="/static/ticket-math.js?v=1"></script>
 <script src="/static/glossary.js?v=1"></script>
+<script src="/static/chart.js?v=1"></script>
 <script src="/static/shell.js?v=1"></script>
 </body>
 </html>

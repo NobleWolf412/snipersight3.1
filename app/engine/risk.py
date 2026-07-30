@@ -17,13 +17,16 @@ import json
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from . import store
+from . import store, venues
 from .setups import SETUP_VERSION
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.6-draft"
+RISK_VERSION = "risk-v0.7-draft"
+# v0.7: shorting, leverage and the liquidation gate are venue-derived. Sizing
+# rules (2%/4%/6%) are unchanged, but SHORT setups on a shorts-capable venue now
+# reach sizing instead of being rejected outright, so decisions differ.
 # v0.6: account accounting is scoped to the active non-destructive forward
 # baseline. Strategy eligibility and sizing rules are unchanged.
 # v0.4 (user directive 2026-07-21): per-trade risk 1% -> 2%. Coherently
@@ -39,14 +42,39 @@ START_EQUITY = Decimal("10000")
 RISK_PCT = Decimal("0.02")            # 2% of current equity per trade
 MAX_CONCURRENT = 2
 MAX_TOTAL_OPEN_RISK_PCT = Decimal("0.04")   # 4% of equity at risk at once
-MAX_LEVERAGE = Decimal("1")              # declared venue is Coinbase spot
-ALLOW_SHORTS = False                     # spot inventory shorting is unsupported
+# v0.7: shorting and leverage are VENUE capabilities, not process constants.
+# As globals they rejected 31% of all validated setups (44 of 143) — every SHORT
+# the playbook produced — because the only declared venue was Coinbase spot.
+# `venues.venue_for(symbol)` now answers both, and a leveraged perp additionally
+# has to prove its stop triggers before liquidation.
+# The kept names below are the SPOT defaults, retained so any caller that has
+# not been migrated still gets the conservative answer rather than a crash.
+MAX_LEVERAGE = Decimal("1")              # spot default; see venues.max_leverage
+ALLOW_SHORTS = False                     # spot default; see venues.allow_shorts
 MIN_NOTIONAL_USD = Decimal("1")
 DAILY_LOSS_LIMIT_PCT = Decimal("0.06")      # realized -6% in a UTC day -> halt
 MIN_REDUCED_FRACTION = Decimal("0.25")      # reduce below 25% of intended -> reject
 QC = Decimal("0.01")
 
 TFS = ("15m", "1H", "4H", "1D", "1W")
+
+
+def _venue_allows_shorts(symbol: str) -> bool:
+    """Venue capability. An unrecognised symbol falls back to the SPOT answer —
+    refusing the short — because assuming a market is shortable when it is not
+    would record trades that could never have been placed."""
+    try:
+        return venues.allow_shorts(symbol)
+    except ValueError:
+        return ALLOW_SHORTS
+
+
+def _venue_max_leverage(symbol: str) -> Decimal:
+    """Same conservative fallback: 1x when the venue is unknown."""
+    try:
+        return venues.max_leverage(symbol)
+    except ValueError:
+        return MAX_LEVERAGE
 
 
 def _symbols(con):
@@ -94,6 +122,18 @@ def run(con) -> dict:
         n = {"APPROVED": 0, "REDUCED": 0, "REJECTED": 0, "KILL": 0}
         n_new_facts = 0
 
+        _peak_box = [START_EQUITY]
+        _dd_box: list = [None]
+
+        def _set_peak(v):
+            _peak_box[0] = v
+
+        def _dd_halted():
+            return _dd_box[0] is not None
+
+        def _trip_dd(info):
+            _dd_box[0] = info
+
         def settle(up_to_ts):
             nonlocal equity, n_new_facts
             for p in sorted([p for p in open_pos if p["exit_ts"] and p["exit_ts"] <= up_to_ts],
@@ -105,6 +145,32 @@ def run(con) -> dict:
                 daily_pnl[d] = daily_pnl.get(d, Decimal(0)) + pnl
                 curve.append({"ts": p["exit_ts"], "equity": str(equity)})
                 open_pos.remove(p)
+                # Total-drawdown guardrail. The daily halt catches a bad DAY;
+                # this catches a bad month that never trips it — a slow bleed of
+                # small losses can drain the account without any single day
+                # breaching -6%.
+                if equity > _peak_box[0]:
+                    _set_peak(equity)
+                dd_limit = Decimal(str(opcfg["max_drawdown_pct"])) / Decimal(100)
+                if dd_limit > 0 and _peak_box[0] > 0:
+                    dd = (_peak_box[0] - equity) / _peak_box[0]
+                    if dd >= dd_limit and not _dd_halted():
+                        _trip_dd({"at": p["exit_ts"], "peak": str(_peak_box[0]),
+                                  "equity": str(equity),
+                                  "drawdown_pct": str((dd * 100).quantize(QC))})
+                        if store.insert_fact(
+                                con, symbol="PORTFOLIO", tf="ALL", kind="risk",
+                                market_time=p["exit_ts"], confirmed_at=p["exit_ts"],
+                                algo_version=RISK_VERSION,
+                                payload={"event": "DRAWDOWN_HALT",
+                                         "peak_equity": str(_peak_box[0]),
+                                         "equity": str(equity),
+                                         "drawdown_pct": str((dd * 100).quantize(QC)),
+                                         "limit_pct": str(opcfg["max_drawdown_pct"]),
+                                         "baseline_id": baseline["id"],
+                                         "reason": "total drawdown limit reached "
+                                                   "— no new entries this window"}):
+                            n_new_facts += 1
                 loss_limit = DAILY_LOSS_LIMIT_PCT * day_start_equity[d]
                 if d not in halted and daily_pnl[d] <= -loss_limit:
                     halted.add(d)
@@ -123,6 +189,29 @@ def run(con) -> dict:
                                      "reason": "daily loss limit reached — no new entries today"}):
                         n_new_facts += 1
 
+        # Operator halt and strategy toggles. Read once per run so a mid-run
+        # edit cannot approve half the intents under one policy and half under
+        # another. A halt blocks NEW entries only — open positions still settle,
+        # because refusing to close a position is not a safety feature.
+        from . import settings as _settings
+        opcfg = _settings.all_settings(con)
+        # Data-health gate. Trading on data the audit says is BROKEN produces a
+        # forward record that proves nothing — the results would be attributable
+        # to the corruption as much as to the strategy.
+        data_blocked = False
+        if opcfg["halt_on_data_blocked"]:
+            try:
+                from . import quality
+                rep = quality.cached_audit(con)
+                data_blocked = bool(rep) and not rep.get("evaluation_allowed", True)
+            except Exception:
+                data_blocked = False          # never block on the gate itself failing
+        _strategy_on = {
+            "PULLBACK": opcfg["strategy_pullback"],
+            "REVERSAL": opcfg["strategy_reversal"],
+            "SCALE_IN": opcfg["strategy_scale_in"],
+        }
+
         for it in intents:
             ts = it["confirmed_at"]
             settle(ts)
@@ -134,13 +223,22 @@ def run(con) -> dict:
             risk_usd = intended
 
             parents_open = {p["setup_id"] for p in open_pos}
-            if _day(ts) in halted:
+            if opcfg["halted"]:
+                decision, reasons = "REJECTED", ["OPERATOR_HALT"]
+            elif data_blocked:
+                decision, reasons = "REJECTED", ["DATA_HEALTH_BLOCKED"]
+            elif _dd_halted():
+                decision, reasons = "REJECTED", [
+                    f"DRAWDOWN_HALT({_dd_box[0]['drawdown_pct']}%)"]
+            elif not _strategy_on.get(it["strategy"], True):
+                decision, reasons = "REJECTED", [f"STRATEGY_DISABLED({it['strategy']})"]
+            elif _day(ts) in halted:
                 decision, reasons = "REJECTED", ["DAILY_LOSS_HALT"]
             elif not it["universe_eligible"]:
                 decision, reasons = "REJECTED", ["NOT_IN_POINT_IN_TIME_UNIVERSE"]
             elif stop_dist <= 0:
                 decision, reasons = "REJECTED", ["INVALID_STOP_DISTANCE"]
-            elif it["direction"] == "SHORT" and not ALLOW_SHORTS:
+            elif it["direction"] == "SHORT" and not _venue_allows_shorts(it["symbol"]):
                 decision, reasons = "REJECTED", ["SHORT_UNSUPPORTED_COINBASE_SPOT"]
             elif is_add and it.get("parent_setup_id") not in parents_open:
                 decision, reasons = "REJECTED", ["PARENT_CLOSED"]
@@ -155,19 +253,31 @@ def run(con) -> dict:
                     else:
                         decision, reasons = "REDUCED", ["EXPOSURE_LIMIT"]
                         risk_usd = budget
+                venue_lev = _venue_max_leverage(it["symbol"])
                 if decision != "REJECTED" and stop_dist > 0:
                     units = risk_usd / stop_dist
                     notional = units * entry
                     lev = notional / equity
-                    if lev > MAX_LEVERAGE:
-                        scale = MAX_LEVERAGE / lev
+                    if lev > venue_lev:
+                        scale = venue_lev / lev
                         risk_usd = (risk_usd * scale).quantize(QC)
                         units = risk_usd / stop_dist
                         notional = units * entry
-                        lev = MAX_LEVERAGE
+                        lev = venue_lev
                         if decision == "APPROVED":
                             decision = "REDUCED"
-                        reasons.append("SPOT_CASH_CAP(1x)")
+                        reasons.append(f"LEVERAGE_CAP({venue_lev}x)")
+
+                    # Liquidation gate. On a leveraged perp the exchange can
+                    # close the position before the stop is reached, at a loss
+                    # LARGER than the one that was risked — which makes the stop
+                    # decorative and every R-multiple downstream fiction.
+                    ok, liq = venues.stop_survives_liquidation(
+                        entry, sl, lev, it["direction"])
+                    if not ok:
+                        decision = "REJECTED"
+                        reasons = [f"STOP_BEYOND_LIQUIDATION({liq.quantize(QC)}"
+                                   f"@{lev.quantize(QC)}x)"]
 
                 if decision != "REJECTED" and risk_usd > 0:
                     units = risk_usd / stop_dist
@@ -223,9 +333,16 @@ def run(con) -> dict:
                          "return_pct": str(((equity / START_EQUITY - 1) * 100).quantize(QC)),
                          "max_drawdown_pct": round(maxdd, 2),
                          "decisions": n, "curve": curve,
-                         "venue_contract": {"venue": "coinbase-spot",
-                                            "allow_shorts": ALLOW_SHORTS,
-                                            "max_leverage": str(MAX_LEVERAGE)}}):
+                         # The account can now span venues, so the contract is a
+                         # list of what each ALLOWS rather than one hard-coded
+                         # claim about Coinbase.
+                         "venue_contract": {
+                             "venues_version": venues.VENUES_VERSION,
+                             "venues": [{"venue": v.key, "kind": v.kind,
+                                         "allow_shorts": v.allow_shorts,
+                                         "max_leverage": str(v.max_leverage),
+                                         "cost_profile": v.cost_profile}
+                                        for v in venues.ALL]}}):
             n_new_facts += 1
         con.commit()
         rec.n_new_facts = n_new_facts

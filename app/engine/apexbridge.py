@@ -86,7 +86,8 @@ def state(con) -> dict:
     try:
         hb = json.loads(hb_path.read_text())
         scanner_age = int(time.time() - hb["ts"])
-        scanner = "LIVE" if scanner_age < 150 else f"DOWN {scanner_age // 60}m"
+        # matches server.SCANNER_STALE_S — the live loop beats at every stage
+        scanner = "LIVE" if scanner_age < 90 else f"DOWN {scanner_age // 60}m"
     except Exception:
         scanner = "NEVER STARTED"
 

@@ -103,6 +103,23 @@ class DataQualityError(RuntimeError):
     pass
 
 
+def _live_symbols(con) -> set:
+    """Symbols currently in the scan universe.
+
+    Computed once per audit and passed down — deliberately NOT cached in a
+    module global. A cache keyed on nothing is shared across CONNECTIONS, so an
+    audit of one database would suppress warnings in another.
+    """
+    try:
+        from . import universe
+        return set(universe.current_symbols(con))
+    except Exception:
+        # Fail OPEN: if we cannot tell what is live, report staleness rather
+        # than silently suppressing a real one.
+        return {r[0] for r in con.execute(
+            "SELECT DISTINCT symbol FROM candles").fetchall()}
+
+
 def _issue(checks, stage, status, code, details, symbol=None, tf=None):
     checks.append({"stage": stage, "status": status, "code": code,
                    "rung": _rung_for(status, code),
@@ -177,6 +194,7 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
     if not series:
         _issue(checks, "DATA", "BLOCKED", "NO_CANDLES",
                "no market candles are available", symbol)
+    live = _live_symbols(con)
 
     for sym, tf in series:
         sec = importer.TF_SECONDS.get(tf)
@@ -226,7 +244,13 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
         if developing:
             _issue(checks, "DATA", "BLOCKED", "DEVELOPING_CANDLES",
                    f"{developing} candles have not closed", sym, tf)
-        if rows and now - (rows[-1][0] + sec) > 2 * sec:
+        # Staleness only means something for a symbol we are STILL tracking. A
+        # symbol deliberately dropped from the universe has retired data, not
+        # stale data, and reporting it forever buries the one series that goes
+        # quiet while it matters. Switching to perps retired 108 spot symbols
+        # and produced 108 permanent warnings — the same cry-wolf failure as the
+        # 1,364 blockers that wedged the scanner for days.
+        if rows and sym in live and now - (rows[-1][0] + sec) > 2 * sec:
             _issue(checks, "DATA", "DEGRADED", "STALE_SERIES",
                    f"latest closed candle is {now - (rows[-1][0] + sec)}s old", sym, tf)
 
