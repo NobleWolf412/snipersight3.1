@@ -26,6 +26,25 @@ LOCK_PORT = 8423
 SERVER_URL = "http://127.0.0.1:8422/api/status"
 AUDIT_INTERVAL_SEC = 60           # kill-switch audit cadence (SQLite read)
 
+# A restart must never be able to prevent the work it is restarting.
+#
+# On 2026-07-30 watchdog.log recorded 184 `live-scanner exited rc=1` events.
+# None were crashes: every one was this process terminating the scanner because
+# the audit saw QUARANTINE climb. A full scan cycle measures ~296s, the audit
+# runs every 60s, and the scanner was being killed ~78s in — so it never once
+# reached the end of a pass. The climb was STALE_SERIES, which means candles are
+# behind; the cure for that is letting the import finish, and the response was
+# to kill the importer. Restart, fall behind, restart.
+#
+# Two guards. A climb has to PERSIST before it counts, because the observed
+# sequence recovered on its own (19 -> 19 -> 4 -> 0) and each of those ticks
+# used to be a kill. And the scanner gets long enough on the clock to finish a
+# cycle before anything may terminate it, because a process that is never
+# allowed to complete its work cannot clear the condition being complained
+# about.
+QUARANTINE_CLIMB_TICKS = 3        # consecutive audits elevated-and-not-recovering
+RESTART_GRACE_SEC = 360           # > one measured ~296s cycle
+
 
 def log(msg: str):
     line = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}"
@@ -97,17 +116,35 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
     auto_disable_now = counts.get("AUTO_DISABLE", 0)
     serve_flag_now = counts.get("SERVE_FLAG", 0)
 
+    prior_q = prior.get("QUARANTINE", 0)
+    # How long the quarantine reading has been elevated WITHOUT recovering. A
+    # single tick means nothing: the count moves while an import catches up.
+    streak = state.get("q_streak", 0)
+    if warmup or quarantine_now == 0 or quarantine_now < prior_q:
+        streak = 0                       # clean, or actively recovering
+    elif quarantine_now > prior_q or streak:
+        streak += 1                      # climbing, or stuck high after a climb
+
     reason = None
     if halt_now:
         reason = f"HALT ({halt_now} finding(s))"
-    elif not warmup and quarantine_now > prior.get("QUARANTINE", 0):
-        reason = (f"QUARANTINE climb "
-                  f"{prior.get('QUARANTINE', 0)}->{quarantine_now}")
+    elif streak >= QUARANTINE_CLIMB_TICKS:
+        reason = (f"QUARANTINE {quarantine_now} sustained over "
+                  f"{streak} audits (was {prior_q})")
 
     if reason:
         codes = sorted({b["code"] for b in report.get("blockers", [])} |
                        {c["code"] for c in report.get("warnings", [])
                         if c.get("rung") == "QUARANTINE"})
+        # Killing a scanner that has not yet had time to finish a pass is how
+        # the restart loop sustained itself. Say so and wait rather than
+        # silently doing nothing — a suppressed safety action must be visible.
+        age = time.monotonic() - getattr(live_child, "started_at", 0.0)
+        if live_child.alive() and age < RESTART_GRACE_SEC:
+            log(f"audit: worst={worst} counts={counts} — {reason}, but "
+                f"live-scanner is {age:.0f}s old and a cycle needs ~296s; "
+                f"deferring restart (codes={codes[:6]})")
+            return {"counts": counts, "at": now_mono, "q_streak": streak}
         log(f"audit: worst={worst} counts={counts} — restart live ({reason}, "
             f"codes={codes[:6]})")
         toast("⚠ SniperSight audit restart",
@@ -118,6 +155,7 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
                 live_child.proc.terminate()
             except Exception as e:
                 log(f"audit: terminate failed ({e})")
+        streak = 0                       # the restart is the response; re-arm
     elif warmup:
         log(f"audit: warmup seed counts={counts} worst={worst}")
     elif auto_disable_now:
@@ -127,7 +165,7 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
     else:
         log(f"audit: worst={worst} — clean")
 
-    return {"counts": counts, "at": now_mono}
+    return {"counts": counts, "at": now_mono, "q_streak": streak}
 
 
 class Child:
@@ -137,14 +175,43 @@ class Child:
         self.proc = None
         self.started_at = 0.0
         self.backoff = 5
+        self._err = None
+        self._err_path = APP / "data" / f"{name}.err.log"
 
     def alive(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
 
     def start(self):
-        self.proc = subprocess.Popen(self.args, cwd=APP)
+        """Start the child with its stderr captured to a file.
+
+        It used to inherit this process's stderr. Under start.bat that is a
+        console window, so 184 exits were recorded as `rc=1` with the traceback
+        printed to a window nobody was reading and nothing kept. The exit code
+        alone cannot distinguish a crash from a deliberate terminate, which is
+        most of why those events went a day without a diagnosis.
+        """
+        try:
+            self._err_path.parent.mkdir(parents=True, exist_ok=True)
+            self._err = open(self._err_path, "a", encoding="utf-8", errors="replace")
+            self._err.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} start ===\n")
+            self._err.flush()
+        except Exception as e:                       # never block a start on logging
+            log(f"{self.name}: could not open {self._err_path.name} ({e})")
+            self._err = None
+        self.proc = subprocess.Popen(self.args, cwd=APP, stderr=self._err or None)
         self.started_at = time.monotonic()
         log(f"{self.name} started pid={self.proc.pid}")
+
+    def _last_error(self, max_lines: int = 12) -> str:
+        """The tail of the child's stderr, so the exit explains itself."""
+        try:
+            lines = self._err_path.read_text(encoding="utf-8",
+                                             errors="replace").splitlines()
+            i = max(i for i, l in enumerate(lines) if l.startswith("=== "))
+            tail = [l for l in lines[i + 1:] if l.strip()][-max_lines:]
+            return " | ".join(tail)
+        except Exception:
+            return ""
 
     def tick(self):
         if self.alive():
@@ -153,7 +220,13 @@ class Child:
             return
         if self.proc is not None:         # it died
             rc = self.proc.returncode
-            log(f"{self.name} exited rc={rc} — restart in {self.backoff}s")
+            if self._err:
+                try: self._err.close()
+                except Exception: pass
+                self._err = None
+            why = self._last_error()
+            log(f"{self.name} exited rc={rc} — restart in {self.backoff}s"
+                + (f" — last output: {why}" if why else ""))
             if self.notify_restart:
                 toast("⚠ SniperSight scanner restarted",
                       f"{self.name} exited (rc={rc}) — auto-recovered, check watchdog.log")

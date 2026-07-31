@@ -50,15 +50,21 @@ class TestWatchdogRungDispatch(unittest.TestCase):
         child.proc.terminate.assert_called_once()
         toast.assert_called_once()
 
-    def test_quarantine_climb_restarts_live(self):
+    def test_a_single_quarantine_climb_does_not_restart(self):
+        """THE 184-RESTART BUG. One tick of climb used to be a kill.
+
+        A scan cycle measures ~296s and the audit runs every 60s, so the
+        scanner was terminated ~78s in and never once finished a pass. The
+        climb was STALE_SERIES — candles behind — and the response was to kill
+        the process whose job is catching them up."""
         report = {"worst_rung": "QUARANTINE",
                   "rung_counts": {"HALT": 0, "QUARANTINE": 3, "SERVE_FLAG": 0,
                                    "AUTO_DISABLE": 0, "SERVE": 0},
                   "blockers": [],
                   "warnings": [{"code": "STALE_SERIES", "rung": "QUARANTINE"}]}
         _, child, toast = self._run(report, prior={"QUARANTINE": 1})
-        child.proc.terminate.assert_called_once()
-        toast.assert_called_once()
+        child.proc.terminate.assert_not_called()
+        toast.assert_not_called()
 
     def test_quarantine_stable_does_not_restart(self):
         report = {"worst_rung": "QUARANTINE",
@@ -95,6 +101,66 @@ class TestWatchdogRungDispatch(unittest.TestCase):
                   "blockers": [], "warnings": []}
         new_state, _, _ = self._run(report, prior={"QUARANTINE": 5})
         self.assertEqual(new_state["counts"], report["rung_counts"])
+
+
+class TestQuarantinePersistence(unittest.TestCase):
+    """A climb must PERSIST before it counts as a fault.
+
+    The whole point is the difference between a reading that is moving while an
+    import catches up and one that is genuinely stuck. The observed sequence on
+    2026-07-30 was 19 -> 19 -> 4 -> 0: it recovered unaided, and every one of
+    those ticks was a kill under the old rule."""
+
+    def _sequence(self, quarantines, age=10_000.0):
+        """Feed consecutive audits and report when a terminate happened."""
+        child = _FakeChild(alive=True)
+        child.started_at = 0.0
+        state = {"counts": {}, "at": 0.0}
+        fake_con = MagicMock()
+        fake_store = MagicMock(connect=MagicMock(return_value=fake_con))
+        kills = []
+        for q in quarantines:
+            report = {"worst_rung": "QUARANTINE" if q else "SERVE",
+                      "rung_counts": {"HALT": 0, "QUARANTINE": q, "SERVE_FLAG": 0,
+                                       "AUTO_DISABLE": 0, "SERVE": 0},
+                      "blockers": [],
+                      "warnings": [{"code": "STALE_SERIES", "rung": "QUARANTINE"}] * q}
+            fake_quality = MagicMock(audit=MagicMock(return_value=report))
+            with patch.dict("sys.modules",
+                            {"engine": MagicMock(store=fake_store, quality=fake_quality),
+                             "engine.store": fake_store,
+                             "engine.quality": fake_quality}):
+                with patch.object(watchdog, "toast"), patch.object(watchdog, "log"), \
+                     patch.object(watchdog.time, "monotonic", return_value=age):
+                    state = watchdog.audit_tick(state, child)
+            kills.append(child.proc.terminate.call_count)
+        return kills
+
+    def test_the_observed_recovering_sequence_never_restarts(self):
+        # the exact live reading that produced the restart loop
+        self.assertEqual(self._sequence([19, 19, 4, 0])[-1], 0)
+
+    def test_a_sustained_climb_still_restarts(self):
+        # stuck high and not recovering IS a fault; the guard must not mute it
+        kills = self._sequence([5, 9, 14])
+        self.assertEqual(kills[0], 0, "restarted on the first tick")
+        self.assertEqual(kills[1], 0, "restarted before the streak was met")
+        self.assertEqual(kills[-1], 1, "a genuine sustained climb was never acted on")
+
+    def test_stuck_at_a_high_level_restarts(self):
+        # a count that climbs then holds is not recovering
+        self.assertEqual(self._sequence([7, 7, 7])[-1], 1)
+
+    def test_recovery_rearms_the_streak(self):
+        # dropping back must clear the count, or an old climb fires later
+        self.assertEqual(self._sequence([9, 9, 1, 9])[-1], 0)
+
+    def test_a_young_scanner_is_not_killed_mid_cycle(self):
+        """A cycle needs ~296s. Terminating before that guarantees it never
+        completes, which is precisely how the loop sustained itself."""
+        kills = self._sequence([5, 9, 14], age=30.0)
+        self.assertEqual(kills[-1], 0,
+                         "a scanner too young to have finished a pass was killed")
 
 
 class TestAuditWarmup(unittest.TestCase):
@@ -164,6 +230,58 @@ class TestAuditCadenceOnSkip(unittest.TestCase):
                 new_state = watchdog.audit_tick(
                     {"counts": {}, "at": 0.0}, child)
         self.assertGreater(new_state["at"], 0.0)
+
+
+class TestChildErrorCapture(unittest.TestCase):
+    """An exit code alone cannot tell a crash from a deliberate terminate.
+
+    Children used to inherit this process's stderr, which under start.bat is a
+    console window — so 184 `rc=1` events were recorded with their tracebacks
+    printed somewhere nothing kept. That is most of why they went a day without
+    a diagnosis. The child's stderr is now captured and its tail is logged with
+    the exit."""
+
+    def _child(self, code):
+        import tempfile
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        c = watchdog.Child("probe", [sys.executable, "-c", code])
+        c._err_path = Path(tmp.name) / "probe.err.log"
+        return c
+
+    def test_a_traceback_is_captured_and_surfaced(self):
+        c = self._child("raise RuntimeError('the actual reason')")
+        with patch.object(watchdog, "log"):
+            c.start()
+        c.proc.wait(timeout=30)
+        if c._err:
+            c._err.close()
+            c._err = None
+        self.assertNotEqual(c.proc.returncode, 0, "the probe was meant to fail")
+        why = c._last_error()
+        self.assertIn("the actual reason", why,
+                      "the child's traceback is still being thrown away")
+        self.assertIn("RuntimeError", why)
+
+    def test_a_clean_child_surfaces_nothing(self):
+        c = self._child("pass")
+        with patch.object(watchdog, "log"):
+            c.start()
+        c.proc.wait(timeout=30)
+        if c._err:
+            c._err.close()
+            c._err = None
+        self.assertEqual(c._last_error(), "",
+                         "a silent clean exit invented an explanation")
+
+    def test_capture_failure_never_blocks_a_start(self):
+        """Logging is housekeeping; it must not stop the scanner coming back."""
+        c = self._child("pass")
+        c._err_path = Path("Z:/definitely/not/writable/probe.err.log")
+        with patch.object(watchdog, "log"):
+            c.start()                      # must not raise
+        c.proc.wait(timeout=30)
+        self.assertEqual(c.proc.returncode, 0)
 
 
 if __name__ == "__main__":
