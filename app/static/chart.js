@@ -47,6 +47,8 @@ window.SSChart = (() => {
   let cfg = null, equity = null;
   let priceLines = {}, zoneLines = [], handles = {};
   let drawnKind = null;          // 'engine' | 'draft' — see applyLevels()
+  let refreshTimer = null, refreshing = false;   // see startAutoRefresh()
+  let loadedAt = null, freshTimer = null;        // see showFreshness()
   let loadSeq = 0;                            // guards out-of-order responses
 
   const overlays = {swings: true, structure: true, zones: true,
@@ -356,7 +358,7 @@ window.SSChart = (() => {
     el.textContent = detail ? `${title} — ${detail}` : title;
   }
 
-  async function load(){
+  async function load(opts){
     if(!sym) return;
     // Before the fetch, not after: which instrument this is stays true even
     // when the candles fail to arrive, and it is the thing that says whether
@@ -436,7 +438,32 @@ window.SSChart = (() => {
     $('cRegime').textContent = reg ? reg.replace('_', ' ') : 'no regime';
 
     drawOverlays();
-    pickSetup();
+    pickSetup(!!(opts && opts.keepTicket));
+    loadedAt = Date.now();
+    showFreshness();
+  }
+
+  /* State the age of what is on screen, and keep stating it.
+
+     The chart updates once a minute, so "is this current?" is a question the
+     operator would otherwise answer by guessing. The ticker runs on its own 5s
+     timer rather than the refresh's, because the whole point is to keep
+     counting UP when a refresh has NOT happened — a freshness label that only
+     moved when the data did would be permanently reassuring and useless.
+     Past two minutes it says so: a refresh has been missed and the numbers are
+     not what the engine currently holds. */
+  function showFreshness(){
+    const el = $('cFresh');
+    if(!el) return;
+    if(!loadedAt){ el.textContent = '—'; el.className = 'chip'; return; }
+    const s = Math.round((Date.now() - loadedAt) / 1000);
+    el.textContent = s < 5 ? 'just now'
+      : s < 90 ? `updated ${s}s ago`
+      : `updated ${Math.round(s / 60)}m ago`;
+    el.className = 'chip' + (s > 120 ? ' chip-amber' : '');
+    el.title = s > 120
+      ? 'a refresh has been missed — these numbers may not be what the engine holds'
+      : 'age of the data on screen; the chart refreshes every 60s while visible';
   }
 
   /* Build every overlay and report how many objects each one actually drew.
@@ -578,7 +605,7 @@ window.SSChart = (() => {
   }
 
   /* ---------- the setup this chart is about ---------- */
-  function pickSetup(){
+  function pickSetup(keepTicket){
     const byId = {};
     for(const f of facts.setupF) byId[f.setup_id] = f;
     const all = Object.values(byId);
@@ -586,7 +613,15 @@ window.SSChart = (() => {
                      .sort((a, b) => b.market_time - a.market_time);
     setup = valid[0] || null;
 
-    modified = false;
+    /* An operator who has dragged a level or overridden risk owns those
+       numbers, and a background refresh must not take them away mid-thought.
+       `base` and the rationale below still update — so the Reset button snaps
+       to the CURRENT engine plan and the "why" text stays true — but the
+       levels on screen are left exactly as they were typed or dragged.
+       Without this, auto-refresh would silently delete a half-built trade
+       every 60 seconds, which is worse than the staleness it fixes. */
+    const editing = keepTicket && (modified || riskOverride != null);
+    if(!editing) modified = false;
     if(setup){
       base = {entry: +setup.entry, tp: +setup.tp, sl: +setup.sl,
               dir: setup.direction, kind: 'engine'};
@@ -639,7 +674,10 @@ window.SSChart = (() => {
         'if you want to trade this anyway. Nothing you do here counts toward ' +
         'the strategy record.';
     }
-    restore();
+    // Redraw against the refreshed facts without touching the operator's
+    // numbers; otherwise put the ticket back to whatever the chart now says.
+    if(editing){ applyLevels(); recompute(); }
+    else restore();
   }
 
   /* put the ticket back to whatever this chart started from */
@@ -813,21 +851,69 @@ window.SSChart = (() => {
     $('tkReset').addEventListener('click', restore);
   }
 
+  /* Equity, re-read every time rather than once per page load.
+
+     This was guarded by `if(!cfg)`, and `cfg` is assigned by load() — so after
+     the first symbol rendered, the branch never ran again and equity was
+     FROZEN for the lifetime of the page while `shell.js` refreshed its own
+     copy every 30s. The ticket sizes every trade against this number, so a
+     stale one silently mis-sizes: position size is `riskUsd / stop distance`
+     and `riskUsd` is `equity * risk_pct`. Two surfaces disagreeing about
+     equity is the exact defect of 2026-07-26 that /api/trade-config exists to
+     prevent, reintroduced one variable over.
+
+     The guard also conflated two unrelated things: whether the trade CONFIG
+     had loaded, and whether the ACCOUNT had. They are refreshed separately
+     now because they go stale for different reasons. */
+  async function loadEquity(){
+    try{
+      const p = await api('/api/portfolio');
+      equity = p.equity;
+    }catch(err){ /* the health chip owns API state; ticket shows dashes */ }
+  }
+
   /* ---------- public ---------- */
   async function onShow(){
     visible = true;
     boot();
-    if(!cfg){
-      try{
-        const p = await api('/api/portfolio');
-        equity = p.equity;
-      }catch(err){ /* the health chip owns API state; ticket shows dashes */ }
-      setLock();
-    }
+    await loadEquity();
+    setLock();
     if(!sym) await populate();
-    else recompute();
+    // Re-entering the tab used to call recompute() only, which re-does the
+    // ticket ARITHMETIC on data already in memory — so the chart showed
+    // whatever it had when you last left it, with nothing saying so.
+    else await load({keepTicket: true});
+    startAutoRefresh();
   }
   function onHide(){ visible = false; }
+
+  /* Keep the chart current while it is on screen.
+
+     There was no refresh of any kind: no timer, no subscription. The chart
+     fetched on a symbol or timeframe change and never again, so a bar could
+     close, the scanner could write new facts, and the screen would keep
+     showing the previous state indefinitely with no indication it was old.
+
+     60s matches the scanner's own poll. It cannot usefully be faster: the
+     engines act only on CLOSED candles, so nothing downstream changes until a
+     bar closes anyway.
+
+     `keepTicket` is the load-bearing part — see pickSetup(). A refresh that
+     reset the ticket would delete levels the operator was in the middle of
+     dragging, which is a far worse failure than showing a stale chart. */
+  function startAutoRefresh(){
+    if(!freshTimer) freshTimer = setInterval(showFreshness, 5000);
+    if(refreshTimer) return;
+    refreshTimer = setInterval(async () => {
+      if(!visible || !sym || refreshing) return;
+      refreshing = true;
+      try{
+        await loadEquity();
+        await load({keepTicket: true});
+      }catch(err){ /* transient; the health chip reports API state */ }
+      finally{ refreshing = false; }
+    }, 60000);
+  }
 
   async function populate(){
     let o;
