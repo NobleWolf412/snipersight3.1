@@ -470,9 +470,13 @@ window.SSChart = (() => {
     const el = $('tkOpen');
     if(!openPos.length){ el.innerHTML = ''; return; }
     const p = openPos[0];
+    // A trailed trade's stop is wherever the ratchet has moved it — drawing
+    // the original would misstate where the trade dies.
+    const stopNow = p.current_stop || p.sl;
     for(const [k, price, label] of [['entry', p.fill_price || p.entry, 'YOURS · ENTRY'],
                                     ['tp', p.tp, 'YOURS · TP'],
-                                    ['sl', p.sl, 'YOURS · SL']]){
+                                    ['sl', stopNow,
+                                     p.trailed ? 'YOURS · TRAIL' : 'YOURS · SL']]){
       const v = parseFloat(price);
       if(isFinite(v)) posLines.push(series.createPriceLine({
         price: v, color: '#fbbf24', lineWidth: 1, lineStyle: k === 'entry' ? 0 : 3,
@@ -863,6 +867,14 @@ window.SSChart = (() => {
             symbol: sym, tf: tf, direction: dir,
             entry: levels.entry, tp: levels.tp, sl: levels.sl,
             leverage: leverage,
+            // The trailing toggle was DECORATIVE — it showed an input and the
+            // value went nowhere, an armed promise the resolver never kept.
+            // Now it rides the intent, and the resolver honors it.
+            trail_r: (() => {
+              if(!$('tkTrail').checked) return null;
+              const v = parseFloat($('tkTrailR').value);
+              return isFinite(v) && v > 0 ? v : null;
+            })(),
             risk_usd: isFinite(riskUsd) && riskUsd > 0 ? riskUsd : null})});
         const d = await r.json().catch(() => ({}));
         if(!r.ok){

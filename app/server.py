@@ -1743,6 +1743,7 @@ def manual_arm(payload: dict):
                 created_at=int(payload.get("created_at") or time.time()),
                 risk_usd=payload.get("risk_usd"),
                 leverage=payload.get("leverage") or 1,
+                trail_r=payload.get("trail_r"),
                 note=str(payload.get("note") or ""))
         except manual.IntentRejected as exc:
             # A refused plan is a 400 carrying the REASON. The operator needs to

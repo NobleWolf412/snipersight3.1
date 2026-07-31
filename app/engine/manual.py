@@ -126,7 +126,7 @@ def risk_per_unit(direction: str, entry: Decimal, sl: Decimal) -> Decimal:
 
 def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
                   created_at: int, risk_usd=None, size_units=None,
-                  note: str = "", leverage=1) -> dict:
+                  note: str = "", leverage=1, trail_r=None) -> dict:
     """Record one operator intent. Validated first; nothing is written on reject.
 
     `created_at` is the causal boundary and is stored as `confirmed_at` — the
@@ -137,9 +137,29 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
     never widens a stop, and the resolver never reads it, so a leveraged and an
     unleveraged plan with the same prices resolve to the same r_multiple. What
     it does change is where liquidation sits, which `validate` gates on.
+
+    `trail_r` — the operator's CHOICE, never a default. The stop ratchets to
+    trail this many R behind the best price seen since fill, which folds
+    breakeven in for free (at +1R of progress a 1.0R trail sits at entry). It
+    is recorded on the intent and on the exit, so the book can eventually
+    grade trailing against holding — the engine's own managed exits measured
+    WORSE than holding (S44), and this feature does not get to skip the same
+    exam just because it feels prudent. None means hold to SL/TP, exactly as
+    before; this field is ADDITIVE, and every previously-recorded intent
+    resolves byte-identically, which is why MANUAL_VERSION does not bump — a
+    bump would strand every open v0.1 intent the resolver queries by version.
     """
     entry, tp, sl = Decimal(str(entry)), Decimal(str(tp)), Decimal(str(sl))
     leverage = Decimal(str(leverage or 1))
+    if trail_r is not None:
+        trail_r = Decimal(str(trail_r))
+        # A zero or negative trail is not a tight trail, it is a stop placed at
+        # or beyond the best price itself — the first bar of noise closes it.
+        if trail_r < Decimal("0.1"):
+            raise IntentRejected(
+                f"trail distance must be at least 0.1R, got {trail_r} — a "
+                f"tighter trail than that is stopped by the same bar that "
+                f"moves it")
     meta = validate(symbol, direction, entry, tp, sl, leverage)
     per_unit = risk_per_unit(direction, entry, sl)
     if size_units is None and risk_usd is not None:
@@ -168,6 +188,7 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
         "venue": meta["venue"], "venue_kind": meta["kind"],
         "max_entry_bars": MAX_ENTRY_BARS,
         "max_holding_bars": MAX_BARS,
+        "trail_r": None if trail_r is None else str(trail_r),
         "armed_at": created_at,
         "note": note[:280],
         "cost_manifest_hash": costs.record(con, profile),
@@ -233,31 +254,36 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
     out = []
     for p in open_here:
         direction, long = p["direction"], p["direction"] == "LONG"
-        entry, sl, tp = (Decimal(p["entry"]), Decimal(p["sl"]), Decimal(p["tp"]))
+        entry, sl = Decimal(p["entry"]), Decimal(p["sl"])
         risk = risk_per_unit(direction, entry, sl)
-        order_i = _first_eligible_bar(candle_times, tf_seconds, p["armed_at"])
-        fill_i = None
-        for k in range(order_i, min(order_i + MAX_ENTRY_BARS, len(candles))):
-            lo, hi = Decimal(candles[k]["low"]), Decimal(candles[k]["high"])
-            if lo <= entry <= hi:
-                fill_i = k
-                break
+        # The SAME walk that settles the trade — see _walk. status() only
+        # reports its live phases, so screen and settlement cannot disagree.
+        w = _walk(p, candles, candle_times, tf_seconds)
         row = {"intent_id": p["intent_id"], "direction": direction,
-               "entry": str(entry), "sl": str(sl), "tp": str(tp),
+               "entry": str(entry), "sl": str(sl), "tp": p["tp"],
+               "trail_r": p.get("trail_r"),
                "risk_usd": p.get("risk_usd"), "leverage": p.get("leverage"),
                "liquidation": p.get("liquidation"),
                "last_close": str(last_close), "armed_at": p["armed_at"]}
-        if fill_i is None:
-            bars_gone = max(0, len(candles) - order_i)
-            row.update(state="PENDING",
-                       bars_left=max(0, MAX_ENTRY_BARS - bars_gone))
+        if w["phase"] == "PENDING":
+            row.update(state="PENDING", bars_left=w["bars_left"])
             out.append(row)
+            continue
+        if w["phase"] != "OPEN":
+            # MISSED and EXIT are run()'s to record; the endpoint resolves
+            # before it asks, so by the time we are here they are facts.
             continue
         move = (last_close - entry) if long else (entry - last_close)
         r_unreal = (move / risk).quantize(Q2) if risk > 0 else Decimal(0)
         usd = p.get("risk_usd")
-        row.update(state="OPEN", bars_held=len(candles) - 1 - fill_i,
+        row.update(state="OPEN",
+                   bars_held=len(candles) - 1 - w["fill_i"],
                    fill_price=str(entry),
+                   # The stop as it stands NOW, ratchet included — this is the
+                   # number the gold SL line must draw. Showing the original
+                   # stop on a trailed trade would misstate where it dies.
+                   current_stop=str(w["current_stop"]),
+                   trailed=w["trailed"],
                    unrealized_r=str(r_unreal),
                    unrealized_usd=(None if usd is None
                                    else str((r_unreal * Decimal(str(usd)))
@@ -282,6 +308,87 @@ def _first_eligible_bar(candle_times: list, tf_seconds: int,
     latency and buys a book whose every fill is provably after its own order.
     """
     return bisect_left(candle_times, armed_at)
+
+
+def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
+    """ONE simulation of an intent against the bars, used by run() AND status().
+
+    This function exists so the trade that settles and the trade on screen are
+    the same trade. The fill test, the exit test and the trailing ratchet live
+    here once; run() writes facts off the terminal phases and status() reports
+    the live ones, and neither can drift from the other because neither owns a
+    copy.
+
+    Trailing, at bar granularity, honestly:
+      · Exits are tested against the stop AS IT STOOD ENTERING THE BAR. A bar
+        that makes a new high and then falls back through the stop that high
+        implies cannot exit on that stop THIS bar — OHLC does not reveal
+        whether the high or the fall came first, so the ratchet only arms for
+        the next bar. Conservative by one bar, never clairvoyant.
+      · The stop only ever tightens: max() for longs, min() for shorts. An
+        adverse bar moves nothing.
+      · Breakeven falls out for free — with a 1.0R trail, +1R of progress puts
+        the stop at entry.
+    A stop exit fills at the stop and pays taker + slippage, like any stop.
+
+    Phases: PENDING (fill window still open) · MISSED (window closed untouched)
+    · OPEN (filled, no exit yet) · EXIT (outcome TP / SL / TRAIL_STOP / TIMEOUT).
+    TRAIL_STOP is a distinct outcome, not an SL flavour, so the book can grade
+    the trailing rule against holding without parsing free text.
+    """
+    direction = p["direction"]
+    long = direction == "LONG"
+    entry, sl, tp = Decimal(p["entry"]), Decimal(p["sl"]), Decimal(p["tp"])
+    trail = p.get("trail_r")
+    trail = Decimal(str(trail)) if trail else None
+    risk = risk_per_unit(direction, entry, sl)
+    if risk <= 0:
+        return {"phase": "INVALID"}
+
+    order_i = _first_eligible_bar(candle_times, tf_seconds, p["armed_at"])
+    if order_i >= len(candles):
+        return {"phase": "PENDING", "bars_left": MAX_ENTRY_BARS}
+    fill_i = None
+    for k in range(order_i, min(order_i + MAX_ENTRY_BARS, len(candles))):
+        lo, hi = Decimal(candles[k]["low"]), Decimal(candles[k]["high"])
+        if lo <= entry <= hi:
+            fill_i = k
+            break
+    if fill_i is None:
+        if order_i + MAX_ENTRY_BARS > len(candles):
+            return {"phase": "PENDING",
+                    "bars_left": order_i + MAX_ENTRY_BARS - len(candles)}
+        return {"phase": "MISSED", "miss_i": order_i + MAX_ENTRY_BARS - 1,
+                "order_i": order_i}
+
+    stop, best, trailed = sl, entry, False
+    for j in range(fill_i, min(fill_i + MAX_BARS, len(candles))):
+        hi, lo = Decimal(candles[j]["high"]), Decimal(candles[j]["low"])
+        hit_stop = lo <= stop if long else hi >= stop
+        hit_tp = hi >= tp if long else lo <= tp
+        if hit_stop:                          # stop wins ties, house rule
+            return {"phase": "EXIT",
+                    "outcome": "TRAIL_STOP" if trailed else "SL",
+                    "exit_price": stop, "exit_i": j, "fill_i": fill_i,
+                    "order_i": order_i,
+                    "ambiguous": hit_stop and hit_tp, "final_stop": stop}
+        if hit_tp:
+            return {"phase": "EXIT", "outcome": "TP", "exit_price": tp,
+                    "exit_i": j, "fill_i": fill_i, "order_i": order_i,
+                    "ambiguous": False, "final_stop": stop}
+        if trail is not None:
+            best = max(best, hi) if long else min(best, lo)
+            cand = (best - trail * risk) if long else (best + trail * risk)
+            if (cand > stop) if long else (cand < stop):
+                stop, trailed = cand, True
+    if fill_i + MAX_BARS <= len(candles):
+        j = fill_i + MAX_BARS - 1
+        return {"phase": "EXIT", "outcome": "TIMEOUT",
+                "exit_price": Decimal(candles[j]["close"]), "exit_i": j,
+                "fill_i": fill_i, "order_i": order_i,
+                "ambiguous": False, "final_stop": stop}
+    return {"phase": "OPEN", "fill_i": fill_i, "order_i": order_i,
+            "current_stop": stop, "best": best, "trailed": trailed}
 
 
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
@@ -311,7 +418,8 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             done.add(json.loads(r["payload"])["intent_id"])
         rec.n_inputs = len(intents)
 
-        counts = {"TP": 0, "SL": 0, "TIMEOUT": 0, "OPEN": 0, "MISSED": 0}
+        counts = {"TP": 0, "SL": 0, "TRAIL_STOP": 0, "TIMEOUT": 0,
+                  "OPEN": 0, "MISSED": 0}
         n_out = 0
         for iid, s in intents.items():
             if iid in done:
@@ -319,29 +427,20 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             direction = s["direction"]
             long = direction == "LONG"
             entry = Decimal(s["entry"])
-            tp, sl = Decimal(s["tp"]), Decimal(s["sl"])
-            risk = risk_per_unit(direction, entry, sl)
-            if risk <= 0:                     # validated at creation; belt and braces
-                continue
+            risk = risk_per_unit(direction, entry, Decimal(s["sl"]))
 
-            order_i = _first_eligible_bar(candle_times, tf_seconds, s["armed_at"])
-            if order_i >= len(candles):
-                counts["OPEN"] += 1           # armed, no bar has closed since
+            # ONE walk settles and displays — see _walk. run() only turns its
+            # terminal phases into facts.
+            w = _walk(s, candles, candle_times, tf_seconds)
+            if w["phase"] in ("PENDING", "INVALID"):
+                if w["phase"] == "PENDING":
+                    counts["OPEN"] += 1
                 continue
-
-            # --- entry: a resting limit at the operator's own price ---
-            fill_i = None
-            for k in range(order_i, min(order_i + MAX_ENTRY_BARS, len(candles))):
-                lo, hi = Decimal(candles[k]["low"]), Decimal(candles[k]["high"])
-                if lo <= entry <= hi:
-                    fill_i = k
-                    break
-            if fill_i is None:
-                if order_i + MAX_ENTRY_BARS > len(candles):
-                    counts["OPEN"] += 1       # window still open, not yet missed
-                    continue
-                miss_ts = (candles[order_i + MAX_ENTRY_BARS - 1]["open_ts"]
-                           + tf_seconds)
+            if w["phase"] == "OPEN":
+                counts["OPEN"] += 1
+                continue
+            if w["phase"] == "MISSED":
+                miss_ts = candles[w["miss_i"]]["open_ts"] + tf_seconds
                 if store.insert_fact(
                         con, symbol=symbol, tf=tf, kind=EXEC_KIND,
                         market_time=s["market_time"], confirmed_at=miss_ts,
@@ -357,34 +456,15 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 counts["MISSED"] += 1
                 continue
 
-            # --- exit: same walk execsim performs, same STOP_FIRST rule ---
-            i = fill_i
-            outcome = exit_price = exit_ts = None
-            ambiguous = False
-            j = i
-            for j in range(i, min(i + MAX_BARS, len(candles))):
-                c = candles[j]
-                hi, lo = Decimal(c["high"]), Decimal(c["low"])
-                hit_sl = lo <= sl if long else hi >= sl
-                hit_tp = hi >= tp if long else lo <= tp
-                if hit_sl or hit_tp:
-                    ambiguous = hit_sl and hit_tp
-                    outcome = "SL" if hit_sl else "TP"
-                    exit_price = sl if hit_sl else tp
-                    exit_ts = c["open_ts"] + tf_seconds
-                    break
-            else:
-                if i + MAX_BARS <= len(candles):
-                    j = i + MAX_BARS - 1
-                    outcome = "TIMEOUT"
-                    exit_price = Decimal(candles[j]["close"])
-                    exit_ts = candles[j]["open_ts"] + tf_seconds
-            if outcome is None:
-                counts["OPEN"] += 1
-                continue
+            i, j = w["fill_i"], w["exit_i"]
+            outcome, exit_price = w["outcome"], w["exit_price"]
+            ambiguous = w["ambiguous"]
+            exit_ts = candles[j]["open_ts"] + tf_seconds
 
             slip = Decimal(0)
-            if outcome in ("SL", "TIMEOUT") and atr[j] is not None:
+            # Every stop is a market order when it fires — the initial one and
+            # the trailed one alike — so both pay taker and slippage below.
+            if outcome in ("SL", "TRAIL_STOP", "TIMEOUT") and atr[j] is not None:
                 slip = profile.market_slippage_atr * atr[j]
             holding_hours = Decimal((j - i) * tf_seconds) / Decimal(3600)
             funding_cost = venues.funding_cost_rate(
@@ -413,9 +493,16 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                              "funding_price_units": str(funding_cost),
                              "slippage_price_units": str(slip),
                              "bars_held": j - i,
-                             "bars_to_fill": i - order_i,
+                             "bars_to_fill": i - w["order_i"],
                              "fill_ts": candles[i]["open_ts"] + tf_seconds,
                              "ambiguous_bar": ambiguous,
+                             # Which exit RULE settled this — recorded so the
+                             # book can grade trailing against holding, which
+                             # is the only way this feature earns permanence.
+                             "exit_rule": ("TRAIL" if s.get("trail_r")
+                                           else "HOLD"),
+                             "trail_r": s.get("trail_r"),
+                             "final_stop": str(w["final_stop"]),
                              "size_units": s.get("size_units"),
                              "risk_usd": s.get("risk_usd"),
                              "venue": s.get("venue"),
@@ -457,8 +544,13 @@ def book(con, limit: int = 200) -> dict:
         p = json.loads(r["payload"])
         if p["intent_id"] not in resolved:
             open_intents.append({"symbol": r["symbol"], "tf": r["tf"], **p})
-    wins = [r for r in rows if r["outcome"] == "TP"]
-    settled = [r for r in rows if r["outcome"] in ("TP", "SL", "TIMEOUT")]
+    settled = [r for r in rows
+               if r["outcome"] in ("TP", "SL", "TRAIL_STOP", "TIMEOUT")]
+    # A win is a settled trade that MADE money, not one that exited at the
+    # target. A trailed stop at +1.4R is a win in anyone's language, and
+    # outcome==TP was already wrong for a profitable TIMEOUT. Counted on net R,
+    # the same number the expectancy uses.
+    wins = [r for r in settled if Decimal(r.get("r_multiple") or 0) > 0]
     return {
         "version": MANUAL_VERSION,
         "trades": rows[-limit:],

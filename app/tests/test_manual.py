@@ -291,8 +291,11 @@ class ManualCase(unittest.TestCase):
     def test_status_reports_pending_then_open_with_unrealized(self):
         # bar 0 closes flat; entry untouched -> PENDING
         self.load([(120, 121, 119, 120)])
+        # tp sits ABOVE every fixture high: the old status() never tested
+        # exits, and its fixture had already struck TP intra-window while
+        # being reported OPEN. The shared walk exposed that.
         manual.create_intent(self.con, SPOT, "1H", "LONG",
-                             entry=100, tp=110, sl=95, created_at=0)
+                             entry=100, tp=130, sl=95, created_at=0)
         st = manual.status(self.con, SPOT, "1H", TF)
         self.assertEqual(st[0]["state"], "PENDING")
         # a bar touches entry, next closes at 102.5 -> OPEN, +0.5R on a 5-wide stop
@@ -312,10 +315,99 @@ class ManualCase(unittest.TestCase):
         every other number on screen — the last CLOSED candle."""
         self.load([(120, 121, 99, 101), (101, 108, 100, 106)])
         manual.create_intent(self.con, SPOT, "1H", "LONG",
-                             entry=100, tp=115, sl=96, created_at=0)
+                             entry=100, tp=125, sl=96, created_at=0)
         st = manual.status(self.con, SPOT, "1H", TF)
         # (106 - 100) / 4 = 1.5R — the close, not the 108 high
         self.assertEqual(st[0]["unrealized_r"], "1.50")
+
+    # ---------- trailing: the operator's exit rule, honestly simulated ------
+
+    def trail_intent(self, symbol=SPOT, **kw):
+        args = dict(entry=100, tp=120, sl=98, created_at=0, risk_usd=200,
+                    trail_r=1.0)
+        args.update(kw)
+        return manual.create_intent(self.con, symbol, "1H", "LONG", **args)
+
+    def test_trailing_stop_locks_in_profit(self):
+        """Risk is 2, trail is 1R: at a best of 110 the stop sits at 108, and
+        the pullback through it settles as TRAIL_STOP at +4R gross."""
+        self.load([(105, 106, 99.5, 105),      # fills at 100, ratchets to 104
+                   (105, 110, 104.5, 109),     # best 110 -> stop 108
+                   (109, 109.5, 107, 107.5)])  # 107 <= 108: trailed out
+        self.trail_intent()
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertEqual(row["outcome"], "TRAIL_STOP")
+        self.assertEqual(row["exit_price"], "108.0")
+        self.assertEqual(row["r_gross"], "4.00")
+        self.assertEqual(row["exit_rule"], "TRAIL")
+        self.assertLess(Decimal(row["r_multiple"]), Decimal(row["r_gross"]),
+                        "a trailed stop is a market exit and pays for it")
+
+    def test_the_ratchet_cannot_act_on_its_own_bar(self):
+        """A bar that makes the new high AND falls through the stop that high
+        implies must NOT exit on it — OHLC cannot say which came first. The
+        ratchet arms for the NEXT bar, conservative by exactly one bar."""
+        self.load([(100, 100.5, 99.5, 100),    # fill, no progress
+                   (100, 110, 107, 108),       # high 110 -> stop 108; low 107 IGNORED
+                   (108, 108.5, 107.5, 108)])  # exits HERE at 108
+        self.trail_intent()
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertEqual(row["outcome"], "TRAIL_STOP")
+        self.assertEqual(row["bars_held"], 2, "the exit must land on bar 2, "
+                         "not the bar whose own high armed the stop")
+
+    def test_the_trail_never_loosens(self):
+        """An adverse bar moves nothing: the stop only ratchets toward price."""
+        self.load([(100, 100, 99.5, 100),      # fill; high == entry, no progress
+                   (99, 99.5, 98.5, 99)])      # adverse; 98.5 > 98 survives
+        self.trail_intent()
+        r = self.run_engine()
+        self.assertEqual(r["OPEN"], 1)
+        st = manual.status(self.con, SPOT, "1H", TF)
+        self.assertEqual(st[0]["state"], "OPEN")
+        self.assertEqual(Decimal(st[0]["current_stop"]), Decimal(98),
+                         "adverse movement must not move the stop")
+        self.assertFalse(st[0]["trailed"])
+
+    def test_status_reports_the_ratcheted_stop_for_the_chart(self):
+        """The gold SL line draws `current_stop` — showing the original stop on
+        a trailed trade would misstate where the trade dies."""
+        self.load([(100, 100.5, 99.5, 100),
+                   (100, 110, 104.5, 109)])    # best 110 -> stop 108, no exit yet
+        self.trail_intent()
+        st = manual.status(self.con, SPOT, "1H", TF)
+        self.assertEqual(st[0]["state"], "OPEN")
+        self.assertEqual(Decimal(st[0]["current_stop"]), Decimal(108))
+        self.assertTrue(st[0]["trailed"])
+
+    def test_a_hair_trigger_trail_is_refused(self):
+        with self.assertRaises(manual.IntentRejected):
+            self.trail_intent(trail_r=0.05)
+
+    def test_without_trailing_nothing_changed(self):
+        """trail_r=None must resolve byte-identically to the pre-trailing
+        resolver — that equivalence is why MANUAL_VERSION did not bump."""
+        self.load([(100, 100.5, 99.5, 100),
+                   (100, 110, 104.5, 109),     # would have trailed to 108...
+                   (109, 109.5, 107, 107.5),   # ...and exited here if trailing
+                   (107, 121, 106, 120)])      # instead rides to TP
+        self.trail_intent(trail_r=None)
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertEqual(row["outcome"], "TP")
+        self.assertEqual(row["exit_rule"], "HOLD")
+
+    def test_book_counts_a_profitable_trail_as_a_win(self):
+        self.load([(105, 106, 99.5, 105),
+                   (105, 110, 104.5, 109),
+                   (109, 109.5, 107, 107.5)])
+        self.trail_intent()
+        self.run_engine()
+        b = manual.book(self.con)
+        self.assertEqual(b["n"], 1)
+        self.assertEqual(b["wins"], 1, "TRAIL_STOP at +4R gross is a win")
 
     # ---------- the book ----------
 
