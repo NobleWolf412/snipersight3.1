@@ -196,8 +196,14 @@ what was decided when the setup was armed.
       2026-07-28 and the entire traded universe is Phemex. Kraken now runs
       CFTC-regulated US perps, which is the ready-made answer if the access is
       a problem.
-- [ ] **Margin mode: isolated or cross?** (question #2). `venues.liquidation_price`
-      assumes a 0.5% maintenance allowance without declaring which mode it prices.
+- [x] **Margin mode: isolated or cross?** (question #2). **ANSWERED 2026-07-30
+      (S46): ISOLATED**, and now declared rather than implied —
+      `venues.Venue.margin_mode` carries it and `liquidation_price` REFUSES to
+      price cross rather than returning the isolated number under a cross label.
+      The reason is the ruling: under cross, every position is backed by the
+      whole account, so "2% per trade" stops meaning what it says. The 0.5%
+      maintenance allowance is now `venues.MAINTENANCE_MARGIN`, served to the
+      order ticket over `/api/trade-config` so the UI cannot hold a second copy.
 
 ---
 
@@ -237,17 +243,28 @@ BLOCKED symbol that aborted 38% of all cycles including `risk.run`.
       Phemex 0.00125%/h — the 8× is purely the constant. Also two constants for
       one quantity (`execsim.FUNDING_RATE_PER_SETTLEMENT`,
       `costs.DEFAULT_FUNDING_RATE`), neither reading the other.
-- [ ] **`scalein.py` missed the venue-cost migration** — still prices Coinbase
-      spot (1.00% round trip) on a 100%-perp universe and passes neither
-      `symbol` nor `tf_seconds`, so the one strategy that adds to an open
-      position prices no funding at all. 5 adds at `scale-v0.7` store-wide.
-- [ ] **`ticket-math.js` is a second authority for position size** and diverges
+- [~] **`scalein.py` missed the venue-cost migration** — 5 adds at `scale-v0.7`
+      store-wide. **Venue half FIXED 2026-07-30 (S52, `scale-v0.11`)**: the
+      add's economics gate now prices on the add's own venue via
+      `costs.profile_for(symbol)`, instead of a Coinbase default ~14× the fees a
+      perp charges. **Funding half STILL OPEN**: `funding` appears nowhere in
+      `scalein.py`, so an add held across settlements is still priced as though
+      it pays none.
+- [~] **`ticket-math.js` is a second authority for position size** and diverges
       from `risk.size_order` in the permissive direction every time: un-reduced
       size where the engine reduces for leverage, no `open_risk` parameter, and
-      no liquidation gate / min-notional / participation cap. Its fee figure
-      omits slippage and funding — funding alone is 49.1% of modelled cost.
+      no min-notional / participation cap. Its fee figure omits slippage and
+      funding — funding alone is 49.1% of modelled cost.
       `/api/trade-config` does not expose `MAX_PARTICIPATION`, so the UI
       *cannot* replicate the engine today.
+      **Liquidation gate CLOSED 2026-07-31**: the ticket now computes
+      liquidation and REFUSES to arm a stop sitting beyond it, matching
+      `venues.stop_survives_liquidation`. Note this also *added* a second
+      implementation of an engine formula — the mitigation is that every
+      liquidation figure in `test_ticket_math.js` was computed by the Python and
+      both constants arrive over `/api/trade-config`, so the constants cannot
+      drift even though the code is duplicated. That is a mitigation, not an
+      exemption; the rest of this item stands.
 - [ ] **`risk.run()` does not call `size_order()`** — the armed order is sized by
       an inline reimplementation on `START_EQUITY` (10,000 vs a live 9,772) with
       no `open_risk`. All 220 armed orders read `APPROVED / WITHIN_LIMITS`.
