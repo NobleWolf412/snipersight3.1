@@ -9,6 +9,8 @@
   const money = n => '$' + Number(n).toLocaleString(undefined, {maximumFractionDigits: 0});
 
   /* ---------- navigation ---------- */
+  // guards the console poll below, which cannot run until its own state exists
+  let consoleReady = false;
   function go(name){
     document.querySelectorAll('.surface').forEach(s => s.classList.toggle('on', s.id === 's' + '-' + name));
     document.querySelectorAll('.nav a').forEach(a => a.classList.toggle('on', a.dataset.s === name));
@@ -16,6 +18,9 @@
     // The chart cannot size itself while its surface is display:none, so it is
     // told when it becomes visible rather than measuring a 0x0 box at load.
     if(window.SSChart) name === 'chart' ? SSChart.onShow() : SSChart.onHide();
+    // The console polls slowly while it is off screen; arriving on it should
+    // not mean waiting out that slow tick for the first paint.
+    if(name === 'diagnostics' && consoleReady) pollConsole();
   }
   document.querySelectorAll('.nav a').forEach(a =>
     a.addEventListener('click', e => { e.preventDefault(); go(a.dataset.s); }));
@@ -925,8 +930,34 @@
     e.currentTarget.textContent = follow ? 'Following' : 'Paused';
     e.currentTarget.style.color = follow ? '' : 'var(--fg-4)';
   });
+
+  /* This poll ran every 2s forever — 30 of the ~57 requests a minute this page
+     made at idle, most of them for a console that was not on screen. It cannot
+     simply stop when the console is hidden, because it also owns Run Scan's
+     state on COMMAND and the repaint when a scan finishes. So it adapts:
+
+       · console on screen  — 2s, someone is reading the log
+       · a scan is running  — 2s, wherever the operator is standing
+       · otherwise          — 15s, just keeping the button honest
+       · tab in background  — not at all
+
+     Idle on Command now costs 4 requests a minute instead of 30, and every
+     behaviour that depended on the fast tick still has it when it matters. */
+  const FAST = 2000, SLOW = 15000;
+  function consoleInterval(){
+    if(document.hidden) return SLOW;
+    if(scanning) return FAST;
+    return $('s-diagnostics').classList.contains('on') ? FAST : SLOW;
+  }
+  (function tick(){
+    const wait = consoleInterval();
+    setTimeout(async () => {
+      if(!document.hidden) await pollConsole();
+      tick();
+    }, wait);
+  })();
+  consoleReady = true;
   pollConsole();
-  setInterval(pollConsole, 2000);
 
   /* ---------- run a real scan ---------- */
   $('btnScan').addEventListener('click', async e => {

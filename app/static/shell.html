@@ -92,16 +92,13 @@
       </div>
 
       <!-- Market Weather: regime x timeframe, and what it MEANS. weather.js owns it. -->
-      <div id="weatherRoot" style="margin-bottom:var(--lg)"></div>
+      <div id="weatherRoot"></div>
 
-      <div class="panel">
-        <div class="panel-head">
-          <span class="t-section">Backend Console</span>
-          <span class="chip" id="consoleState" style="margin-left:auto">idle</span>
-          <button class="btn" id="btnFollow" title="follow new output">Following</button>
-        </div>
-        <pre id="console" class="t-mono">connecting…</pre>
-      </div>
+      <!-- The Backend Console used to sit here. It is developer telemetry —
+           `zone zone-v0.11-draft XRPUSDT 15m in= 981 new= 14 2187ms` — printing
+           on the one surface whose whole job is telling an operator what to do
+           next, and it polled twice a second to do it. Moved to Diagnostics,
+           which is where "what is the machine actually doing" belongs. -->
     </section>
 
     <!-- ─── CHART ─── -->
@@ -342,6 +339,19 @@
       <!-- Edge statistics: is the recorded book distinguishable from zero?
            edgeview.js owns it and reads /api/edge-stats. -->
       <div id="edgeRoot" style="margin-top:var(--lg)"></div>
+
+      <!-- Relocated from Command. This is a developer trace, and it belongs on
+           the surface that asks whether the machine is telling the truth — not
+           on the one that asks what to do next. shell.js only polls it while
+           this surface is on screen. -->
+      <div class="panel" style="margin-top:var(--lg)">
+        <div class="panel-head">
+          <span class="t-section">Backend Console</span>
+          <span class="chip" id="consoleState" style="margin-left:auto">idle</span>
+          <button class="btn" id="btnFollow" title="follow new output">Following</button>
+        </div>
+        <pre id="console" class="t-mono">connecting…</pre>
+      </div>
     </section>
 
     <!-- ─── LEARN ─── -->

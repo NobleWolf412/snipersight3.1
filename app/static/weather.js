@@ -76,6 +76,10 @@
 
   const COLLAPSED = 8;                 // above the fold beats complete-but-buried
   let showAll = false;
+  /* Both start CLOSED on Command, and survive the 30s re-render — a panel that
+     folded itself back up under the reader every half minute would be worse
+     than one that never folded at all. */
+  let tableOpen = false, backdropOpen = false;
   const open = new Set();              // rows the operator expanded, kept across refreshes
 
   function rowHtml(s) {
@@ -127,7 +131,11 @@
       {day: 'numeric', month: 'short', year: 'numeric'});
   };
 
-  function cycleLede(c) {
+  /* `isOpen` is a PARAMETER rather than a read of module state so this stays a
+     pure function of its inputs — test_cycle_lede evaluates it in isolation,
+     and a hidden dependency on a `let` outside it is a function that only works
+     in one place. */
+  function cycleLede(c, isOpen) {
     if (!c || c.unavailable) return '';
     const wk = (c.weekly && c.weekly.cycles) || [];
     const last = wk[wk.length - 1];
@@ -184,12 +192,18 @@
     }
 
     if (!rows.length) return '';
-    return `<div class="wx-lede">
-      <div class="cy-head">
+    /* DEMOTED, deliberately. This block is explicitly observational — its own
+       footer says nothing here opens, sizes or blocks a trade — and it was
+       sitting ABOVE the weather table on the surface that answers "what should
+       I do right now?". Context outranking instruction is exactly backwards, so
+       it now sits last and starts closed. Nothing is removed: the reader who
+       wants the longer rhythm opens it, and it remembers that choice. */
+    return `<details class="wx-lede cy-details"${isOpen ? ' open' : ''}>
+      <summary class="cy-head">
         <span class="t-section">Bitcoin backdrop</span>
         <span class="wx-sub">where the market sits in its own longer rhythm</span>
         <span class="chip">observational</span>
-      </div>
+      </summary>
       ${rows.join('')}
       <div class="cy-foot">Never consumed by any trading engine — nothing here
         opens, sizes or blocks a trade. Read from
@@ -197,7 +211,7 @@
         candles${c.last_candle_ts ? ' to ' + D(c.last_candle_ts) : ''} ·
         ${esc(c.algo_version || '')}. A different Bitcoin series gives a slightly
         different reading; this is one series, not a fact about Bitcoin.</div>
-    </div>`;
+    </details>`;
   }
 
   function render(d) {
@@ -214,33 +228,51 @@
         `trades. Even then a setup only appears once price returns to one of ` +
         `that symbol's zones and confirms there, so quiet days are normal.`;
 
+    /* Command asks "what should I do right now?" and this panel's ANSWER is one
+       sentence — whether anything is in a tradeable condition, and that a quiet
+       deck is the correct result rather than a fault. The 8-row grid is the
+       evidence for that sentence, not the sentence itself, and on the surface
+       whose job is instruction it was outweighing the Setup Deck.
+
+       So the sentence stays on screen and the grid goes behind a disclosure.
+       The reader who wants to know WHY still gets everything, one click away
+       and with its state remembered. */
     root.innerHTML = `<div class="panel wx">
-      ${cycleLede(cyc)}
       <div class="panel-head">
         <span class="t-section">Market Weather</span>
         <span class="wx-sub">what the market is doing &middot; and whether anything can be traded</span>
         <span class="chip">${d.n_live} of ${d.n_total} tradeable</span>
       </div>
-      <div class="wx-body">
-        <div class="wx-row wx-head">
-          <span class="t-label">Symbol</span>
-          ${d.timeframes.map(tf => `<span class="t-label">${esc(tf)}</span>`).join('')}
-          <span class="t-label mean">what this means</span>
+      <div class="wx-lead">${teach(footer)}</div>
+      <details class="wx-details"${tableOpen ? ' open' : ''}>
+        <summary class="wx-summary">Per-symbol breakdown${
+          showAll ? '' : ` &middot; top ${Math.min(COLLAPSED, d.n_total)} of ${d.n_total}`}</summary>
+        <div class="wx-body">
+          <div class="wx-row wx-head">
+            <span class="t-label">Symbol</span>
+            ${d.timeframes.map(tf => `<span class="t-label">${esc(tf)}</span>`).join('')}
+            <span class="t-label mean">what this means</span>
+          </div>
+          ${rows.map(rowHtml).join('')}
         </div>
-        ${rows.map(rowHtml).join('')}
-      </div>
-      <div class="wx-foot">
-        <p>${teach(footer)} <span style="color:var(--fg-4)">Click a row for the full reason.</span></p>
-        ${hidden > 0 || showAll
-          ? `<button class="btn" id="wxMore">${showAll ? 'Show fewer' : 'Show all ' + d.n_total}</button>`
-          : ''}
-        <span class="wx-ver" title="the engine versions that produced these readings">${
-          esc(d.regime_version)} &middot; ${esc(d.strategy_version)}</span>
-      </div>
+        <div class="wx-foot">
+          <p><span style="color:var(--fg-4)">Click a row for the full reason.</span></p>
+          ${hidden > 0 || showAll
+            ? `<button class="btn" id="wxMore">${showAll ? 'Show fewer' : 'Show all ' + d.n_total}</button>`
+            : ''}
+          <span class="wx-ver" title="the engine versions that produced these readings">${
+            esc(d.regime_version)} &middot; ${esc(d.strategy_version)}</span>
+        </div>
+      </details>
+      ${cycleLede(cyc, backdropOpen)}
     </div>`;
 
     const more = document.getElementById('wxMore');
     if (more) more.addEventListener('click', () => { showAll = !showAll; render(d); });
+    const det = root.querySelector('.wx-details');
+    if (det) det.addEventListener('toggle', () => { tableOpen = det.open; });
+    const cyd = root.querySelector('.cy-details');
+    if (cyd) cyd.addEventListener('toggle', () => { backdropOpen = cyd.open; });
   }
 
   function fail(msg) {
