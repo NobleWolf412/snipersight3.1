@@ -16,11 +16,11 @@ from bisect import bisect_left
 from decimal import Decimal
 
 from . import costs, store
-from .setups import SETUP_VERSION, COST_PROFILE
+from .setups import SETUP_VERSION
 from .swings import compute_atr
 from .runlog import RunRecorder
 
-EXEC_VERSION = "exec-v0.7-draft"
+EXEC_VERSION = "exec-v0.8-draft"
 MAX_BARS = 100
 MAX_ENTRY_BARS = 4
 Q2 = Decimal("0.01")
@@ -28,8 +28,14 @@ Q2 = Decimal("0.01")
 # v0.2 (EXEC-1, §14): trading costs modeled. Entry is a resting limit at the
 # zone edge -> fee only, no slippage. TP is a resting limit -> fee only.
 # SL and TIMEOUT exits are market orders -> fee + slippage (0.05 ATR at exit).
-# r_multiple is NET of costs; r_gross preserved. Cost constants live in
-# setups.py (single source of truth — the setup gate uses the same numbers).
+# r_multiple is NET of costs; r_gross preserved.
+#
+# v0.8: the cost profile is chosen PER SYMBOL from its venue, not imported as a
+# module global. Every v0.7 fact charged coinbase-retail-v1 (0.40/0.60) to every
+# trade, including the 54 filled USDT perps, whose real Phemex round trip is
+# 0.07% rather than 1.00% — a ~14x over-charge. v0.7 facts are left exactly as
+# they are (append-only, and they carry their own cost_manifest_hash); the
+# version bump is what keeps the two books distinguishable.
 
 
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
@@ -50,7 +56,9 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         rec.n_inputs = len(setups)
 
         n_out = 0
-        cost_manifest_hash = costs.record(con, COST_PROFILE)
+        # The venue owns what a trade costs; this engine only owns how it fills.
+        profile = costs.profile_for(symbol)
+        cost_manifest_hash = costs.record(con, profile)
         execution_manifest_hash = store.record_manifest(con, "execution", {
             "version": EXEC_VERSION, "max_entry_bars": MAX_ENTRY_BARS,
             "max_holding_bars": MAX_BARS,
@@ -58,7 +66,11 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             "fill_model": "BAR_TOUCH_FULL_FILL",
             "same_bar_stop_target": "STOP_FIRST",
             "partial_fills": "UNAVAILABLE_WITH_OHLC_ONLY",
-            "cost_profile": COST_PROFILE.payload(),
+            # The RULE for picking a cost profile, not the profile itself: this
+            # manifest certifies the execution model, which is symbol-invariant.
+            # The rates actually charged are pinned per fact by
+            # cost_manifest_hash, so the two concerns stay separately auditable.
+            "cost_profile_selection": "VENUE_DERIVED",
         })
         counts = {"TP": 0, "SL": 0, "TIMEOUT": 0, "OPEN": 0,
                   "MISSED": 0, "PENDING": 0}
@@ -101,6 +113,8 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                            "bars_held": 0, "bars_to_fill": None,
                            "available_at": available_at, "fill_ts": None,
                            "ambiguous_bar": False,
+                           "venue": profile.venue,
+                           "cost_profile_version": profile.version,
                            "cost_manifest_hash": cost_manifest_hash,
                            "execution_manifest_hash": execution_manifest_hash,
                            "manifest_hash": s.get("manifest_hash")}
@@ -148,7 +162,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             slip = Decimal(0)
             if outcome in ("SL", "TIMEOUT"):
                 if atr[j] is not None:
-                    slip = COST_PROFILE.market_slippage_atr * atr[j]
+                    slip = profile.market_slippage_atr * atr[j]
                 else:
                     # loud-fallback rule: degrading (no slippage modeled) must be audible
                     from .runlog import get_logger
@@ -156,9 +170,9 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                         f"execsim {symbol} {tf}: no ATR at exit bar for {sid} — "
                         f"market-exit slippage NOT applied (results slightly flattering)")
             eff_exit = (exit_price - slip) if long else (exit_price + slip)
-            exit_rate = (COST_PROFILE.maker_rate if outcome == "TP"
-                         else COST_PROFILE.taker_rate)
-            fees = COST_PROFILE.maker_rate * entry + exit_rate * eff_exit
+            exit_rate = (profile.maker_rate if outcome == "TP"
+                         else profile.taker_rate)
+            fees = profile.maker_rate * entry + exit_rate * eff_exit
             gross = (exit_price - entry) if long else (entry - exit_price)
             net = ((eff_exit - entry) if long else (entry - eff_exit)) - fees
             r_gross = (gross / risk).quantize(Q2) if risk > 0 else Decimal(0)
@@ -185,6 +199,11 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                        "ambiguous_bar": ambiguous,
                        "entry_fee_role": "MAKER",
                        "exit_fee_role": "MAKER" if outcome == "TP" else "TAKER",
+                       # Which venue's rates this trade was actually charged.
+                       # Derivable from the symbol, recorded anyway so a fact
+                       # can be audited without re-running the resolver.
+                       "venue": profile.venue,
+                       "cost_profile_version": profile.version,
                        "cost_manifest_hash": cost_manifest_hash,
                        "execution_manifest_hash": execution_manifest_hash,
                        "manifest_hash": s.get("manifest_hash")}
