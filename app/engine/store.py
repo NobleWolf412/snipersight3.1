@@ -13,6 +13,11 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "snipersight.db"
 
+# Ceiling the write-ahead log is truncated back to after a checkpoint. Large
+# enough that an import burst is not fighting the truncator on every commit,
+# small enough that a gigabyte can never accumulate again. See connect().
+WAL_SIZE_LIMIT_BYTES = 64 * 1024 * 1024
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS candles (
     symbol      TEXT NOT NULL,
@@ -117,9 +122,55 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
     con.execute("PRAGMA busy_timeout=5000")
+    # The WAL reached 966 MB against a 1.7 GB database on 2026-07-30, and every
+    # read had to work through it: /api/overview took 57 SECONDS. A restart
+    # checkpointed it to 1 MB and the same request took 0.90s. The data was
+    # never the problem.
+    #
+    # Two things combined. A checkpoint cannot reset the WAL while ANY reader
+    # holds an open snapshot — measured directly: with one reader open,
+    # `wal_checkpoint(TRUNCATE)` returns busy=1 and strands frames; with it
+    # closed, the same call returns frames=0 and the file drops to zero. The
+    # API polls continuously and the scanner reads continuously, so a
+    # reader-free instant is rare. Meanwhile journal_size_limit defaulted to -1,
+    # meaning even a checkpoint that DID succeed left the file at its
+    # high-water mark forever. The size only ever ratcheted up.
+    #
+    # This caps it: after any successful checkpoint SQLite truncates the WAL
+    # back to this bound, so a busy period can still grow it but a quiet one
+    # always reclaims it. It does not remove the need for a reader-free moment;
+    # it removes the permanence of never getting one.
+    con.execute(f"PRAGMA journal_size_limit={WAL_SIZE_LIMIT_BYTES}")
     con.executescript(SCHEMA)
     _migrate(con)
     return con
+
+
+def checkpoint_wal(con: sqlite3.Connection, log=None) -> dict:
+    """Reclaim the write-ahead log. Safe to call whenever; never raises.
+
+    Call this at a point where the caller is NOT holding a read snapshot — the
+    end of a scan cycle, not the middle of one. A checkpoint cannot reset the
+    WAL while any reader has an open snapshot, so calling it mid-cycle reports
+    busy and reclaims nothing.
+
+    Returns the raw SQLite answer: `busy` is 1 when a reader blocked the reset,
+    and `frames`/`checkpointed` differing means some frames could not be copied
+    back. Both are worth logging — a checkpoint that silently achieves nothing
+    is exactly how a 966 MB WAL goes unnoticed for a day.
+    """
+    try:
+        con.commit()                       # a WRITER's own open transaction blocks it too
+        busy, frames, done = con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        out = {"busy": busy, "frames": frames, "checkpointed": done}
+        if log and busy:
+            log.info(f"wal checkpoint blocked by a reader: {done}/{frames} frames "
+                     f"reclaimed — the log keeps growing until one lands cleanly")
+        return out
+    except Exception as e:                 # never let housekeeping kill a scan
+        if log:
+            log.warning(f"wal checkpoint failed: {e}")
+        return {"busy": None, "error": str(e)}
 
 
 def _migrate(con: sqlite3.Connection) -> None:

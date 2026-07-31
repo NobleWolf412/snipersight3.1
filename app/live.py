@@ -386,6 +386,14 @@ def main():
                          f"({time.monotonic()-t0:.1f}s)")
             for sym, tf, p in fired:
                 announce(sym, tf, p, log)
+            # Housekeeping at the ONE moment this process is not mid-read. A
+            # checkpoint cannot reset the log while a reader holds a snapshot,
+            # and this loop holds one for most of a ~300s cycle; here, between
+            # cycles, is the only place it can land cleanly.
+            ck = store.checkpoint_wal(con, log)
+            if ck.get("frames"):
+                log.debug(f"wal checkpoint busy={ck['busy']} "
+                          f"{ck['checkpointed']}/{ck['frames']} frames")
         except Exception as e:
             log.error(f"live cycle failed: {e}")
         if args.once:
