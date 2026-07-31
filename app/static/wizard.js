@@ -132,9 +132,9 @@
     return {
       title: T, result: 'fail', value: 'the universe is empty',
       means: M + ' It is empty, so there is nothing to scan and nothing can ever fire.',
-      doing: 'Open Scanner Setup and check the universe rules — a minimum volume ' +
+      doing: 'Open Rules and check the universe settings — a minimum volume ' +
              'or minimum history threshold may be excluding every token.',
-      cta: { href: '#setup', label: 'Scanner Setup' }
+      cta: { href: '#rules', label: 'Rules' }
     };
   }
 
@@ -327,7 +327,7 @@
              'which is itself a defect worth chasing.'),
       doing: meta && meta.means ? meta.means
         : 'Open a trace on any refused setup from the funnel to see the exact rule.',
-      cta: meta && meta.cta ? meta.cta : { href: '#setup', label: 'Scanner Setup' }
+      cta: meta && meta.cta ? meta.cta : { href: '#rules', label: 'Rules' }
     };
   }
 

@@ -120,6 +120,40 @@ body{
 .era-band a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 .era-band b{color:var(--fg);font-weight:600}
 
+/* The explainer. Body prose for the same reason the era band is: these are
+   paragraphs to be read once and understood, and the all-caps mono this app
+   uses for chrome is unreadable at that length. Closed by default — it is
+   reference, and a settings page that opens with an essay is its own problem. */
+.explainer{border:1px solid var(--border-soft);border-radius:var(--r-xl);
+  background:rgba(0,0,0,.22);margin-bottom:var(--lg)}
+.explainer-head{display:flex;align-items:baseline;gap:var(--md);flex-wrap:wrap;
+  padding:var(--md) var(--lg);cursor:pointer;list-style:none}
+.explainer-head::-webkit-details-marker{display:none}
+.explainer-head::after{content:'▾';color:var(--fg-4);font-size:10px;
+  margin-left:auto;transition:transform .15s ease}
+.explainer[open] .explainer-head::after{transform:rotate(180deg)}
+.explainer-head:hover .t-section{color:var(--fg-2)}
+.explainer-body{padding:0 var(--lg) var(--lg);color:var(--fg-2);max-width:78ch}
+.explainer-body p{margin-bottom:var(--md)}
+.explainer-body b{color:var(--fg);font-weight:600}
+.explainer-steps{margin:0 0 var(--md);padding-left:1.35em}
+.explainer-steps li{margin-bottom:var(--sm);padding-left:.2em}
+.explainer-steps li::marker{color:var(--accent);font-family:var(--f-mono);
+  font-size:11px}
+/* the "controlled by" pointer: this is what ties a step to a toggle below */
+.explainer-steps em{display:block;margin-top:3px;font-style:normal;
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--fg-4)}
+@media (prefers-reduced-motion: reduce){
+  .explainer-head::after{transition:none}
+}
+
+/* One line above the deck saying what the deck is. Sits inside the panel so it
+   cannot be read as belonging to the panel above it. */
+.deck-note{padding:var(--sm) var(--lg) var(--md);color:var(--fg-3);
+  font-size:12.5px;line-height:1.6;border-bottom:1px solid var(--border-soft)}
+.deck-note a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+
 /* ---------- buttons ---------- */
 .btn{font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.14em;
   text-transform:uppercase;padding:9px 14px;border-radius:var(--r-md);cursor:pointer;

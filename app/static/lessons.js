@@ -1566,7 +1566,7 @@
         'trips on a bad day and not on an ordinary one.</p>' +
         '<p>And the caps are coupled deliberately: 4% is exactly two 2% trades, and the daily ' +
         'halt is about three. Change one and the others stop meaning what they meant. That is ' +
-        'why the risk numbers are displayed on Scanner Setup but not editable there — and also ' +
+        'why the risk numbers are displayed on Rules but not editable there — and also ' +
         'because changing them would re-size the entire forward record, which is a different ' +
         'engine wearing the same version number.</p>',
       mistakes: [

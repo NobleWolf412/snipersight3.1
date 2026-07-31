@@ -11,7 +11,13 @@
   /* ---------- navigation ---------- */
   // guards the console poll below, which cannot run until its own state exists
   let consoleReady = false;
+  /* `setup` was renamed to `rules` because a SETUP is a trade candidate
+     everywhere else in this app. Old hashes are still honoured — a bookmark, a
+     link in the wizard's prose, or anything the operator saved must not land on
+     a blank screen because we improved a word. */
+  const SURFACE_ALIASES = {setup: 'rules'};
   function go(name){
+    name = SURFACE_ALIASES[name] || name;
     document.querySelectorAll('.surface').forEach(s => s.classList.toggle('on', s.id === 's' + '-' + name));
     document.querySelectorAll('.nav a').forEach(a => a.classList.toggle('on', a.dataset.s === name));
     if(location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);

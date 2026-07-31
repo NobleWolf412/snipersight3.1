@@ -47,7 +47,12 @@
     <a href="#chart"                data-s="chart">Chart</a>
     <a href="#results"              data-s="results">Results</a>
     <div class="nav-sep"></div>
-    <a href="#setup"                data-s="setup">Scanner Setup</a>
+    <!-- "Rules", not "Scanner Setup". A SETUP is a trade candidate everywhere
+         else in this app — the Setup Deck, active setups, "a setup only appears
+         once price returns to a zone" — and this surface is configuration. One
+         word meaning two things is why an operator cannot tell what these
+         toggles are for. The surface's own question already said Rules. -->
+    <a href="#rules"                data-s="rules">Rules</a>
     <a href="#diagnostics"          data-s="diagnostics">Diagnostics<span class="nav-count" id="nDiag"></span></a>
     <div class="nav-sep"></div>
     <a href="#learn"                data-s="learn">Learn</a>
@@ -86,8 +91,15 @@
       <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head">
           <span class="t-section">Setup Deck</span>
+          <!-- Says what the deck IS, next to the thing itself. An operator
+               reading an empty deck beside a busy Market Weather concluded the
+               scanner was broken; it is the correct answer, and the correction
+               has to live here rather than one surface away. -->
           <span class="chip" style="margin-left:auto">One per token · best replaces pending</span>
         </div>
+        <div class="deck-note t-body">Setups appear only when price returns to a
+          zone and confirms there — not when a symbol merely looks tradeable.
+          Empty is normal. <a href="#rules">How the scanner works</a></div>
         <div id="deck"><div class="empty">loading…</div></div>
       </div>
 
@@ -228,8 +240,60 @@
     </section>
 
     <!-- ─── SCANNER SETUP ─── -->
-    <section class="surface" id="s-setup">
-      <div class="surface-head"><h1 class="t-page">Scanner Setup</h1><p>What is the bot allowed to do?</p></div>
+    <section class="surface" id="s-rules">
+      <div class="surface-head"><h1 class="t-page">Rules</h1><p>What is the bot allowed to do?</p></div>
+
+      <!-- Every control below changes one step of a pipeline nobody had
+           described. An operator cannot judge "min volume usd" without knowing
+           there IS a ranking step, and asking them to is how a settings page
+           becomes unusable. Closed by default: it is reference, not news. -->
+      <details class="explainer" id="howItWorks">
+        <summary class="explainer-head">
+          <span class="t-section">How the scanner works</span>
+          <span class="wx-sub">the five steps these rules control</span>
+        </summary>
+        <div class="explainer-body t-body">
+          <p><b>It is always running.</b> The scanner wakes every 60 seconds and
+          walks the whole universe; one full pass takes roughly five minutes, so
+          in practice it runs continuously. <b>Run Scan</b> on Command does not
+          do anything extra — it runs the same pass immediately instead of
+          waiting for the next wake-up.</p>
+
+          <ol class="explainer-steps">
+            <li><b>Rank the universe.</b> Every symbol on the venue is sorted by
+              24-hour volume and the top slice is admitted.
+              <em>Controlled by: top n, min volume usd, enable perps.</em></li>
+            <li><b>Warm up new symbols.</b> A symbol needs
+              <b>200 daily candles</b> of history before it can be traded — long
+              enough to map its structure. Until then it shows as
+              <span class="term" data-t="warming">WARMING</span> and is
+              deliberately excluded from sizing.</li>
+            <li><b>Import closed candles.</b> Only candles that have actually
+              closed are imported, never the one still forming. That is why a
+              fast move shows up as a drift alert before any engine reacts to
+              it.</li>
+            <li><b>Read the market.</b> Structure, zones, regime and the rest run
+              over the new candles and record what they find. This is what
+              <b>Market Weather</b> shows: what condition each symbol is in.</li>
+            <li><b>Wait for price to arrive.</b> A tradeable condition is not a
+              trade. A <span class="term" data-t="setup">setup</span> only
+              appears when price returns to one of that symbol's zones and
+              confirms there — then it lands on the <b>Setup Deck</b>.
+              <em>Controlled by: the playbook switches above.</em></li>
+          </ol>
+
+          <p><b>So an empty Setup Deck beside a busy Market Weather is the
+          normal state</b>, not a fault. Weather is necessary and nowhere near
+          sufficient: a symbol can sit in a tradeable regime for days without
+          price ever coming back to a zone. Quiet days are the design.</p>
+
+          <p>Nothing here places a real order. <b>Arm</b> writes to your own
+          <span class="term" data-t="paper">paper</span> book, kept separate
+          from the strategy's record so hand-picked trades are never counted as
+          engine edge. Live execution is locked.</p>
+        </div>
+      </details>
+
       <!-- Playbook catalogue: what each strategy hunts, and its live record —
            losses included. playbooks.js owns it and reads /api/playbooks. -->
       <div id="playbookRoot" style="margin-bottom:var(--lg)"></div>

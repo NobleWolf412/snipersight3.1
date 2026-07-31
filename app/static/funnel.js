@@ -53,7 +53,7 @@
      to a de-underscored version of itself and no CTA — guessing at a meaning we
      do not have would be worse than showing the raw code. */
 
-  const SETUP_SURFACE  = { href: '#setup',       label: 'Scanner Setup' };
+  const SETUP_SURFACE  = { href: '#rules',       label: 'Rules' };
   const CHART_SURFACE  = { href: '#chart',       label: 'Chart' };
   const RESULTS_SURF   = { href: '#results',     label: 'Results' };
   const COMMAND_SURF   = { href: '#command',     label: 'Command' };
@@ -106,7 +106,7 @@
     STRATEGY_DISABLED: {
       plain: 'that strategy is switched off',
       means: 'The setup was valid, but the strategy that produced it is ' +
-             'disabled in Scanner Setup.',
+             'disabled in Rules.',
       cta: SETUP_SURFACE },
     DAILY_LOSS_HALT: {
       plain: "the day's loss limit had already been hit",

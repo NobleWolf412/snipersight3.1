@@ -325,6 +325,10 @@
   // shell.js owns navigation and emits no event, so the hash is the cheapest
   // honest signal that this surface just became visible.
   addEventListener('hashchange', () => {
-    if (location.hash.slice(1) === 'setup') load();
+    // `setup` still accepted: the surface was renamed to `rules` and old
+    // bookmarks keep working, so this has to answer to both names or the
+    // catalogue silently stops refreshing for anyone using an old link.
+    const s = location.hash.slice(1);
+    if (s === 'rules' || s === 'setup') load();
   });
 })();
