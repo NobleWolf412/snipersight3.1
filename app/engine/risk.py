@@ -23,7 +23,27 @@ from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.17-draft"
+RISK_VERSION = "risk-v0.18-draft"
+# v0.18: the exit join merged exits. `exits` was keyed on `setup_id` alone, but
+# a plan is re-simulated whenever the cost/venue manifest moves and each re-run
+# writes its own exec fact under the same tag — so `setup_id` is not unique
+# inside ONE book, never mind across generations. Measured on the store:
+# exec-v0.8 carries 112 of 452 setup_ids with more than one exec fact,
+# exec-v0.16 carries 7. Those collided exits collapsed into one and the account
+# settled on whichever row the scan happened to reach last. Now keyed on
+# (setup_id, available_at), newest fact id winning, with the collision count
+# surfaced in the run notes rather than resolved in silence.
+#
+# Honest scope: exec-v0.17 currently carries ZERO collisions (644 setup_ids), so
+# this restates no number in today's book — it stops the merge recurring the
+# next time the cost manifest moves, which is the event that produced all 119.
+# Exec facts predating `available_at` (v0.1-v0.6, 786 facts) keep setup_id-only
+# keying, because a tighter key that silently matched NOTHING would be a worse
+# failure than the merge it set out to fix.
+#
+# This is the S37/S40 defect's other half. Version-scoping `setup_id` stopped
+# two ENGINE GENERATIONS colliding; it did nothing about two facts from the
+# same generation. Equity can move, so the tag moves with it.
 # v0.17: cascade from exec-v0.18 and setup-v0.14, both downstream of zone-v0.12.
 # Same reasoning as v0.16 below: this engine replays the account from exec
 # facts, so a new exec generation is a new equity curve.
@@ -229,7 +249,8 @@ def run(con) -> dict:
         from .scalein import SCALE_VERSION   # lazy: avoids circular import
         baseline = store.get_active_baseline(con)
         baseline_start = baseline["started_at"]
-        intents, exits = [], {}
+        intents, exits, legacy_exits = [], {}, {}
+        n_exit_collisions = 0
         for sym in _symbols(con):
             for tf in TFS:
                 for ver in (SETUP_VERSION, SCALE_VERSION):
@@ -244,9 +265,47 @@ def run(con) -> dict:
                                                 con, sym, r["confirmed_at"]), **p})
                 for r in store.get_facts(con, sym, tf, "exec", EXEC_VERSION):
                     p = json.loads(r["payload"])
-                    exits[p["setup_id"]] = {"exit_ts": r["confirmed_at"],
-                                            "r_net": Decimal(p["r_multiple"]),
-                                            "outcome": p["outcome"]}
+                    # S37/S40, the join half. Version-scoping `setup_id` stopped
+                    # two ENGINE GENERATIONS colliding; it does nothing about two
+                    # facts from the SAME generation. A plan is re-simulated
+                    # whenever the cost/venue manifest moves, and each re-run
+                    # writes its own exec fact under the same tag — so `setup_id`
+                    # alone is not unique inside one book. Measured on the store:
+                    # exec-v0.8 carries 112 of 452 setup_ids with more than one
+                    # exec fact (exec-v0.16, 7). Keyed on `setup_id`, this dict
+                    # dropped 112 exits and settled the account on whichever row
+                    # the scan reached last.
+                    #
+                    # An intent is identified by the plan AND the bar it became
+                    # actionable on — execsim writes `available_at` from the
+                    # setup's own `confirmed_at`, which is what the lookup below
+                    # holds. Verified on the live store: the tighter key matches
+                    # exactly as many intents as `setup_id` did (644 of 654), so
+                    # this loses no exit, it only stops merging distinct ones.
+                    row = {"exit_ts": r["confirmed_at"],
+                           "r_net": Decimal(p["r_multiple"]),
+                           "outcome": p["outcome"], "fact_id": r["id"]}
+                    if p.get("available_at") is None:
+                        # exec-v0.1 through v0.6 predate the field — 786 facts in
+                        # the store, plus any fixture that writes a bare outcome.
+                        # They cannot be keyed by the bar they became actionable
+                        # on, so they keep the old setup_id-only behaviour. A
+                        # tighter key that silently matched NOTHING would be a
+                        # worse failure than the merge it set out to fix.
+                        legacy_exits[p["setup_id"]] = row
+                        continue
+                    key = (p["setup_id"], p["available_at"])
+                    prev = exits.get(key)
+                    if prev is not None:
+                        # Same plan, same bar, different manifest: one trade
+                        # costed two ways. The newest fact is the current truth,
+                        # and it is chosen by fact id — `get_facts` orders by
+                        # market_time first, so scan order is NOT id-major and
+                        # "last one wins" would be arbitrary rather than latest.
+                        n_exit_collisions += 1
+                        if r["id"] < prev["fact_id"]:
+                            continue
+                    exits[key] = row
         intents.sort(key=lambda i: (i["confirmed_at"], i["market_time"], i["setup_id"]))
         rec.n_inputs = len(intents)
 
@@ -483,7 +542,14 @@ def run(con) -> dict:
                 payload.update({"units": str(units.quantize(Decimal("0.00000001"))),
                                 "notional_usd": str((units * entry).quantize(QC)),
                                 "implied_leverage": str((units * entry / equity).quantize(QC))})
-                ex = exits.get(it["setup_id"])
+                # Composite key, matching how `exits` was built above. The setup
+                # payload never carries `confirmed_at` of its own (checked across
+                # all 5,058 current setup facts), so the explicit value set when
+                # the intent was built survives the `**p` splat and is the same
+                # timestamp execsim recorded as `available_at`.
+                ex = exits.get((it["setup_id"], it["confirmed_at"]))
+                if ex is None:
+                    ex = legacy_exits.get(it["setup_id"])
                 payload["fill_outcome"] = ex["outcome"] if ex else "PENDING"
                 if ex is None or ex["outcome"] != "MISSED":
                     open_pos.append({"setup_id": it["setup_id"], "risk_usd": risk_usd,
@@ -534,4 +600,8 @@ def run(con) -> dict:
         con.commit()
         rec.n_new_facts = n_new_facts
         rec.notes = f"baseline={baseline['id']} final_equity={equity}"
+        # A merge that resolves silently is the defect this key exists to stop,
+        # so say when one happened even though it resolved correctly.
+        if n_exit_collisions:
+            rec.notes += f" exit_manifest_collisions={n_exit_collisions}"
         return {"final_equity": str(equity), **n}

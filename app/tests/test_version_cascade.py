@@ -96,7 +96,13 @@ EXPECTED = {
     # scale ALSO changed on its own account — its economics gate now prices the
     # add on the add's own venue instead of the process-wide Coinbase default.
     "exec": "exec-v0.18-draft",
-    "risk": "risk-v0.17-draft",
+    # risk-v0.18 is NOT a cascade. v0.17 was (from exec-v0.18); v0.18 is risk's
+    # own defect — `exits` keyed on `setup_id` alone merged 112 of 452 exits on
+    # exec-v0.8, because one plan re-simulated under a changed cost manifest
+    # writes several exec facts under one tag. Two changes, two versions, so the
+    # label says which book it is. CONSUMERS has no entry for "risk": nothing
+    # reads its facts, so this bump stops here.
+    "risk": "risk-v0.18-draft",
     "scale": "scale-v0.12-draft",
     "cooldown": "cooldown-v0.6-draft",
     "breakout": "breakout-v0.2-draft",

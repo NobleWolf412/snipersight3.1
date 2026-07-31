@@ -317,6 +317,101 @@ class TestRiskVenueContract(TempStore):
         self.assertEqual(kills[0]["day_start_equity"], "10000")
 
 
+class TestExitJoinIdentity(TempStore):
+    """S37/S40, the join half — `setup_id` is not unique inside ONE book.
+
+    Version-scoping `setup_id` stopped two engine GENERATIONS colliding. It did
+    nothing about two facts from the same generation: a plan is re-simulated
+    whenever the cost/venue manifest moves, and each re-run writes its own exec
+    fact under the same tag. Keyed on `setup_id` alone, `risk.run` merged exits
+    belonging to different bars and settled on whichever row the scan reached
+    last — 112 of 452 setup_ids on exec-v0.8, 7 on exec-v0.16, 0 on v0.17.
+
+    The account is replayed from these facts, so a merged exit is a wrong equity
+    curve. risk-v0.18 keys on (setup_id, available_at).
+    """
+
+    SID = "s1"
+
+    def plan(self, market_time, confirmed_at):
+        store.insert_fact(
+            self.con, symbol="BTC-USD", tf="1D", kind="setup",
+            market_time=market_time, confirmed_at=confirmed_at,
+            algo_version=setups.SETUP_VERSION,
+            payload={"setup_id": self.SID, "strategy": "PULLBACK",
+                     "direction": "LONG", "entry": "100", "sl": "95",
+                     "tp": "110", "rr": "2", "rank": 50, "state": "VALIDATED"})
+
+    def filled(self, *, market_time, confirmed_at, outcome, r, available_at=None):
+        payload = {"setup_id": self.SID, "outcome": outcome, "r_multiple": r}
+        if available_at is not None:
+            payload["available_at"] = available_at
+        store.insert_fact(
+            self.con, symbol="BTC-USD", tf="1D", kind="exec",
+            market_time=market_time, confirmed_at=confirmed_at,
+            algo_version=execsim.EXEC_VERSION, payload=payload)
+
+    def outcomes(self):
+        return {r["market_time"]: json.loads(r["payload"])["fill_outcome"]
+                for r in store.get_facts(self.con, "BTC-USD", "1D", "risk",
+                                         risk.RISK_VERSION)}
+
+    def test_two_bars_of_one_plan_settle_from_their_own_exits(self):
+        """The defect itself: same plan, two bars, two genuinely different
+        exits. Keyed on setup_id alone both bars read one row and one of these
+        outcomes is wrong."""
+        candle(self.con, "BTC-USD", "1D", 0, 100, 101, 99, 100)
+        self.plan(10, 20)
+        self.plan(30, 40)
+        self.filled(market_time=10, confirmed_at=30, outcome="SL",
+                    r="-1.1", available_at=20)
+        self.filled(market_time=30, confirmed_at=50, outcome="TP",
+                    r="2.0", available_at=40)
+        risk.run(self.con)
+        self.assertEqual(self.outcomes(), {10: "SL", 30: "TP"})
+
+    def test_one_bar_re_costed_settles_on_the_newest_fact(self):
+        """Same plan, same bar, two manifests — one trade costed two ways. The
+        newest fact is the current truth, and it is chosen by fact id because
+        `get_facts` orders market_time-major, so scan order is not id-major."""
+        candle(self.con, "BTC-USD", "1D", 0, 100, 101, 99, 100)
+        self.plan(10, 20)
+        self.filled(market_time=10, confirmed_at=30, outcome="SL",
+                    r="-1.1", available_at=20)
+        self.filled(market_time=10, confirmed_at=30, outcome="TP",
+                    r="2.0", available_at=20)
+        self.assertEqual(self.con.execute(
+            "SELECT COUNT(*) FROM facts WHERE kind='exec'").fetchone()[0], 2,
+            "both manifests must survive as facts; the join picks between them")
+        risk.run(self.con)
+        self.assertEqual(self.outcomes()[10], "TP")
+
+    def test_a_collision_is_reported_rather_than_resolved_in_silence(self):
+        """A merge that resolves quietly is the defect this key exists to stop,
+        so a run that had to choose says so."""
+        candle(self.con, "BTC-USD", "1D", 0, 100, 101, 99, 100)
+        self.plan(10, 20)
+        self.filled(market_time=10, confirmed_at=30, outcome="SL",
+                    r="-1.1", available_at=20)
+        self.filled(market_time=10, confirmed_at=30, outcome="TP",
+                    r="2.0", available_at=20)
+        risk.run(self.con)
+        notes = self.con.execute(
+            "SELECT notes FROM engine_runs WHERE engine='risk' "
+            "ORDER BY id DESC LIMIT 1").fetchone()[0]
+        self.assertIn("exit_manifest_collisions=1", notes)
+
+    def test_an_exec_fact_predating_available_at_still_settles(self):
+        """exec-v0.1 through v0.6 have no `available_at` — 786 facts in the
+        store. A tighter key that silently matched NOTHING would be a worse
+        failure than the merge it set out to fix."""
+        candle(self.con, "BTC-USD", "1D", 0, 100, 101, 99, 100)
+        self.plan(10, 20)
+        self.filled(market_time=10, confirmed_at=30, outcome="SL", r="-1.1")
+        risk.run(self.con)
+        self.assertEqual(self.outcomes()[10], "SL")
+
+
 class TestTickerEndpoint(TempStore):
     def test_ticker_returns_typed_status(self):
         class Response:
