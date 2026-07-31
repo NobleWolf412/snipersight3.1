@@ -11,8 +11,12 @@ Usage:
   python live.py --once    # single cycle (testing / task scheduler)
 """
 import argparse
+import atexit
+import faulthandler
 import json
 import os
+import signal
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +25,54 @@ import notify
 from engine import (store, importer, aggregator, risk, universe, ingest,
                     quality, marketdata, pipeline)
 from engine.runlog import get_logger
+
+# ---------------------------------------------------------------- exit forensics
+#
+# This process exited 191 times with rc=1 and nothing to show for it. The exit
+# code alone cannot tell a crash from a terminate from a clean stop, and the one
+# thing every theory needed — what the process was doing at the end — was never
+# recorded. So it records itself now. Each channel writes a DIFFERENT line, and
+# which line appears is the diagnosis:
+#
+#   FATAL   ...  the interpreter died in C (segfault / access violation);
+#                faulthandler dumps every thread's Python stack
+#   SIGNAL  ...  something asked it to stop and Python got to hear about it
+#   EXIT    ...  ordinary interpreter shutdown, with the code
+#   (nothing) .. TerminateProcess — the OS shot it and nothing can be caught,
+#                which narrows the caller to something holding a handle
+#
+# Silence is now evidence too, which it was not before.
+_EXIT_LOG = Path(__file__).resolve().parent / "data" / "live-exit.log"
+
+
+def _exit_note(kind: str, detail: str = "") -> None:
+    try:
+        _EXIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(_EXIT_LOG, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()} "
+                    f"{kind} {detail}\n")
+            f.flush()
+            os.fsync(f.fileno())      # the process may be about to vanish
+    except Exception:
+        pass
+
+
+def install_exit_forensics() -> None:
+    try:
+        _fh = open(_EXIT_LOG, "a", encoding="utf-8")
+        faulthandler.enable(file=_fh, all_threads=True)
+    except Exception:
+        pass
+    for name in ("SIGTERM", "SIGINT", "SIGBREAK"):
+        sig = getattr(signal, name, None)
+        if sig is None:
+            continue
+        try:
+            signal.signal(sig, lambda s, _f: (_exit_note("SIGNAL", f"sig={s}"),
+                                              sys.exit(1)))
+        except Exception:
+            pass                      # not every signal is settable on Windows
+    atexit.register(lambda: _exit_note("EXIT", "interpreter shutdown"))
 
 NATIVE_TFS = ("15m", "1H", "1D")
 _last_universe_refresh = 0.0
@@ -354,7 +406,9 @@ def main():
     ap.add_argument("--once", action="store_true")
     args = ap.parse_args()
     log = get_logger()
+    install_exit_forensics()
     con = store.connect()
+    _exit_note("START", f"once={args.once}")
     log.info(f"live loop start (once={args.once}) poll={POLL_SECONDS}s")
     hb_path = Path(__file__).resolve().parent / "data" / "heartbeat.json"
     n_cycles = 0
