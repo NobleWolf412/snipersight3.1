@@ -153,6 +153,25 @@ body{
   .explainer-head::after{transition:none}
 }
 
+/* D5 — a count you cannot open is an assertion. "known venue gaps ×91" told an
+   operator a number and refused to show them one, on the surface that asks
+   whether the machine is telling the truth. */
+.issue{border-bottom:1px solid var(--border-soft)}
+.issue-head{display:flex;align-items:center;gap:var(--md);padding:9px var(--lg);
+  cursor:pointer;list-style:none}
+.issue-head::-webkit-details-marker{display:none}
+.issue-count{margin-left:auto;color:var(--fg-3)}
+.issue-head::after{content:'▾';color:var(--fg-4);font-size:10px;margin-left:var(--sm)}
+.issue[open] .issue-head::after{content:'▴'}
+.issue-head:hover{background:rgba(255,255,255,.02)}
+.issue-body{padding:0 var(--lg) var(--md);max-height:280px;overflow:auto}
+.issue-item{display:flex;gap:var(--md);align-items:baseline;padding:4px 0;
+  font-size:11.5px;line-height:1.5;border-top:1px dashed var(--border-soft)}
+.issue-where{color:var(--fg-3);flex:none;min-width:11ch}
+.issue-detail{color:var(--fg-4);font-family:var(--f-body);font-size:12px}
+/* a truncated list must say it is truncated, or the sample reads as the whole */
+.issue-more{color:var(--fg-4);font-style:italic}
+
 /* B5 — every action reports a result and a time. A control that changes nothing
    visible is indistinguishable from one that did not fire. */
 .scan-result{color:var(--fg-3);font-size:11px;margin-bottom:var(--md);

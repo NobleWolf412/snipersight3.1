@@ -578,20 +578,44 @@
       : counted;
     $('nDiag').textContent = blockers || '';
 
+    /* D5 — a count without a drill-in is an assertion, not diagnostics.
+       This panel reported "known venue gaps ×91" and offered no way to see one
+       of them, on the surface whose whole question is whether the machine is
+       telling the truth. The payload has carried `symbol`, `tf` and `details`
+       per finding the entire time; only the aggregate was rendered.
+
+       Each code is now a disclosure holding its own findings. Collapsed by
+       default — 93 rows expanded is the wall of numbers the grouping exists to
+       avoid — and capped, because a count in the thousands should not try to
+       paint thousands of nodes. The cap says how many it is not showing rather
+       than silently truncating. */
+    const ISSUE_SAMPLE = 40;
     const groups = {};
     for(const c of [...(h.blockers || []), ...(h.warnings || [])]){
       const k = c.code + '|' + c.status;
-      groups[k] = (groups[k] || 0) + 1;
+      (groups[k] = groups[k] || []).push(c);
     }
-    const rows = Object.entries(groups).sort((a, b) => b[1] - a[1]);
-    $('dIssues').innerHTML = rows.length ? rows.map(([k, n]) => {
+    const rows = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+    $('dIssues').innerHTML = rows.length ? rows.map(([k, items]) => {
       const [code, status] = k.split('|');
       const blocked = status === 'BLOCKED';
-      return `<div style="display:flex;align-items:center;gap:var(--md);padding:9px var(--lg);
-        border-bottom:1px solid var(--border-soft)">
-        <span class="chip ${blocked ? 'chip-red' : 'chip-amber'}">${blocked ? 'blocker' : 'warning'}</span>
-        <span class="t-mono" style="color:var(--fg-2)">${code.replaceAll('_', ' ').toLowerCase()}</span>
-        <b class="t-mono" style="margin-left:auto;color:var(--fg-3)">×${n}</b></div>`;
+      const n = items.length;
+      const shown = items.slice(0, ISSUE_SAMPLE);
+      const where = c => [c.symbol, c.tf].filter(Boolean).join(' ') || c.stage || '—';
+      const detail = shown.map(c => `<div class="issue-item">
+          <span class="t-mono issue-where">${esc(where(c))}</span>
+          <span class="issue-detail">${esc(c.details || c.code || '')}</span></div>`).join('');
+      return `<details class="issue">
+        <summary class="issue-head">
+          <span class="chip ${blocked ? 'chip-red' : 'chip-amber'}">${blocked ? 'blocker' : 'warning'}</span>
+          <span class="t-mono" style="color:var(--fg-2)">${code.replaceAll('_', ' ').toLowerCase()}</span>
+          <b class="t-mono issue-count">×${n}</b>
+        </summary>
+        <div class="issue-body">${detail}${
+          n > shown.length
+            ? `<div class="issue-item issue-more">…and ${n - shown.length} more not listed</div>`
+            : ''}</div>
+      </details>`;
     }).join('') : '<div class="empty">no open issues</div>';
   }
 

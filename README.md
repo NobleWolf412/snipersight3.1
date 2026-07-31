@@ -40,7 +40,7 @@ candles**, 78 tracked symbols, 19 in the live scan universe.
 - **Nested cycle satellite** — observational only; never consumed by any trading
   engine.
 - **Five-surface UI** — COMMAND, CHART (draggable levels + order ticket),
-  RESULTS, SCANNER SETUP, DIAGNOSTICS, plus a LEARN surface and a 40-term
+  RESULTS, RULES, DIAGNOSTICS, plus a LEARN surface and a 40-term
   glossary.
 
 ## Design principles
@@ -64,12 +64,18 @@ start.bat                     # watchdog: live scanner + API server + browser
 Then open http://localhost:8422.
 
 To begin a clean forward paper record without deleting candle history or audit
-facts, use **NEW BASELINE** in the wallet card. The same operation is available
-from `app/`:
+facts, run this from `app/`:
 
 ```
 python reset_baseline.py
 ```
+
+There is no UI control for it. This section used to say "use **NEW BASELINE** in
+the wallet card" — there is no wallet card, the string `wallet` appears nowhere
+in `static/`, and nothing in the UI calls `/api/baseline/reset`. Documenting a
+control that does not exist is worse than documenting none, because the reader
+spends their time hunting for it. The endpoint is built and unwired; if it ever
+gets a button, this paragraph changes back.
 
 The active baseline scopes wallet equity, positions, performance, setup
 telemetry, orders, and execution results. Reprocessing history cannot repopulate
@@ -100,15 +106,15 @@ was made.
 cd app
 python -m compileall -q .
 python -m unittest discover -s tests -v
-node tests/test_ticket_math.js
-node tests/test_lessons.js
+for f in tests/*.js; do node "$f"; done
 ```
 
-The full python suite plus two JavaScript suites. (No count here on purpose —
+The full python suite plus every JavaScript suite. (No count here on purpose —
 the suite grows daily and a hardcoded number was stale within a day of being
-written; the commands above report the real one.) The JS suites are not extras:
-`ticket-math.js` decides how big a trade is, and it is what proves the order
-ticket and the engine agree about where a position liquidates.
+written; the commands above report the real one. The JS line used to name two
+files by hand and had already fallen behind by eight.) The JS suites are not
+extras: `ticket-math.js` decides how big a trade is, and it is what proves the
+order ticket and the engine agree about where a position liquidates.
 
 ## Layout
 
