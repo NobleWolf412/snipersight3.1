@@ -48,6 +48,10 @@ RESTART_GRACE_SEC = 420           # > the slowest cycle measured (347.1s)
 SERVER_PROBE_TIMEOUT = 15         # > /api/status measured at 6.9s under load
 SERVER_MISSES_BEFORE_TAKEOVER = 3 # one slow answer is not a disappearance
 ERR_LOG_CAP_BYTES = 8 * 1024 * 1024   # a diagnostic must not fill the disk
+# Windows creation flags. Each child gets its own console and its own process
+# group, so a console control event cannot travel between them — see start().
+CREATE_NO_WINDOW = 0x08000000
+CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 
 def log(msg: str):
@@ -306,9 +310,48 @@ class Child:
             except Exception as e:                   # never block a start on logging
                 log(f"{self.name}: could not open {self._err_path.name} ({e})")
                 self._err = None
-        self.proc = subprocess.Popen(self.args, cwd=APP, stderr=self._err or None)
+        # Each child gets its OWN console and its OWN process group.
+        #
+        # Both children were dying together and unattributed while this
+        # supervisor, which is pythonw and has no console, survived. A
+        # console-less parent makes Windows hand its console children a console,
+        # and a control event delivered there takes out everything sharing it
+        # while leaving the console-less parent untouched. That is the exact
+        # shape observed at 06:39 — scanner rc=1, api-server rc=0 forty-four
+        # seconds later, neither ended by us.
+        #
+        # CREATE_NEW_PROCESS_GROUP scopes GenerateConsoleCtrlEvent, so neither
+        # child can be reached by, or reach, anything outside itself.
+        self.proc = subprocess.Popen(
+            self.args, cwd=APP, stderr=self._err or None,
+            creationflags=(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP)
+            if sys.platform == "win32" else 0,
+            env=self._child_env())
         self.started_at = time.monotonic()
         log(f"{self.name} started pid={self.proc.pid}")
+
+    def _child_env(self) -> dict:
+        """The scanner does not spawn desktop notifications.
+
+        Every toast spawns a PowerShell process, and the scanner's deaths land
+        on toast call sites over and over — an onboard, then a drift alert at
+        35 minutes, then another drift alert at 402 seconds — across console
+        mode AND the detached autostart path, and through two rounds of
+        isolation flags that each failed to stop it. The one intervention that
+        has ever measurably worked is not spawning them: 1055s and 13 completed
+        cycles with toasts off, against 254s and death with them on.
+
+        The scan loop staying up is worth more than a balloon. The supervisor
+        still toasts on restarts and audit events, so the operator is still
+        told when something happens — from a process that is not the one
+        holding the scan.
+
+        SNIPERSIGHT_TOASTS=1 puts them back for anyone who wants to test it.
+        """
+        env = dict(os.environ)
+        if self.name == "live-scanner" and env.get("SNIPERSIGHT_TOASTS") != "1":
+            env["SNIPERSIGHT_NO_TOAST"] = "1"
+        return env
 
     def _rotate_err(self, cap: int = ERR_LOG_CAP_BYTES) -> None:
         """Keep the capture file bounded. It reached 48 MB in hours once, and a

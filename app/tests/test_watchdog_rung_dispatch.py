@@ -487,6 +487,48 @@ class TestKillAttribution(unittest.TestCase):
                           "a child starts out already blamed on the supervisor")
 
 
+class TestChildSpawnIsolation(unittest.TestCase):
+    """Both children were dying together, unattributed, while the supervisor
+    survived. It is pythonw and has no console; they are python.exe and get one.
+    A control event in a console the CHILDREN share takes them both out and
+    leaves a console-less parent untouched — exactly the 06:39 shape: scanner
+    rc=1, api-server rc=0 forty-four seconds later, neither ended by us."""
+
+    def test_children_are_spawned_in_their_own_group_and_console(self):
+        c = watchdog.Child("probe", [sys.executable, "-c", "pass"])
+        with patch.object(watchdog.subprocess, "Popen") as popen, \
+             patch.object(watchdog.sys, "platform", "win32"), \
+             patch.object(watchdog, "log"):
+            popen.return_value = MagicMock(pid=1)
+            c.start()
+        flags = popen.call_args.kwargs.get("creationflags", 0)
+        self.assertTrue(flags & watchdog.CREATE_NEW_PROCESS_GROUP,
+                        "a control event can still cross between the children")
+        self.assertTrue(flags & watchdog.CREATE_NO_WINDOW,
+                        "the children still share a console")
+
+    def test_the_scanner_does_not_spawn_toasts(self):
+        """Every toast spawns PowerShell, and the scanner's deaths land on toast
+        sites across both launch modes and through two rounds of isolation
+        flags. Not spawning them is the only thing that has ever measurably
+        worked: 1055s and 13 cycles off, against 254s and death on."""
+        c = watchdog.Child("live-scanner", ["x"])
+        self.assertEqual(c._child_env().get("SNIPERSIGHT_NO_TOAST"), "1")
+
+    def test_the_supervisor_still_notifies(self):
+        """The operator must still be told. The watchdog toasts on restarts and
+        audit events — from a process that is not holding the scan."""
+        s = watchdog.Child("api-server", ["x"])
+        self.assertIsNone(s._child_env().get("SNIPERSIGHT_NO_TOAST"),
+                          "the suppression leaked beyond the scanner")
+
+    def test_toasts_can_be_put_back_for_testing(self):
+        import os
+        c = watchdog.Child("live-scanner", ["x"])
+        with patch.dict(os.environ, {"SNIPERSIGHT_TOASTS": "1"}):
+            self.assertIsNone(c._child_env().get("SNIPERSIGHT_NO_TOAST"))
+
+
 class TestTakeoverHysteresis(unittest.TestCase):
     """`server_up()` probed with a 3s timeout an endpoint measured at 6.9s under
     a bloated WAL. One slow answer read as "the external server vanished", so
