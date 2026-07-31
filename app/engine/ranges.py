@@ -143,7 +143,10 @@ from . import store
 from .swings import SWING_VERSION, alternate, compute_atr, quote_ticks
 from .runlog import RunRecorder
 
-RANGES_VERSION = "ranges-v0.1-draft"
+RANGES_VERSION = "ranges-v0.2-draft"
+# v0.2: cascade from swing-v0.9. No rule change here — this engine reads LOCAL
+# swings, whose payloads never carried the accruing evidence — but the input
+# namespace moved, and a tag must identify the generation of its inputs.
 RANGE_TIERS = ("LOCAL",)                    # superset of INTERMEDIATE+, see docstring
 MIN_PIVOTS = 4                              # 2 highs + 2 lows
 BOUNDARY_ATR = Decimal("0.25")              # == zones.ZONE_ATR, see docstring (a)

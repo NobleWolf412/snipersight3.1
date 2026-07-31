@@ -17,7 +17,22 @@ from decimal import Decimal
 from . import store
 from .runlog import RunRecorder
 
-SWING_VERSION = "swing-v0.8-draft"
+SWING_VERSION = "swing-v0.9-draft"
+# v0.9: the promotion payload is now a pure function of the candles. v0.8 embedded
+# `evidence.held_candles` — which accrues per BAR — inside a content-hashed,
+# append-only fact, so every scan cycle re-appended every promoted pivot with the
+# integer bumped: 193,718 promotion rows for 15,603 pivots, one AAVEUSDT 4H pivot
+# 11 times (held 987..997), and zones/liquidity counting the copies as distinct
+# neighbours. held_candles is now CENSORED at HELD_FULL (90) — the cap the score
+# card already applied — and the fact is emitted only once that window has
+# CLOSED: price traded beyond the extreme, or 90 bars elapsed. confirmed_at =
+# when that became knowable (§5). Score-identical for every settled pivot, so
+# the golden calibration stands. The alternative — freezing held at geometric
+# confirmation — was measured and rejected: it is v0.4's held-as-confirmation-lag
+# dud again (45% of pivots change tier; 2,687 of 4,016 majors demote; the golden
+# BTC-1D set loses 2 of 20). Honest cost of this rule: a promotion is knowable a
+# median ~65 bars later than v0.8 pretended, and 440 frontier pivots (2.8%)
+# defer until their window closes.
 # v0.7: launched-impact window for dominant pivots runs to the next same-type
 # DOMINANT pivot (v0.6 cut it at the next intermediate pivot — the 126k cycle
 # top got zero credit for the bear CHoCH it caused and scored 54.22 vs 55).
@@ -256,17 +271,27 @@ def _run(con, rec, symbol: str, tf: str, tf_seconds: int) -> dict:
                         "confirmed_at": candles[opp["i"] + 2]["open_ts"] + tf_seconds})
 
     def evidence(s):
-        """Promotion evidence — §8 explainability. held_candles/impact accrue
-        as-of-now (CAV-3); the rest is knowable at confirmed_at."""
+        """Promotion evidence — §8 explainability. v0.9: measured over a CLOSED
+        window so the payload is deterministic. held_candles = bars until price
+        first traded beyond the extreme, censored at HELD_FULL — beyond the cap
+        it never moved the score, it only churned the hash. Returns (None, None)
+        while the window is still open: the tier is unknowable until then (§5).
+        Impact/liquidity evidence reads a frozen bootstrap corpus (PRIOR_*), so
+        it does not accrue between runs. Second return value is the bar index
+        that closed the window, for confirmed_at."""
         i = s["i"]
         p = Decimal(s["price"])
-        held = len(candles) - 1 - i
-        for j in range(i + 1, len(candles)):
+        held = close_bar = None
+        for j in range(i + 1, min(i + int(HELD_FULL), len(candles) - 1) + 1):
             beyond = Decimal(candles[j]["high"]) > p if s["type"] == "HIGH" \
                 else Decimal(candles[j]["low"]) < p
             if beyond:
-                held = j - i
+                held, close_bar = j - i, j
                 break
+        if held is None:
+            if len(candles) - 1 - i < int(HELD_FULL):
+                return None, None
+            held, close_bar = int(HELD_FULL), i + int(HELD_FULL)
         ev = {"vs_left_neighbor": s["_left"], "vs_right_neighbor": s["_right"],
               "margin_pct": s["_margin_pct"],
               "held_candles": held}
@@ -277,7 +302,7 @@ def _run(con, rec, symbol: str, tf: str, tf_seconds: int) -> dict:
             avg_vol = sum(Decimal(candles[j]["volume"]) for j in range(i - 20, i)) / 20
             if avg_vol > 0:
                 ev["vol_ratio"] = str((Decimal(candles[i]["volume"]) / avg_vol).quantize(Q2))
-        return ev
+        return ev, close_bar
 
     inter = promote_tier(alternate(locals_))
     major_items = {s["market_time"]: s for s in promote_tier(alternate(inter))}
@@ -312,7 +337,12 @@ def _run(con, rec, symbol: str, tf: str, tf_seconds: int) -> dict:
     for k, s in enumerate(inter):
         # dominant swings are scored at the scale they dominate
         scored = major_items.get(s["market_time"], s)
-        ev = evidence(scored)
+        ev, held_close_bar = evidence(scored)
+        if ev is None:
+            # held window still open — the score, and therefore the tier, is
+            # unknowable yet (§5). The pivot is emitted on a later run, once,
+            # rather than re-emitted every cycle as the evidence drifts.
+            continue
         took_prev = False
         if s["type"] in prev_same:
             pp = Decimal(prev_same[s["type"]])
@@ -353,9 +383,13 @@ def _run(con, rec, symbol: str, tf: str, tf_seconds: int) -> dict:
         payload = {"type": s["type"], "tier": tier, "price": s["price"],
                    "bar_open_ts": s["market_time"],
                    "promoted_from": "LOCAL", "evidence": ev}
+        # Knowable when BOTH the sequence geometry and the held window are
+        # closed — whichever came later.
+        confirmed = max(s["confirmed_at"],
+                        candles[held_close_bar]["open_ts"] + tf_seconds)
         if store.insert_fact(con, symbol=symbol, tf=tf, kind="swing",
                              market_time=s["market_time"],
-                             confirmed_at=s["confirmed_at"],
+                             confirmed_at=confirmed,
                              algo_version=SWING_VERSION, payload=payload):
             n_tiers[tier] += 1
 

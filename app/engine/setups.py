@@ -29,7 +29,12 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.13-draft"
+SETUP_VERSION = "setup-v0.14-draft"
+# v0.14: cascade from swing-v0.9 — every upstream this engine reads moved with
+# it (zone-v0.12, liq-v0.10, regime-v0.11, structure-v0.11). The load-bearing
+# change: v0.8 swings re-emitted promoted pivots every cycle and zones counted
+# the copies as cluster neighbours, so zone strength — a REVERSAL evidence
+# component — inflated monotonically. Which setups exist changes.
 # v0.12: cascade from zone-v0.11, which closed a lookahead in the zone cluster
 # count. `zone_strength` is one of the four REVERSAL evidence components, so a
 # zone quality computed from the future fed straight into playbook selection.

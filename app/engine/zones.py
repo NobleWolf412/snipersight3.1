@@ -23,7 +23,16 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-ZONE_VERSION = "zone-v0.11-draft"
+ZONE_VERSION = "zone-v0.12-draft"
+# v0.12: cascade from swing-v0.9. v0.8 swings re-emitted every promoted pivot
+# every cycle (held_candles accrued inside the hashed payload), and this
+# engine's cluster count treated each copy as a distinct neighbour — so
+# formation_quality, and therefore strength, WHICH GATES REVERSAL, inflated
+# monotonically as the scanner ran. The anchor read now also collapses to one
+# row per pivot, so a legitimately revised pivot (sequence-tail revision, 63
+# groups measured in the v0.8 store) counts once, not per revision. Promotion
+# confirmed_at moved too (held window close), so zones are born later and their
+# creation-time cluster counts change.
 # v0.11: LOOKAHEAD CLOSED. The creation-time cluster count included swings that
 # were not yet confirmed, so `formation_quality` — and therefore `strength`,
 # which gates the REVERSAL playbook — was computed from the future on 7.9% of
@@ -71,13 +80,18 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         ticks = quote_ticks(candles)
         n_created = n_events = 0
 
-        swings = []
+        # One anchor per pivot, LATEST row winning (get_facts orders by
+        # market_time, confirmed_at, id) — a revised pivot is one swing, not two,
+        # and the cluster count below counts anchors.
+        latest = {}
         for r in store.get_facts(con, symbol, tf, "swing", SWING_VERSION):
             p = json.loads(r["payload"])
             if p["tier"] in ZONE_TIERS:
-                swings.append({"market_time": r["market_time"],
-                               "confirmed_at": r["confirmed_at"],
-                               "type": p["type"], "price": Decimal(p["price"])})
+                latest[r["market_time"]] = {"market_time": r["market_time"],
+                                            "confirmed_at": r["confirmed_at"],
+                                            "type": p["type"],
+                                            "price": Decimal(p["price"])}
+        swings = list(latest.values())
         rec.n_inputs = len(swings)
 
         # precompute bands so cluster membership is knowable per zone

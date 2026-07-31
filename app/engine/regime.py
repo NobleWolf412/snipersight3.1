@@ -19,7 +19,9 @@ from . import store
 from .structure import STRUCTURE_VERSION
 from .runlog import RunRecorder
 
-REGIME_VERSION = "regime-v0.10-draft"
+REGIME_VERSION = "regime-v0.11-draft"
+# v0.11: cascade from structure-v0.11 (itself from swing-v0.9). This engine
+# classifies FROM breaks; a new structure generation is a new break series.
 # v0.10: no rule change. structure-v0.10 dropped 1W to INTERMEDIATE, so 1W
 # breaks now exist for 18 of 21 perps instead of 1 — and this engine
 # classifies FROM breaks. A 1W regime is what makes the 1D book measurable.

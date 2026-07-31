@@ -16,7 +16,13 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-LIQ_VERSION = "liq-v0.9-draft"
+LIQ_VERSION = "liq-v0.10-draft"
+# v0.10: cascade from swing-v0.9. v0.8 swings re-emitted every promoted pivot
+# every cycle, and identical-price phantom copies are trivially inside any
+# equal-tolerance — pool n_members inflated as the scanner ran. The swing read
+# now collapses to one row per pivot; pool membership counts pivots again.
+# Promotion confirmed_at moved too (held window close), so pools are anchored
+# and knowable later.
 # v0.9: the pool break tolerance was max(TICK, 0.05*ATR) with TICK hard-coded to
 # 0.01 — right for BTC-USD, catastrophically wrong below a dollar, where a
 # tolerance wider than any move the instrument makes means no close ever breaks
@@ -41,13 +47,19 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         atr = compute_atr(candles)
         ticks = quote_ticks(candles)
 
-        swings = {"HIGH": [], "LOW": []}
+        # One member per pivot, LATEST row winning (get_facts orders by
+        # market_time, confirmed_at, id) — n_members counts pivots, not copies.
+        latest = {}
         for r in store.get_facts(con, symbol, tf, "swing", SWING_VERSION):
             p = json.loads(r["payload"])
             if p["tier"] in POOL_TIERS:
-                swings[p["type"]].append({"market_time": r["market_time"],
-                                          "confirmed_at": r["confirmed_at"],
-                                          "price": Decimal(p["price"])})
+                latest[r["market_time"]] = {"market_time": r["market_time"],
+                                            "confirmed_at": r["confirmed_at"],
+                                            "type": p["type"],
+                                            "price": Decimal(p["price"])}
+        swings = {"HIGH": [], "LOW": []}
+        for s in latest.values():
+            swings[s.pop("type")].append(s)
         rec.n_inputs = len(swings["HIGH"]) + len(swings["LOW"])
         n_pools = n_events = 0
 

@@ -3353,3 +3353,73 @@ already resolved per symbol, so its outputs are unchanged.
   · book total **+33.76 R**
 
 573 python + 50 js green.
+
+## S53 — 178,115 phantom facts: the promotion payload accrued per bar
+
+Closes the S49-audit headline item ("`swings` re-emits every promoted pivot
+every cycle"), diagnosed 2026-07-31 and deliberately left for a single owner.
+
+**The defect.** The INTERMEDIATE/MAJOR promotion payload embedded
+`evidence.held_candles`, which increments every candle a pivot holds — a
+run-time-dependent value inside a content-hashed, append-only fact. Every scan
+cycle the integer moved, the hash moved, and `insert_fact` appended the same
+pivot again. Measured at fix time: **193,718 promotion rows for 15,603 pivots
+(3,283 duplicated keys, 178,115 excess rows)**, one AAVEUSDT 4H pivot 11 times
+differing only in held 987..997. Downstream, `zones` counted the copies as
+cluster neighbours and `liquidity` as pool members, so `formation_quality` →
+`strength` — **which gates REVERSAL** — inflated monotonically for as long as
+the scanner stayed up. Also the true cause of the standing
+`test_zone_causality` live-store failure: the phantom population grew between
+a zone's write and the test's recount.
+
+**The rule (swing-v0.9).** `held_candles` is censored at `HELD_FULL` (90 —
+the cap the score card applied all along), and the promotion fact is emitted
+only once that window has CLOSED: price traded beyond the extreme, or 90 bars
+elapsed. `confirmed_at = max(geometric confirmation, window close)` — when the
+evidence became knowable (§5). The payload is now a pure function of the
+candles; re-runs are no-ops.
+
+**The alternative was measured and rejected.** Freezing held at geometric
+confirmation — the other option in the audit note — is v0.4's
+held-as-confirmation-lag dud again: simulated over every latest recorded
+pivot, **45% change tier** (4,313 of 15,546 INTERMEDIATEs drop out, 2,687 of
+4,016 MAJORs demote, the golden BTC-1D set loses 2 of 20 majors). The chosen
+rule is score-IDENTICAL for every settled pivot, because held points always
+capped at 90. Replayed on real candles (AAVEUSDT 4H, BTC-USD 1D): re-run
+inserts 0 facts; all 27 + 48 settled pivots match the latest v0.8 copies in
+tier AND score; the only absences are frontier pivots whose window is open —
+including the one golden major minted 2026-05-06, back ~2026-08-04. Honest
+cost: a promotion is knowable a median ~65 bars later than v0.8 pretended
+(v0.8's early copies carried lower drifting scores — it published the
+trajectory as duplicates); 440 frontier pivots (2.8%) defer until settle.
+
+**The cascade, and a hole in the map.** Widest bump the lockfile has recorded:
+swing-v0.9 → structure-v0.11, zone-v0.12, liq-v0.10, ranges-v0.2,
+momentum-v0.2, setup-v0.14, breakout-v0.3 → regime-v0.11 → exec-v0.18,
+risk-v0.17, scale-v0.12, cooldown-v0.6. **`setup` and `breakout` read swing
+facts directly but were missing from `CONSUMERS["swing"]`** (and from
+`CONSUMERS["structure"]`) — the cascade plan drafted from that map missed them
+both, which is precisely the failure the map exists to prevent. Fixed in the
+same commit.
+
+**Residual, named rather than hidden.** 63 of the 3,283 duplicate groups
+varied in something other than held — a pivot near the sequence tail is
+legitimately revised when a more extreme same-type swing replaces its right
+neighbour. Bounded (one revision window per pivot), and the count-sensitive
+consumers now collapse to one row per pivot, LATEST winning: `structure`
+(sequence-sensitive label walk, collapsed across both tiers so a demoted
+pivot's stale higher-tier row cannot survive), `zones` (cluster counts
+anchors), `liquidity` (n_members counts pivots). `ranges`/`momentum` already
+pass swing facts through `alternate()`, which tolerates repeats;
+`setups`/`breakout` do price lookups, which duplicate rows cannot distort.
+
+New regression suite `test_swing_promotion_stability.py` drives the real
+recursion over a constructed zigzag: appending a bar re-emits nothing; an open
+window emits nothing; a breach closes the window early and stamps
+`confirmed_at` at the breach bar's close.
+
+The old v0.8 facts remain in the store as the recorded dud, per house rule.
+Forward baseline: every recorded number downstream changes generation; the
+S50 "baseline reset" operator ruling now covers this cascade too (TODO.md).
+
+658 python green.

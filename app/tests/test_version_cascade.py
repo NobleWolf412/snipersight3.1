@@ -61,21 +61,36 @@ LOCKED = {
 }
 
 EXPECTED = {
-    "swing": "swing-v0.8-draft",
-    "structure": "structure-v0.10-draft",
+    # S53 cascade — the widest this file has recorded, and the reason it exists.
+    # swing-v0.9 stopped the promotion payload accruing per bar: v0.8 embedded
+    # evidence.held_candles — which increments every candle a pivot holds —
+    # inside the content-hashed, append-only fact, so every scan cycle appended
+    # a near-duplicate of every promoted pivot. Measured: 193,718 promotion rows
+    # for 15,603 pivots; zones counted the copies as cluster neighbours and
+    # liquidity as pool members, so zone strength (a REVERSAL gate) inflated
+    # monotonically as the scanner ran. held is now censored at HELD_FULL (90 —
+    # the cap the score card always applied) and the fact is emitted once, when
+    # that window closes; confirmed_at moved with it. Every fact-level reader of
+    # swings moved: structure, zone, liquidity, ranges, momentum, setup,
+    # breakout — the last two were missing from CONSUMERS["swing"] and are added
+    # below — then regime (reads structure), and the trading tail exec / risk /
+    # scale / cooldown through setup. ma, volatility, volume, venues, cycles,
+    # manual are the only engines that stay put.
+    "swing": "swing-v0.9-draft",
+    "structure": "structure-v0.11-draft",
     # S50: zone-v0.11 closed a creation-time LOOKAHEAD — the cluster count read
     # swings not yet confirmed, inflating formation_quality on 7.9% of zones.
     # CONSUMERS["zone"] is ("setup",), and setup's own consumers are
     # ("exec", "risk", "scale"), so the whole trading path cascades.
-    "zone": "zone-v0.11-draft",
-    "liquidity": "liq-v0.9-draft",
-    "regime": "regime-v0.10-draft",
-    "ranges": "ranges-v0.1-draft",
+    "zone": "zone-v0.12-draft",
+    "liquidity": "liq-v0.10-draft",
+    "regime": "regime-v0.11-draft",
+    "ranges": "ranges-v0.2-draft",
     "ma": "ma-v0.1-draft",
-    "momentum": "momentum-v0.1-draft",
+    "momentum": "momentum-v0.2-draft",
     "volatility": "volatility-v0.1-draft",
     "volume": "volume-v0.1-draft",
-    "setup": "setup-v0.13-draft",
+    "setup": "setup-v0.14-draft",
     # S50 cascade. exec-v0.13 -> v0.14 corrected the MAKER_THEN_MARKET crossing
     # leg, which booked a market fill at the PLAN's price — two bars stale, and
     # outside the fill bar's own [low, high] on 78 of 95 crossed orders, never
@@ -93,11 +108,11 @@ EXPECTED = {
     # are derived purely from recorded exits. All four move together.
     # scale ALSO changed on its own account — its economics gate now prices the
     # add on the add's own venue instead of the process-wide Coinbase default.
-    "exec": "exec-v0.17-draft",
-    "risk": "risk-v0.16-draft",
-    "scale": "scale-v0.11-draft",
-    "cooldown": "cooldown-v0.5-draft",
-    "breakout": "breakout-v0.2-draft",
+    "exec": "exec-v0.18-draft",
+    "risk": "risk-v0.17-draft",
+    "scale": "scale-v0.12-draft",
+    "cooldown": "cooldown-v0.6-draft",
+    "breakout": "breakout-v0.3-draft",
     "venues": "venues-v0.2-draft",
     "cycles": "cycles-v0.2-draft",
     "manual": "manual-v0.1-draft",
@@ -125,8 +140,14 @@ CONSUMERS = {
     # their source. That is the version cascade in its most invisible form: no
     # import of a VERSION constant to grep for, just a shared function.
     "ma": ("momentum", "volatility", "volume"),
-    "swing": ("structure", "zone", "liquidity", "ranges", "momentum"),
-    "structure": ("regime", "scale"),
+    # S53: setup and breakout were MISSING here despite reading swing facts
+    # directly (setups.py takes targets from INTERMEDIATE+ swings; breakout.py
+    # does the same) — and the cascade plan drafted from this map missed them,
+    # which is precisely the failure mode the map exists to prevent. Same for
+    # structure: setup and breakout both read structure facts.
+    "swing": ("structure", "zone", "liquidity", "ranges", "momentum",
+              "setup", "breakout"),
+    "structure": ("regime", "scale", "setup", "breakout"),
     "zone": ("setup",),
     "liquidity": ("setup",),
     "regime": ("setup",),

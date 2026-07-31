@@ -45,7 +45,12 @@ from .setups import (CONFIRM_MAX_BARS, ENTRY_MAX_BARS, ENTRY_MODEL, GOOD_RR,
 from .structure import STRUCTURE_VERSION
 from .swings import SWING_VERSION, compute_atr, quote_ticks
 
-BREAKOUT_VERSION = "breakout-v0.2-draft"
+BREAKOUT_VERSION = "breakout-v0.3-draft"
+# v0.3: cascade from swing-v0.9 and structure-v0.11. Targets come from
+# INTERMEDIATE+ swing prices and entries from structure breaks, so both input
+# generations moved under this engine. NOTE: this engine read swing facts all
+# along but was absent from CONSUMERS["swing"] in test_version_cascade.py —
+# the exact gap that map exists to close; fixed there in the same commit.
 # v0.2: same funding-aware economics gate as setup-v0.11.
 
 

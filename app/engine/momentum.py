@@ -125,7 +125,10 @@ from .ma import ema, plain, sig
 from .runlog import RunRecorder
 from .swings import SWING_VERSION, alternate
 
-MOMENTUM_VERSION = "momentum-v0.1-draft"
+MOMENTUM_VERSION = "momentum-v0.2-draft"
+# v0.2: cascade from swing-v0.9. No rule change here — divergences read LOCAL
+# swings, whose payloads never carried the accruing evidence — but the input
+# namespace moved, and a tag must identify the generation of its inputs.
 
 RSI_PERIOD = 14
 MACD_FAST, MACD_SLOW, MACD_SIGNAL = 12, 26, 9

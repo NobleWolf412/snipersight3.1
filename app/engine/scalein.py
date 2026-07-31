@@ -28,7 +28,10 @@ from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.11-draft"
+SCALE_VERSION = "scale-v0.12-draft"
+# v0.12: cascade from setup-v0.14 / exec-v0.18 / structure-v0.11 (swing-v0.9 at
+# the root). An add is only placed against a position the simulator says is
+# open, and its structure reads moved generation with the rest.
 # v0.11: the add's economics gate is priced on the ADD'S OWN VENUE. It imported
 # setups.COST_PROFILE — the process-wide Coinbase default — so every scale-in on
 # a perp had to clear a gate built from fees ~14x higher than the venue charges.

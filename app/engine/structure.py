@@ -19,7 +19,11 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-STRUCTURE_VERSION = "structure-v0.10-draft"
+STRUCTURE_VERSION = "structure-v0.11-draft"
+# v0.11: cascade from swing-v0.9, which stopped re-emitting every promoted pivot
+# each cycle (held_candles accrued inside the hashed payload) and moved a
+# promotion's confirmed_at to when its held window closes. Labels and breaks key
+# off those pivots, so both the pivot set and its knowability times change.
 # v0.9: the break tolerance was max(TICK, 0.05*ATR) with TICK hard-coded to
 # 0.01 — right for BTC-USD, catastrophically wrong below a dollar, where a
 # tolerance wider than any move the instrument makes means NO close ever breaks
@@ -66,13 +70,22 @@ TIER_BY_TF = {"1W": "INTERMEDIATE", "1D": "MAJOR",
 
 def _tier_swings(con, symbol, tf):
     tier = TIER_BY_TF[tf]
-    out = []
+    # One pivot per market_time, LATEST promotion row winning (get_facts orders
+    # by market_time, confirmed_at, id). swing-v0.9 payloads are deterministic,
+    # but a pivot near the sequence tail can still be legitimately revised —
+    # margin, even tier — when a more extreme same-type swing replaces its right
+    # neighbour; 63 such revision groups measured in the v0.8 store. Collapse
+    # across BOTH promotion tiers before filtering, so a demoted pivot's stale
+    # higher-tier row cannot survive; the label walk below is sequence-sensitive
+    # and must never see the same pivot twice.
+    latest = {}
     for r in store.get_facts(con, symbol, tf, "swing", SWING_VERSION):
         p = json.loads(r["payload"])
-        if p["tier"] == tier:
-            out.append({"market_time": r["market_time"], "confirmed_at": r["confirmed_at"],
-                        "type": p["type"], "price": Decimal(p["price"])})
-    return out
+        if p["tier"] in ("INTERMEDIATE", "MAJOR"):
+            latest[r["market_time"]] = (r, p)
+    return [{"market_time": r["market_time"], "confirmed_at": r["confirmed_at"],
+             "type": p["type"], "price": Decimal(p["price"])}
+            for r, p in latest.values() if p["tier"] == tier]
 
 
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
