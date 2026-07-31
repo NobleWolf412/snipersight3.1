@@ -565,8 +565,19 @@
             esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
         </div>
         <div>
-          <div class="pos-track">${at == null ? ''
-            : `<span class="pos-mark" style="left:${at.toFixed(1)}%"></span>`}</div>
+          <div class="pos-track"><span class="end-sl"></span><span class="end-tp"></span>${(() => {
+            // Entry tick + travelled segment. Without the entry the marker had
+            // no origin: a 3:1 trade STARTS at 25% of this bar, so "near the
+            // stop end" is where every fresh trade lives, win or lose. What is
+            // honest to colour is the movement SINCE entry.
+            const entAt = span ? Math.max(2, Math.min(98,
+              ((long ? entry - sl : sl - entry) / span) * 100)) : null;
+            if(at == null || entAt == null) return '';
+            const a = Math.min(entAt, at), b = Math.max(entAt, at);
+            return `<span class="pos-prog ${tone}" style="left:${a.toFixed(1)}%;width:${(b - a).toFixed(1)}%"></span>` +
+                   `<span class="pos-entry" style="left:${entAt.toFixed(1)}%" title="entry ${px(entry)}"></span>` +
+                   `<span class="pos-mark" style="left:${at.toFixed(1)}%"></span>`;
+          })()}</div>
           <div class="pos-ends">
             <span>stop ${px(sl)}</span>
             <span class="now">${now == null ? 'price unavailable' : 'now ' + px(now)}</span>

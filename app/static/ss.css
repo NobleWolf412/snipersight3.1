@@ -325,6 +325,18 @@ body{
   border-top:1px solid var(--border-soft);background:var(--bg-2);
   font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;color:var(--fg-4);text-transform:uppercase}
 .statusbar b{color:var(--fg-2);font-weight:600}
+/* the orb is a sized box, so its container has to be a flex line for it to
+   have any size at all — inline it collapses to nothing */
+.statusbar .sb-item{display:inline-flex;align-items:center;gap:7px}
+.statusbar .sb-item:empty{display:none}
+.statusbar .sb-dev{background:none;border:0;cursor:pointer;color:var(--fg-4);
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  padding:0;margin-left:var(--lg)}
+.statusbar .sb-dev:hover{color:var(--fg-2)}
+.statusbar .sb-dev:focus-visible{outline:1px solid var(--accent);outline-offset:3px;border-radius:2px}
+.statusbar .sb-dev[aria-pressed="true"]{color:var(--accent)}
+/* the developer surface is hidden until it is asked for */
+.shell:not(.dev) .nav a[data-s="diagnostics"]{display:none}
 
 /* status orb — ambient state, not decoration */
 .orb{width:7px;height:7px;border-radius:50%;flex:none;background:var(--fg-4)}
@@ -398,8 +410,73 @@ body{
 
 /* order ticket */
 .ticket{display:flex;flex-direction:column;min-height:0}
-.ticket-body{padding:var(--md) var(--lg);display:flex;flex-direction:column;gap:var(--md);
-  overflow:auto;flex:1}
+/* The controls are the point of the ticket, so they get a floor. Without one
+   the pinned foot below simply took the panel: measured at 885px tall, the
+   body was left 28px with 799px scrolled out of reach and the Long/Short
+   selector rendering 2px high. */
+/* The floor stops the inputs collapsing to a slit when the foot is tall; the
+   ticket's own overflow:auto (below, on .ticket) is the honest fallback when
+   a window is too short for even the minimums — the whole panel scrolls as
+   one visible unit instead of flexbox silently crushing whichever child has
+   the least intrinsic height. */
+.ticket{overflow:auto}
+.ticket-body{padding:10px var(--lg);display:flex;flex-direction:column;gap:10px;
+  overflow:auto;flex:1 1 auto;min-height:140px}
+.ticket .fld input{padding:7px 10px}
+/* Slim head: the tabs directly beneath already say this panel is the ticket,
+   so the head row only needs to carry the source chip, not a tall banner. */
+.ticket .panel-head{padding:8px var(--lg)}
+/* Label BESIDE the input, not above it. A stacked label spends a full line on
+   one word; beside the input each price row is ~33px instead of ~56, which is
+   the difference between the Trade pane fitting whole and it scrolling. Only
+   the simple label+input rows (Entry / TP / SL) — composite fields like the
+   leverage block keep their stacked layout. */
+.ticket label.fld:not(.fld-inline){flex-direction:row;align-items:center;gap:10px}
+.ticket label.fld:not(.fld-inline) > .t-label{flex:0 0 84px}
+.ticket label.fld:not(.fld-inline) > input{flex:1;min-width:0}
+/* A column flex container shrinks its children before it scrolls, and a
+   segmented control is the one control here with nothing to resist it: the
+   text inputs held their height on intrinsic minimums while Long/Short
+   collapsed to its own two borders. The body is a scroller, so nothing in it
+   should be shrinking at all. */
+.ticket-body > *{flex:0 0 auto}
+
+/* ---------- ticket panes ----------
+   One question per pane, so a control is either on screen in full or one
+   labelled click away — never half-scrolled with nothing to say it is there. */
+.tk-tabs{display:flex;flex:none;margin:10px var(--lg) 0}
+.tk-tabs button{flex:1;font-family:var(--f-mono);font-size:9.5px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;padding:8px 4px;cursor:pointer;
+  background:transparent;color:var(--fg-3);border:0;border-right:1px solid var(--border-soft)}
+.tk-tabs button:last-child{border-right:0}
+.tk-tabs button:hover{color:var(--fg-2);background:rgba(255,255,255,.03)}
+.tk-tabs button.on{background:rgba(var(--accent-rgb),.12);color:var(--accent)}
+.tk-tabs button:focus-visible{outline:1px solid var(--accent);outline-offset:-2px}
+.tk-pane{display:none;flex-direction:column;gap:var(--md)}
+.tk-pane.on{display:flex}
+
+/* `hidden` did not hide: `.fld{display:flex}` is an author rule and the
+   [hidden] default is the user agent's, so it always lost. The leverage dial
+   and the trail-distance field were both rendering on venues that cannot use
+   them. Author-level, and scoped to the ticket rather than changed globally. */
+.ticket [hidden]{display:none}
+
+/* The three numbers that decide the trade, pinned under the panes — as one
+   strip, not three stacked label/value rows. They are read together and
+   compared at a glance, so stacking them cost 74px of the one area that has
+   to stay uncrowded to buy nothing. Display face at 17px because these are
+   the figures the decision actually rests on. */
+.tk-key{display:flex;gap:var(--lg);align-items:flex-start;
+  padding-bottom:var(--sm);border-bottom:1px solid var(--border-soft)}
+.tk-key > div{display:flex;flex-direction:column;gap:2px;padding:0;
+  flex:1 1 0;min-width:0}
+.tk-key .k{font-family:var(--f-mono);font-size:9px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--fg-4);line-height:1.3}
+.tk-key .v{font-family:var(--f-display);font-size:17px;font-weight:800;line-height:1.1;
+  color:var(--fg);font-variant-numeric:tabular-nums}
+.tk-key .v.good{color:var(--green)}
+.tk-key .v.bad{color:var(--red-2)}
+.tk-key .v.warn{color:var(--amber)}
 .fld{display:flex;flex-direction:column;gap:5px}
 .fld input{background:rgba(0,0,0,.45);border:1px solid var(--border);border-radius:var(--r-md);
   padding:9px 11px;color:var(--fg);font-family:var(--f-mono);font-size:13px;
@@ -416,8 +493,21 @@ body{
 
 /* Pinned economics + commit control. flex:none keeps it out of the body's
    scroll; the operator sees R:R, size, fees and Arm at every scroll position. */
-.ticket-foot{flex:none;display:flex;flex-direction:column;gap:var(--md);
-  padding:var(--md) var(--lg) var(--lg);border-top:1px solid var(--border-soft);
+/* `flex:none` on a block that grew an outputs list, a breach warning and a
+   standing lock note meant it could not be told no. It shrinks and scrolls
+   now — and Arm sticks to the bottom of that scroll, so the promise the foot
+   exists to keep (the commit control is always reachable) survives the
+   thing that was breaking it. */
+/* Fully pinned, never scrolling. The foot earned that back by shrinking: the
+   nine-row breakdown lives in the Numbers pane and the standing lock note in
+   Why, so what remains — three key figures, the breach warning, Arm — is the
+   set that must be visible in full whenever a trade is being committed. The
+   earlier scroll-with-sticky-Arm version put the Arm row ON TOP of the
+   warning text, which cut the sentence naming the breach in half. When space
+   runs out it is the INPUTS above that scroll, because a half-hidden input
+   asks for a click; a half-hidden warning gets a trade armed against it. */
+.ticket-foot{flex:none;display:flex;flex-direction:column;gap:10px;
+  padding:10px var(--lg) var(--md);border-top:1px solid var(--border-soft);
   background:rgba(0,0,0,.22)}
 
 .tk-out{display:flex;flex-direction:column;gap:1px;padding:0}
@@ -429,10 +519,12 @@ body{
 .tk-out .v.warn{color:var(--amber)}
 /* Breach notes sit in the pinned foot, so they get their own scroll rather
    than pushing Arm off the panel when several fire at once. */
+/* Compact but never clipped and never scrolled: the sentence naming the
+   breach sizes itself in full. It is the one block here whose whole point
+   is being read before Arm is pressed. */
 .tk-warn{border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);
-  border-radius:var(--r-md);padding:9px 11px;color:var(--red-2);
-  font-family:var(--f-mono);font-size:11px;line-height:1.6;
-  max-height:132px;overflow:auto}
+  border-radius:var(--r-md);padding:6px 9px;color:var(--red-2);
+  font-family:var(--f-mono);font-size:10.5px;line-height:1.45}
 .tk-why{color:var(--fg-3);font-size:12px}
 .tk-verdict{border-radius:var(--r-md);padding:8px 10px;margin-bottom:var(--md);
   font-family:var(--f-mono);font-size:11px;line-height:1.6}
@@ -485,6 +577,71 @@ body{
    REFUSED is the worst thing this deck can render. The row's .dead opacity
    already dims it; this makes the intent explicit rather than incidental. */
 .deck-row.dead .deck-why{color:var(--fg-4)}
+
+/* ---------- the trade story ----------
+   The engine's rationale, split back into the questions it answers. Collapsed
+   by default: the headline is the claim, and the breakdown is for the reader
+   who wants to check it before risking money on it. */
+.deck-story{margin-top:6px}
+.deck-story summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;
+  gap:6px;padding:3px 0;font-family:var(--f-mono);font-size:9.5px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--fg-4)}
+.deck-story summary::-webkit-details-marker{display:none}
+.deck-story summary::after{content:'▾';font-size:9px;transition:transform .15s ease}
+.deck-story[open] summary::after{transform:rotate(180deg)}
+.deck-story summary:hover{color:var(--accent)}
+.deck-story summary:focus-visible{outline:1px solid var(--accent);outline-offset:2px;border-radius:2px}
+.why-rows{display:flex;flex-direction:column;gap:5px;padding:4px 0 2px}
+.why-row{display:grid;grid-template-columns:112px minmax(0,1fr);gap:var(--md);align-items:baseline}
+.why-k{font-family:var(--f-mono);font-size:9px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--fg-4)}
+.why-d{font-family:var(--f-body);font-size:12.5px;line-height:1.5;color:var(--fg-2)}
+.deck-row.dead .why-d{color:var(--fg-4)}
+@media(max-width:900px){.why-row{grid-template-columns:1fr;gap:1px}}
+@media (prefers-reduced-motion: reduce){.deck-story summary::after{transition:none}}
+
+/* ---------- open trades (Command) ----------
+   The plan is three prices the reader otherwise has to compare in their head.
+   Drawn as a stop-to-target track with price standing on it, the question
+   "is this winning, and how far from either end" is answered by position
+   rather than by arithmetic. */
+.pos-row{display:grid;grid-template-columns:150px minmax(0,1fr) 128px;gap:var(--lg);
+  align-items:center;padding:var(--md) var(--lg);border-bottom:1px solid var(--border-soft)}
+.pos-row:last-child{border-bottom:0}
+.pos-sym{font-family:var(--f-display);font-size:16px;letter-spacing:.08em;color:var(--fg)}
+/* The track is NEUTRAL. It was a red-to-green gradient over stop->target
+   price space, which meant a 3:1 trade — whose entry sits at 25% from the
+   stop end by construction — always painted its marker "in the red", and a
+   position up +0.7R read as losing. The gradient implied a judgement the
+   geometry cannot support; colour now belongs only to the TRAVELLED segment,
+   whose direction is a fact. */
+.pos-track{position:relative;height:5px;border-radius:var(--r-pill);margin:9px 0 7px;
+  background:rgba(255,255,255,.07)}
+.pos-track .end-sl{position:absolute;left:0;top:0;bottom:0;width:3px;
+  border-radius:2px;background:rgba(248,113,113,.7)}
+.pos-track .end-tp{position:absolute;right:0;top:0;bottom:0;width:3px;
+  border-radius:2px;background:rgba(0,255,170,.7)}
+/* where you got in — the reference the bar was missing */
+.pos-entry{position:absolute;top:50%;width:2px;height:11px;
+  transform:translate(-50%,-50%);background:var(--fg-3)}
+/* entry -> now, coloured by direction of travel: the one honest colour here */
+.pos-prog{position:absolute;top:0;bottom:0}
+.pos-prog.up{background:rgba(0,255,170,.45)}
+.pos-prog.down{background:rgba(248,113,113,.5)}
+.pos-mark{position:absolute;top:50%;width:3px;height:15px;border-radius:2px;background:var(--fg);
+  transform:translate(-50%,-50%);box-shadow:0 0 10px rgba(255,255,255,.45)}
+.pos-ends{display:flex;justify-content:space-between;gap:var(--sm);
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;color:var(--fg-4);
+  text-transform:uppercase;font-variant-numeric:tabular-nums}
+.pos-ends .now{color:var(--fg-2)}
+.pos-r{text-align:right;font-family:var(--f-display);font-size:20px;font-weight:800;color:var(--fg)}
+.pos-r.up{color:var(--green)} .pos-r.down{color:var(--red-2)}
+.pos-r .t-sub{display:block;font-family:var(--f-mono);font-size:10px;font-weight:400;
+  color:var(--fg-4);margin-top:4px}
+@media(max-width:900px){
+  .pos-row{grid-template-columns:1fr;gap:var(--sm)}
+  .pos-r{text-align:left}
+}
 
 /* settings rows */
 .set-row{display:flex;align-items:flex-start;gap:var(--md);padding:10px 0;
