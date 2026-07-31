@@ -40,7 +40,13 @@
   // for it, but it did not always, and the shell is owned elsewhere. wizard.js
   // early-returns if it has already registered, so loading it twice is a
   // no-op rather than a double-bound Diagnose button.
-  if (!window.SSWizard && !document.querySelector('script[data-dx-wizard]')) {
+  /* The check must find the SHELL'S tag, not only a previous injection of our
+     own. Since every script in shell.html gained `defer`, execution order puts
+     funnel.js before wizard.js — so `window.SSWizard` is undefined here and the
+     old test (which only looked for `data-dx-wizard`) injected a second copy on
+     every load. wizard.js guards its own re-execution, so nothing broke; it was
+     simply a wasted request that nothing reported. */
+  if (!window.SSWizard && !document.querySelector('script[src*="wizard.js"]')) {
     const s = document.createElement('script');
     s.src = '/static/wizard.js?v=1';
     s.dataset.dxWizard = '1';

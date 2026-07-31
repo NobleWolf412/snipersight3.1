@@ -272,6 +272,20 @@ body{
 .surface{display:none;animation:fade .18s ease-out}
 .surface.on{display:block}
 @keyframes fade{from{opacity:0}to{opacity:1}}
+
+/* A12 — one global honour of the OS setting, rather than remembering it at each
+   of the eight animated rules. Someone who has asked their machine to stop
+   moving things has usually asked for a reason, and a trading screen is the
+   last place to overrule that. Kept as near-zero rather than `none` so
+   transitionend/animationend listeners still fire and nothing waits forever. */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+    scroll-behavior:auto !important;
+  }
+}
 .surface-head{display:flex;align-items:baseline;gap:var(--md);margin-bottom:var(--xl)}
 .surface-head p{color:var(--fg-4);font-family:var(--f-mono);font-size:10px;letter-spacing:.1em}
 
@@ -306,6 +320,12 @@ body{
 /* stage rows are 56 topbar + 26 statusbar; --xl padding top and bottom */
 #s-chart.on{display:flex;flex-direction:column;gap:var(--md);
   height:calc(100vh - 56px - 26px - var(--xl) * 2)}
+/* The chart still owns the screen. Its heading is compact — inline, small, no
+   bottom margin of its own — because the surface height is calculated and the
+   pane needs it. Stating the question costs one line; not stating it left the
+   operator to infer what this surface is for. */
+.chart-head{margin-bottom:0;flex:none;align-items:baseline}
+.chart-head .t-page{font-size:19px;letter-spacing:.16em}
 .chart-top{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap;flex:none}
 .chart-main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 320px;
   gap:var(--md);min-height:0}

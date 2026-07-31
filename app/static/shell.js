@@ -667,6 +667,31 @@
   const escHtml = s => String(s).replace(/[<>&"]/g, c =>
     ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
 
+  /* B7 — this page mixes two voices. The prose above these controls is careful
+     ("These are the live numbers the risk authority sizes with…") and the
+     controls themselves were raw config keys with the underscores knocked out:
+     "strategy scale in", "max drawdown pct", "halt on data blocked", "halted".
+     A reader has to translate every one of them back into English, on the
+     surface that was already the hardest to understand.
+
+     The engine keeps owning the NAMES — these are display labels only, and an
+     unmapped key still falls back to the de-underscored form rather than
+     disappearing, so adding a setting can never produce a blank row. */
+  const SETTING_LABELS = {
+    enable_perps: 'Trade perpetual futures',
+    top_n: 'How many symbols to admit',
+    min_volume_usd: 'Minimum 24h volume',
+    strategy_pullback: 'Pullback playbook',
+    strategy_reversal: 'Reversal playbook',
+    strategy_scale_in: 'Scale-in adds',
+    strategy_breakout_retest: 'Breakout-retest playbook',
+    strategy_range_fade: 'Range-fade playbook',
+    max_drawdown_pct: 'Halt if equity falls this far below its peak',
+    halt_on_data_blocked: 'Halt when the data audit is BLOCKED',
+    halted: 'Operator halt',
+  };
+  const settingLabel = name => SETTING_LABELS[name] || name.replaceAll('_', ' ');
+
   /* Full rebuild. Only ever called when the SHAPE of the spec changes — never
      on a keystroke and never on the refresh tick, both of which used to blow
      away the input under the operator's cursor. See patchSettingsState. */
@@ -679,7 +704,7 @@
       return `<label class="set-row" data-setrow="${s.name}">
         ${s.type === 'bool' ? ctl : ''}
         <span>
-          <span class="t-mono" style="color:var(--fg-2)">${s.name.replaceAll('_',' ')}</span>
+          <span class="t-mono" style="color:var(--fg-2)">${escHtml(settingLabel(s.name))}</span>
           ${s.class === 'BEHAVIOURAL' ? '<span class="chip chip-amber">rule</span>' : ''}
           <span class="t-label" style="display:block;margin-top:2px;text-transform:none;
             letter-spacing:0;color:var(--fg-4)">${escHtml(s.description)}</span>
@@ -703,7 +728,7 @@
     const rules = dirty.filter(k => (specOf(k) || {}).class === 'BEHAVIOURAL');
     $('setWarn').hidden = !rules.length;
     if(rules.length) $('setWarn').innerHTML =
-      `Changing <b>${rules.join(', ').replaceAll('_',' ')}</b> starts a NEW forward window. ` +
+      `Changing <b>${escHtml(rules.map(settingLabel).join(', '))}</b> starts a NEW forward window. ` +
       'Your existing record is kept but stops accumulating. Nothing is deleted.';
   }
 

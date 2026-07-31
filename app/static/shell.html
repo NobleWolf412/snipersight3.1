@@ -128,6 +128,14 @@
 
     <!-- ─── CHART ─── -->
     <section class="surface" id="s-chart">
+      <!-- B3 — the only surface that had no stated question, and the one where
+           the decision is actually committed. Every other surface leads with
+           the thing it answers; this one led with a symbol picker. Compact
+           because the chart needs the height, but present, because "what am I
+           deciding here" should not be the operator's inference. -->
+      <div class="surface-head chart-head">
+        <h1 class="t-page">Chart</h1><p>Is this setup worth taking?</p>
+      </div>
       <div class="chart-top">
         <select id="cSym" class="btn" style="text-transform:none;letter-spacing:.06em"></select>
         <!-- The picker defaults to the symbols the engine actually watches.
@@ -505,22 +513,32 @@
 
 </div>
 
-<script src="/static/lightweight-charts.js"></script>
+<!-- A11 — every one of these was synchronous, so 280KB of JavaScript parsed
+     before the first paint whether or not you ever opened the surface that
+     needs it: lightweight-charts is 160KB for a Chart you may not visit and
+     lessons.js is 122KB for Learn.
+
+     `defer` on all of them. It keeps EXECUTION ORDER, which matters here —
+     ssdata must initialise before any consumer reads through it, glossary
+     before anything marks up a term — while letting the parser finish and paint
+     first. Nothing in this app runs during parse; every module boots itself off
+     its own mount point, so there was never a reason for them to block. -->
+<script defer src="/static/lightweight-charts.js"></script>
 <!-- must load before any consumer: every module reads through it -->
-<script src="/static/ssdata.js?v=1"></script>
-<script src="/static/ticket-math.js?v=1"></script>
-<script src="/static/glossary.js?v=1"></script>
-<script src="/static/chart.js?v=1"></script>
-<script src="/static/shell.js?v=1"></script>
+<script defer src="/static/ssdata.js?v=1"></script>
+<script defer src="/static/ticket-math.js?v=1"></script>
+<script defer src="/static/glossary.js?v=1"></script>
+<script defer src="/static/chart.js?v=1"></script>
+<script defer src="/static/shell.js?v=1"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must
      never blank a surface that another owns. -->
-<script src="/static/playbooks.js?v=1"></script>
-<script src="/static/weather.js?v=1"></script>
-<script src="/static/lessons.js?v=1"></script>
-<script src="/static/funnel.js?v=1"></script>
-<script src="/static/tracer.js?v=1"></script>
-<script src="/static/wizard.js?v=1"></script>
-<script src="/static/edgeview.js?v=1"></script>
+<script defer src="/static/playbooks.js?v=1"></script>
+<script defer src="/static/weather.js?v=1"></script>
+<script defer src="/static/lessons.js?v=1"></script>
+<script defer src="/static/funnel.js?v=1"></script>
+<script defer src="/static/tracer.js?v=1"></script>
+<script defer src="/static/wizard.js?v=1"></script>
+<script defer src="/static/edgeview.js?v=1"></script>
 </body>
 </html>
