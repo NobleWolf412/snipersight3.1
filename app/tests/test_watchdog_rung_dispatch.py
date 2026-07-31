@@ -300,37 +300,65 @@ class TestOrphanClearing(unittest.TestCase):
     SQLite file is the `database is locked` storm the log shows: 154 in an
     hour."""
 
-    def _wmic(self, stdout):
+    def _query(self, stdout):
+        """Stub the query's OUTPUT only. These cover the filtering rules; the
+        test below covers the plumbing. Both are needed — the wmic regression
+        passed every stub of this kind while doing nothing in production."""
         return patch.object(watchdog.subprocess, "run",
                             return_value=MagicMock(stdout=stdout, returncode=0))
 
+    def test_the_real_scan_can_actually_see_a_process(self):
+        """NOT mocked, deliberately.
+
+        The first version of _orphans() shelled out to wmic, which is REMOVED on
+        current Windows 11 builds. FileNotFoundError was swallowed, [] came back,
+        and the clearing never happened — a no-op in production. Every unit test
+        passed, because they mocked subprocess.run: a mock of a binary that does
+        not exist proves the parser and never the plumbing.
+
+        So this one spawns a real process carrying `live.py` on its command line
+        and requires the real query to find it. If the mechanism breaks again —
+        another deprecated binary, a quoting change — this fails."""
+        if sys.platform != "win32":
+            self.skipTest("windows-only process query")
+        import subprocess as sp
+        p = sp.Popen([sys.executable, "-c", "import time; time.sleep(25)", "live.py"])
+        try:
+            found = dict((pid, what) for pid, what in watchdog._orphans())
+            self.assertIn(p.pid, found,
+                          "the real orphan scan cannot see a real process — the "
+                          "clearing is a no-op again")
+            self.assertEqual(found[p.pid], "live.py")
+            # and the exclusion must work against the real query too
+            self.assertNotIn(p.pid, dict(watchdog._orphans(exclude={p.pid})))
+        finally:
+            p.kill()
+            p.wait(timeout=10)
+
     def test_a_leftover_scanner_is_found(self):
-        rows = ("Node,CommandLine,ProcessId\n"
-                "PC,python.exe -X utf8 live.py,4321\n")
-        with self._wmic(rows), patch.object(watchdog.sys, "platform", "win32"):
+        with self._query("4321\tpython.exe -X utf8 live.py\n"), \
+             patch.object(watchdog.sys, "platform", "win32"):
             found = watchdog._orphans()
         self.assertIn((4321, "live.py"), found)
 
     def test_this_process_is_never_its_own_orphan(self):
         import os
-        rows = f"Node,CommandLine,ProcessId\nPC,python.exe live.py,{os.getpid()}\n"
-        with self._wmic(rows), patch.object(watchdog.sys, "platform", "win32"):
+        with self._query(f"{os.getpid()}\tpython.exe live.py\n"), \
+             patch.object(watchdog.sys, "platform", "win32"):
             self.assertEqual(watchdog._orphans(), [])
 
     def test_a_supervised_child_is_never_cleared(self):
         """The takeover path clears orphans while this supervisor already has a
         scanner running. Without an exclusion it would kill its own child —
         the exact failure this function exists to prevent."""
-        rows = ("Node,CommandLine,ProcessId\n"
-                "PC,python.exe -X utf8 live.py,5555\n")
-        with self._wmic(rows), patch.object(watchdog.sys, "platform", "win32"):
+        with self._query("5555\tpython.exe -X utf8 live.py\n"), \
+             patch.object(watchdog.sys, "platform", "win32"):
             self.assertEqual(watchdog._orphans(exclude={5555}), [])
             self.assertEqual(watchdog._orphans(), [(5555, "live.py")])
 
     def test_unrelated_python_is_left_alone(self):
-        rows = ("Node,CommandLine,ProcessId\n"
-                "PC,python.exe some_other_tool.py,999\n")
-        with self._wmic(rows), patch.object(watchdog.sys, "platform", "win32"):
+        with self._query("999\tpython.exe some_other_tool.py\n"), \
+             patch.object(watchdog.sys, "platform", "win32"):
             self.assertEqual(watchdog._orphans(), [])
 
     def test_clearing_survives_a_failing_taskkill(self):

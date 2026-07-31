@@ -106,20 +106,29 @@ def _orphans(exclude: set[int] | None = None) -> list[tuple[int, str]]:
     # would kill the very scanner we are supervising — the exact failure this
     # function exists to prevent, caused by the fix for it.
     skip = {os.getpid()} | (exclude or set())
+    # PowerShell/CIM rather than wmic: wmic is REMOVED on current Windows 11
+    # builds, and its absence is silent here — FileNotFoundError is swallowed by
+    # the except below, _orphans() returns [], and the clearing this function
+    # exists to do never happens. The first version of this shipped exactly that
+    # way, and a unit test passed because it mocked subprocess.run: a mock of a
+    # binary that does not exist proves the parser, never the plumbing.
+    ps = ("Get-CimInstance Win32_Process -Filter \"Name like '%python%'\" | "
+          "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }")
     try:
         r = subprocess.run(
-            ["wmic", "process", "where", "name like '%python%'",
-             "get", "ProcessId,CommandLine", "/format:csv"],
-            capture_output=True, text=True, timeout=15)
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+            capture_output=True, text=True, timeout=30)
         for line in (r.stdout or "").splitlines():
-            if "live.py" not in line and "uvicorn" not in line:
+            pid_s, _, cmd = line.partition("\t")
+            if not pid_s.strip().isdigit():
                 continue
-            parts = [p for p in line.strip().split(",") if p]
-            pid = next((int(p) for p in reversed(parts) if p.isdigit()), None)
-            if pid and pid not in skip:
-                out.append((pid, "live.py" if "live.py" in line else "api-server"))
-    except Exception:
-        pass
+            if "live.py" not in cmd and "uvicorn" not in cmd:
+                continue
+            pid = int(pid_s.strip())
+            if pid not in skip:
+                out.append((pid, "live.py" if "live.py" in cmd else "api-server"))
+    except Exception as e:
+        log(f"orphan scan failed ({e}) — cannot tell leftovers from live children")
     return out
 
 
