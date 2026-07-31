@@ -1741,6 +1741,88 @@ def manual_arm(payload: dict):
         con.close()
 
 
+@app.get("/api/draft")
+def draft_bracket(symbol: str, tf: str = "1H"):
+    """A structure-anchored DRAFT bracket for the ticket — never a setup.
+
+    Returns `null` when price is not near any live zone, and that is a real
+    answer rather than a failure: it is what the ruler could never say. The
+    engine's own proximity notion is 1 ATR (`setups.PROX_ATR`); this allows 3,
+    so a decline means price genuinely is not at a level.
+    """
+    from engine import draft as _draft
+    if tf not in VALID_TFS:
+        raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
+    con = store.connect()
+    try:
+        return {"symbol": symbol, "tf": tf, "draft": _draft.for_symbol(con, symbol, tf)}
+    finally:
+        con.close()
+
+
+@app.post("/api/analyse")
+def analyse_symbol(symbol: str, response: Response):
+    """Run the engine chain over ONE symbol, on demand.
+
+    48 of the symbols in the chart picker are outside the scan universe, so the
+    engine has never looked at them and they carry no zones, no regime and no
+    structure. This is how an operator asks it to look. It runs
+    `pipeline.DESCRIPTIVE` in the roster's own order, so a per-symbol analysis
+    cannot describe a market differently from the scanner, and facts are
+    content-hashed, so overlapping with the scanner's own tick duplicates
+    nothing.
+
+    **The DESCRIPTION layer only — the trading engines are excluded.**
+    `setups`/`execsim`/`scalein`/`cooldowns` would write simulated trades on a
+    symbol nobody is scanning, and `edgestats`/`factorstats` grade that
+    population. Wiring them to a button would make the graded book depend on
+    which symbols an operator happened to click, which is not a record anyone
+    can reproduce. What this produces is what the draft bracket needs — zones,
+    liquidity, structure, regime — and nothing that reaches the strategy record.
+
+    Synchronous, and it takes roughly 10-20s. That is deliberate: it is one
+    symbol, triggered by an explicit click, and the caller wants the answer
+    rather than a job id. The cycle-wide `/api/scan` is the async one because it
+    covers 19 symbols and takes minutes.
+    """
+    import time as _t
+    from engine import pipeline
+    con = store.connect()
+    try:
+        if symbol not in universe.all_tracked_symbols(con):
+            raise HTTPException(
+                404, f"{symbol} has no stored candles — nothing to analyse")
+        t0 = _t.time()
+        produced, failed = {}, []
+        for mod in pipeline.DESCRIPTIVE:
+            name = mod.__name__.rsplit(".", 1)[-1]
+            for tf in ("15m", "1H", "4H", "1D", "1W"):
+                try:
+                    r = mod.run(con, symbol, tf, importer.TF_SECONDS[tf])
+                except Exception as exc:
+                    # One engine failing must not abort the rest — a partial
+                    # analysis is useful and a silent one is not (loud fallback).
+                    failed.append(f"{name}/{tf}: {type(exc).__name__}")
+                    continue
+                for k, v in (r or {}).items():
+                    if k in ("symbol", "tf") or not isinstance(v, int):
+                        continue
+                    produced[name] = produced.get(name, 0) + v
+        con.commit()
+        from engine.runlog import get_logger
+        get_logger().info(
+            f"ANALYSE {symbol}: {sum(produced.values())} new facts in "
+            f"{_t.time() - t0:.1f}s" + (f", {len(failed)} engine errors" if failed else ""))
+        if failed:
+            response.status_code = 207        # partial: say so rather than imply success
+        return {"ok": not failed, "symbol": symbol,
+                "seconds": round(_t.time() - t0, 1),
+                "new_facts": {k: v for k, v in produced.items() if v},
+                "errors": failed}
+    finally:
+        con.close()
+
+
 @app.get("/api/manual/book")
 def manual_book():
     """The operator's paper record — separate curve, separate everything."""

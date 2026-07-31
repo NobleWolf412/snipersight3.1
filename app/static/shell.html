@@ -129,6 +129,11 @@
         <span class="chip" id="cVenue" title="the exchange these candles came from">—</span>
         <span class="chip" id="cRegime">—</span>
         <span class="chip" id="cPrice">—</span>
+        <!-- 48 of the symbols in the picker sit outside the scan universe, so
+             the engine has never looked at them and they carry no zones, no
+             regime and no setups. This is how you ask it to look at one. -->
+        <button class="btn" id="cAnalyse"
+                title="run the engine chain over this symbol now (~10-20s)">Analyse</button>
         <div style="margin-left:auto"></div>
         <!-- data-label is the base text; chart.js appends the live fact count -->
         <div class="seg seg-toggle" id="cOverlays">

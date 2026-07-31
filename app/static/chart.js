@@ -23,6 +23,7 @@ window.SSChart = (() => {
   // restorable, so an operator who drags into a corner is never stranded.
   let base = null;                            // {entry,tp,sl,dir,kind}
   let symMeta = {};                           // symbol -> /api/overview row (venue, state)
+  let draftPlan = null;                       // engine/draft.py bracket, or null
   let modified = false;
   // Per-trade risk. Null means "use the engine default". Deliberately reset on
   // every setup load: an override is a decision about ONE trade, and carrying
@@ -217,7 +218,8 @@ window.SSChart = (() => {
     const kind = base ? base.kind : 'none';
     $('tkSrc').textContent = kind === 'engine'
       ? (modified ? 'operator-modified' : 'engine')
-      : kind === 'seeded' ? 'operator-seeded' : 'no setup';
+      : kind === 'draft' ? (modified ? 'operator-modified' : 'structure draft')
+      : kind === 'seeded' ? 'not analysis' : 'no setup';
     $('tkSrc').className = 'chip ' +
       (kind === 'engine' && !modified ? 'chip-accent' : 'chip-amber');
     $('tkReset').textContent = base && base.kind === 'engine' ? 'Reset to engine' : 'Reset';
@@ -368,6 +370,14 @@ window.SSChart = (() => {
         api(`/api/candles?symbol=${sym}&tf=${tf}&limit=1500`),
         q('swing'), q('structure'), q('zone'), q('liquidity'),
         q('regime'), q('setup'), q('cycle'), q('risk')]);
+      // The draft is fetched, never computed here. Composing a bracket out of
+      // zones and pools in the browser would be a second authority for what a
+      // level is; `engine/draft.py` owns it and this only displays the answer.
+      // Failure is non-fatal — the ticket falls back and says it did.
+      try{
+        const dr = await api(`/api/draft?symbol=${encodeURIComponent(sym)}&tf=${tf}`);
+        draftPlan = dr && dr.draft ? dr.draft : null;
+      }catch(err){ draftPlan = null; }
     }catch(err){
       // The failure path used to write into #chartEmpty and return — but
       // #chartEmpty is only ever un-hidden on the SUCCESS path below, so after
@@ -589,9 +599,24 @@ window.SSChart = (() => {
           : `<br>sizes ${usd(+d.risk_usd)} of risk`) + '</div>';
       $('tkWhy').innerHTML = verdict +
         `<em>Why the engine took it</em>${setup.why || '—'}`;
+    }else if(draftPlan){
+      /* No engine setup, but price IS at a level the engine recognises. Draft
+         a bracket from it — entry at the zone edge, stop beyond its far edge,
+         target at the nearest unbroken pool. Anchored to the market instead of
+         to arithmetic, and it says what it stood on. */
+      base = {entry: +draftPlan.entry, tp: +draftPlan.tp, sl: +draftPlan.sl,
+              dir: draftPlan.direction, kind: 'draft'};
+      $('tkWhy').innerHTML =
+        '<em>No engine setup — drafted from live structure</em>' +
+        draftPlan.basis.map(b => '· ' + b).join('<br>') +
+        '<br><br>A starting point anchored to real levels, not an engine ' +
+        'setup — the engine has not judged this trade. Yours to change, and ' +
+        'nothing you do here counts toward the strategy record.';
     }else{
-      // No engine setup here. Seed from the recent range so the operator has
-      // something to drag — and SAY it is seeded, never dress it as engine output.
+      /* Nothing near price. The ruler stays ONLY as something to drag, and it
+         now says outright that it is not analysis — previously it read as a
+         plan because it was drawn like one and described in the same breath as
+         the engine's own. `applyLevels` renders it dotted and dimmed. */
       const last = candles.length ? candles[candles.length - 1].close : null;
       if(last == null) base = null;
       else{
@@ -600,10 +625,13 @@ window.SSChart = (() => {
         base = {entry: last, sl: last - tr, tp: last + tr * 2,
                 dir: 'LONG', kind: 'seeded'};
       }
-      $('tkWhy').innerHTML = '<em>No engine setup on this timeframe</em>' +
-        'These levels are seeded from the average 14-bar range so you have ' +
-        'something to work from. They are yours, not the engine\'s, and nothing ' +
-        'you do here counts toward the strategy record.';
+      $('tkWhy').innerHTML =
+        '<em>Nothing here — price is not at a level the engine recognises</em>' +
+        'No setup, and no live zone within 3 ATR to draft against. These ' +
+        'numbers are a plain 2:1 drawn around the current price: not a signal, ' +
+        'not analysis, and not the engine\'s opinion — just something to drag ' +
+        'if you want to trade this anyway. Nothing you do here counts toward ' +
+        'the strategy record.';
     }
     restore();
   }
@@ -674,6 +702,34 @@ window.SSChart = (() => {
     $('tkDir').addEventListener('click', e => {
       const b = e.target.closest('button'); if(!b) return;
       setDir(b.dataset.d);
+    });
+    /* Ask the engine to look at THIS symbol. Runs the same pipeline roster the
+       live loop runs, so a per-symbol analysis can never disagree with the
+       scanner. Slow by nature (~10-20s for five timeframes), so the button
+       states what it is doing rather than appearing to hang. */
+    $('cAnalyse').addEventListener('click', async () => {
+      const b = $('cAnalyse'), was = b.textContent;
+      if(!sym || b.disabled) return;
+      b.disabled = true; b.textContent = 'analysing…';
+      try{
+        const r = await fetch('/api/analyse?symbol=' + encodeURIComponent(sym),
+                              {method: 'POST'});
+        const d = await r.json().catch(() => ({}));
+        if(r.status === 404){ b.textContent = 'no candles'; return; }
+        if(!r.ok && r.status !== 207){ b.textContent = 'failed'; return; }
+        // The facts just changed underneath the cache, so a plain reload would
+        // redraw the pre-analysis answer for up to 25 seconds.
+        for(const p of ['/api/facts', '/api/candles', '/api/draft'])
+          window.SSData.invalidate(p);
+        await load();
+        const n = Object.values(d.new_facts || {}).reduce((s, v) => s + v, 0);
+        b.textContent = (d.errors && d.errors.length)
+          ? `partial · ${n} facts` : `+${n} facts`;
+      }catch(err){
+        b.textContent = 'unreachable';
+      }finally{
+        setTimeout(() => { b.disabled = false; b.textContent = was; }, 2500);
+      }
     });
     /* Arm -> the OPERATOR's paper book (`manual-v0.1-draft`), never the
        strategy record. The reply is reported literally: if the server refuses
