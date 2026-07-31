@@ -76,6 +76,10 @@ def install_exit_forensics() -> None:
 
 NATIVE_TFS = ("15m", "1H", "1D")
 _last_universe_refresh = 0.0
+# Symbols already announced as newly onboarded. A symbol stays in `warming`
+# forever when its venue has less history than the engines need, so without this
+# it is announced on every refresh and every restart. See refresh_universe().
+_announced_warming: set[str] = set()
 ALL_TFS = ("15m", "1H", "4H", "1D", "1W")
 # The roster lives in `engine/pipeline.py` and is imported by all three runners
 # (live, ingest, backfill). It used to be maintained here and copied there, and
@@ -130,8 +134,20 @@ def refresh_universe(con, log, beat=None):
         for sym in r["warming"]:
             try:
                 res = ingest.onboard(con, sym)
-                log.info(f"UNIVERSE onboarded {sym}: {res['candles'].get('1D',0)} daily candles")
-                notify.toast("＋ New symbol added", f"{sym} joined the scan universe")
+                n_daily = res["candles"].get("1D", 0)
+                log.info(f"UNIVERSE onboarded {sym}: {n_daily} daily candles")
+                # ANNOUNCE ONCE. `warming` lists every symbol short of the 200
+                # daily candles the engines need, so a symbol whose venue simply
+                # has no more history — CAP-USD has 35 and always will — is
+                # re-onboarded and announced as "New symbol added" on every
+                # hourly refresh AND every restart. It is not new, and saying so
+                # repeatedly is both wrong and expensive: each toast spawns a
+                # PowerShell process, and the scanner's remaining deaths all sit
+                # in the startup burst where that fires once per warming symbol.
+                if sym not in _announced_warming:
+                    _announced_warming.add(sym)
+                    notify.toast("＋ New symbol added",
+                                 f"{sym} joined the scan universe")
             except Exception as e:
                 log.warning(f"onboard failed for {sym}: {e}")
         if r["warming"]:
