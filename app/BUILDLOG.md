@@ -2168,17 +2168,39 @@ concentrated in the sub-dollar symbols: 74% sit on tick-affected symbols now
 versus 92% before, i.e. what is left is spread across the book rather than being
 one instrument's blindness.
 
-**Not fixed in the store, and worth knowing:** `live.cycle` runs the engines over
-`universe.current_symbols` — the **20-symbol scan universe** — not over the 59
-`all_tracked_symbols`. SHIB-USD, PUMP-USD and u1000PEPEUSDT are tracked but not
-scanned, so they have **no `structure-v0.9` facts at all** and their persisted
-structure is still the blinded v0.8 generation showing 0 breaks against 101 and
-145 labels. An earlier draft of this section reported "SHIB-USD 0->35, PUMP-USD
-0->40" as measured effect; those came from an ad-hoc recomputation, never from
-the store, and the store contradicts them. The fix is correct for those symbols
-— it simply has not been run on them. Re-running the cascade over all tracked
-symbols is a backfill decision, not a code one, and it is deliberately not
-bundled here.
+**The gap that hid this, and the backfill that closed it.** `live.cycle` runs the
+engines over `universe.current_symbols` — the scan universe, 19 symbols — not
+over `all_tracked_symbols`, now 76. A tracked symbol that leaves the scan set
+keeps whatever facts it had on the way out, so the blinded generation survived
+in place for every symbol the scanner had stopped looking at. That is why an
+earlier draft of this section reported "SHIB-USD 0->35, PUMP-USD 0->40" as
+measured effect and the store disagreed: those symbols had no post-fix facts at
+all, the numbers came from an ad-hoc recomputation, and nothing had been written.
+
+The description layer has now been re-run over the 40 tracked symbols that
+lacked current-version facts (`swings -> structure -> zones -> liquidity ->
+regime -> ranges` plus the indicator engines, the `pipeline.PER_SYMBOL` order,
+431s, no errors). The claim is finally a query rather than an assertion —
+labels/breaks, blinded generation vs now:
+
+```
+SHIB-USD  101L /  0B  ->  104L / 43B        ACH-USD   123L /  4B  ->  125L / 60B
+PUMP-USD  145L /  0B  ->  145L / 63B        HBAR-USD  146L /  6B  ->  147L / 64B
+USDT-USD   95L /  0B  ->   98L / 13B        DOGE-USD  153L / 13B  ->  159L / 63B
+```
+
+All three symbols that could not print a single break now print them. Across the
+59 symbols carrying both generations, total breaks went **2,294 -> 3,344**, and
+regime RANGE share over the same set **18.1% -> 15.1%**. `structure-v0.10` and
+`regime-v0.10` now cover all 76 tracked symbols with none missing.
+
+**The trading engines were deliberately NOT run in this backfill.** `setups`,
+`execsim`, `scalein` and `cooldowns` would add simulated trades on symbols
+outside the scan universe, and `edgestats`/`factorstats` grade that population —
+so extending it is a decision about what the edge numbers MEAN, not a
+housekeeping step, and it does not get made as a side effect of fixing
+structure. The description layer is now correct everywhere; whether the book
+should include symbols nobody is scanning is a separate question.
 
 **The REVERSAL result survived a change that reclassified a third of the market,
 and got MORE robust:**
