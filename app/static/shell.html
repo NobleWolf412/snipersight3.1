@@ -17,12 +17,15 @@
       <img src="/static/assets/snipersight-logo.png" alt="SniperSight">
     </div>
 
-    <label class="t-label" style="display:flex;align-items:center;gap:8px"><span class="term" data-t="perps">VENUE</span>
-      <select id="venue" class="btn" style="text-transform:none;letter-spacing:.08em">
-        <option value="coinbase">Coinbase · spot</option>
-        <option value="phemex">Phemex · perps</option>
-      </select>
-    </label>
+    <!-- The venue SELECT that used to sit here is deliberately gone. Venue is
+         not a mode: it is derived per symbol (BTC-USD -> Coinbase spot,
+         BTCUSDT -> Phemex perp, PF_XBTUSD -> Kraken perp) at ranking time by
+         an economic rule, and nothing ever read this control's value. Worse,
+         it actively lied — it told the operator "Phemex lands in phase 4"
+         while the scan universe was 19 Phemex perps and nothing else. The
+         venue of the chart in front of you is named by the #cVenue chip and on
+         every entry in the symbol picker, which is where the fact is true. -->
+    <span class="chip" title="venue is per-symbol — see the chart's venue chip"><span class="term" data-t="perps">multi-venue</span></span>
 
     <span class="chip chip-amber" id="modeChip">
       <span class="orb warn"></span><span class="term" data-t="paper">Paper</span>

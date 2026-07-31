@@ -374,10 +374,16 @@ window.SSChart = (() => {
       // zones and pools in the browser would be a second authority for what a
       // level is; `engine/draft.py` owns it and this only displays the answer.
       // Failure is non-fatal — the ticket falls back and says it did.
+      //
+      // The seq guard on the ASSIGNMENT matters as much as the one below:
+      // `draftPlan` is module state, and a stale load finishing late would
+      // otherwise overwrite the new symbol's draft with the old symbol's —
+      // the same wrong-market-under-the-right-name failure the catch block
+      // below exists to prevent.
       try{
         const dr = await api(`/api/draft?symbol=${encodeURIComponent(sym)}&tf=${tf}`);
-        draftPlan = dr && dr.draft ? dr.draft : null;
-      }catch(err){ draftPlan = null; }
+        if(seq === loadSeq) draftPlan = dr && dr.draft ? dr.draft : null;
+      }catch(err){ if(seq === loadSeq) draftPlan = null; }
     }catch(err){
       // The failure path used to write into #chartEmpty and return — but
       // #chartEmpty is only ever un-hidden on the SUCCESS path below, so after
@@ -642,6 +648,11 @@ window.SSChart = (() => {
     else levels = {entry: base.entry, tp: base.tp, sl: base.sl};
     modified = false;
     riskOverride = null;              // an override belongs to one trade only
+    // The arm confirmation belongs to the trade that was armed. Left in place
+    // it would sit under the NEXT symbol's ticket reading "armed on paper ·
+    // LONG BTCUSDT ..." while the chart shows ETHUSDT — a stale receipt
+    // dressed as a current one.
+    $('tkArmed').textContent = '';
     setDir(base ? base.dir : 'LONG', true);
     applyLevels();
     recompute();

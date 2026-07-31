@@ -40,7 +40,7 @@ import json
 from decimal import Decimal
 
 from . import store, venues
-from .zones import ZONE_VERSION, ZONE_ATR
+from .zones import ZONE_VERSION
 from .liquidity import LIQ_VERSION
 from .swings import compute_atr
 

@@ -104,7 +104,9 @@ node tests/test_ticket_math.js
 node tests/test_lessons.js
 ```
 
-653 python tests and two JavaScript suites. The JS ones are not extras:
+The full python suite plus two JavaScript suites. (No count here on purpose —
+the suite grows daily and a hardcoded number was stale within a day of being
+written; the commands above report the real one.) The JS suites are not extras:
 `ticket-math.js` decides how big a trade is, and it is what proves the order
 ticket and the engine agree about where a position liquidates.
 

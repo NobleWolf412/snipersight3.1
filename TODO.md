@@ -237,6 +237,34 @@ three-copy engine roster (`cooldowns` was scheduled by nothing), and the single
 BLOCKED symbol that aborted 38% of all cycles including `risk.run`.
 
 ### Confirmed, measured, not yet fixed
+- [ ] **`swings` re-emits every promoted pivot every cycle — 174,316 phantom
+      facts, and the zone-strength evidence is counting them.** Root cause,
+      diagnosed 2026-07-31: the INTERMEDIATE/MAJOR promotion payload embeds
+      `evidence.held_candles`, which increments every bar — a run-time-dependent
+      value inside a content-hashed, append-only fact. Each scan cycle the
+      payload differs by one integer, the hash differs, and the same pivot is
+      appended again. Measured: 3,275 (symbol, tf, market_time, tier) keys are
+      duplicated; one AAVEUSDT 4H pivot exists **11 times**, identical in every
+      field except `held_candles` = 987, 988, 989…
+      Downstream, and this is the part that matters: `zones.py` counts
+      "other same-type anchors inside this band" for `cluster_members`, and the
+      10 phantom copies of one pivot count as 10 neighbours — so
+      `formation_quality`, and therefore `strength`, **which gates REVERSAL**,
+      inflates monotonically as the scanner runs. `liquidity.py` clusters
+      swings within 0.10 ATR, and identical-price phantoms are trivially inside
+      any tolerance, so pool `n_members` inflates the same way. This is also
+      the actual cause of the standing `test_zone_causality` failure: the
+      recount grows between the zone's write and the test's run because the
+      phantom population grows — recorded 6, causal-now 7, and next week it
+      will be 8. The zone facts and the test are both victims.
+      **The fix cascades the entire lockfile** — a stable promotion payload (or
+      freezing `held_candles` at confirmation) is a swings rule change, so
+      swing-v0.9 → structure, zones, liquidity, ranges, momentum → regime →
+      setups → exec/risk/scale/cooldown, plus a baseline decision. Single-owner
+      job per PROGRAM-PLAN §6; deliberately NOT done as a drive-by during the
+      2026-07-31 second pass, with a concurrent session mid-cascade in the same
+      files. Do not "fix" it by deduping in consumers only — that changes their
+      outputs under their current tags, which is the S37 defect again.
 - [ ] **Funding is one constant across venues whose settlement schedules differ
       8×.** Phemex 3/day, Kraken 24/day, both charged
       `FUNDING_RATE_PER_SETTLEMENT = 0.0001`. Measured: Kraken 0.0100%/h vs

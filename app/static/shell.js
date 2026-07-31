@@ -1033,15 +1033,6 @@
     b.disabled = false; b.textContent = was;
   });
 
-  $('venue').addEventListener('change', e => {
-    // Phase 3 makes this switch adapters. Until then it must not pretend.
-    if(e.target.value === 'phemex'){
-      alert('Phemex adapter lands in phase 4 (perps: shorts, leverage, liquidation, funding).\n' +
-            'All current data is Coinbase spot.');
-      e.target.value = 'coinbase';
-    }
-  });
-
   /* ---------- refresh loop ---------- */
   async function refresh(){
     const jobs = [loadOverview(), loadPortfolio(), loadHealth(), loadStatus(),
