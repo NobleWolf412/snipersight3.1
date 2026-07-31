@@ -1823,6 +1823,26 @@ def analyse_symbol(symbol: str, response: Response):
         con.close()
 
 
+@app.get("/api/manual/open")
+def manual_open(symbol: str, tf: str = "1H"):
+    """Live state of the operator's open trades on one chart.
+
+    Resolves first, then reports: `manual.run` is idempotent and cheap for one
+    symbol/tf, and without it a trade whose stop was hit two bars ago would
+    still be described as OPEN until the next scanner cycle happened to visit.
+    """
+    from engine import manual
+    if tf not in VALID_TFS:
+        raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
+    con = store.connect()
+    try:
+        manual.run(con, symbol, tf, importer.TF_SECONDS[tf])
+        return {"symbol": symbol, "tf": tf,
+                "open": manual.status(con, symbol, tf, importer.TF_SECONDS[tf])}
+    finally:
+        con.close()
+
+
 @app.get("/api/manual/book")
 def manual_book():
     """The operator's paper record — separate curve, separate everything."""

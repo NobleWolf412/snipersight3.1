@@ -26,6 +26,8 @@ window.SSChart = (() => {
   let allSymbols = [];                        // the full overview list, cached for the picker
   let pickerScope = 'scanned';                // 'scanned' | 'all' — see renderPicker()
   let draftPlan = null;                       // engine/draft.py bracket, or null
+  let openPos = [];                           // open manual trades on this chart
+  let posLines = [];                          // their price lines, redrawn per load
   let modified = false;
   // Per-trade risk. Null means "use the engine default". Deliberately reset on
   // every setup load: an override is a decision about ONE trade, and carrying
@@ -355,6 +357,10 @@ window.SSChart = (() => {
     // A cleared chart describes no market, so there is no plan to arm.
     armable = false; refreshArm();
     $('tkArmed').textContent = '';
+    openPos = [];
+    for(const l of posLines){ try{ series.removePriceLine(l); }catch(e){} }
+    posLines = [];
+    $('tkOpen').innerHTML = '';
     const el = $('chartEmpty');
     el.style.display = '';                    // the bug: only ever unset on success
     el.textContent = detail ? `${title} — ${detail}` : title;
@@ -388,6 +394,11 @@ window.SSChart = (() => {
         const dr = await api(`/api/draft?symbol=${encodeURIComponent(sym)}&tf=${tf}`);
         if(seq === loadSeq) draftPlan = dr && dr.draft ? dr.draft : null;
       }catch(err){ if(seq === loadSeq) draftPlan = null; }
+      // The operator's open trades here. Same seq guard, same reason.
+      try{
+        const op = await api(`/api/manual/open?symbol=${encodeURIComponent(sym)}&tf=${tf}`);
+        if(seq === loadSeq) openPos = (op && op.open) || [];
+      }catch(err){ if(seq === loadSeq) openPos = []; }
     }catch(err){
       // The failure path used to write into #chartEmpty and return — but
       // #chartEmpty is only ever un-hidden on the SUCCESS path below, so after
@@ -441,8 +452,47 @@ window.SSChart = (() => {
 
     drawOverlays();
     pickSetup(!!(opts && opts.keepTicket));
+    drawPosition();
     loadedAt = Date.now();
     showFreshness();
+  }
+
+  /* The operator's live trade, on the chart and in words.
+
+     Gold and solid, against the ticket's cyan/green/red — these are not plan
+     levels to drag, they are the terms of a position already taken, and the
+     resolver will settle them whether or not anyone is watching. The readout
+     marks to the LAST CLOSED bar and says so; a fresher number here than
+     everywhere else would read as precision and be inconsistency. */
+  function drawPosition(){
+    for(const l of posLines){ try{ series.removePriceLine(l); }catch(e){} }
+    posLines = [];
+    const el = $('tkOpen');
+    if(!openPos.length){ el.innerHTML = ''; return; }
+    const p = openPos[0];
+    for(const [k, price, label] of [['entry', p.fill_price || p.entry, 'YOURS · ENTRY'],
+                                    ['tp', p.tp, 'YOURS · TP'],
+                                    ['sl', p.sl, 'YOURS · SL']]){
+      const v = parseFloat(price);
+      if(isFinite(v)) posLines.push(series.createPriceLine({
+        price: v, color: '#fbbf24', lineWidth: 1, lineStyle: k === 'entry' ? 0 : 3,
+        axisLabelVisible: true, title: label}));
+    }
+    const more = openPos.length > 1 ? ` · +${openPos.length - 1} more` : '';
+    if(p.state === 'PENDING'){
+      el.innerHTML = `PENDING ${p.direction} · limit ${pf(+p.entry)} · ` +
+        `fills if touched within ${p.bars_left} more bar${p.bars_left === 1 ? '' : 's'}, ` +
+        `else missed${more}`;
+      return;
+    }
+    const r = parseFloat(p.unrealized_r);
+    const cls = r >= 0 ? 'good' : 'bad';
+    const usd = p.unrealized_usd != null
+      ? ` (<span class="${cls}">${(r >= 0 ? '+' : '-')}$${Math.abs(+p.unrealized_usd).toFixed(0)}</span>)` : '';
+    el.innerHTML =
+      `OPEN ${p.direction} · in at ${pf(+p.fill_price)} · ` +
+      `<span class="${cls}">${r >= 0 ? '+' : ''}${r.toFixed(2)}R</span>${usd} ` +
+      `at last close · held ${p.bars_held} bar${p.bars_held === 1 ? '' : 's'}${more}`;
   }
 
   /* State the age of what is on screen, and keep stating it.
@@ -801,6 +851,9 @@ window.SSChart = (() => {
       const btn = $('tkArm'), out = $('tkArmed');
       if(btn.disabled) return;
       const riskUsd = parseFloat(String($('tkRisk').value).replace(/[$,]/g, ''));
+      // Captured at click: the reload below may restore() the ticket, and the
+      // receipt must quote the price that was ARMED, not the one drawn after.
+      const armedEntry = levels.entry, armedDir = dir;
       btn.disabled = true;
       out.textContent = 'arming…';
       try{
@@ -818,8 +871,14 @@ window.SSChart = (() => {
         }
         const n = d.book ? d.book.n : 0;
         const openN = d.book ? (d.book.open_intents || []).length : 0;
+        // Put the position on screen NOW, not at the next refresh — arming
+        // and then seeing nothing appear is the report this closes. The
+        // receipt is written AFTER the reload because a clean reload runs
+        // restore(), which clears the receipt line.
+        window.SSData.invalidate('/api/manual/open');
+        await load({keepTicket: true});
         out.textContent =
-          `armed on paper · ${dir} ${sym} ${tf} · entry ${pf(levels.entry)} · ` +
+          `armed on paper · ${armedDir} ${sym} ${tf} · entry ${pf(armedEntry)} · ` +
           `your book: ${n} settled, ${openN} open`;
       }catch(err){
         // Never imply an order exists when the request never landed.

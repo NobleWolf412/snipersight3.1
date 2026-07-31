@@ -240,6 +240,10 @@
                    things: this one is theirs, the strategy record is not. -->
               <button class="btn btn-cyan" id="tkArm" disabled>Arm (paper)</button>
             </div>
+            <!-- The operator's open trade on THIS chart, marked to the last
+                 closed bar. Without it a trade vanished into the book the
+                 moment it was armed — no line, no P&L, nowhere to watch it. -->
+            <div class="t-mono tk-open" id="tkOpen"></div>
             <div class="t-mono tk-armed" id="tkArmed"></div>
             <div class="t-mono tk-lock" id="tkLock"></div>
           </div>

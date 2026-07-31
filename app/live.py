@@ -318,6 +318,44 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
         except Exception as exc:
             log.warning(f"import skipped {sym}: {type(exc).__name__} {exc}")
             continue
+
+    # ── The operator's open trades, WHEREVER they are ─────────────────────
+    # Everything above is scoped to the scan universe, and so was every
+    # resolution pass — which meant an intent armed on any of the ~58
+    # chartable-but-unscanned symbols was checked exactly once, at arm time,
+    # and then sat ARMED forever: a trade the operator placed and could never
+    # see settle. Manual work is now discovered from the intents themselves,
+    # and for an off-watchlist symbol this block does the lifecycle the scan
+    # loop does for its own — fresh candles, higher-timeframe roll-up, resolve.
+    # It sits BEFORE the no-new-candles early return, which only knows whether
+    # the WATCHLIST had new candles.
+    try:
+        from engine import manual
+        for (m_sym, m_tf), _intents in sorted(manual.unresolved(con).items()):
+            _beat(f"manual {m_sym}")
+            try:
+                if m_sym not in scan:
+                    for tf, gran in importer.native_tfs(m_sym).items():
+                        last = con.execute(
+                            "SELECT MAX(open_ts) FROM candles WHERE symbol=? "
+                            "AND tf=? AND source NOT LIKE 'agg:%'",
+                            (m_sym, tf)).fetchone()[0]
+                        closed_until = now - now % gran
+                        # No history floor here: an intent can only exist on a
+                        # symbol that already has candles, so `last` is real.
+                        start = (last + gran) if last else None
+                        if start and start < closed_until:
+                            importer.backfill(con, m_sym, tf, start, now)
+                    for tf in ("4H", "1W"):
+                        aggregator.aggregate(con, m_sym, tf)
+                manual.run(con, m_sym, m_tf, importer.TF_SECONDS[m_tf])
+            except Exception as exc:
+                # One symbol's venue hiccup must not strand the others' trades.
+                log.warning(f"manual resolve skipped {m_sym} {m_tf}: "
+                            f"{type(exc).__name__} {exc}")
+    except Exception as exc:
+        log.warning(f"manual resolve pass failed: {type(exc).__name__} {exc}")
+
     if not new_candles:
         return 0, []
 

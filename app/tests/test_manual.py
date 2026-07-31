@@ -267,6 +267,56 @@ class ManualCase(unittest.TestCase):
                                   tp=104, sl=98, created_at=0, leverage=1)
         self.assertIsNone(ok["liquidation"])
 
+    # ---------- discovery and live status: the never-resolves fix ----------
+
+    def test_unresolved_finds_work_wherever_it_lives(self):
+        """The live loop resolves manual intents by asking WHERE they are, not
+        by assuming they sit inside the scan universe. Before this, an intent
+        on an unscanned symbol was checked once at arm time and then sat ARMED
+        forever — a trade the operator placed and could never see settle."""
+        self.load(self.flat(3))                       # not enough bars to resolve
+        manual.create_intent(self.con, SPOT, "1H", "LONG",
+                             entry=100, tp=104, sl=98, created_at=0)
+        self.assertIn((SPOT, "1H"), manual.unresolved(self.con))
+        # settle it, and the work list must empty
+        for i, (o, h, l, c) in enumerate(
+                [(100, 104, 99, 103)] + self.flat(5), start=3):
+            self.con.execute("INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+                             (SPOT, "1H", i * TF, str(o), str(h), str(l), str(c),
+                              "1", "test", i * TF))
+        self.con.commit()
+        self.run_engine()
+        self.assertNotIn((SPOT, "1H"), manual.unresolved(self.con))
+
+    def test_status_reports_pending_then_open_with_unrealized(self):
+        # bar 0 closes flat; entry untouched -> PENDING
+        self.load([(120, 121, 119, 120)])
+        manual.create_intent(self.con, SPOT, "1H", "LONG",
+                             entry=100, tp=110, sl=95, created_at=0)
+        st = manual.status(self.con, SPOT, "1H", TF)
+        self.assertEqual(st[0]["state"], "PENDING")
+        # a bar touches entry, next closes at 102.5 -> OPEN, +0.5R on a 5-wide stop
+        for i, bar in enumerate([(120, 121, 99, 101), (101, 103, 100, "102.5")],
+                                start=1):
+            o, h, l, c = bar
+            self.con.execute("INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+                             (SPOT, "1H", i * TF, str(o), str(h), str(l), str(c),
+                              "1", "test", i * TF))
+        self.con.commit()
+        st = manual.status(self.con, SPOT, "1H", TF)
+        self.assertEqual(st[0]["state"], "OPEN")
+        self.assertEqual(st[0]["unrealized_r"], "0.50")
+
+    def test_status_marks_to_the_last_closed_bar_not_a_live_tick(self):
+        """The unrealized figure must come from the same price authority as
+        every other number on screen — the last CLOSED candle."""
+        self.load([(120, 121, 99, 101), (101, 108, 100, 106)])
+        manual.create_intent(self.con, SPOT, "1H", "LONG",
+                             entry=100, tp=115, sl=96, created_at=0)
+        st = manual.status(self.con, SPOT, "1H", TF)
+        # (106 - 100) / 4 = 1.5R — the close, not the 108 high
+        self.assertEqual(st[0]["unrealized_r"], "1.50")
+
     # ---------- the book ----------
 
     def test_book_reports_only_manual_trades(self):

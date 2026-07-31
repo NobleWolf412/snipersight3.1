@@ -179,6 +179,93 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
     return {"intent_id": intent_id, "written": bool(written), **payload}
 
 
+def unresolved(con) -> dict:
+    """Every armed intent with no terminal fact, grouped by (symbol, tf).
+
+    This is the resolver's WORK LIST, and it exists because the live loop runs
+    engines over the scan universe only. An intent armed on any of the ~58
+    chartable-but-unscanned symbols got exactly one resolution attempt — at arm
+    time — and then sat ARMED forever: the trade the operator placed could
+    never report a result. `live.cycle` now asks this function where manual
+    work exists instead of assuming it lives inside the watchlist.
+    """
+    import sqlite3
+    con.row_factory = sqlite3.Row
+    intents: dict = {}
+    for r in con.execute(
+            "SELECT symbol, tf, payload FROM facts WHERE kind=? AND algo_version=?",
+            (INTENT_KIND, MANUAL_VERSION)):
+        p = json.loads(r["payload"])
+        intents[p["intent_id"]] = (r["symbol"], r["tf"], p)
+    done = {json.loads(r[0])["intent_id"] for r in con.execute(
+        "SELECT payload FROM facts WHERE kind=? AND algo_version=?",
+        (EXEC_KIND, MANUAL_VERSION))}
+    out: dict = {}
+    for iid, (sym, tf, p) in intents.items():
+        if iid not in done:
+            out.setdefault((sym, tf), []).append(p)
+    return out
+
+
+def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
+    """Non-terminal state of each open intent: PENDING, OPEN, or EXPIRING.
+
+    The resolver only writes facts at terminal outcomes, so between arm and
+    exit the book says nothing — and the operator watching the chart needs the
+    in-between: has it filled, at what price, and what is it worth right now.
+    Computed HERE, not in the browser: the fill test is the same bar-touch walk
+    `run()` performs, and a JS re-implementation would be a second authority
+    that drifts from the one that settles the trade.
+
+    Unrealized R is marked against the LAST CLOSED bar, and says so. A closed
+    candle is the only price this system trusts anywhere else; quoting a live
+    tick here would make this one number fresher than every other number on
+    the screen, which reads as precision and is actually inconsistency.
+    """
+    open_here = unresolved(con).get((symbol, tf), [])
+    if not open_here:
+        return []
+    candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
+    if not candles:
+        return []
+    candle_times = [c["open_ts"] for c in candles]
+    last_close = Decimal(candles[-1]["close"])
+    out = []
+    for p in open_here:
+        direction, long = p["direction"], p["direction"] == "LONG"
+        entry, sl, tp = (Decimal(p["entry"]), Decimal(p["sl"]), Decimal(p["tp"]))
+        risk = risk_per_unit(direction, entry, sl)
+        order_i = _first_eligible_bar(candle_times, tf_seconds, p["armed_at"])
+        fill_i = None
+        for k in range(order_i, min(order_i + MAX_ENTRY_BARS, len(candles))):
+            lo, hi = Decimal(candles[k]["low"]), Decimal(candles[k]["high"])
+            if lo <= entry <= hi:
+                fill_i = k
+                break
+        row = {"intent_id": p["intent_id"], "direction": direction,
+               "entry": str(entry), "sl": str(sl), "tp": str(tp),
+               "risk_usd": p.get("risk_usd"), "leverage": p.get("leverage"),
+               "liquidation": p.get("liquidation"),
+               "last_close": str(last_close), "armed_at": p["armed_at"]}
+        if fill_i is None:
+            bars_gone = max(0, len(candles) - order_i)
+            row.update(state="PENDING",
+                       bars_left=max(0, MAX_ENTRY_BARS - bars_gone))
+            out.append(row)
+            continue
+        move = (last_close - entry) if long else (entry - last_close)
+        r_unreal = (move / risk).quantize(Q2) if risk > 0 else Decimal(0)
+        usd = p.get("risk_usd")
+        row.update(state="OPEN", bars_held=len(candles) - 1 - fill_i,
+                   fill_price=str(entry),
+                   unrealized_r=str(r_unreal),
+                   unrealized_usd=(None if usd is None
+                                   else str((r_unreal * Decimal(str(usd)))
+                                            .quantize(Q2))))
+        out.append(row)
+    return out
+
+
 def _first_eligible_bar(candle_times: list, tf_seconds: int,
                         armed_at: int) -> int:
     """Index of the first bar that OPENS at or after `armed_at`.

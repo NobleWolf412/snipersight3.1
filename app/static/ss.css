@@ -344,6 +344,14 @@ body{
 .tk-armed{color:var(--fg-2);font-size:11px;line-height:1.6;text-align:center;
           min-height:1.6em}
 .tk-armed:empty{min-height:0}
+/* The open-position readout. Amber border because it is the one element on
+   the ticket describing money currently at stake rather than a plan. */
+.tk-open{color:var(--fg-1);font-size:11px;line-height:1.7;text-align:center;
+         border:1px solid rgba(251,191,36,.35);border-radius:4px;
+         padding:4px 6px;margin-bottom:4px}
+.tk-open:empty{display:none}
+.tk-open .good{color:var(--green)}
+.tk-open .bad{color:var(--red)}
 
 /* Row geometry lives here, not in a style attribute, because renderDeck now
    creates the wrapper element once and patches only its contents. */
