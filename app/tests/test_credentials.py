@@ -67,7 +67,14 @@ class NoReadRouteTest(unittest.TestCase):
         substring match would fail on that documentation.
         """
         import ast
-        with open("server.py", encoding="utf-8") as fh:
+        import pathlib
+        # Resolved from THIS file, not the working directory. As a bare relative
+        # path this passed from app/ and failed with FileNotFoundError from the
+        # repo root — so `pytest app/tests/` reported a security assertion as
+        # broken when nothing was wrong with it. A guard that cries wolf
+        # depending on where you stood is a guard people learn to ignore.
+        server = pathlib.Path(__file__).resolve().parent.parent / "server.py"
+        with open(server, encoding="utf-8") as fh:
             tree = ast.parse(fh.read())
         called = set()
         for node in ast.walk(tree):
