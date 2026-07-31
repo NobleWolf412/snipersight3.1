@@ -29,14 +29,40 @@
   const entries = new Map();          // path -> Entry
   const TICK = 1000;                  // scheduler granularity
 
+  /* Most paths here are a fixed handful. Chart data is not: /api/candles and
+     /api/facts key on symbol AND timeframe, so browsing the universe walks
+     through hundreds of distinct keys, each holding a few thousand candles.
+     Those entries are all legitimately re-readable — unlike the cursored
+     console poll, which was unbounded AND unreachable — but "bounded by 33
+     symbols times 5 timeframes times a few thousand candles" is still a lot of
+     memory to hold for a chart nobody is looking at any more.
+
+     So: an LRU cap on entries nothing subscribes to. Subscribed paths are never
+     evicted, because something on screen is depending on them. */
+  const MAX_ENTRIES = 60;
+
   function entry(path) {
     let e = entries.get(path);
     if (!e) {
       e = {path, data: undefined, err: null, at: 0, inflight: null,
-           subs: new Set(), everyMs: 0, nextAt: 0};
+           subs: new Set(), everyMs: 0, nextAt: 0, used: Date.now()};
       entries.set(path, e);
+      evict();
+    } else {
+      e.used = Date.now();
     }
     return e;
+  }
+
+  function evict() {
+    if (entries.size <= MAX_ENTRIES) return;
+    const cold = [...entries.values()]
+      .filter(e => !e.subs.size && !e.inflight)
+      .sort((a, b) => a.used - b.used);
+    for (const e of cold) {
+      if (entries.size <= MAX_ENTRIES) break;
+      entries.delete(e.path);
+    }
   }
 
   function emit(e) {

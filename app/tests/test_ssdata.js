@@ -188,6 +188,20 @@ function load() {
     assert.strictEqual(D._stats().length, 5);
   });
 
+  await ok('cold entries are evicted, subscribed ones never are', async () => {
+    /* Chart data keys on symbol AND timeframe, so browsing the universe walks
+       hundreds of distinct keys holding thousands of candles each. Cap them —
+       but never drop a path something on screen is still subscribed to. */
+    const {D} = load();
+    D.subscribe('/pinned', () => {}, 0);
+    await D.get('/pinned', 0);
+    for (let i = 0; i < 90; i++) await D.get('/candles?s=' + i, 0);
+    const stats = D._stats();
+    assert(stats.length <= 60, 'cache grew past the cap: ' + stats.length);
+    assert(stats.some(e => e.path === '/pinned'),
+           'an entry with a live subscriber was evicted from under it');
+  });
+
   await ok('the console poll does NOT go through the cache', async () => {
     const shell = fs.readFileSync(
       path.join(__dirname, '..', 'static', 'shell.js'), 'utf8');
