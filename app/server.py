@@ -1436,9 +1436,31 @@ def weather():
     # top to bottom as a liquidity ranking.
     out.sort(key=lambda s: (s["tier"],
                             9999 if s["rank"] is None else s["rank"], s["symbol"]))
+    # THE DENOMINATOR THIS PANEL IS ABOUT.
+    #
+    # `n_live`/`n_total` counted every member of the ranking snapshot, which
+    # includes SHADOW and WARMING. Measured 2026-07-31, the strip therefore
+    # reported "20 of 29 tradeable" while only ELEVEN of those twenty could be
+    # sized: the other nine were shadow symbols, which the risk authority never
+    # sizes by definition. Command read `universe_counts.admitted` and showed 19
+    # on the same screen, so the two panels disagreed about the size of the
+    # universe AND about what "tradeable" means.
+    #
+    # A panel whose stated job is "whether anything can be traded" must not
+    # count things that cannot be. `n_live`/`n_total` are now scoped to
+    # ADMITTED — the same population Command counts — and the shadow and warming
+    # figures are reported separately so nothing is hidden, just no longer
+    # folded into a headline that reads as opportunity.
+    sizeable = [s for s in out if s["state"] == "ADMITTED"]
     return {"generated_at": int(_t.time()), "timeframes": list(WEATHER_TFS),
-            "symbols": out, "n_live": sum(1 for s in out if s["live"]),
-            "n_total": len(out),
+            "symbols": out,
+            "n_live": sum(1 for s in sizeable if s["live"]),
+            "n_total": len(sizeable),
+            "n_shadow": sum(1 for s in out if s["state"] == "SHADOW"),
+            "n_warming": sum(1 for s in out if s["state"] == "WARMING"),
+            "n_shadow_live": sum(1 for s in out
+                                 if s["state"] == "SHADOW" and s["live"]),
+            "n_rows": len(out),
             "enabled_strategies": sorted(enabled) if enabled else None,
             "regime_version": regime.REGIME_VERSION,
             "strategy_version": setups.SETUP_VERSION}

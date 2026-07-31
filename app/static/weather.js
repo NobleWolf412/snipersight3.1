@@ -218,15 +218,36 @@
     lastWeather = d;
     const rows = showAll ? d.symbols : d.symbols.slice(0, COLLAPSED);
     const hidden = d.symbols.length - rows.length;
+    // The GRID lists every row — tradeable, shadow and warming. Its own
+    // counts must say so, or "top 8 of 19" would sit above a 29-row table.
+    const rowTotal = d.n_rows != null ? d.n_rows : d.symbols.length;
     // The sentence that does the actual explaining. Regime eligibility is
     // necessary, not sufficient — price still has to arrive at a zone — and
     // saying so is the difference between "quiet" and "broken".
+    /* Counts are scoped to the TRADEABLE universe — the same population
+       Command counts — because this panel used to fold shadow symbols into a
+       headline that reads as opportunity. It said "20 of 29 tradeable" while
+       only 11 could be sized; the other nine were shadow, which the risk
+       authority never sizes. Two panels on one screen therefore disagreed about
+       the universe AND about what "tradeable" meant. */
+    const shadow = d.n_shadow || 0, warming = d.n_warming || 0;
+    const shadowLive = d.n_shadow_live || 0;
     const footer = d.n_live === 0
       ? 'No symbol is in a condition any playbook trades right now. An empty ' +
         'Setup Deck is the correct answer to that, not a fault.'
-      : `${d.n_live} of ${d.n_total} symbols are in a condition a playbook ` +
-        `trades. Even then a setup only appears once price returns to one of ` +
-        `that symbol's zones and confirms there, so quiet days are normal.`;
+      : `${d.n_live} of ${d.n_total} tradeable symbols are in a condition a ` +
+        `playbook trades. Even then a setup only appears once price returns to ` +
+        `one of that symbol's zones and confirms there, so quiet days are normal.`;
+    // Said plainly rather than folded into the count above. A watched symbol
+    // that can never be sized is evidence about a venue, not an opportunity.
+    const aside = (shadow || warming)
+      ? ` <span style="color:var(--fg-4)">${
+          shadow ? `${shadow} more are <span class="term" data-t="shadow">shadow</span>`
+                 + ` symbols — watched and scored, never sized${
+                     shadowLive ? `, and ${shadowLive} of those are live` : ''}` : ''}${
+          shadow && warming ? '; ' : ''}${
+          warming ? `${warming} still <span class="term" data-t="warming">warming</span>` : ''}.</span>`
+      : '';
 
     /* Command asks "what should I do right now?" and this panel's ANSWER is one
        sentence — whether anything is in a tradeable condition, and that a quiet
@@ -243,10 +264,10 @@
         <span class="wx-sub">what the market is doing &middot; and whether anything can be traded</span>
         <span class="chip">${d.n_live} of ${d.n_total} tradeable</span>
       </div>
-      <div class="wx-lead">${teach(footer)}</div>
+      <div class="wx-lead">${teach(footer)}${aside}</div>
       <details class="wx-details"${tableOpen ? ' open' : ''}>
         <summary class="wx-summary">Per-symbol breakdown${
-          showAll ? '' : ` &middot; top ${Math.min(COLLAPSED, d.n_total)} of ${d.n_total}`}</summary>
+          showAll ? '' : ` &middot; top ${Math.min(COLLAPSED, rowTotal)} of ${rowTotal}`}</summary>
         <div class="wx-body">
           <div class="wx-row wx-head">
             <span class="t-label">Symbol</span>
@@ -258,7 +279,7 @@
         <div class="wx-foot">
           <p><span style="color:var(--fg-4)">Click a row for the full reason.</span></p>
           ${hidden > 0 || showAll
-            ? `<button class="btn" id="wxMore">${showAll ? 'Show fewer' : 'Show all ' + d.n_total}</button>`
+            ? `<button class="btn" id="wxMore">${showAll ? 'Show fewer' : 'Show all ' + rowTotal}</button>`
             : ''}
           <span class="wx-ver" title="the engine versions that produced these readings">${
             esc(d.regime_version)} &middot; ${esc(d.strategy_version)}</span>
