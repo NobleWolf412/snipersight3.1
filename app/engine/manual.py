@@ -68,7 +68,7 @@ class IntentRejected(ValueError):
 
 
 def validate(symbol: str, direction: str, entry: Decimal, tp: Decimal,
-             sl: Decimal) -> dict:
+             sl: Decimal, leverage: Decimal = Decimal(1)) -> dict:
     """Reject a plan that cannot be traded, and say which rule refused it.
 
     These are the checks that are true of the VENUE or of the geometry, not of
@@ -76,6 +76,13 @@ def validate(symbol: str, direction: str, entry: Decimal, tp: Decimal,
     good. A spot account cannot short (`venues.allow_shorts`), and a stop on the
     wrong side of the entry is not a wide stop, it is a plan whose risk is
     undefined and whose r_multiple would be a negative denominator.
+
+    The liquidation gate is checked HERE as well as in the ticket, and that
+    duplication is deliberate. The ticket refuses to arm an unsafe plan, but the
+    ticket is a client; an endpoint that trusts its own UI to have validated the
+    request is an endpoint with no validation. `risk.py` applies the same gate to
+    the strategy book (`stop_survives_liquidation`), so both books refuse the
+    same geometry for the same reason.
     """
     if direction not in VALID_DIRECTIONS:
         raise IntentRejected(f"direction must be one of {VALID_DIRECTIONS}")
@@ -97,8 +104,20 @@ def validate(symbol: str, direction: str, entry: Decimal, tp: Decimal,
             raise IntentRejected("a SHORT stop must sit ABOVE the entry")
         if tp >= entry:
             raise IntentRejected("a SHORT target must sit BELOW the entry")
+    if leverage < 1:
+        raise IntentRejected("leverage cannot be below 1x")
+    if leverage > venue.max_leverage:
+        raise IntentRejected(
+            f"{venue.key} allows at most {venue.max_leverage}x, asked {leverage}x")
+    ok, liq = venues.stop_survives_liquidation(entry, sl, leverage, direction)
+    if not ok:
+        raise IntentRejected(
+            f"at {leverage}x this liquidates at {liq}, before the stop at {sl} — "
+            f"the exchange would close it at a loss larger than the one risked, "
+            f"so the stop and every R figure built on it would be fiction")
     return {"venue": venue.key, "kind": venue.kind,
-            "max_leverage": str(venue.max_leverage)}
+            "max_leverage": str(venue.max_leverage),
+            "liquidation": None if liq is None else str(liq)}
 
 
 def risk_per_unit(direction: str, entry: Decimal, sl: Decimal) -> Decimal:
@@ -107,14 +126,21 @@ def risk_per_unit(direction: str, entry: Decimal, sl: Decimal) -> Decimal:
 
 def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
                   created_at: int, risk_usd=None, size_units=None,
-                  note: str = "") -> dict:
+                  note: str = "", leverage=1) -> dict:
     """Record one operator intent. Validated first; nothing is written on reject.
 
     `created_at` is the causal boundary and is stored as `confirmed_at` — the
     resolver will not fill this on any bar that closed at or before it.
+
+    `leverage` sets the MARGIN posted and nothing else. Size below is derived
+    from risk and the stop distance exactly as it would be at 1x — leverage
+    never widens a stop, and the resolver never reads it, so a leveraged and an
+    unleveraged plan with the same prices resolve to the same r_multiple. What
+    it does change is where liquidation sits, which `validate` gates on.
     """
     entry, tp, sl = Decimal(str(entry)), Decimal(str(tp)), Decimal(str(sl))
-    meta = validate(symbol, direction, entry, tp, sl)
+    leverage = Decimal(str(leverage or 1))
+    meta = validate(symbol, direction, entry, tp, sl, leverage)
     per_unit = risk_per_unit(direction, entry, sl)
     if size_units is None and risk_usd is not None:
         size_units = (Decimal(str(risk_usd)) / per_unit) if per_unit > 0 else Decimal(0)
@@ -132,6 +158,13 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
         "risk_per_unit": str(per_unit),
         "risk_usd": None if risk_usd is None else str(risk_usd),
         "size_units": None if size_units is None else str(size_units),
+        # Financing, recorded so the trade can be reproduced. `margin_usd` is
+        # notional / leverage; it is what the position COST to hold, which the
+        # r_multiple deliberately does not reflect.
+        "leverage": str(leverage),
+        "liquidation": meta["liquidation"],
+        "margin_usd": (None if size_units is None
+                       else str((Decimal(str(size_units)) * entry) / leverage)),
         "venue": meta["venue"], "venue_kind": meta["kind"],
         "max_entry_bars": MAX_ENTRY_BARS,
         "max_holding_bars": MAX_BARS,

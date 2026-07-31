@@ -11,16 +11,43 @@
 (function(root){
   'use strict';
 
-  /* input:  {dir, entry, tp, sl, equity, cfg, riskUsdOverride}
-     output: {ok, errors[], notes[], riskPerUnit, rewardPerUnit, rrGross,
-              rrNet, riskUsd, size, notional, fees, netUsd, riskPctEffective,
-              riskSource} */
+  /* Liquidation, mirroring `venues.liquidation_price` — ISOLATED margin.
+
+     `(1/leverage) - maintenance` is the price move that exhausts the margin
+     posted to THIS position. This is a second implementation of an engine
+     formula, which the house rules normally forbid, and it is justified only
+     because the ticket must draw the line before any fact exists to read it
+     from. Both of its inputs are served by /api/trade-config so the CONSTANTS
+     cannot drift; `test_ticket_math.js` pins the output against values computed
+     from the Python.
+
+     Returns null at 1x: an unleveraged position cannot be liquidated by price,
+     which is also why this is inert on spot. */
+  function liquidationPrice(entry, leverage, long, maintenance){
+    if(!(leverage > 1)) return null;
+    const move = (1 / leverage) - maintenance;
+    if(move <= 0) return entry;              // margin allowance exceeds the buffer
+    return long ? entry * (1 - move) : entry * (1 + move);
+  }
+
+  /* input:  {dir, entry, tp, sl, equity, cfg, riskUsdOverride, leverage}
+     output: {ok, errors[], notes[], blocks[], riskPerUnit, rewardPerUnit,
+              rrGross, rrNet, riskUsd, size, notional, fees, netUsd,
+              riskPctEffective, riskSource, leverage, margin, liquidation,
+              liqDistance} */
   function ticketMath(inp){
-    const {dir, entry, tp, sl, equity, cfg, riskUsdOverride} = inp;
+    const {dir, entry, tp, sl, equity, cfg, riskUsdOverride, leverage} = inp;
     const long = dir === 'LONG';
-    const out = {ok: false, errors: [], notes: [], riskPerUnit: null,
+    /* `notes` are shown; `blocks` PREVENT the trade. They were one list, and
+       merging them would mean a liquidation-safety failure rendered in the same
+       grey as "fees are high" — the engine already refuses these outright
+       (risk.py calls stop_survives_liquidation), so the ticket must not present
+       one as advice. */
+    const out = {ok: false, errors: [], notes: [], blocks: [], riskPerUnit: null,
                  rewardPerUnit: null, rrGross: null, rrNet: null, riskUsd: null,
-                 size: null, notional: null, fees: null, netUsd: null};
+                 size: null, notional: null, fees: null, netUsd: null,
+                 leverage: null, margin: null, liquidation: null,
+                 liqDistance: null};
 
     const num = v => typeof v === 'number' && isFinite(v) && v > 0;
     if(!num(entry) || !num(tp) || !num(sl)){
@@ -88,8 +115,44 @@
                        'The engine gate rejects trades like this for a reason.');
     }
 
-    const buyingPower = equity * (cfg.max_leverage || 1);
-    if(notional > buyingPower)
+    /* LEVERAGE IS A CAP ON MARGIN, NEVER A MULTIPLIER ON RISK.
+
+       Size is already fixed above by `riskUsd / riskU` and nothing here may
+       touch it. Raising leverage posts LESS margin for the same position and
+       moves liquidation closer to entry; it does not buy a bigger trade. That
+       is the spec's rule verbatim — "risk stays distance to stop; margin =
+       notional / leverage. Leverage never widens a stop" — and it is what makes
+       the dial safe to expose: the worst it can do is move a line the ticket
+       draws, and the gate below refuses the trade when that line crosses the
+       stop.
+
+       Clamped to the venue's own maximum, so spot (1x) silently pins to 1 and
+       the whole mechanism is inert there by construction rather than by a
+       branch. */
+    const venueMax = cfg.max_leverage || 1;
+    const lev = Math.min(Math.max(
+      (typeof leverage === 'number' && isFinite(leverage) && leverage >= 1)
+        ? leverage : 1, 1), venueMax);
+    out.leverage = lev;
+    out.margin = notional / lev;
+
+    const maint = (cfg.venue && typeof cfg.venue.maintenance_margin === 'number')
+      ? cfg.venue.maintenance_margin : 0;
+    const liq = liquidationPrice(entry, lev, long, maint);
+    out.liquidation = liq;
+    if(liq != null){
+      out.liqDistance = Math.abs(entry - liq);
+      /* The stop must trigger BEFORE liquidation. If the exchange closes the
+         position first, the stop is decorative and every R-multiple built on it
+         is fiction — which is why this blocks rather than warns. */
+      const survives = long ? sl > liq : sl < liq;
+      if(!survives) out.blocks.push('STOP_BEYOND_LIQUIDATION');
+    }
+
+    /* Buying power is now measured against the CHOSEN leverage, not the venue
+       maximum. Sizing against a 10x cap while posting 1x of margin would report
+       headroom the account does not have. */
+    if(out.margin > equity)
       out.notes.push('NOTIONAL_EXCEEDS_BUYING_POWER');
 
     return out;

@@ -36,6 +36,12 @@ window.SSChart = (() => {
      computed a live verdict and then disabled the button unconditionally, so a
      valid paper plan and a missing trade config looked identical. */
   let armable = false;
+  /* Operator leverage for THIS trade. A cap on posted margin, never a
+     multiplier on risk — see ticket-math.js. Defaults to 1x deliberately: at
+     1x you post the full notional and cannot be liquidated by price, so the
+     safe end is the one you get without touching anything. Reset per symbol,
+     because it means nothing across venues. */
+  let leverage = 1;
   let cfg = null, equity = null;
   let priceLines = {}, zoneLines = [], handles = {};
   let loadSeq = 0;                            // guards out-of-order responses
@@ -193,7 +199,8 @@ window.SSChart = (() => {
     }
 
     const m = SSTicketMath.ticketMath(
-      {dir, entry: e, tp, sl, equity, cfg, riskUsdOverride: riskOverride});
+      {dir, entry: e, tp, sl, equity, cfg, riskUsdOverride: riskOverride,
+       leverage});
 
     if(!m.ok){
       out.innerHTML = '<div><span class="k">status</span><span class="v bad">invalid</span></div>';
@@ -210,6 +217,11 @@ window.SSChart = (() => {
       row('R:R after fees', m.rrNet == null ? '—' : m.rrNet.toFixed(2), rrCls) +
       row('position size', m.size == null ? '—' : pf(m.size)) +
       row('notional', m.notional == null ? '—' : usd(m.notional)) +
+      // Margin is what leverage actually moves. Shown next to notional so the
+      // difference between "the position" and "what it costs to hold" is
+      // visible rather than inferred.
+      (m.margin == null ? '' : row('margin posted', usd(m.margin) +
+          (m.leverage > 1 ? ` at ${m.leverage}x` : ''))) +
       row('risk', m.riskUsd == null ? '—' : usd(m.riskUsd)) +
       row('round-trip fees', m.fees == null ? '—' : usd(m.fees),
           m.fees && m.riskUsd && m.fees > m.riskUsd * 0.3 ? 'warn' : '') +
@@ -237,15 +249,52 @@ window.SSChart = (() => {
       RISK_EXCEEDS_DAILY_HALT: () =>
         `A single loss here (${(m.riskPctEffective * 100).toFixed(1)}%) would ` +
         `breach the ${(cfg.daily_loss_pct * 100).toFixed(0)}% daily halt on its own.`,
+      // The only BLOCKING wording. It says what to change, because both fixes
+      // are in the operator's hands: lower the dial or tighten the stop.
+      STOP_BEYOND_LIQUIDATION: () =>
+        `At ${m.leverage}x you are liquidated at ${pf(m.liquidation)}, which is ` +
+        `before your stop at ${pf(sl)}. The exchange would close this at a loss ` +
+        `bigger than the one you set, so the stop — and every R figure built on ` +
+        `it — would be fiction. Lower the leverage or move the stop closer.`,
     };
     const notes = m.notes.map(n => WORDING[n] ? WORDING[n]() : n);
-    warn.hidden = !notes.length;
-    warn.innerHTML = notes.join('<br><br>');
+    const blocks = m.blocks.map(n => WORDING[n] ? WORDING[n]() : n);
+    warn.hidden = !(notes.length || blocks.length);
+    warn.innerHTML = blocks.map(b => `<strong class="bad">${b}</strong>`)
+                           .concat(notes).join('<br><br>');
+    syncLeverage(m);
     /* Breaches in `notes` are shown, not used to block. They are the risk
        authority's warnings about SIZE, and the operator's paper book is where
        they are allowed to disagree with it — that is the point of keeping this
-       record separate. The engine's own book still refuses them. */
-    armable = true; refreshArm();
+       record separate. The engine's own book still refuses them.
+
+       `blocks` are different in kind and do stop the trade. A stop sitting
+       beyond liquidation is not an opinion about sizing: the position would be
+       closed by the exchange before the stop was ever reached, so the plan does
+       not describe what would happen. `risk.py` refuses these outright; the
+       ticket must not offer to record one. */
+    armable = m.blocks.length === 0;
+    refreshArm();
+  }
+
+  /* Keep the dial, its ceiling and the liquidation line in step with the venue.
+
+     Everything here is driven off `cfg.max_leverage`, which arrives per-symbol
+     from /api/trade-config. On spot that is 1, so the whole control hides
+     itself — the instrument answers the question rather than a mode switch
+     somewhere else deciding it. */
+  function syncLeverage(m){
+    const row = $('tkLevRow'), max = (cfg && cfg.max_leverage) || 1;
+    row.hidden = !(max > 1);
+    if(row.hidden) return;
+    const slider = $('tkLev');
+    slider.max = String(max);
+    slider.value = String(m && m.leverage ? m.leverage : leverage);
+    $('tkLevVal').textContent = slider.value + 'x';
+    $('tkLevMax').textContent = `· ${cfg.venue ? cfg.venue.key : ''} allows up to ${max}x`;
+    $('tkLiq').textContent = (m && m.liquidation != null)
+      ? `liquidation ${pf(m.liquidation)} · ${pf(m.liqDistance)} away`
+      : 'no liquidation at 1x — the full notional is posted as margin';
   }
 
   /* ---------- overlays + data ---------- */
@@ -566,7 +615,15 @@ window.SSChart = (() => {
 
   /* ---------- wiring ---------- */
   function wire(){
-    $('cSym').addEventListener('change', e => { sym = e.target.value; load(); });
+    $('cSym').addEventListener('change', e => {
+      sym = e.target.value;
+      // Leverage means nothing across instruments — 10x on a perp is not a
+      // setting that survives a hop to spot. Back to the safe end on every
+      // symbol change rather than silently carrying a dial the new venue may
+      // not even permit.
+      leverage = 1;
+      load();
+    });
     $('cTfs').addEventListener('click', e => {
       const b = e.target.closest('button'); if(!b) return;
       tf = b.dataset.tf;
@@ -599,6 +656,7 @@ window.SSChart = (() => {
           body: JSON.stringify({
             symbol: sym, tf: tf, direction: dir,
             entry: levels.entry, tp: levels.tp, sl: levels.sl,
+            leverage: leverage,
             risk_usd: isFinite(riskUsd) && riskUsd > 0 ? riskUsd : null})});
         const d = await r.json().catch(() => ({}));
         if(!r.ok){
@@ -631,6 +689,14 @@ window.SSChart = (() => {
       // default, not any other trade, not the recorded history.
       riskOverride = (isFinite(v) && v > 0) ? v : null;
       if(riskOverride != null) modified = true;
+      recompute();
+    });
+    $('tkLev').addEventListener('input', e => {
+      const v = parseInt(e.target.value, 10);
+      leverage = isFinite(v) && v >= 1 ? v : 1;
+      // Not `modified`: leverage changes how the position is FINANCED, not the
+      // engine's plan. Marking it operator-modified would wrongly suggest the
+      // entry, target or stop had been touched.
       recompute();
     });
     $('tkRiskReset').addEventListener('click', () => {

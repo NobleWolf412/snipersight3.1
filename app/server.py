@@ -1617,7 +1617,14 @@ def trade_config(symbol: str | None = None):
         "daily_loss_pct": float(risk.DAILY_LOSS_LIMIT_PCT),
         "venue": {"key": v.key, "kind": v.kind, "quote": v.quote,
                   "allow_shorts": v.allow_shorts,
-                  "funding_per_day": v.funding_settlements_per_day},
+                  "funding_per_day": v.funding_settlements_per_day,
+                  # The ticket draws a liquidation line from the SAME formula
+                  # `venues.liquidation_price` uses, so both inputs to it are
+                  # served rather than hard-coded on the other side of the wire.
+                  # A JS copy of either would be a second authority for the
+                  # price at which a position dies.
+                  "margin_mode": v.margin_mode,
+                  "maintenance_margin": float(venues.MAINTENANCE_MARGIN)},
         "venues": [{"key": x.key, "kind": x.kind, "allow_shorts": x.allow_shorts,
                     "max_leverage": float(x.max_leverage)} for x in venues.ALL],
         "cost": {"version": v.cost_profile, "venue": v.key,
@@ -1697,6 +1704,7 @@ def manual_arm(payload: dict):
                 sl=payload.get("sl"),
                 created_at=int(payload.get("created_at") or time.time()),
                 risk_usd=payload.get("risk_usd"),
+                leverage=payload.get("leverage") or 1,
                 note=str(payload.get("note") or ""))
         except manual.IntentRejected as exc:
             # A refused plan is a 400 carrying the REASON. The operator needs to

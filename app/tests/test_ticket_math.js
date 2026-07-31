@@ -109,18 +109,30 @@ t('notional above buying power is flagged at 1x', () => {
   assert.ok(m.notes.includes('NOTIONAL_EXCEEDS_BUYING_POWER'));
 });
 
-t('leverage raises buying power and clears the flag', () => {
-  // 0.5 stop -> size 400 -> notional 40,000: over a 10,000 spot account,
-  // comfortably inside a 100,000 buying power at 10x.
+t('buying power follows the CHOSEN leverage, not the venue ceiling', () => {
+  /* This test used to assert that raising `max_leverage` to 10 cleared the
+     flag. That was the old model, and it was quietly optimistic: it sized
+     against headroom the venue ALLOWS rather than margin the operator has
+     actually chosen to post, so a trade needing 40,000 of margin on a 10,000
+     account looked fine merely because the venue permits 10x somewhere.
+
+     Now the operator picks. Raising the venue ceiling changes nothing on its
+     own; raising the dial is what posts less margin and frees the headroom. */
   const args = {dir: 'LONG', entry: 100, tp: 130, sl: 99.5, equity: EQ};
   const spot = ticketMath(Object.assign({cfg: CFG}, args));
   assert.ok(near(spot.notional, 40000), 'notional ' + spot.notional);
   assert.ok(spot.notes.includes('NOTIONAL_EXCEEDS_BUYING_POWER'), 'flagged at 1x');
 
-  const lev = ticketMath(Object.assign(
+  const ceilingOnly = ticketMath(Object.assign(
     {cfg: Object.assign({}, CFG, {max_leverage: 10})}, args));
-  assert.ok(!lev.notes.includes('NOTIONAL_EXCEEDS_BUYING_POWER'), 'clear at 10x');
-  assert.ok(near(lev.size, spot.size), 'leverage changes the limit, not the size');
+  assert.ok(ceilingOnly.notes.includes('NOTIONAL_EXCEEDS_BUYING_POWER'),
+            'a higher venue cap alone must not clear it — nothing was posted');
+
+  const dialled = ticketMath(Object.assign(
+    {cfg: Object.assign({}, CFG, {max_leverage: 10}), leverage: 10}, args));
+  assert.ok(!dialled.notes.includes('NOTIONAL_EXCEEDS_BUYING_POWER'),
+            '4,000 of margin against 10,000 of equity is fine');
+  assert.ok(near(dialled.size, spot.size), 'leverage changes margin, not size');
 });
 
 t('no equity means ratios but deliberately no position size', () => {
@@ -199,6 +211,92 @@ t('junk overrides fall back to the engine default, never to NaN', () => {
                           equity: EQ, cfg: CFG, riskUsdOverride: bad});
     assert.ok(near(m.riskUsd, 200), 'bad override: ' + String(bad));
     assert.strictEqual(m.riskSource, 'engine');
+  }
+});
+
+/* ---------- leverage and liquidation (perps) ----------
+
+   Every liquidation figure asserted below came from the ENGINE, not from this
+   file:
+
+     python -c "from decimal import Decimal as D; from engine import venues;
+                print(venues.liquidation_price(D('100'), D(10), 'LONG'))"
+     -> 90.500
+
+   Pinning them is the whole point. `ticket-math.js` re-implements
+   `venues.liquidation_price` — normally forbidden — because the ticket must
+   draw the line before any fact exists to read it from. A second
+   implementation is only tolerable while something proves the two agree, and
+   this is that something. Both constants it needs arrive over
+   /api/trade-config, so they cannot drift independently either. */
+const PERP = Object.assign({}, CFG, {
+  max_leverage: 10,
+  venue: {key: 'phemex-perp', kind: 'perp', allow_shorts: true,
+          margin_mode: 'ISOLATED', maintenance_margin: 0.005},
+  cost: {maker_rate: 0.0001, taker_rate: 0.0006, slippage_atr: 0.05},
+});
+
+t('leverage never changes size or risk — only the margin posted', () => {
+  const base = {dir: 'LONG', entry: 100, tp: 130, sl: 90, equity: EQ, cfg: PERP};
+  const at1  = ticketMath(Object.assign({}, base, {leverage: 1}));
+  const at10 = ticketMath(Object.assign({}, base, {leverage: 10}));
+  assert.ok(near(at1.size, at10.size), 'size must not move with leverage');
+  assert.ok(near(at1.notional, at10.notional), 'nor notional');
+  assert.ok(near(at1.riskUsd, at10.riskUsd), 'risk is an input, never an output');
+  assert.ok(near(at1.margin, at1.notional), 'at 1x you post the whole notional');
+  assert.ok(near(at10.margin, at1.notional / 10));
+});
+
+t('liquidation matches the engine formula exactly', () => {
+  const L = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 95,
+                        equity: EQ, cfg: PERP, leverage: 10});
+  assert.ok(near(L.liquidation, 90.5), 'engine says 90.500, got ' + L.liquidation);
+  const S = ticketMath({dir: 'SHORT', entry: 100, tp: 70, sl: 105,
+                        equity: EQ, cfg: PERP, leverage: 10});
+  assert.ok(near(S.liquidation, 109.5), 'engine says 109.500, got ' + S.liquidation);
+  const two = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 95,
+                          equity: EQ, cfg: PERP, leverage: 2});
+  assert.ok(near(two.liquidation, 50.5), 'engine says 50.500, got ' + two.liquidation);
+});
+
+t('1x cannot be liquidated by price, so spot is inert by construction', () => {
+  const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90, equity: EQ,
+                        cfg: PERP, leverage: 1});
+  assert.strictEqual(m.liquidation, null);
+  assert.strictEqual(m.blocks.length, 0);
+  const spot = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90, equity: EQ,
+                           cfg: CFG, leverage: 10});
+  assert.strictEqual(spot.leverage, 1, 'spot must clamp to its 1x venue max');
+  assert.strictEqual(spot.liquidation, null);
+});
+
+t('a stop beyond liquidation BLOCKS, it does not merely warn', () => {
+  // at 10x liquidation sits at 90.5, so a stop at 85 would never be reached:
+  // the exchange closes the position first and the stop is decorative.
+  const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 85,
+                        equity: EQ, cfg: PERP, leverage: 10});
+  assert.ok(m.blocks.includes('STOP_BEYOND_LIQUIDATION'));
+  assert.ok(!m.notes.includes('STOP_BEYOND_LIQUIDATION'),
+            'a safety gate must not be filed among the advisory notes');
+  const ok = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 85,
+                         equity: EQ, cfg: PERP, leverage: 2});
+  assert.strictEqual(ok.blocks.length, 0,
+                     'liquidation at 50.5 is far below a stop at 85');
+});
+
+t('the short side blocks on the correct side of the price', () => {
+  const m = ticketMath({dir: 'SHORT', entry: 100, tp: 70, sl: 115,
+                        equity: EQ, cfg: PERP, leverage: 10});
+  assert.ok(m.blocks.includes('STOP_BEYOND_LIQUIDATION'),
+            'short liquidation is 109.5; a stop at 115 sits past it');
+});
+
+t('leverage is clamped to the venue maximum, and junk never escapes', () => {
+  for(const bad of [50, 1e9, NaN, Infinity, -3, 0, '10', null, undefined]){
+    const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 95,
+                          equity: EQ, cfg: PERP, leverage: bad});
+    assert.ok(m.leverage >= 1 && m.leverage <= 10,
+              'leverage escaped its bounds for input: ' + String(bad));
   }
 });
 

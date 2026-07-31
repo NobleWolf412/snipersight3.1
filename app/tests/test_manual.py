@@ -206,6 +206,67 @@ class ManualCase(unittest.TestCase):
         # $200 risked over a $2 stop is 100 units
         self.assertEqual(Decimal(out["size_units"]), Decimal(100))
 
+    # ---------- leverage: margin only, and the liquidation gate ----------
+
+    def test_leverage_changes_margin_but_never_size_or_outcome(self):
+        """The spec's rule, asserted rather than trusted: "risk stays distance
+        to stop; margin = notional / leverage. Leverage never widens a stop."
+
+        Same prices at 1x and 10x must resolve to the SAME r_multiple. If they
+        ever diverge, leverage has leaked into sizing and 2%-per-trade has
+        stopped meaning 2%.
+        """
+        bars = self.flat(6) + [(100, 104, 99, 103)] + self.flat(5)
+        self.load(bars, symbol=PERP)
+        a = manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+                                 sl=98, created_at=0, risk_usd=200, leverage=1)
+        b = manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+                                 sl=98, created_at=TF, risk_usd=200, leverage=10)
+        self.assertEqual(a["size_units"], b["size_units"], "size must not move")
+        # margin is what moves: notional / leverage
+        self.assertEqual(Decimal(a["margin_usd"]) / 10, Decimal(b["margin_usd"]))
+        self.assertIsNone(a["liquidation"], "1x cannot be liquidated by price")
+        self.assertEqual(Decimal(b["liquidation"]), Decimal("90.500"))
+        self.run_engine(symbol=PERP)
+        rs = {r["intent_id"]: r for r in self.execs(symbol=PERP)}
+        self.assertEqual(len(rs), 2)
+        vals = {r["r_multiple"] for r in rs.values()}
+        self.assertEqual(len(vals), 1,
+                         f"leverage changed the outcome: {vals}")
+
+    def test_a_stop_beyond_liquidation_is_refused_by_the_api_not_just_the_ui(self):
+        """The ticket blocks this, but the ticket is a client. An endpoint that
+        trusts its own UI to have validated the request has no validation."""
+        self.load(self.flat(10), symbol=PERP)
+        with self.assertRaises(manual.IntentRejected) as ctx:
+            manual.create_intent(self.con, PERP, "1H", "LONG", entry=100,
+                                 tp=130, sl=85, created_at=0, leverage=10)
+        self.assertIn("liquidat", str(ctx.exception).lower())
+        self.assertEqual(
+            store.get_facts(self.con, PERP, "1H", manual.INTENT_KIND,
+                            manual.MANUAL_VERSION), [])
+        # the identical stop is fine with less leverage — liquidation moves away
+        ok = manual.create_intent(self.con, PERP, "1H", "LONG", entry=100,
+                                  tp=130, sl=85, created_at=0, leverage=2)
+        self.assertEqual(Decimal(ok["liquidation"]), Decimal("50.500"))
+
+    def test_leverage_cannot_exceed_the_venue_maximum(self):
+        self.load(self.flat(10), symbol=PERP)
+        with self.assertRaises(manual.IntentRejected):
+            manual.create_intent(self.con, PERP, "1H", "LONG", entry=100,
+                                 tp=104, sl=98, created_at=0, leverage=50)
+
+    def test_spot_is_pinned_to_1x(self):
+        """Not a policy choice — a spot position is not financed, so there is
+        no leverage to set and no liquidation to price."""
+        self.load(self.flat(10))
+        with self.assertRaises(manual.IntentRejected):
+            manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100,
+                                 tp=104, sl=98, created_at=0, leverage=5)
+        ok = manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100,
+                                  tp=104, sl=98, created_at=0, leverage=1)
+        self.assertIsNone(ok["liquidation"])
+
     # ---------- the book ----------
 
     def test_book_reports_only_manual_trades(self):

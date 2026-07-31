@@ -170,6 +170,23 @@
               </div>
             </div>
 
+            <!-- LEVERAGE. Sets the margin posted, never the position size —
+                 size stays risk / distance-to-stop no matter what this reads.
+                 Raising it posts less margin and pulls liquidation toward
+                 entry, which is why the liquidation line sits directly beneath
+                 it rather than somewhere an operator has to go looking. Hidden
+                 entirely on spot, where the venue max is 1x and the whole
+                 mechanism is inert. -->
+            <div class="fld" id="tkLevRow" hidden>
+              <span class="t-label">Leverage
+                <span id="tkLevMax" style="color:var(--fg-3)"></span></span>
+              <div class="fld-row">
+                <input id="tkLev" class="t-mono" type="range" min="1" step="1" value="1">
+                <span class="t-mono" id="tkLevVal" style="min-width:3.5em;text-align:right"></span>
+              </div>
+              <div class="t-mono" id="tkLiq" style="color:var(--fg-3);font-size:11px"></div>
+            </div>
+
             <label class="row-toggle"><input type="checkbox" id="tkTrail">
               <span class="t-label"><span class="term" data-t="trailing">Trailing stop</span></span></label>
             <label class="fld fld-inline" id="tkTrailRow" hidden>

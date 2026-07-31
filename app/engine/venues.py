@@ -116,6 +116,15 @@ KRAKEN_PERP = Venue(
 ALL = (COINBASE_SPOT, PHEMEX_PERP, KRAKEN_PERP)
 _BY_KEY = {v.key: v for v in ALL}
 
+#: Maintenance margin assumed by `liquidation_price`. Named rather than left as
+#: an inline default because the order ticket now draws a liquidation line from
+#: the same formula, and a second copy of this number in JavaScript is how the
+#: UI and the engine come to disagree about where a position dies. Served to the
+#: ticket by `/api/trade-config`; house convention 10, one authority per number.
+#: 0.005 is the conservative first-tier figure — see `kraken.py`, which measured
+#: it against the published tier table.
+MAINTENANCE_MARGIN = Decimal("0.005")
+
 
 def venue_for(symbol: str) -> Venue:
     """Which venue this symbol trades on. Raises on anything unrecognised —
@@ -152,7 +161,7 @@ def round_trip_cost_rate(symbol: str) -> Decimal:
 
 
 def liquidation_price(entry: Decimal, leverage: Decimal, direction: str,
-                      maintenance_margin: Decimal = Decimal("0.005"),
+                      maintenance_margin: Decimal = MAINTENANCE_MARGIN,
                       margin_mode: str = "ISOLATED") -> Decimal | None:
     """Approximate liquidation price for a leveraged perp position, ISOLATED.
 
