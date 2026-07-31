@@ -120,6 +120,12 @@
     <section class="surface" id="s-chart">
       <div class="chart-top">
         <select id="cSym" class="btn" style="text-transform:none;letter-spacing:.06em"></select>
+        <!-- The picker defaults to the symbols the engine actually watches.
+             All 78 tracked symbols in one list — 47 of them leftovers nothing
+             scans — buried the 19 that matter under venue-labelled noise.
+             The full list is one click away, not gone: shadow and unscanned
+             symbols are still chartable and hand-tradeable. -->
+        <button class="btn" id="cScope" title="switch between the scanned watchlist and every stored symbol">all pairs</button>
         <div class="seg" id="cTfs">
           <button data-tf="15m">15m</button><button data-tf="1H">1H</button
           ><button data-tf="4H" class="on">4H</button><button data-tf="1D">1D</button
@@ -142,7 +148,7 @@
              the engine has never looked at them and they carry no zones, no
              regime and no setups. This is how you ask it to look at one. -->
         <button class="btn" id="cAnalyse"
-                title="run the engine chain over this symbol now (~10-20s)">Analyse</button>
+                title="run the engine chain (swings, structure, zones, liquidity, regime) over this symbol now, ~10-20s — mainly useful on symbols the scanner is not watching">Analyze</button>
         <div style="margin-left:auto"></div>
         <!-- data-label is the base text; chart.js appends the live fact count -->
         <div class="seg seg-toggle" id="cOverlays">
@@ -172,6 +178,26 @@
               <button data-d="LONG">Long</button><button data-d="SHORT">Short</button>
             </div>
 
+            <!-- LEVERAGE, directly under direction — measured 280px below the
+                 fold of this scroll region in its old position, which meant the
+                 operator saw "up to 10x" in the header chip and could not find
+                 the dial that sets it. Direction and financing are the two
+                 facts about HOW the trade is taken; prices follow them. It sets
+                 the margin posted, never the position size — size stays
+                 risk / distance-to-stop at every setting — and the liquidation
+                 line sits directly beneath it because raising it is what pulls
+                 liquidation toward entry. Hidden on spot, where the venue max
+                 is 1x and the whole mechanism is inert. -->
+            <div class="fld" id="tkLevRow" hidden>
+              <span class="t-label">Leverage — this trade
+                <span id="tkLevMax" style="color:var(--fg-3)"></span></span>
+              <div class="fld-row">
+                <input id="tkLev" class="t-mono" type="range" min="1" step="1" value="1">
+                <span class="t-mono" id="tkLevVal" style="min-width:3.5em;text-align:right"></span>
+              </div>
+              <div class="t-mono" id="tkLiq" style="color:var(--fg-3);font-size:11px"></div>
+            </div>
+
             <label class="fld"><span class="t-label"><span class="term" data-t="entry">Entry</span></span>
               <input id="tkEntry" class="t-mono" inputmode="decimal" autocomplete="off"></label>
             <label class="fld"><span class="t-label"><span class="term" data-t="tp">Take profit</span></span>
@@ -187,23 +213,6 @@
                 <input id="tkRisk" class="t-mono" inputmode="decimal" autocomplete="off">
                 <button class="btn" id="tkRiskReset" title="back to the engine default" disabled>Default</button>
               </div>
-            </div>
-
-            <!-- LEVERAGE. Sets the margin posted, never the position size —
-                 size stays risk / distance-to-stop no matter what this reads.
-                 Raising it posts less margin and pulls liquidation toward
-                 entry, which is why the liquidation line sits directly beneath
-                 it rather than somewhere an operator has to go looking. Hidden
-                 entirely on spot, where the venue max is 1x and the whole
-                 mechanism is inert. -->
-            <div class="fld" id="tkLevRow" hidden>
-              <span class="t-label">Leverage
-                <span id="tkLevMax" style="color:var(--fg-3)"></span></span>
-              <div class="fld-row">
-                <input id="tkLev" class="t-mono" type="range" min="1" step="1" value="1">
-                <span class="t-mono" id="tkLevVal" style="min-width:3.5em;text-align:right"></span>
-              </div>
-              <div class="t-mono" id="tkLiq" style="color:var(--fg-3);font-size:11px"></div>
             </div>
 
             <label class="row-toggle"><input type="checkbox" id="tkTrail">

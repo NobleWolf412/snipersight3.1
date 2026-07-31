@@ -23,6 +23,8 @@ window.SSChart = (() => {
   // restorable, so an operator who drags into a corner is never stranded.
   let base = null;                            // {entry,tp,sl,dir,kind}
   let symMeta = {};                           // symbol -> /api/overview row (venue, state)
+  let allSymbols = [];                        // the full overview list, cached for the picker
+  let pickerScope = 'scanned';                // 'scanned' | 'all' — see renderPicker()
   let draftPlan = null;                       // engine/draft.py bracket, or null
   let modified = false;
   // Per-trade risk. Null means "use the engine default". Deliberately reset on
@@ -329,7 +331,7 @@ window.SSChart = (() => {
     $('tkLevMax').textContent = `· ${cfg.venue ? cfg.venue.key : ''} allows up to ${max}x`;
     $('tkLiq').textContent = (m && m.liquidation != null)
       ? `liquidation ${pf(m.liquidation)} · ${pf(m.liqDistance)} away`
-      : 'no liquidation at 1x — the full notional is posted as margin';
+      : 'at 1x there is no liquidation — slide right to add leverage';
   }
 
   /* ---------- overlays + data ---------- */
@@ -752,14 +754,24 @@ window.SSChart = (() => {
       const b = e.target.closest('button'); if(!b) return;
       setDir(b.dataset.d);
     });
-    /* Ask the engine to look at THIS symbol. Runs the same pipeline roster the
-       live loop runs, so a per-symbol analysis can never disagree with the
-       scanner. Slow by nature (~10-20s for five timeframes), so the button
-       states what it is doing rather than appearing to hang. */
+    /* Ask the engine to look at THIS symbol. Runs the same description-layer
+       roster the live loop runs, so a per-symbol analysis can never disagree
+       with the scanner. Slow by nature (~10-20s for five timeframes), so the
+       button states what it is doing rather than appearing to hang.
+
+       "+0 facts" read as "it did nothing" — but on an already-scanned symbol,
+       zero new facts IS the result: facts are content-hashed, so a re-run over
+       data the engine has already described inserts nothing. That outcome now
+       says so in words, because a number the operator must interpret as
+       reassurance is not reassurance. */
+    $('cScope').addEventListener('click', () => {
+      pickerScope = pickerScope === 'scanned' ? 'all' : 'scanned';
+      renderPicker();
+    });
     $('cAnalyse').addEventListener('click', async () => {
       const b = $('cAnalyse'), was = b.textContent;
       if(!sym || b.disabled) return;
-      b.disabled = true; b.textContent = 'analysing…';
+      b.disabled = true; b.textContent = 'analyzing…';
       try{
         const r = await fetch('/api/analyse?symbol=' + encodeURIComponent(sym),
                               {method: 'POST'});
@@ -772,12 +784,13 @@ window.SSChart = (() => {
           window.SSData.invalidate(p);
         await load();
         const n = Object.values(d.new_facts || {}).reduce((s, v) => s + v, 0);
-        b.textContent = (d.errors && d.errors.length)
-          ? `partial · ${n} facts` : `+${n} facts`;
+        b.textContent = (d.errors && d.errors.length) ? `partial · ${n} facts`
+          : n === 0 ? 'already current'
+          : `+${n} facts`;
       }catch(err){
         b.textContent = 'unreachable';
       }finally{
-        setTimeout(() => { b.disabled = false; b.textContent = was; }, 2500);
+        setTimeout(() => { b.disabled = false; b.textContent = was; }, 4000);
       }
     });
     /* Arm -> the OPERATOR's paper book (`manual-v0.1-draft`), never the
@@ -919,15 +932,26 @@ window.SSChart = (() => {
     let o;
     try{ o = await api('/api/overview'); }
     catch(err){ $('chartEmpty').textContent = 'symbol list unavailable'; return; }
-    const list = o.symbols.filter(s => s.state !== 'WARMING');
+    allSymbols = o.symbols.filter(s => s.state !== 'WARMING');
     symMeta = {};
-    for(const s of list) symMeta[s.symbol] = s;
+    for(const s of allSymbols) symMeta[s.symbol] = s;
+    ensureInScope();          // a deck-opened symbol may sit outside 'scanned'
+    renderPicker();
+    if(!sym) sym = allSymbols.length ? allSymbols[0].symbol : null;
+    if(sym){ $('cSym').value = sym; await load(); }
+  }
 
-    /* GROUPED, because 19 of these are scanned and 47 are leftovers nothing
-       watches. The picker used to present a 41-day-old symbol the scanner
-       dropped months ago with exactly the same standing as BTCUSDT, and the
-       ticket would then draw it a full-looking plan. Whether the engine is
-       even LOOKING at a symbol is the first thing to know about it. */
+  /* Two scopes, because one flat list of 78 was measured to be mostly noise:
+     47 entries are former universe members nothing scans, and they buried the
+     19 the engine actually watches. Default is the watchlist; "all pairs" is
+     one click away and keeps every stored symbol reachable — a symbol the
+     picker hides entirely is one the operator cannot inspect to find out why
+     it was dropped. Grouping survives in the full view: whether the engine is
+     even LOOKING at a symbol is the first thing to know about it. */
+  function renderPicker(){
+    const scoped = pickerScope === 'scanned'
+      ? allSymbols.filter(s => s.state === 'ADMITTED')
+      : allSymbols;
     const GROUPS = [
       ['ADMITTED', 'Scanned — the engine watches these'],
       ['SHADOW',   'Shadow — measured, never sized'],
@@ -936,24 +960,49 @@ window.SSChart = (() => {
     const seen = new Set();
     let html = '';
     for(const [state, label] of GROUPS){
-      const rows = list.filter(s => s.state === state);
+      const rows = scoped.filter(s => s.state === state);
       if(!rows.length) continue;
       rows.forEach(s => seen.add(s.symbol));
       html += `<optgroup label="${label} (${rows.length})">` +
         rows.map(s => `<option value="${s.symbol}">${optLabel(s)}</option>`).join('') +
         '</optgroup>';
     }
-    // Anything in an unexpected state still has to be reachable — a symbol the
-    // picker silently omits is one the operator cannot look at to find out why.
-    const rest = list.filter(s => !seen.has(s.symbol));
+    const rest = scoped.filter(s => !seen.has(s.symbol));
     if(rest.length)
       html += `<optgroup label="Other (${rest.length})">` +
         rest.map(s => `<option value="${s.symbol}">${optLabel(s)}</option>`).join('') +
         '</optgroup>';
+    // Narrowing the scope must never orphan the chart on screen. A <select>
+    // whose value is not among its options silently displays the first entry
+    // while `sym` says otherwise — the wrong-market-under-the-right-name
+    // failure again. The current symbol rides along as its own group instead.
+    if(sym && symMeta[sym] && !scoped.some(s => s.symbol === sym))
+      html += '<optgroup label="Current — not on the watchlist">' +
+        `<option value="${sym}">${optLabel(symMeta[sym])}</option></optgroup>`;
     $('cSym').innerHTML = html;
+    if(sym && symMeta[sym]) $('cSym').value = sym;
+    const btn = $('cScope');
+    if(btn){
+      btn.textContent = pickerScope === 'scanned'
+        ? `all pairs (${allSymbols.length})`
+        : 'watchlist only';
+      btn.title = pickerScope === 'scanned'
+        ? 'show every stored symbol, including shadow and unscanned ones'
+        : 'back to just the symbols the engine scans';
+    }
+  }
 
-    if(!sym) sym = list.length ? list[0].symbol : null;
-    if(sym){ $('cSym').value = sym; await load(); }
+  /* A symbol outside the current scope must widen the scope, not vanish.
+     The deck's "Open chart", a shadow pair, or a hand-typed URL can land on a
+     symbol the scanned view does not contain; a <select> whose value is not
+     among its options silently shows the first entry while `sym` says
+     otherwise — the wrong-market-under-the-right-name failure again. */
+  function ensureInScope(){
+    if(pickerScope === 'scanned' && sym && symMeta[sym]
+       && symMeta[sym].state !== 'ADMITTED'){
+      pickerScope = 'all';
+      renderPicker();
+    }
   }
 
   /* The full symbol, never prettified. `.replace('-USD','')` rendered BTC-USD
@@ -978,10 +1027,13 @@ window.SSChart = (() => {
     const lev = v.max_leverage > 1 ? ` · up to ${v.max_leverage}x` : ' · 1x';
     el.textContent = venueName(v) + lev + (v.allow_shorts ? '' : ' · long only');
     el.className = 'chip ' + (m.state === 'ADMITTED' ? 'chip-accent' : 'chip-amber');
-    el.title = m.state === 'ADMITTED'
+    el.title = (m.state === 'ADMITTED'
       ? 'the exchange these candles came from — the engine scans this symbol'
       : `the exchange these candles came from — state ${m.state}, the engine is `
-        + 'not scanning this symbol, so it will have no setups';
+        + 'not scanning this symbol, so it will have no setups')
+      + (v.max_leverage > 1
+         ? '. Leverage is set per trade with the dial at the top of the order ticket.'
+         : '');
   }
 
   /* open(symbol, timeframe) — the deck's "Open chart" entry point */
@@ -990,8 +1042,8 @@ window.SSChart = (() => {
     boot();
     document.querySelectorAll('#cTfs button').forEach(b =>
       b.classList.toggle('on', b.dataset.tf === tf));
-    if(!$('cSym').options.length) await populate();
-    else{ $('cSym').value = sym; await load(); }
+    if(!$('cSym').options.length) await populate();   // handles scope + load itself
+    else{ ensureInScope(); $('cSym').value = sym; await load(); }
   }
 
   wire();
