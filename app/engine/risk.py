@@ -29,10 +29,18 @@ RISK_VERSION = "risk-v0.18-draft"
 # writes its own exec fact under the same tag — so `setup_id` is not unique
 # inside ONE book, never mind across generations. Measured on the store:
 # exec-v0.8 carries 112 of 452 setup_ids with more than one exec fact,
-# exec-v0.16 carries 7. Those collided exits collapsed into one and the account
-# settled on whichever row the scan happened to reach last. Now keyed on
-# (setup_id, available_at), newest fact id winning, with the collision count
-# surfaced in the run notes rather than resolved in silence.
+# exec-v0.16 carries 7. The account settled on whichever row the scan happened
+# to reach last, and `get_facts` orders market_time-major, so that was scan
+# order rather than the newest costing.
+#
+# TWO distinct populations hide under one symptom, and they need different
+# fixes — worth stating because the obvious single fix only covers one:
+#  * Manifest re-runs are genuinely ONE trade costed several ways. Collapsing
+#    them is CORRECT; only the arbitrary winner was wrong. They share
+#    `available_at`, so the composite key does not separate them at all — the
+#    explicit fact-id tie-break is what resolves these.
+#  * Re-touches are different intents that a bare `setup_id` merged. The
+#    composite key separates these — exec-v0.7, 25 ids down to 12.
 #
 # Honest scope: exec-v0.17 currently carries ZERO collisions (644 setup_ids), so
 # this restates no number in today's book — it stops the merge recurring the
@@ -269,19 +277,27 @@ def run(con) -> dict:
                     # two ENGINE GENERATIONS colliding; it does nothing about two
                     # facts from the SAME generation. A plan is re-simulated
                     # whenever the cost/venue manifest moves, and each re-run
-                    # writes its own exec fact under the same tag — so `setup_id`
-                    # alone is not unique inside one book. Measured on the store:
-                    # exec-v0.8 carries 112 of 452 setup_ids with more than one
-                    # exec fact (exec-v0.16, 7). Keyed on `setup_id`, this dict
-                    # dropped 112 exits and settled the account on whichever row
-                    # the scan reached last.
+                    # writes its own exec fact under the same tag, so `setup_id`
+                    # is not unique inside one book: exec-v0.8 has 112 of 452 ids
+                    # carrying more than one exec fact, exec-v0.16 has 7.
                     #
-                    # An intent is identified by the plan AND the bar it became
-                    # actionable on — execsim writes `available_at` from the
-                    # setup's own `confirmed_at`, which is what the lookup below
-                    # holds. Verified on the live store: the tighter key matches
-                    # exactly as many intents as `setup_id` did (644 of 654), so
-                    # this loses no exit, it only stops merging distinct ones.
+                    # Those really are ONE trade costed several ways, so
+                    # collapsing them is right — the defect is that WHICH one
+                    # survived was arbitrary. `get_facts` orders by market_time
+                    # first, so plain overwrite kept whichever row the scan
+                    # happened to reach last, not the newest costing, and the
+                    # settled equity curve moved with scan order. Ties are now
+                    # broken on fact id, explicitly.
+                    #
+                    # The key is also tightened to the plan AND the bar it became
+                    # actionable on, which is the true identity of an intent
+                    # (execsim writes `available_at` from the setup's own
+                    # confirmed_at — what the lookup below holds). On today's
+                    # data that separates the exec-v0.7 re-touches, 25 ids down
+                    # to 12; the manifest re-runs share available_at and are
+                    # resolved by the id tie-break above. Verified on the live
+                    # store: the tighter key matches exactly as many intents as
+                    # `setup_id` did (644 of 654), so it costs no exit.
                     row = {"exit_ts": r["confirmed_at"],
                            "r_net": Decimal(p["r_multiple"]),
                            "outcome": p["outcome"], "fact_id": r["id"]}
