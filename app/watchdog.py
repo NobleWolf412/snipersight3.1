@@ -210,10 +210,7 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
               f"{reason} — restarting live-scanner. "
               f"Codes: {', '.join(codes[:6]) or '(none)'}")
         if live_child.alive():
-            try:
-                live_child.proc.terminate()
-            except Exception as e:
-                log(f"audit: terminate failed ({e})")
+            live_child.kill(f"audit: {reason}")
         streak = 0                       # the restart is the response; re-arm
     elif warmup:
         log(f"audit: warmup seed counts={counts} worst={worst}")
@@ -236,6 +233,18 @@ class Child:
         self.backoff = 5
         self._err = None
         self._err_path = APP / "data" / f"{name}.err.log"
+        # Did THIS supervisor end the child? The exit forensics in live.py can
+        # prove a death was TerminateProcess but not who sent it, and rc=1 looks
+        # identical either way. Recording our own hand is the only way to read
+        # an exit as "we did that" rather than "something did that".
+        self.killed_by_us = None
+
+    def kill(self, why: str):
+        self.killed_by_us = why
+        try:
+            self.proc.terminate()
+        except Exception as e:
+            log(f"{self.name}: terminate failed ({e})")
 
     def alive(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
@@ -284,8 +293,13 @@ class Child:
                 except Exception: pass
                 self._err = None
             why = self._last_error()
-            log(f"{self.name} exited rc={rc} — restart in {self.backoff}s"
+            # The distinction that took 191 exits to become answerable.
+            hand = (f" — ENDED BY THIS SUPERVISOR ({self.killed_by_us})"
+                    if self.killed_by_us
+                    else " — NOT ended by this supervisor")
+            log(f"{self.name} exited rc={rc}{hand} — restart in {self.backoff}s"
                 + (f" — last output: {why}" if why else ""))
+            self.killed_by_us = None
             if self.notify_restart:
                 toast("⚠ SniperSight scanner restarted",
                       f"{self.name} exited (rc={rc}) — auto-recovered, check watchdog.log")
@@ -346,9 +360,12 @@ def main():
                 audit_state = audit_tick(audit_state, live)
             time.sleep(10)
     finally:
+        # Reached only on an orderly stop. A hard kill of this process skips it
+        # entirely, which is how seven previous supervisors left their children
+        # running — see clear_orphans().
         for c in (live, server):
             if c.alive():
-                c.proc.terminate()
+                c.kill("watchdog shutting down")
         log("watchdog stopped")
 
 

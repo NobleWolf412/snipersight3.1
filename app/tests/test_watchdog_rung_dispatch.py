@@ -18,9 +18,17 @@ class _FakeChild:
     def __init__(self, alive=True):
         self._alive = alive
         self.proc = MagicMock()
+        self.killed_by_us = None
 
     def alive(self):
         return self._alive
+
+    def kill(self, why):
+        """Mirrors Child.kill: records our own hand, then terminates. The
+        attribution is what lets an exit line say whether this supervisor ended
+        the child or merely watched it die."""
+        self.killed_by_us = why
+        self.proc.terminate()
 
 
 class TestWatchdogRungDispatch(unittest.TestCase):
@@ -339,6 +347,35 @@ class TestOrphanClearing(unittest.TestCase):
         self.assertIn("clear_orphans()", body, "startup never clears orphans")
         self.assertLess(body.index("clear_orphans()"), body.index("live.tick()"),
                         "orphans are cleared after the supervisor starts working")
+
+
+class TestKillAttribution(unittest.TestCase):
+    """rc=1 looks identical whether this supervisor sent the terminate or
+    something else did. The forensics in live.py can prove a death WAS a
+    TerminateProcess but not whose. Recording our own hand is the only way to
+    read an exit line as "we did that"."""
+
+    def test_an_audit_restart_is_attributed(self):
+        child = _FakeChild(alive=True)
+        report = {"worst_rung": "HALT",
+                  "rung_counts": {"HALT": 1, "QUARANTINE": 0, "SERVE_FLAG": 0,
+                                   "AUTO_DISABLE": 0, "SERVE": 0},
+                  "blockers": [{"code": "X", "rung": "HALT"}], "warnings": []}
+        fake_store = MagicMock(connect=MagicMock(return_value=MagicMock()))
+        fake_quality = MagicMock(audit=MagicMock(return_value=report))
+        with patch.dict("sys.modules",
+                        {"engine": MagicMock(store=fake_store, quality=fake_quality),
+                         "engine.store": fake_store, "engine.quality": fake_quality}):
+            with patch.object(watchdog, "toast"), patch.object(watchdog, "log"):
+                watchdog.audit_tick({"counts": {}, "at": 0.0}, child)
+        self.assertIsNotNone(child.killed_by_us,
+                             "a supervisor-initiated kill was not recorded as one")
+        self.assertIn("HALT", child.killed_by_us)
+
+    def test_a_death_we_did_not_cause_stays_unattributed(self):
+        c = watchdog.Child("probe", [sys.executable, "-c", "pass"])
+        self.assertIsNone(c.killed_by_us,
+                          "a child starts out already blamed on the supervisor")
 
 
 class TestTakeoverHysteresis(unittest.TestCase):
