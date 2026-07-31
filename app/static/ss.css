@@ -148,6 +148,20 @@ body{
   .explainer-head::after{transition:none}
 }
 
+/* B5 — every action reports a result and a time. A control that changes nothing
+   visible is indistinguishable from one that did not fire. */
+.scan-result{color:var(--fg-3);font-size:11px;margin-bottom:var(--md);
+  padding:6px 10px;border-radius:var(--r-md);background:rgba(255,255,255,.03);
+  border-left:2px solid var(--accent)}
+.scan-result.bad{color:var(--red-2);border-left-color:var(--red)}
+
+/* A disabled control carries its reason INLINE. Hidden in a hover title, the
+   explanation may as well not exist — and an unexplained dead button reads as
+   an app that is arbitrary rather than one that is careful. */
+.locked-ctl{display:inline-flex;flex-direction:column;gap:2px;align-items:flex-start}
+.locked-ctl .locked-why{font-family:var(--f-mono);font-size:9px;
+  letter-spacing:.06em;color:var(--fg-4);max-width:22ch;line-height:1.3}
+
 /* One line above the deck saying what the deck is. Sits inside the panel so it
    cannot be read as belonging to the panel above it. */
 .deck-note{padding:var(--sm) var(--lg) var(--md);color:var(--fg-3);
@@ -201,6 +215,18 @@ body{
   letter-spacing:.22em;color:var(--fg);text-transform:uppercase}
 .brand img{height:26px;width:auto;display:block}
 .topbar .spacer{margin-left:auto}
+
+/* A8 — the header must hold still. The scanner chip cycles through
+   `SCANNER · ENGINES PF_ADAUSD`, `SCANNER · AUDIT` and `SCANNER LIVE` at
+   different widths, and every change shoved its neighbours sideways. Constant
+   motion in the top bar reads as alarm from the corner of the eye, on a bar
+   whose job is to be ignorable until something is wrong. Fixed slot, truncate
+   rather than reflow; the full phase stays in the title attribute. */
+#scanChip{width:196px;flex:none;overflow:hidden}
+#scanTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* tabular numerals so a changing clock does not shuffle its own digits */
+#clock{font-variant-numeric:tabular-nums;width:8ch;flex:none}
+#equityChip{font-variant-numeric:tabular-nums}
 
 .nav{border-right:1px solid var(--border-soft);padding:var(--lg) 0;display:flex;flex-direction:column;gap:2px;
   background:linear-gradient(180deg,var(--bg-2),var(--bg))}

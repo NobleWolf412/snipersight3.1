@@ -76,9 +76,19 @@
           <span class="t-section"><span class="term" data-t="scanner">Scanner</span></span>
           <div class="spacer" style="margin-left:auto"></div>
           <button class="btn btn-cyan" id="btnScan">Run Scan</button>
-          <button class="btn" id="btnAuto" title="Autonomous mode — locked until the forward record earns it" disabled>Auto: Off</button>
+          <!-- The reason is ON the control, not hidden in a hover title. A
+               disabled button whose explanation you have to discover teaches an
+               operator that the app is arbitrary. -->
+          <span class="locked-ctl" title="Autonomous mode stays locked until the forward record earns it">
+            <button class="btn" id="btnAuto" disabled>Auto: Off</button>
+            <span class="locked-why">locked until the forward record earns it</span>
+          </span>
         </div>
         <div class="panel-body">
+          <!-- What the last action did, and when. Run Scan used to show
+               "Scanning…", revert, and change nothing visible — leaving no way
+               to tell a completed scan from a click that missed. -->
+          <div class="t-mono scan-result" id="scanResult" hidden></div>
           <div class="grid cols-4">
             <div class="tile"><span class="t-label"><span class="term" data-t="universe">Tradeable now</span></span><span class="t-metric" id="mUniverse">—</span><span class="t-sub" id="mUniverseSub"></span></div>
             <div class="tile"><span class="t-label"><span class="term" data-t="setup">Active setups</span></span><span class="t-metric" id="mSetups">—</span></div>

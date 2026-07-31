@@ -964,6 +964,11 @@
         window.SSData.invalidate('/api/overview');
         window.SSData.invalidate('/api/setup-telemetry');
         window.SSData.invalidate('/api/pipeline-health');
+        // AND SAY SO. Run Scan used to show "Scanning…", revert, and change
+        // nothing an operator could see — no result, no timestamp, no way to
+        // tell a finished scan from a click that missed. An action that reports
+        // nothing teaches you to distrust it.
+        scanResult(s.detail || 'finished');
         refresh();                                   // just finished — repaint deck
       }
       scanning = !!s.running;
@@ -1005,6 +1010,17 @@
   pollConsole();
 
   /* ---------- run a real scan ---------- */
+  /* Every action reports a RESULT and a TIME. A control that changes nothing
+     visible is indistinguishable from one that did not fire, and an operator
+     who cannot tell those apart stops trusting the button. */
+  function scanResult(text, bad){
+    const el = $('scanResult');
+    if(!el) return;
+    el.textContent = `${text} · ${new Date().toISOString().slice(11, 19)}Z`;
+    el.className = 't-mono scan-result' + (bad ? ' bad' : '');
+    el.hidden = false;
+  }
+
   $('btnScan').addEventListener('click', async e => {
     const b = e.currentTarget;
     b.disabled = true; b.textContent = 'Scanning…';
@@ -1012,11 +1028,19 @@
     try{
       const r = await fetch('/api/scan', {method:'POST'});
       const d = await r.json().catch(() => ({}));
-      if(r.status === 409){ $('consoleState').textContent = 'already scanning'; }
-      else if(!r.ok){ markDegraded(d.detail || ('scan → ' + r.status)); }
+      if(r.status === 409){
+        $('consoleState').textContent = 'already scanning';
+        scanResult('a scan was already running', true);
+      }
+      else if(!r.ok){
+        markDegraded(d.detail || ('scan → ' + r.status));
+        scanResult(d.detail || ('scan failed → ' + r.status), true);
+      }
+      else scanResult('scanning…');
       await pollConsole();
     }catch(err){
       markDegraded(String(err));
+      scanResult('could not start a scan', true);
       b.disabled = false; b.textContent = 'Run Scan';
     }
     // the poll loop re-enables the button when the backend reports it finished
