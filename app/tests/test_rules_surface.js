@@ -80,13 +80,17 @@ ok('it answers the questions that were actually asked', () => {
   const body = HTML.slice(i, HTML.indexOf('</details>', i));
   // "is it always scanning? what does run scan do then?"
   assert(/always running/i.test(body), 'never says the scanner runs continuously');
-  assert(/Run Scan/.test(body) && /same pass/i.test(body),
+  // substance, not my original phrasing — another session rewrote this prose
+  // (for the better) and the old assertion pinned exact words instead of the
+  // claim. What must survive any rewrite: Run Scan is the same work, now.
+  assert(/Run Scan/.test(body) && /same (pass|check|work)/i.test(body),
          'never explains that Run Scan is the same work, just now');
   // "market weather looks like potential setups?"
   assert(/empty Setup Deck/i.test(body) && /normal state/i.test(body),
          'never says an empty deck beside a busy weather is correct');
   // "im seeing not scanned yet still warming up. whats that"
-  assert(/200 daily candles/.test(body), 'never says what warming is waiting for');
+  assert(/200 daily candles|enough history/i.test(body),
+         'never says what warming is waiting for');
   // "arm scanner should take the trade"
   assert(/paper/i.test(body) && /locked/i.test(body),
          'never says Arm does not place a real order');
@@ -98,7 +102,9 @@ ok('each step names the settings it controls', () => {
   assert(/Controlled by:/.test(body),
          'the pipeline is described but never tied to the toggles below it, '
          + 'which is the whole reason it is on this surface');
-  assert(/top n|min volume/i.test(body), 'no setting is named');
+  // accepts either the raw keys or the B7 display labels the page now uses
+  assert(/top n|min volume|how many symbols to admit|minimum 24h volume/i.test(body),
+         'no setting is named');
 });
 
 ok('every term it underlines is defined', () => {

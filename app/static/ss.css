@@ -161,6 +161,30 @@ body{
   .explainer-head::after{transition:none}
 }
 
+/* A10 — a loading state holds the space its content will take. Every pending
+   panel used to say "loading…" in one line of text, then resolve into rows,
+   tables and bands several hundred pixels tall — so the whole page reflowed on
+   every arrival, and anything the operator was about to click moved. The
+   shimmer is deliberately slow and dim (this is a waiting room, not a show),
+   and the global prefers-reduced-motion rule flattens it with everything else. */
+.skeleton{display:flex;flex-direction:column;gap:10px;padding:var(--md) var(--lg)}
+.skel{position:relative;overflow:hidden;background:rgba(255,255,255,.045);
+  border-radius:var(--r-sm)}
+.skel::after{content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.05),transparent);
+  animation:skelSweep 1.8s ease-in-out infinite}
+@keyframes skelSweep{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.skel-line{display:block;height:12px}
+/* skeletons inside prose bands inherit the band's padding; don't double it */
+.era-band .skeleton, .t-body .skeleton{padding:0}
+
+/* Decision Provenance: the second application, embedded where it belongs.
+   The iframe gets its src ONLY when the disclosure opens — see shell.js —
+   so the page inside costs nothing until someone asks for it. */
+.prov-body iframe{width:100%;height:72vh;border:0;display:block;
+  background:#070b10;border-top:1px solid var(--border-soft)}
+.prov-body a{color:var(--accent)}
+
 /* D5 — a count you cannot open is an assertion. "known venue gaps ×91" told an
    operator a number and refused to show them one, on the surface that asks
    whether the machine is telling the truth. */

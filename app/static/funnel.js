@@ -580,7 +580,13 @@
                  ov.status === 'fulfilled' ? ov.value : {}));
   }
 
-  ROOT.innerHTML = '<div class="dx-funnel"><div class="dx-load">reading the funnel…</div></div>';
+  // Skeleton, not text: the funnel arrives as several stage bars, and a
+  // one-line placeholder meant the panel grew on arrival and shoved everything
+  // below it. ss.css owns .skel; this module renders inside the shell page.
+  ROOT.innerHTML = '<div class="dx-funnel"><div class="skeleton" role="status" ' +
+    'aria-label="loading"><div class="skel" style="height:28px"></div>' +
+    '<div class="skel" style="height:28px"></div>' +
+    '<div class="skel" style="height:28px"></div></div></div>';
 
   /* Driven by SSData's scheduler rather than a timer of this module's own, so
      the cadence, the in-flight de-duplication and the don't-poll-a-hidden-tab

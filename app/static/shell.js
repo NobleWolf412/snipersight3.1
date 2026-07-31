@@ -274,6 +274,20 @@
        changes. Survivors keep their node (and their position); a row that
        leaves the payload fades OUT IN PLACE, holding its slot open, so nothing
        below it shifts at the moment the operator is reaching for it. */
+    /* The differ only ever APPENDS rows, so the placeholder the markup ships
+       with (`loading…`) was never removed on the path where setups exist — it
+       sat above the first card until the deck happened to empty out once. */
+    el.querySelectorAll(':scope > .empty').forEach(n => n.remove());
+
+    /* The differ APPENDS row nodes; anything else in the container survives
+       every render. So the loading skeleton — and the empty state, when a quiet
+       market wakes up — must be removed by hand, or they sit ABOVE the first
+       real rows forever. This was live: a PF_ZECUSD setup rendered underneath
+       the skeleton, and the same hole existed for the old "loading…" div. It
+       went unseen because the deck was empty in every test until a real setup
+       finally fired. */
+    el.querySelectorAll(':scope > .skeleton, :scope > .empty').forEach(n => n.remove());
+
     const seen = new Set();
     ordered.forEach(s => {
       const key = s.symbol;
@@ -1024,6 +1038,18 @@
     }catch(err){ /* console is best-effort; the health chip owns API state */ }
     finally{ polling = false; }
   }
+  /* Decision Provenance — the second application, loaded on demand.
+     diagnostics.html shipped with an ?embed=1 mode that hides its own chrome;
+     someone designed it to be embedded here and stopped one step short of
+     wiring it. The iframe is src-less in the markup and gets its URL on the
+     FIRST open only, so the extra page and its fetches cost nothing until the
+     operator actually asks for provenance. */
+  const prov = $('provenance');
+  if(prov) prov.addEventListener('toggle', () => {
+    const f = $('provFrame');
+    if(prov.open && f && !f.src) f.src = f.dataset.src;
+  });
+
   $('btnFollow').addEventListener('click', e => {
     follow = !follow;
     e.currentTarget.textContent = follow ? 'Following' : 'Paused';

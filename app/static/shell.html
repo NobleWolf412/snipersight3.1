@@ -113,7 +113,10 @@
         <div class="deck-note t-body">Setups appear only when price returns to a
           zone and confirms there — not when a symbol merely looks tradeable.
           Empty is normal. <a href="#rules">How the scanner works</a></div>
-        <div id="deck"><div class="empty">loading…</div></div>
+        <div id="deck"><div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:58px"></div>
+          <div class="skel" style="height:58px"></div>
+        </div></div>
       </div>
 
       <!-- Market Weather: regime x timeframe, and what it MEANS. weather.js owns it. -->
@@ -283,7 +286,9 @@
            measures the whole book, so the two trade counts legitimately differ
            — and a reader who meets them unlabelled concludes the app is lying.
            The reconciliation is the headline on BOTH panels, in one wording. -->
-      <div class="era-band" id="resultsEra">loading…</div>
+      <div class="era-band" id="resultsEra"><span class="skeleton" role="status" aria-label="loading">
+        <span class="skel skel-line" style="width:88%"></span>
+        <span class="skel skel-line" style="width:64%"></span></span></div>
       <div class="grid cols-4" style="margin-bottom:var(--lg)">
         <div class="tile"><span class="t-label">Equity</span><span class="t-metric" id="rEquity">—</span></div>
         <div class="tile"><span class="t-label">Return</span><span class="t-metric" id="rReturn">—</span></div>
@@ -303,17 +308,30 @@
       <div class="grid cols-2" style="margin-bottom:var(--lg)">
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">By Symbol</h2></div>
-          <div id="perfSymbol"><div class="empty">loading…</div></div>
+          <div id="perfSymbol"><div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:24px"></div>
+          <div class="skel" style="height:24px"></div>
+          <div class="skel" style="height:24px"></div>
+          <div class="skel" style="height:24px"></div>
+        </div></div>
         </div>
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">By Strategy</h2></div>
-          <div id="perfStrategy"><div class="empty">loading…</div></div>
+          <div id="perfStrategy"><div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:24px"></div>
+          <div class="skel" style="height:24px"></div>
+          <div class="skel" style="height:24px"></div>
+          <div class="skel" style="height:24px"></div>
+        </div></div>
         </div>
       </div>
 
       <div class="panel">
         <div class="panel-head"><h2 class="t-section">Forward Record</h2></div>
-        <div class="panel-body t-body" id="resultsNote">loading…</div>
+        <div class="panel-body t-body" id="resultsNote"><span class="skeleton" role="status" aria-label="loading">
+        <span class="skel skel-line" style="width:92%"></span>
+        <span class="skel skel-line" style="width:78%"></span>
+        <span class="skel skel-line" style="width:40%"></span></span></div>
       </div>
     </section>
 
@@ -393,8 +411,9 @@
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><h2 class="t-section">Risk</h2>
-            <span class="chip" id="riskVer" style="margin-left:auto">—</span></div>
+          <!-- the cost-model build stamp (`costs-v0.4`) lived here; it is
+               provenance for a developer, not a rule the reader can change -->
+          <div class="panel-head"><h2 class="t-section">Risk</h2></div>
           <div class="panel-body">
             <div class="tk-out" id="riskNow"></div>
             <p class="t-body" style="margin-top:var(--md);color:var(--fg-3)">
@@ -460,7 +479,9 @@
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Why nothing fired</h2>
             <button class="btn" id="btnDiagnose" style="margin-left:auto">Diagnose</button></div>
-          <div class="panel-body" id="dFunnel"><span class="t-mono" style="color:var(--fg-4)">loading…</span></div>
+          <div class="panel-body" id="dFunnel"><span class="skeleton" role="status" aria-label="loading">
+        <span class="skel skel-line" style="width:70%"></span>
+        <span class="skel skel-line" style="width:55%"></span></span></div>
           <!-- funnel.js appends the stage bars + bottleneck pill here -->
           <div id="funnelRoot"></div>
         </div>
@@ -468,19 +489,55 @@
       <div class="grid cols-2">
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Open <span class="term" data-t="blocker">Issues</span></h2></div>
-          <div id="dIssues"><div class="empty">loading…</div></div>
+          <div id="dIssues"><div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:36px"></div>
+          <div class="skel" style="height:36px"></div>
+          <div class="skel" style="height:36px"></div>
+        </div></div>
         </div>
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Setup
             <span class="term" data-t="telemetry">Telemetry</span></h2>
             <span class="chip" id="telChip" style="margin-left:auto">—</span></div>
-          <div id="dTelemetry"><div class="empty">loading…</div></div>
+          <div id="dTelemetry"><div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:30px"></div>
+          <div class="skel" style="height:30px"></div>
+          <div class="skel" style="height:30px"></div>
+        </div></div>
         </div>
       </div>
 
       <!-- Edge statistics: is the recorded book distinguishable from zero?
            edgeview.js owns it and reads /api/edge-stats. -->
-      <div id="edgeRoot" style="margin-top:var(--lg)"></div>
+      <div id="edgeRoot" style="margin-top:var(--lg)">
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:64px"></div>
+          <div class="skel skel-line" style="width:60%"></div>
+          <div class="skel skel-line" style="width:85%"></div>
+        </div>
+      </div>
+
+      <!-- static/diagnostics.html was a complete second application — its own
+           header, stylesheet, and a searchable decision-provenance view this
+           surface lacked — reachable only by TYPING THE PATH. Nothing linked
+           to it. Yet it shipped with an ?embed=1 mode that hides its chrome:
+           someone designed it to be embedded here and stopped one step short.
+           This is that step. The iframe stays src-less until opened, so the
+           second app costs nothing until someone asks for it. -->
+      <details class="explainer" id="provenance" style="margin-top:var(--lg)">
+        <summary class="explainer-head">
+          <h2 class="t-section">Decision Provenance</h2>
+          <span class="wx-sub">every decision, searchable — rules, values, missing evidence</span>
+        </summary>
+        <div class="prov-body">
+          <iframe id="provFrame" data-src="/static/diagnostics.html?embed=1"
+                  title="Decision provenance — searchable record of every decision"></iframe>
+          <div class="t-label" style="padding:var(--sm) var(--lg);text-transform:none;letter-spacing:0">
+            Also available as a
+            <a href="/static/diagnostics.html" target="_blank" rel="noopener">full page</a>.
+          </div>
+        </div>
+      </details>
 
       <!-- Relocated from Command. This is a developer trace, and it belongs on
            the surface that asks whether the machine is telling the truth — not
@@ -500,7 +557,11 @@
     <section class="surface" id="s-learn">
       <div class="surface-head"><h1 class="t-page">Learn</h1>
         <p>What do these words mean, and why do they work?</p></div>
-      <div id="learnRoot"><div class="empty">loading…</div></div>
+      <div id="learnRoot"><div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:88px"></div>
+          <div class="skel" style="height:88px"></div>
+          <div class="skel" style="height:88px"></div>
+        </div></div>
     </section>
 
   </main>
