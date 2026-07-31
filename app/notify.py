@@ -49,7 +49,18 @@ def _xml_escape(s: str) -> str:
 #
 # CREATE_NO_WINDOW gives the child its own hidden console instead of borrowing
 # ours. The toast still appears; the blast radius does not include the caller.
+#
+# CREATE_NEW_PROCESS_GROUP added after that was not sufficient. With the console
+# fix in place the scanner still died at toast sites — a drift alert at 05:47:45
+# after 35 minutes, an onboard before that — so the deaths track TOASTS rather
+# than startup, and CREATE_NO_WINDOW alone had not severed whatever reaches back.
+# A new process group is what actually stops console control events being
+# delivered across the boundary: GenerateConsoleCtrlEvent is scoped to a group,
+# so a child in its own group cannot pass one back to us and we cannot send one
+# to it. Belt and braces, on a path where the failure is an uncatchable kill and
+# the cost of over-isolating a notification is nil.
 CREATE_NO_WINDOW = 0x08000000
+CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 
 def toast(title: str, msg: str) -> bool:
@@ -73,7 +84,7 @@ def toast(title: str, msg: str) -> bool:
             path = f.name
         kwargs = {}
         if sys.platform == "win32":
-            kwargs["creationflags"] = CREATE_NO_WINDOW
+            kwargs["creationflags"] = CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
         r = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path],
             capture_output=True, timeout=15, **kwargs)
