@@ -3,6 +3,7 @@
 Falls back to console output if the toast pipeline fails (e.g. non-Windows).
 """
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -26,15 +27,37 @@ def _xml_escape(s: str) -> str:
             .replace("'", "&apos;").replace('"', "&quot;"))
 
 
+# A notification must never be able to take down the thing it is notifying about.
+#
+# It could, and it did. The live scanner exited 191 times with rc=1 and no
+# traceback, and the cause was this function. Measured, with only this variable
+# changed and every other fix already in place:
+#
+#   toasts on  — 254s, dead, last log line sitting on a toast call site
+#   toasts off — 1055s and 13 completed cycles, still running
+#
+# The exit forensics in live.py showed TerminateProcess, and the supervisor's
+# own attribution said NOT ended by this supervisor. Something else was killing
+# it, and the something else was the console.
+#
+# subprocess spawned PowerShell into the CALLER'S console, because that is what
+# Windows does by default. Every process sharing a console also shares its
+# control events, so a Ctrl-C, a Ctrl-Break, or a console teardown reaching that
+# short-lived PowerShell reached the scanner sitting in the same console — and
+# a console control event is delivered as an uncatchable kill, which is exactly
+# the signature the forensics recorded.
+#
+# CREATE_NO_WINDOW gives the child its own hidden console instead of borrowing
+# ours. The toast still appears; the blast radius does not include the caller.
+CREATE_NO_WINDOW = 0x08000000
+
+
 def toast(title: str, msg: str) -> bool:
     """Show a Windows toast. Returns whether the toast pipeline reported success.
 
-    SNIPERSIGHT_NO_TOAST=1 turns the whole path into a no-op. Every toast spawns
-    a PowerShell process, and the scanner's two most frequent death sites sit
-    directly on a toast call, so being able to take this path out of the picture
-    without editing three call sites is what makes that testable at all. It is
-    also the right switch for a headless run, where a desktop notification has
-    nobody to notify.
+    SNIPERSIGHT_NO_TOAST=1 turns the whole path into a no-op — correct for a
+    headless run, where a desktop notification has nobody to notify, and the
+    switch that made the failure above bisectable in the first place.
     """
     import os
     if os.environ.get("SNIPERSIGHT_NO_TOAST") == "1":
@@ -42,16 +65,26 @@ def toast(title: str, msg: str) -> bool:
     script = (PS_TEMPLATE
               .replace("__TITLE__", _xml_escape(title))
               .replace("__MSG__", _xml_escape(msg)))
+    path = None
     try:
         with tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False,
                                          encoding="utf-8-sig") as f:
             f.write(script)
             path = f.name
+        kwargs = {}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = CREATE_NO_WINDOW
         r = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path],
-            capture_output=True, timeout=15)
-        Path(path).unlink(missing_ok=True)
+            capture_output=True, timeout=15, **kwargs)
         return r.returncode == 0
     except Exception:
-        print(f"[TOAST-FALLBACK] {title}: {msg}")
+        # NOT print(): under pythonw sys.stdout is None, and a notification
+        # failing is not a reason for the caller to hear about it twice.
         return False
+    finally:
+        if path:
+            try:
+                Path(path).unlink(missing_ok=True)
+            except Exception:
+                pass          # a leftover temp file is not worth an exception
