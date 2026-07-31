@@ -141,9 +141,13 @@
              'it is a rule of thumb the engine applies, not a proven improvement.',
       cta: RESULTS_SURF },
     NOT_IN_POINT_IN_TIME_UNIVERSE: {
-      plain: 'the token was not in the tradeable list when the setup confirmed',
-      means: 'Membership is judged at the moment the setup confirmed, not now. ' +
-             'A token that qualifies today does not retroactively qualify.',
+      plain: 'the token was not on the traded watchlist when the setup confirmed',
+      means: 'The watchlist is the ~19 symbols the scanner admits by volume and ' +
+             'history ("Tradeable now" on Command). Membership is judged at the ' +
+             'moment the setup confirmed, not now — a token that qualifies today ' +
+             'does not retroactively qualify. Kraken (PF_) pairs are on purpose: ' +
+             'they are shadow venue — watched and measured to build evidence, ' +
+             'never given money. Their setups appear here so the record exists.',
       cta: SETUP_SURFACE },
     INVALID_STOP_DISTANCE: {
       plain: 'the stop sat on top of the entry, so no size could be computed',

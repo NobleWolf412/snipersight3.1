@@ -420,12 +420,18 @@ body{
    one visible unit instead of flexbox silently crushing whichever child has
    the least intrinsic height. */
 .ticket{overflow:auto}
-.ticket-body{padding:10px var(--lg);display:flex;flex-direction:column;gap:10px;
+.ticket-body{padding:8px var(--lg);display:flex;flex-direction:column;gap:8px;
   overflow:auto;flex:1 1 auto;min-height:140px}
 .ticket .fld input{padding:7px 10px}
 /* Slim head: the tabs directly beneath already say this panel is the ticket,
-   so the head row only needs to carry the source chip, not a tall banner. */
-.ticket .panel-head{padding:8px var(--lg)}
+   so the head row only needs to carry the source chip, not a tall banner.
+   The title is narrowed too — at full size "ORDER TICKET" plus the source
+   chip exceeded the 268px column and wrapped the head to two rows. */
+.ticket .panel-head{padding:6px var(--lg)}
+.ticket .panel-head .t-section{font-size:11px;letter-spacing:.14em}
+/* rationale prose, slightly condensed: it is the one pane that is pure
+   reading, and 12px Inter stays comfortably legible */
+.tk-why{font-size:12px;line-height:1.45}
 /* Label BESIDE the input, not above it. A stacked label spends a full line on
    one word; beside the input each price row is ~33px instead of ~56, which is
    the difference between the Trade pane fitting whole and it scrolling. Only
@@ -461,15 +467,10 @@ body{
    them. Author-level, and scoped to the ticket rather than changed globally. */
 .ticket [hidden]{display:none}
 
-/* The three numbers that decide the trade, pinned under the panes — as one
-   strip, not three stacked label/value rows. They are read together and
-   compared at a glance, so stacking them cost 74px of the one area that has
-   to stay uncrowded to buy nothing. Display face at 17px because these are
-   the figures the decision actually rests on. */
-.tk-key{display:flex;gap:var(--lg);align-items:flex-start;
-  padding-bottom:var(--sm);border-bottom:1px solid var(--border-soft)}
-.tk-key > div{display:flex;flex-direction:column;gap:2px;padding:0;
-  flex:1 1 0;min-width:0}
+/* The three numbers the decision rests on, in the display face so they read
+   as the headline of the bar rather than three more stats. */
+.tk-key{display:flex;gap:var(--lg);align-items:flex-start;flex:none}
+.tk-key > div{display:flex;flex-direction:column;gap:2px;padding:0;min-width:0}
 .tk-key .k{font-family:var(--f-mono);font-size:9px;font-weight:600;letter-spacing:.12em;
   text-transform:uppercase;color:var(--fg-4);line-height:1.3}
 .tk-key .v{font-family:var(--f-display);font-size:17px;font-weight:800;line-height:1.1;
@@ -498,17 +499,24 @@ body{
    now — and Arm sticks to the bottom of that scroll, so the promise the foot
    exists to keep (the commit control is always reachable) survives the
    thing that was breaking it. */
-/* Fully pinned, never scrolling. The foot earned that back by shrinking: the
-   nine-row breakdown lives in the Numbers pane and the standing lock note in
-   Why, so what remains — three key figures, the breach warning, Arm — is the
-   set that must be visible in full whenever a trade is being committed. The
-   earlier scroll-with-sticky-Arm version put the Arm row ON TOP of the
-   warning text, which cut the sentence naming the breach in half. When space
-   runs out it is the INPUTS above that scroll, because a half-hidden input
-   asks for a click; a half-hidden warning gets a trade armed against it. */
-.ticket-foot{flex:none;display:flex;flex-direction:column;gap:10px;
-  padding:10px var(--lg) var(--md);border-top:1px solid var(--border-soft);
-  background:rgba(0,0,0,.22)}
+/* ---------- the commit bar ----------
+   The deciding numbers, the breach warning and Arm — laid flat under the
+   chart at full width instead of stacked inside the 268px ticket column.
+   In the column this content was 229px tall (the warning alone wrapped to
+   five lines) and starved the controls above it into a scrolling slit; as a
+   row it costs ~70px and the warning is a sentence again. Wraps only when a
+   message row (open trade, armed result, lock note) has something to say. */
+.commit-bar{flex:none;display:flex;align-items:center;flex-wrap:wrap;
+  gap:8px var(--lg);padding:8px var(--lg);
+  border:1px solid var(--border-soft);border-radius:var(--r-lg);
+  background:rgba(0,0,0,.3)}
+.commit-bar .tk-warn{flex:1 1 240px;min-width:0}
+.commit-bar .tk-actions{flex:none;margin-left:auto}
+.commit-bar .tk-actions .btn{flex:none}
+/* message rows: full-width second line, only when non-empty */
+.commit-bar .tk-open,.commit-bar .tk-armed,.commit-bar .tk-lock{
+  flex:1 1 100%;text-align:left;margin:0;border:0;padding:0}
+.commit-bar .tk-armed:empty,.commit-bar .tk-lock:empty{display:none;min-height:0}
 
 .tk-out{display:flex;flex-direction:column;gap:1px;padding:0}
 .tk-out div{display:flex;justify-content:space-between;align-items:baseline;gap:var(--sm);
@@ -634,6 +642,10 @@ body{
   font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;color:var(--fg-4);
   text-transform:uppercase;font-variant-numeric:tabular-nums}
 .pos-ends .now{color:var(--fg-2)}
+/* anything carrying data-trace opens the per-setup trace drawer */
+.traceable{cursor:pointer}
+.traceable:hover .chip{filter:brightness(1.25)}
+.pos-row.traceable:hover{background:rgba(255,255,255,.03)}
 .pos-r{text-align:right;font-family:var(--f-display);font-size:20px;font-weight:800;color:var(--fg)}
 .pos-r.up{color:var(--green)} .pos-r.down{color:var(--red-2)}
 .pos-r .t-sub{display:block;font-family:var(--f-mono);font-size:10px;font-weight:400;

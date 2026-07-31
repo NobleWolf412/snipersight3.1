@@ -389,6 +389,17 @@
         if(window.SSChart) SSChart.open(b.dataset.sym, b.dataset.tf);
       });
     });
+    /* The verdict is a claim; the trace is its evidence. SSTracer has existed
+       since Wave 3.5 and NOTHING opened it — a drawer that answers "why did
+       this trade / why was this refused" gate by gate, wired to no click.
+       The verdict cell is now that click. */
+    el.querySelectorAll('[data-trace]').forEach(d => {
+      if(d.dataset.wired || !d.dataset.trace) return;
+      d.dataset.wired = '1';
+      d.addEventListener('click', () => {
+        if(window.SSTracer) SSTracer.open(d.dataset.trace);
+      });
+    });
   }
 
   const deckRows = new Map();          // symbol -> {el, html, cls}
@@ -497,7 +508,8 @@
           <span class="term" data-t="rr">R:R</span> ${s.rr}
           ${storyOf(s)}
         </div>
-        <div>${verdict}</div>
+        <div class="traceable" data-trace="${esc(s.setup_id || '')}"
+             title="click for the gate-by-gate story: the zone, the confirmation, every rule it passed or failed">${verdict}</div>
         <button class="btn" data-sym="${s.symbol}" data-tf="${s.tf}">Open chart</button>`;
     }
   }
@@ -558,7 +570,8 @@
       const r = (now == null || !perR) ? null
         : (long ? now - entry : entry - now) / perR;
       const tone = r == null ? '' : r >= 0 ? 'up' : 'down';
-      return `<div class="pos-row">
+      return `<div class="pos-row traceable" data-trace="${esc(t.setup_id || '')}"
+        title="click for why this trade was taken — the zone, the confirmation, every gate">
         <div>
           <div class="pos-sym">${esc(String(t.symbol).replace('-USD', ''))}</div>
           <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
@@ -614,6 +627,13 @@
     $('mEquity').textContent = money(p.equity);
     $('rEquity').textContent = money(p.equity);
 
+    if(!$('positions').dataset.traceWired){
+      $('positions').dataset.traceWired = '1';
+      $('positions').addEventListener('click', e => {
+        const d = e.target.closest('[data-trace]');
+        if(d && d.dataset.trace && window.SSTracer) SSTracer.open(d.dataset.trace);
+      });
+    }
     // fire-and-forget: the positions panel fetches a price per open trade, and
     // a slow venue must not hold up the equity numbers above it
     renderPositions(p).catch(() => {});
