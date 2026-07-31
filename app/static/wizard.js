@@ -51,11 +51,13 @@
 
   /* ---------- data ---------- */
 
-  async function api(path) {
-    const r = await fetch(path);
-    if (!r.ok) throw new Error(path + ' → HTTP ' + r.status);
-    return r.json();
-  }
+  /* The wizard reads five endpoints the shell is already polling. Reading them
+     through SSData means opening it costs nothing when the shell has current
+     answers, and — more to the point — the wizard's verdict is computed from
+     the SAME payloads the surfaces behind it are showing. A diagnosis drawn
+     from a different moment than the screen it is diagnosing is worse than no
+     diagnosis. */
+  const api = path => window.SSData.get(path, 25000);
 
   // Every step reads from this bag. A rejected entry carries its error string,
   // which is what turns the step into UNDETERMINED rather than a guess.

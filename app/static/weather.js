@@ -312,36 +312,29 @@
     r.click();
   });
 
-  async function load() {
-    try {
-      /* The cycle backdrop is SUPPLEMENTARY. It is fetched alongside the
-         weather but its failure must never take the strip down with it — the
-         strip answers "why is my screen empty?", which is the load-bearing
-         question here. A missing backdrop drops one block; a thrown backdrop
-         would drop the answer. */
-      fetch('/api/cycles')
-        .then(r => (r.ok ? r.json() : null))
-        .then(c => { cyc = c; if (lastWeather) render(lastWeather); })
-        .catch(() => { /* backdrop absent; the strip stands on its own */ });
 
-      const res = await fetch('/api/weather');
-      if (!res.ok) throw new Error('/api/weather → ' + res.status);
-      const data = await res.json();
-      if (!data || !Array.isArray(data.symbols)) throw new Error('/api/weather returned no symbols');
-      if (!data.symbols.length) {
-        // An empty universe is a real state, but it is a PIPELINE state, and it
-        // must not be dressed up as a calm one.
-        fail('the scan universe is empty — no symbol has been admitted yet');
-        return;
-      }
-      render(data);
-    } catch (err) {
-      fail(String(err && err.message ? err.message : err));
+  /* The cadence is SSData's now, not this module's. It was the only file
+     checking document.hidden; that check is in the layer, so every consumer
+     gets it rather than only the one that remembered. Subscribing also means
+     this strip repaints from the same /api/weather response any other reader
+     saw, instead of one it fetched on a clock of its own. */
+  window.SSData.subscribe('/api/weather', (d, err) => {
+    if (err) { fail(String(err.message || err)); return; }
+    if (!d || !Array.isArray(d.symbols)) return;
+    if (!d.symbols.length) {
+      fail('the scan universe is empty — no symbol has been admitted yet');
+      return;
     }
-  }
-
-  load();
-  // Same cadence as the shell's own refresh loop; skipped while the tab is
-  // hidden because a background tab polling a 1GB store buys nothing.
-  setInterval(() => { if (!document.hidden) load(); }, 30000);
+    render(d);
+  }, 30000);
+  /* The cycle backdrop is SUPPLEMENTARY, and subscribed SEPARATELY for that
+     reason: its failure must never take the strip down with it. The strip
+     answers "why is my screen empty?", which is the load-bearing question here.
+     A missing backdrop drops one block; a backdrop that could throw into the
+     weather's own path would drop the answer. On error `c` is undefined, the
+     lede renders nothing, and the strip stands on its own. */
+  window.SSData.subscribe('/api/cycles', (c) => {
+    cyc = c || null;
+    if (lastWeather) render(lastWeather);
+  }, 30000);
 })();

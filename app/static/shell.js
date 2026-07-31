@@ -32,11 +32,22 @@
 
   /* ---------- fetch with visible failure ---------- */
   let degraded = false;
-  async function api(path){
-    const r = await fetch(path);
-    if(!r.ok) throw new Error(path + ' → ' + r.status);
-    return r.json();
-  }
+  /* Reads go through SSData so this file and funnel.js/chart.js/wizard.js share
+     one response per endpoint instead of fetching the same thing on four
+     unaligned clocks and then disagreeing about the answer.
+
+     shell.js is the POLLER and defaults to maxAge 0 — always a real request.
+     That is deliberate: refresh() is not only the 30s loop, it is also the
+     repaint after a scan finishes, after Apply, and after a halt. Serving any
+     of those from cache would show the operator the state they just changed
+     away from. Everyone else reads with a window and gets these answers free.
+
+     Costs nothing extra: SSData collapses concurrent requests for one path into
+     one in-flight promise, which matters more than it sounds — /api/overview
+     can take the better part of a minute while the scanner holds the store, and
+     four modules asking separately used to mean four overlapping requests
+     competing for it. The throw-on-failure contract is unchanged. */
+  const api = (path, maxAge) => window.SSData.get(path, maxAge == null ? 0 : maxAge);
   /* ONE severity ladder, ONE colour. The engine already grades every check on
      PASS < DEGRADED < BLOCKED (engine/quality.py ORDER) and this file used to
      re-derive a colour at three call sites from three different predicates.
@@ -737,6 +748,17 @@
       body: JSON.stringify({changes, note: note || ''})});
     const d = await r.json().catch(() => ({}));
     if(!r.ok) throw new Error(d.detail || ('settings → ' + r.status));
+    /* This file reads with maxAge 0 and would repaint correctly on its own, but
+       playbooks.js holds the same settings behind a window and would keep
+       showing the pre-Apply switch positions. A write invalidates for everyone,
+       not just for the writer. A BEHAVIOURAL change also opens a new forward
+       window, so the overview and portfolio both stop describing the old one. */
+    window.SSData.invalidate('/api/settings');
+    window.SSData.invalidate('/api/playbooks');
+    if(d.baseline){
+      window.SSData.invalidate('/api/overview');
+      window.SSData.invalidate('/api/portfolio');
+    }
     return d;
   }
 
@@ -835,6 +857,7 @@
       const d = await r.json().catch(() => ({}));
       if(!r.ok) throw new Error(d.detail || ('credentials → ' + r.status));
       if(input) input.value = '';        // never leave a secret in the DOM
+      window.SSData.invalidate('/api/credentials');
       await loadCredentials();
     }catch(err){ alert('Could not save credential: ' + err.message); }
   });
@@ -909,7 +932,15 @@
     if(polling) return;
     polling = true;
     try{
-      const d = await api('/api/console?offset=' + logOffset);
+      /* NOT through SSData, deliberately. This is a cursored stream: the offset
+         is different on every call, so every poll would mint a cache entry that
+         can never be hit again — an unbounded map, growing twice a second, for
+         responses nothing will ever re-read. A cache keyed by URL is the wrong
+         shape for a cursor, and `polling` above already does the only
+         de-duplication this call needs. */
+      const r = await fetch('/api/console?offset=' + logOffset, {cache: 'no-store'});
+      if(!r.ok) throw new Error('/api/console → ' + r.status);
+      const d = await r.json();
       if(!consoleEl.dataset.seeded) consoleEl.textContent = '';
       logOffset = d.offset;
       paint(d.lines || []);
@@ -920,7 +951,15 @@
       // reload mid-scan shows the same button state as the tab that started it.
       b.disabled = !!s.running;
       b.textContent = s.running ? 'Scanning…' : 'Run Scan';
-      if(scanning && !s.running) refresh();          // just finished — repaint deck
+      if(scanning && !s.running){
+        // A finished scan changes what every one of these paths says. Drop the
+        // cached copies so funnel.js and the chart repaint from the new pass
+        // too, rather than waiting out their own windows.
+        window.SSData.invalidate('/api/overview');
+        window.SSData.invalidate('/api/setup-telemetry');
+        window.SSData.invalidate('/api/pipeline-health');
+        refresh();                                   // just finished — repaint deck
+      }
       scanning = !!s.running;
     }catch(err){ /* console is best-effort; the health chip owns API state */ }
     finally{ polling = false; }

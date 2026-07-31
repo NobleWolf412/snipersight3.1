@@ -288,11 +288,12 @@
   const fmt = n => Number(n).toLocaleString();
   const pct = (n, d) => d > 0 ? Math.round(100 * n / d) : 0;
 
-  async function api(path) {
-    const r = await fetch(path);
-    if (!r.ok) throw new Error(path + ' → HTTP ' + r.status);
-    return r.json();
-  }
+  /* Through SSData: this module and shell.js both read /api/overview and
+     /api/setup-telemetry on 30s clocks that were never aligned, so the same
+     data was fetched twice per cycle and the two panels could show two
+     different moments. The window is just under the poll period, so whichever
+     module wakes first pays for the request and the other reads its answer. */
+  const api = path => window.SSData.get(path, 25000);
 
   /* ---------- state ---------- */
   let selected = null;         // stage key the operator clicked, null = follow bottleneck
@@ -574,8 +575,14 @@
   }
 
   ROOT.innerHTML = '<div class="dx-funnel"><div class="dx-load">reading the funnel…</div></div>';
-  load();
-  // Matches the shell's own 30s cadence. The operator's stage selection is held
-  // in `selected` and survives the repaint.
-  setInterval(load, 30000);
+
+  /* Driven by SSData's scheduler rather than a timer of this module's own, so
+     the cadence, the in-flight de-duplication and the don't-poll-a-hidden-tab
+     rule are decided in one place for every consumer.
+
+     Subscribed on the telemetry path because that is the one only this file
+     reads; /api/overview is then pulled from cache inside load(), which is what
+     stops this panel and the shell describing two different scans. The
+     operator's stage selection is held in `selected` and survives the repaint. */
+  window.SSData.subscribe('/api/setup-telemetry?limit=500', () => { load(); }, 30000);
 })();

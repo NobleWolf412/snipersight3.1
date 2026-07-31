@@ -73,14 +73,14 @@
   const busy = {};          // key -> a POST is in flight
   const notice = {};        // key -> what happened after the last apply
 
-  // no-store because this endpoint reports a LIVE record. A heuristically
-  // cached response would keep showing a stale win rate on a page whose entire
-  // claim is that the numbers are current.
-  async function api(path) {
-    const r = await fetch(path, {cache: 'no-store'});
-    if (!r.ok) throw new Error(path + ' → ' + r.status);
-    return r.json();
-  }
+  /* Through SSData, which sends no-store on every request for the reason this
+     module originally set it: the endpoint reports a LIVE record, and a
+     heuristically cached response would keep showing a stale win rate on a page
+     whose whole claim is that its numbers are current. Freshness is now an
+     explicit window rather than the browser's guess. /api/settings is shared
+     with the shell, so the strategy toggles here and the settings panel there
+     can no longer be a poll period apart. */
+  const api = path => window.SSData.get(path, 25000);
 
   const day = ts => ts ? new Date(ts * 1000).toISOString().slice(0, 10) : 'unknown';
   const num = n => Number(n).toLocaleString();
@@ -271,6 +271,12 @@
         ' — the switch is unchanged.'};
     }
     busy[key] = false;
+    /* The write just changed what every cached read of these paths says. Drop
+       them before reloading, or the catalogue repaints from the answer it got
+       BEFORE the toggle and silently shows the operator the state they just
+       changed away from. */
+    window.SSData.invalidate('/api/settings');
+    window.SSData.invalidate('/api/playbooks');
     await load();
   }
 

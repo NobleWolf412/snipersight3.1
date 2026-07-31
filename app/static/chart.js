@@ -37,11 +37,14 @@ window.SSChart = (() => {
                     liquidity: false, cycle: false};
   const VISIBLE_BARS = 120;                   // the opening window, not the limit
 
-  const api = async p => {
-    const r = await fetch(p);
-    if(!r.ok) throw new Error(p + ' → ' + r.status);
-    return r.json();
-  };
+  /* Through SSData. /api/overview, /api/portfolio and /api/trade-config are all
+     also read by the shell, so the ticket now sizes against exactly the equity
+     and config the Results and Risk panels are displaying — previously they
+     came from separate requests and could differ by a poll period.
+     Candles and facts key on symbol and timeframe, so switching market is
+     always a fresh read; only revisiting the same one inside the window is
+     served from cache. */
+  const api = p => window.SSData.get(p, 25000);
 
   /* ---------- price formatting: one token is $60,000 and another $0.00004 ---------- */
   const digits = p => { p = Math.abs(p);
