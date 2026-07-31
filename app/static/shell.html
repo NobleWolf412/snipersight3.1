@@ -156,6 +156,12 @@
         <span class="chip" id="cVenue" title="the exchange these candles came from">—</span>
         <span class="chip" id="cRegime">—</span>
         <span class="chip" id="cPrice">—</span>
+        <!-- The live tick sits BESIDE the closed-candle price and never
+             replaces it. §5 is closed-candle-only: every engine, fact and setup
+             is computed on closed candles, so a live price must never be
+             mistakeable for something the system acted on. Quieter treatment
+             and its own LIVE label for exactly that reason. -->
+        <span class="chip chip-live" id="cLive" hidden>—</span>
         <!-- How old the numbers on this screen are. The chart had no refresh of
              any kind and nothing said so, so a closed bar and new facts could
              sit unseen indefinitely. Freshness is now stated rather than

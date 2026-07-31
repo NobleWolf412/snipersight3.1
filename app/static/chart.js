@@ -336,6 +336,57 @@ window.SSChart = (() => {
       : 'at 1x there is no liquidation — slide right to add leverage';
   }
 
+  /* ---------- live price ----------
+     /api/ticker has existed since S-whenever with this docstring: "this exists
+     purely so the human sees the market move between candle closes". It had
+     ZERO callers in the whole of static/ — the liveness feature was built,
+     documented, and never connected.
+
+     It goes BESIDE the closed-candle price, never replacing it, and the two are
+     visibly different things. §5 is closed-candle-only: every engine, every
+     fact, every setup is computed on closed candles, and a live tick must never
+     be mistakeable for something the system acted on. So the closed price keeps
+     its colour and its chip, and this is a quieter neighbour that says LIVE.
+
+     Stops when the surface is hidden — this is the only poll in the app that
+     exists for the eye, so it has no business running when nobody is looking. */
+  let tickTimer = null;
+  const TICK_MS = 5000;
+
+  async function tickOnce(){
+    if(!sym || !visible) return;
+    try{
+      // short window: a stale live price is worse than none, and this is the
+      // one number on screen whose entire value is being current
+      const all = await window.SSData.get('/api/ticker', 4000);
+      const t = all && all[sym];
+      const el = $('cLive');
+      if(!el) return;
+      if(!t || t.price == null || t.status !== 'OK'){
+        el.hidden = true;                      // never show a stale or absent tick
+        return;
+      }
+      el.hidden = false;
+      el.textContent = 'LIVE ' + pf(t.price);
+      el.title = 'live ticker price, display only — no engine reads this (§5: '
+               + 'analysis is closed-candle only)';
+    }catch(e){
+      const el = $('cLive');
+      if(el) el.hidden = true;                 // a failed tick shows nothing
+    }
+  }
+
+  function startTicker(){
+    stopTicker();
+    tickOnce();
+    tickTimer = setInterval(tickOnce, TICK_MS);
+  }
+  function stopTicker(){
+    if(tickTimer){ clearInterval(tickTimer); tickTimer = null; }
+    const el = $('cLive');
+    if(el) el.hidden = true;
+  }
+
   /* ---------- overlays + data ---------- */
   /* Blank everything that describes a market, then say why.
 
@@ -447,6 +498,8 @@ window.SSChart = (() => {
     const chg = ((last - prev) / prev) * 100;
     $('cPrice').textContent = pf(last) + '  ' + (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
     $('cPrice').className = 'chip ' + (chg >= 0 ? 'chip-green' : 'chip-red');
+    $('cPrice').title = 'last CLOSED candle on this timeframe — what the engines see';
+    startTicker();
     const reg = regime.length ? regime[regime.length - 1].regime : null;
     $('cRegime').textContent = reg ? reg.replace('_', ' ') : 'no regime';
 
@@ -969,7 +1022,12 @@ window.SSChart = (() => {
     else await load({keepTicket: true});
     startAutoRefresh();
   }
-  function onHide(){ visible = false; }
+  function onHide(){
+    visible = false;
+    // the live tick exists for the eye; it has no business polling when the
+    // surface is off screen
+    stopTicker();
+  }
 
   /* Keep the chart current while it is on screen.
 

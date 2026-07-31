@@ -112,6 +112,14 @@ body{
 /* the health chip becomes a route to Diagnostics only while it has something
    to explain — a control that looks clickable at rest but is not lies twice */
 .chip.clickable{cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+/* The live tick. Deliberately the quietest chip on the bar: it is display-only,
+   no engine reads it, and it must never carry the visual weight of a number the
+   system actually acted on. A slow pulse says "this is moving" without becoming
+   another thing flashing at the operator. */
+.chip-live{background:transparent;border:1px dashed var(--border);
+  color:var(--fg-3);font-variant-numeric:tabular-nums;
+  animation:livePulse 4s ease-in-out infinite}
+@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.62}}
 
 /* The era label. Deliberately BODY PROSE, not a chip: it is two sentences that
    have to be read and understood, and the all-caps mono treatment this app uses
