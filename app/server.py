@@ -1447,6 +1447,7 @@ def weather():
 @app.get("/api/overview")
 def overview():
     """One call for the cockpit rails: watchlist, setup feed, engine health."""
+    from engine import venues
     con = store.connect()
     try:
         baseline, eligible = _baseline_setup_ids(con)
@@ -1474,9 +1475,24 @@ def overview():
             # 200px below reported 34 from the universe fact. Three
             # irreconcilable universe sizes on one screen, all describing the
             # same store.
+            # Venue is served, never re-derived in the browser. `venues.py` is
+            # the only thing allowed to map a symbol to what a market ALLOWS,
+            # and a JS copy of that rule would be a second authority for
+            # whether shorting is permitted and what leverage is available.
+            # It also answers the operator's question directly: BTC-USD and
+            # BTCUSDT are one coin on two exchanges at two prices, and the
+            # picker never said which one you were about to arm on.
+            try:
+                v = venues.venue_for(sym)
+                vinfo = {"key": v.key, "kind": v.kind,
+                         "max_leverage": float(v.max_leverage),
+                         "allow_shorts": v.allow_shorts}
+            except ValueError:
+                vinfo = None          # unknown instrument; say nothing rather than guess
             symbols.append({"symbol": sym, "price": price, "change_pct": chg,
                             "regime": reg, "state": m.get("state", "UNTRACKED"),
-                            "rank": m.get("rank"), "vol_usd": m.get("vol_usd")})
+                            "rank": m.get("rank"), "vol_usd": m.get("vol_usd"),
+                            "venue": vinfo})
         # rank order: by universe rank, unranked last
         symbols.sort(key=lambda s: (s["rank"] is None, s["rank"] or 0))
 

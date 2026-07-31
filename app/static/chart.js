@@ -22,6 +22,7 @@ window.SSChart = (() => {
   // seeded from the recent range when there is no setup. Either way it is
   // restorable, so an operator who drags into a corner is never stranded.
   let base = null;                            // {entry,tp,sl,dir,kind}
+  let symMeta = {};                           // symbol -> /api/overview row (venue, state)
   let modified = false;
   // Per-trade risk. Null means "use the engine default". Deliberately reset on
   // every setup load: an override is a decision about ONE trade, and carrying
@@ -44,6 +45,7 @@ window.SSChart = (() => {
   let leverage = 1;
   let cfg = null, equity = null;
   let priceLines = {}, zoneLines = [], handles = {};
+  let drawnKind = null;          // 'engine' | 'draft' — see applyLevels()
   let loadSeq = 0;                            // guards out-of-order responses
 
   const overlays = {swings: true, structure: true, zones: true,
@@ -152,12 +154,41 @@ window.SSChart = (() => {
     requestAnimationFrame(syncHandles);
   }
 
+  /* A DRAFT and an engine plan must not be drawn alike.
+
+     They were. `spec` was one fixed style map, so levels invented from
+     `last close ± average 14-bar range` — no zone, no structure, no regime,
+     always LONG — got the identical cyan ENTRY, green TP and red SL as a real
+     setup. `base.kind` was consulted only for a text chip and a button label,
+     and three horizontal price lines outweigh any caption. The code that seeds
+     them says "SAY it is seeded, never dress it as engine output"; it said so
+     in words and then dressed it anyway.
+
+     Draft covers anything that is not EXACTLY what the engine said — seeded
+     levels and dragged ones both. Solid and bright therefore carries one
+     meaning: this is the engine's plan, untouched. */
   function applyLevels(){
-    const spec = {
+    const draft = !base || base.kind !== 'engine' || modified;
+    const spec = draft ? {
+      entry: {c: 'rgba(34,211,238,.40)',  s: 1, t: 'ENTRY · DRAFT'},
+      tp:    {c: 'rgba(74,222,128,.40)',  s: 1, t: 'TP · DRAFT'},
+      sl:    {c: 'rgba(248,113,113,.40)', s: 1, t: 'SL · DRAFT'},
+    } : {
       entry: {c: '#22d3ee', s: 0, t: 'ENTRY'},
       tp:    {c: '#4ade80', s: 2, t: 'TP'},
       sl:    {c: '#f87171', s: 2, t: 'SL'},
     };
+    // Price lines only take `price` on update, so a kind change has to redraw
+    // them — otherwise dragging an engine plan would keep its solid styling and
+    // the distinction would silently stop working after the first edit.
+    const want = draft ? 'draft' : 'engine';
+    if(drawnKind !== want){
+      for(const k of Object.keys(priceLines)){
+        series.removePriceLine(priceLines[k]);
+        delete priceLines[k];
+      }
+      drawnKind = want;
+    }
     for(const k of ['entry', 'tp', 'sl']){
       const p = levels[k];
       if(p == null){
@@ -325,6 +356,10 @@ window.SSChart = (() => {
 
   async function load(){
     if(!sym) return;
+    // Before the fetch, not after: which instrument this is stays true even
+    // when the candles fail to arrive, and it is the thing that says whether
+    // the empty chart in front of you is a failure or simply unscanned.
+    showVenue();
     const seq = ++loadSeq;
     const q = k => api(`/api/facts?kind=${k}&symbol=${sym}&tf=${tf}`);
     let res;
@@ -732,10 +767,68 @@ window.SSChart = (() => {
     try{ o = await api('/api/overview'); }
     catch(err){ $('chartEmpty').textContent = 'symbol list unavailable'; return; }
     const list = o.symbols.filter(s => s.state !== 'WARMING');
-    $('cSym').innerHTML = list.map(s =>
-      `<option value="${s.symbol}">${s.symbol.replace('-USD', '')}</option>`).join('');
+    symMeta = {};
+    for(const s of list) symMeta[s.symbol] = s;
+
+    /* GROUPED, because 19 of these are scanned and 47 are leftovers nothing
+       watches. The picker used to present a 41-day-old symbol the scanner
+       dropped months ago with exactly the same standing as BTCUSDT, and the
+       ticket would then draw it a full-looking plan. Whether the engine is
+       even LOOKING at a symbol is the first thing to know about it. */
+    const GROUPS = [
+      ['ADMITTED', 'Scanned — the engine watches these'],
+      ['SHADOW',   'Shadow — measured, never sized'],
+      ['UNTRACKED', 'Not scanned — history only, no engine opinion'],
+    ];
+    const seen = new Set();
+    let html = '';
+    for(const [state, label] of GROUPS){
+      const rows = list.filter(s => s.state === state);
+      if(!rows.length) continue;
+      rows.forEach(s => seen.add(s.symbol));
+      html += `<optgroup label="${label} (${rows.length})">` +
+        rows.map(s => `<option value="${s.symbol}">${optLabel(s)}</option>`).join('') +
+        '</optgroup>';
+    }
+    // Anything in an unexpected state still has to be reachable — a symbol the
+    // picker silently omits is one the operator cannot look at to find out why.
+    const rest = list.filter(s => !seen.has(s.symbol));
+    if(rest.length)
+      html += `<optgroup label="Other (${rest.length})">` +
+        rest.map(s => `<option value="${s.symbol}">${optLabel(s)}</option>`).join('') +
+        '</optgroup>';
+    $('cSym').innerHTML = html;
+
     if(!sym) sym = list.length ? list[0].symbol : null;
     if(sym){ $('cSym').value = sym; await load(); }
+  }
+
+  /* The full symbol, never prettified. `.replace('-USD','')` rendered BTC-USD
+     as "BTC" while BTCUSDT stayed "BTCUSDT" — so the one string that tells you
+     spot from perp was stripped from exactly the symbols where it mattered. */
+  function optLabel(s){
+    const v = s.venue;
+    return v ? `${s.symbol}  ·  ${venueName(v)}` : s.symbol;
+  }
+  function venueName(v){
+    const house = (v.key || '').split('-')[0];
+    return `${house.charAt(0).toUpperCase()}${house.slice(1)} ${v.kind}`;
+  }
+
+  /* The header chip. Presentation only — every fact in it was decided by
+     `venues.py` and served over /api/overview; nothing here re-derives a venue
+     from a symbol string. */
+  function showVenue(){
+    const el = $('cVenue'), m = symMeta[sym];
+    if(!m || !m.venue){ el.textContent = '—'; el.className = 'chip'; return; }
+    const v = m.venue;
+    const lev = v.max_leverage > 1 ? ` · up to ${v.max_leverage}x` : ' · 1x';
+    el.textContent = venueName(v) + lev + (v.allow_shorts ? '' : ' · long only');
+    el.className = 'chip ' + (m.state === 'ADMITTED' ? 'chip-accent' : 'chip-amber');
+    el.title = m.state === 'ADMITTED'
+      ? 'the exchange these candles came from — the engine scans this symbol'
+      : `the exchange these candles came from — state ${m.state}, the engine is `
+        + 'not scanning this symbol, so it will have no setups';
   }
 
   /* open(symbol, timeframe) — the deck's "Open chart" entry point */

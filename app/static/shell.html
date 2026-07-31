@@ -122,6 +122,11 @@
           ><button data-tf="4H" class="on">4H</button><button data-tf="1D">1D</button
           ><button data-tf="1W">1W</button>
         </div>
+        <!-- Which exchange these candles came from. BTC-USD and BTCUSDT are one
+             coin on two venues at two prices; the picker never said which, so
+             there was no way to be sure you were arming against the book you
+             were looking at. -->
+        <span class="chip" id="cVenue" title="the exchange these candles came from">—</span>
         <span class="chip" id="cRegime">—</span>
         <span class="chip" id="cPrice">—</span>
         <div style="margin-left:auto"></div>
