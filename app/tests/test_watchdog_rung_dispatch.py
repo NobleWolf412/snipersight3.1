@@ -148,16 +148,52 @@ class TestQuarantinePersistence(unittest.TestCase):
         # the exact live reading that produced the restart loop
         self.assertEqual(self._sequence([19, 19, 4, 0])[-1], 0)
 
-    def test_a_sustained_climb_still_restarts(self):
-        # stuck high and not recovering IS a fault; the guard must not mute it
-        kills = self._sequence([5, 9, 14])
-        self.assertEqual(kills[0], 0, "restarted on the first tick")
-        self.assertEqual(kills[1], 0, "restarted before the streak was met")
-        self.assertEqual(kills[-1], 1, "a genuine sustained climb was never acted on")
+    def test_a_sustained_climb_does_not_restart_either(self):
+        """A quarantine NEVER restarts the scanner now. Measured 2026-07-31:
 
-    def test_stuck_at_a_high_level_restarts(self):
-        # a count that climbs then holds is not recovering
-        self.assertEqual(self._sequence([7, 7, 7])[-1], 1)
+            07:30:27  QUARANTINE 1  climb   streak 1
+            07:31:35  QUARANTINE 1  stuck   streak 2
+            07:32:44  QUARANTINE 1  stuck   streak 3  -> restart
+            07:32:59  scanner restarted
+            07:33:48  QUARANTINE 1  UNCHANGED
+
+        The restart did not clear it; it cleared later on its own while the
+        scanner ran. A quarantine is a statement about DATA, and bouncing the
+        process that ingests data cannot repair data. Hysteresis only slowed
+        this down — that run already had it."""
+        self.assertEqual(self._sequence([5, 9, 14])[-1], 0,
+                         "a data verdict is still being treated as a process fault")
+
+    def test_stuck_at_a_high_level_does_not_restart(self):
+        self.assertEqual(self._sequence([7, 7, 7])[-1], 0)
+
+    def test_a_sustained_quarantine_is_still_reported(self):
+        """Not restarting must not mean not telling. The operator still needs to
+        know data is being held back."""
+        child = _FakeChild(alive=True)
+        child.started_at = 0.0
+        state = {"counts": {}, "at": 0.0}
+        fake_store = MagicMock(connect=MagicMock(return_value=MagicMock()))
+        toasts = []
+        for q in (0, 3, 3, 3):
+            report = {"worst_rung": "QUARANTINE" if q else "SERVE",
+                      "rung_counts": {"HALT": 0, "QUARANTINE": q, "SERVE_FLAG": 0,
+                                       "AUTO_DISABLE": 0, "SERVE": 0},
+                      "blockers": [],
+                      "warnings": [{"code": "STALE_SERIES", "rung": "QUARANTINE"}] * q}
+            fake_quality = MagicMock(audit=MagicMock(return_value=report))
+            with patch.dict("sys.modules",
+                            {"engine": MagicMock(store=fake_store, quality=fake_quality),
+                             "engine.store": fake_store, "engine.quality": fake_quality}):
+                with patch.object(watchdog, "toast",
+                                  side_effect=lambda *a: toasts.append(a)), \
+                     patch.object(watchdog, "log"), \
+                     patch.object(watchdog.time, "monotonic", return_value=10_000.0):
+                    state = watchdog.audit_tick(state, child)
+        child.proc.terminate.assert_not_called()
+        self.assertTrue(toasts, "a sustained quarantine was silently swallowed")
+        self.assertIn("STALE_SERIES", " ".join(str(t) for t in toasts),
+                      "the notification does not name what was held back")
 
     def test_recovery_rearms_the_streak(self):
         # dropping back must clear the count, or an old climb fires later

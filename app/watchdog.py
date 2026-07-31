@@ -198,12 +198,37 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
     elif quarantine_now > prior_q or streak:
         streak += 1                      # climbing, or stuck high after a climb
 
+    # QUARANTINE NO LONGER RESTARTS THE SCANNER. Measured, on 2026-07-31:
+    #
+    #   07:30:27  QUARANTINE 1   climb        streak 1
+    #   07:31:35  QUARANTINE 1   stuck        streak 2
+    #   07:32:44  QUARANTINE 1   stuck        streak 3  -> restart
+    #   07:32:59  scanner restarted
+    #   07:33:48  QUARANTINE 1   UNCHANGED
+    #
+    # The restart did not clear it. It cleared later, on its own, while the
+    # scanner ran. So the response never achieved its goal: a quarantine is a
+    # statement about DATA, and bouncing the process that ingests data cannot
+    # repair data — it interrupts the cycle that would.
+    #
+    # Adding hysteresis (3 audits) only slowed this down; the run above already
+    # had it. The right change is to stop treating a data verdict as a process
+    # fault. HALT still restarts: that is a pipeline the engine says is broken,
+    # and a fresh process is at least a plausible response to it.
+    #
+    # Nothing is silenced — a sustained quarantine still logs and toasts.
     reason = None
     if halt_now:
         reason = f"HALT ({halt_now} finding(s))"
-    elif streak >= QUARANTINE_CLIMB_TICKS:
-        reason = (f"QUARANTINE {quarantine_now} sustained over "
-                  f"{streak} audits (was {prior_q})")
+    elif streak == QUARANTINE_CLIMB_TICKS:
+        codes = sorted({c["code"] for c in report.get("warnings", [])
+                        if c.get("rung") == "QUARANTINE"})
+        log(f"audit: worst={worst} counts={counts} — QUARANTINE {quarantine_now} "
+            f"sustained over {streak} audits, codes={codes[:6]}. NOT restarting: "
+            f"a data verdict is not a process fault.")
+        toast("⚠ SniperSight data quarantine",
+              f"{quarantine_now} finding(s) held back for "
+              f"{streak} audits: {', '.join(codes[:4]) or '(none)'}")
 
     if reason:
         codes = sorted({b["code"] for b in report.get("blockers", [])} |
