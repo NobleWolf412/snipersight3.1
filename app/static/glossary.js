@@ -112,6 +112,49 @@ window.GLOSSARY = {
   });
   window.addEventListener('scroll', hide, true);
 
+  /* KEYBOARD, not just hover. The glossary is the best thing in this app and it
+     was reachable by exactly one input device. Someone tabbing through the page
+     could not read a single definition, and a footnote saying "tap it on a
+     phone" does not help them either.
+
+     Every term becomes a real focus stop: focus shows it, blur and Escape hide
+     it, Enter and Space toggle. `button` role rather than `definition`, because
+     it does something when activated — announcing it as a definition would
+     promise screen-reader users the text is already there, which it is not. */
+  function markFocusable(root){
+    (root || document).querySelectorAll('.term:not([data-gfocus])').forEach(t => {
+      t.dataset.gfocus = '1';
+      t.tabIndex = 0;
+      t.setAttribute('role', 'button');
+      const key = t.dataset.t;
+      t.setAttribute('aria-label',
+        `${t.textContent.trim()} — what this means`);
+      if(window.GLOSSARY[key]) t.setAttribute('title', window.GLOSSARY[key]);
+    });
+  }
+  document.addEventListener('focusin', e => {
+    const t = e.target.closest && e.target.closest('.term');
+    if(t) show(t);
+  });
+  document.addEventListener('focusout', e => {
+    if(e.target.closest && e.target.closest('.term')) hide();
+  });
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape'){ hide(); return; }
+    const t = e.target.closest && e.target.closest('.term');
+    if(!t) return;
+    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); show(t); }
+  });
+
+  /* Content arrives long after load and keeps being replaced — the deck rebuilds
+     on a diff, weather re-renders every 30s, edgeview repaints wholesale. A
+     one-time pass would leave every later term unreachable again. */
+  markFocusable();
+  new MutationObserver(ms => {
+    for(const m of ms) if(m.addedNodes.length){ markFocusable(); return; }
+  }).observe(document.body, {childList: true, subtree: true});
+  window.SSGlossaryFocus = markFocusable;      // for tests and late mounts
+
   /* Mark up engine-authored prose so its jargon explains itself.
 
      Lives HERE, next to the definitions, because it was written inside

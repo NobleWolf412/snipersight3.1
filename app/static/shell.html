@@ -73,7 +73,7 @@
 
       <div class="panel panel-accent bracket" style="margin-bottom:var(--lg)">
         <div class="panel-head">
-          <span class="t-section"><span class="term" data-t="scanner">Scanner</span></span>
+          <h2 class="t-section"><span class="term" data-t="scanner">Scanner</span></h2>
           <div class="spacer" style="margin-left:auto"></div>
           <button class="btn btn-cyan" id="btnScan">Run Scan</button>
           <!-- The reason is ON the control, not hidden in a hover title. A
@@ -103,7 +103,7 @@
 
       <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head">
-          <span class="t-section">Setup Deck</span>
+          <h2 class="t-section">Setup Deck</h2>
           <!-- Says what the deck IS, next to the thing itself. An operator
                reading an empty deck beside a busy Market Weather concluded the
                scanner was broken; it is the correct answer, and the correction
@@ -180,7 +180,7 @@
         <!-- order ticket: the only surface that turns a setup into a decision -->
         <aside class="panel ticket" id="ticket">
           <div class="panel-head">
-            <span class="t-section">Order Ticket</span>
+            <h2 class="t-section">Order Ticket</h2>
             <span class="chip" id="tkSrc" style="margin-left:auto">engine</span>
           </div>
           <div class="ticket-body">
@@ -277,7 +277,7 @@
         <div class="tile"><span class="t-label"><span class="term" data-t="killSwitch">Halt</span> days</span><span class="t-metric" id="rHalt">—</span></div>
       </div>
       <div class="panel" style="margin-bottom:var(--lg)">
-        <div class="panel-head"><span class="t-section">Equity Curve</span>
+        <div class="panel-head"><h2 class="t-section">Equity Curve</h2>
           <span class="chip" id="baselineChip" style="margin-left:auto">—</span></div>
         <div class="panel-body">
           <svg id="eqCurve" viewBox="0 0 800 160" preserveAspectRatio="none"
@@ -288,17 +288,17 @@
 
       <div class="grid cols-2" style="margin-bottom:var(--lg)">
         <div class="panel">
-          <div class="panel-head"><span class="t-section">By Symbol</span></div>
+          <div class="panel-head"><h2 class="t-section">By Symbol</h2></div>
           <div id="perfSymbol"><div class="empty">loading…</div></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><span class="t-section">By Strategy</span></div>
+          <div class="panel-head"><h2 class="t-section">By Strategy</h2></div>
           <div id="perfStrategy"><div class="empty">loading…</div></div>
         </div>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><span class="t-section">Forward Record</span></div>
+        <div class="panel-head"><h2 class="t-section">Forward Record</h2></div>
         <div class="panel-body t-body" id="resultsNote">loading…</div>
       </div>
     </section>
@@ -313,7 +313,7 @@
            becomes unusable. Closed by default: it is reference, not news. -->
       <details class="explainer" id="howItWorks">
         <summary class="explainer-head">
-          <span class="t-section">How the scanner works</span>
+          <h2 class="t-section">How the scanner works</h2>
           <span class="wx-sub">the five steps these rules control</span>
         </summary>
         <div class="explainer-body t-body">
@@ -364,7 +364,7 @@
 
       <div class="grid cols-2">
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Venue &amp; Credentials</span>
+          <div class="panel-head"><h2 class="t-section">Venue &amp; Credentials</h2>
             <span class="chip" id="credChip" style="margin-left:auto">—</span></div>
           <div class="panel-body">
             <div id="credFields"></div>
@@ -379,7 +379,7 @@
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Risk</span>
+          <div class="panel-head"><h2 class="t-section">Risk</h2>
             <span class="chip" id="riskVer" style="margin-left:auto">—</span></div>
           <div class="panel-body">
             <div class="tk-out" id="riskNow"></div>
@@ -399,7 +399,7 @@
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Strategies &amp; Universe</span>
+          <div class="panel-head"><h2 class="t-section">Strategies &amp; Universe</h2>
             <span class="chip" id="setDirty" style="margin-left:auto" hidden>unsaved</span></div>
           <div class="panel-body">
             <div id="setFields"></div>
@@ -416,7 +416,7 @@
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Guardrails</span>
+          <div class="panel-head"><h2 class="t-section">Guardrails</h2>
             <span class="chip" id="guardChip" style="margin-left:auto">—</span></div>
           <div class="panel-body">
             <div class="tk-out" id="guardRows"></div>
@@ -436,7 +436,7 @@
       <div class="surface-head"><h1 class="t-page">Diagnostics</h1><p>Is the machine telling me the truth?</p></div>
       <div class="grid cols-2" style="margin-bottom:var(--lg)">
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Pipeline</span>
+          <div class="panel-head"><h2 class="t-section">Pipeline</h2>
             <button class="btn" id="btnAudit" style="margin-left:auto">Re-audit</button></div>
           <div class="panel-body">
             <div class="t-metric" id="dVerdict" style="margin-bottom:var(--sm)">—</div>
@@ -444,7 +444,7 @@
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Why nothing fired</span>
+          <div class="panel-head"><h2 class="t-section">Why nothing fired</h2>
             <button class="btn" id="btnDiagnose" style="margin-left:auto">Diagnose</button></div>
           <div class="panel-body" id="dFunnel"><span class="t-mono" style="color:var(--fg-4)">loading…</span></div>
           <!-- funnel.js appends the stage bars + bottleneck pill here -->
@@ -453,12 +453,12 @@
       </div>
       <div class="grid cols-2">
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Open <span class="term" data-t="blocker">Issues</span></span></div>
+          <div class="panel-head"><h2 class="t-section">Open <span class="term" data-t="blocker">Issues</span></h2></div>
           <div id="dIssues"><div class="empty">loading…</div></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><span class="t-section">Setup
-            <span class="term" data-t="telemetry">Telemetry</span></span>
+          <div class="panel-head"><h2 class="t-section">Setup
+            <span class="term" data-t="telemetry">Telemetry</span></h2>
             <span class="chip" id="telChip" style="margin-left:auto">—</span></div>
           <div id="dTelemetry"><div class="empty">loading…</div></div>
         </div>
@@ -474,7 +474,7 @@
            this surface is on screen. -->
       <div class="panel" style="margin-top:var(--lg)">
         <div class="panel-head">
-          <span class="t-section">Backend Console</span>
+          <h2 class="t-section">Backend Console</h2>
           <span class="chip" id="consoleState" style="margin-left:auto">idle</span>
           <button class="btn" id="btnFollow" title="follow new output">Following</button>
         </div>

@@ -58,7 +58,12 @@ body{
 /* ---------- type roles (six, not fourteen) ---------- */
 .t-page{font-family:var(--f-display);font-size:32px;line-height:1;letter-spacing:.2em;
   text-transform:uppercase;color:var(--accent);text-shadow:0 0 18px rgba(var(--accent-rgb),.35)}
-.t-section{font-family:var(--f-display);font-size:13px;letter-spacing:.22em;
+/* Now a real <h2>. Every panel label was a styled <span>, so this app had one
+   heading per surface and a screen reader could not navigate it at all. The
+   size and weight are set explicitly rather than inherited, because an h2's
+   defaults would have changed how all seventeen of them look. */
+.t-section{font-family:var(--f-display);font-size:13px;font-weight:400;
+  letter-spacing:.22em;margin:0;
   text-transform:uppercase;color:var(--fg-3);display:flex;align-items:center;gap:var(--sm)}
 .t-metric{font-family:var(--f-display);font-size:26px;font-weight:800;line-height:1;
   letter-spacing:-.01em;color:var(--fg)}
@@ -200,6 +205,11 @@ body{
 /* ---------- glossary: every term explains itself ---------- */
 .term{border-bottom:1px dotted var(--fg-4);cursor:help}
 .term:hover{color:var(--accent);border-bottom-color:var(--accent)}
+/* The glossary was reachable by mouse only. Terms are focus stops now, and a
+   focus stop that shows no ring is worse than none — the reader tabs into
+   something invisible and cannot tell what will happen if they press Enter. */
+.term:focus-visible{color:var(--accent);border-bottom-color:var(--accent);
+  outline:1px solid var(--accent);outline-offset:2px;border-radius:2px}
 #gloss{position:fixed;z-index:9000;max-width:320px;padding:10px 12px;border-radius:var(--r-md);
   background:var(--card);border:1px solid var(--accent);display:none;
   box-shadow:0 8px 30px rgba(0,0,0,.6)}
