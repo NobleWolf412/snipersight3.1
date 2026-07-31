@@ -189,8 +189,13 @@
 
             <div class="tk-actions">
               <button class="btn" id="tkReset" disabled>Reset to engine</button>
-              <button class="btn btn-cyan" id="tkArm" disabled>Arm</button>
+              <!-- The label says PAPER because the button is the last thing read
+                   before acting. "Arm" alone left an operator to infer which
+                   book they were writing to, and the two books mean different
+                   things: this one is theirs, the strategy record is not. -->
+              <button class="btn btn-cyan" id="tkArm" disabled>Arm (paper)</button>
             </div>
+            <div class="t-mono tk-armed" id="tkArmed"></div>
             <div class="t-mono tk-lock" id="tkLock"></div>
           </div>
         </aside>

@@ -28,9 +28,9 @@ engines because it derives purely from exec facts, so it must see the adds too.
 `cycles` is observational (BTC 1D, no consumers) and sits at the end.
 """
 
-from . import (breakout, cooldowns, cycles, execsim, liquidity, ma, momentum,
-               ranges, regime, scalein, setups, structure, swings, volatility,
-               volume, zones)
+from . import (breakout, cooldowns, cycles, execsim, liquidity, ma, manual,
+               momentum, ranges, regime, scalein, setups, structure, swings,
+               volatility, volume, zones)
 
 # Facts the market DESCRIPTION layer derives. No trading consumer reads the
 # indicator engines yet and none may until `factorstats` grades them — they are
@@ -52,7 +52,17 @@ TRADING = (setups, execsim, scalein, execsim, cooldowns)
 
 OBSERVATIONAL = (cycles,)
 
-PER_SYMBOL = DESCRIPTIVE + MEASURED_NOT_ENABLED + TRADING + OBSERVATIONAL
+# The OPERATOR's own paper book, and deliberately NOT part of TRADING. It
+# resolves trades the operator armed by hand, under `manual-v0.1-draft` — a tag
+# no strategy consumer queries, so a discretionary trade cannot reach the record
+# `edgestats`/`factorstats` grade. It is in this roster for the reason given
+# above for `cooldowns`: an engine that is built, tested and never run resolves
+# nothing, and an unresolved intent is a trade the operator placed and can never
+# see the outcome of.
+OPERATOR = (manual,)
+
+PER_SYMBOL = (DESCRIPTIVE + MEASURED_NOT_ENABLED + TRADING + OPERATOR
+              + OBSERVATIONAL)
 
 
 def names() -> list[str]:

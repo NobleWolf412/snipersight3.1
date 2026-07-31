@@ -253,9 +253,28 @@ class TestChildErrorCapture(unittest.TestCase):
         import tempfile
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        c = watchdog.Child("probe", [sys.executable, "-c", code])
+        c = watchdog.Child("probe", [sys.executable, "-c", code],
+                           capture_stderr=True)
         c._err_path = Path(tmp.name) / "probe.err.log"
         return c
+
+    def test_only_the_scanner_has_its_stderr_captured(self):
+        """Handing uvicorn an inherited stderr handle broke its access logger —
+        8,461 `Invalid argument` errors, 48 MB, then an api-server exit with
+        0xC000013A. The capture is what made the scanner's deaths diagnosable,
+        so it stays there and nowhere else."""
+        src = Path(watchdog.__file__).read_text(encoding="utf-8")
+        body = src[src.index("def main("):]
+        live = body[body.index('Child("live-scanner"'):]
+        self.assertIn("capture_stderr=True", live[:300],
+                      "the scanner lost the capture that explains its exits")
+        srv = body[body.index('Child("api-server"'):]
+        self.assertNotIn("capture_stderr=True", srv[:300],
+                         "uvicorn is being handed a stderr handle again")
+        import inspect
+        self.assertIn("capture_stderr=False",
+                      str(inspect.signature(watchdog.Child)),
+                      "capture must be opt-IN, or a new child inherits the fault")
 
     def test_a_traceback_is_captured_and_surfaced(self):
         c = self._child("raise RuntimeError('the actual reason')")
@@ -281,6 +300,68 @@ class TestChildErrorCapture(unittest.TestCase):
             c._err = None
         self.assertEqual(c._last_error(), "",
                          "a silent clean exit invented an explanation")
+
+    def test_a_child_can_flush_the_handle_it_inherits(self):
+        """The precise property, because the indirect test missed it.
+
+        Python's "a"/"ab" ask Windows for FILE_APPEND_DATA only, and a child
+        that inherits such a handle cannot flush it — `OSError: [Errno 22]
+        Invalid argument` on every logging.flush(). An earlier version of this
+        suite logged 400 lines from a child and passed while production was
+        emitting 8,461 of those errors, so it asserts the flush itself now."""
+        c = self._child(
+            "import sys\n"
+            "try:\n"
+            "    sys.stderr.write('probe\\n'); sys.stderr.flush()\n"
+            "    sys.stderr.write('FLUSH_OK\\n'); sys.stderr.flush()\n"
+            "except BaseException as e:\n"
+            "    open(r'%s','a').write('FLUSH_RAISED %%s' %% e)\n" % "")
+        with patch.object(watchdog, "log"):
+            c.start()
+        c.proc.wait(timeout=60)
+        if c._err:
+            c._err.close(); c._err = None
+        text = c._err_path.read_text(encoding="utf-8", errors="replace")
+        self.assertIn("FLUSH_OK", text,
+                      "the child could not flush its inherited stderr — an "
+                      "append-mode handle corrupts every log line it writes")
+
+    def test_heavy_child_logging_does_not_corrupt_the_stream(self):
+        """The capture must not break the thing it captures.
+
+        The first version handed Popen a buffered TEXT-mode file object. The
+        child inherits the handle and wraps it in its own stream, so two
+        independent buffers flushed one append handle — and every uvicorn log
+        line raised `OSError: [Errno 22] Invalid argument` inside
+        logging.flush(). Logging caught it and printed the traceback to the same
+        broken stream: 8,461 of them, 48 MB, in a few hours.
+
+        So: a child that logs the way uvicorn does, and NO logging errors."""
+        c = self._child(
+            "import logging,sys\n"
+            "logging.basicConfig(stream=sys.stderr, level=logging.INFO)\n"
+            "log=logging.getLogger('probe')\n"
+            "[log.info('line %d with unicode ⚠ padding', i) for i in range(400)]\n")
+        with patch.object(watchdog, "log"):
+            c.start()
+        c.proc.wait(timeout=60)
+        if c._err:
+            c._err.close(); c._err = None
+        text = c._err_path.read_text(encoding="utf-8", errors="replace")
+        self.assertNotIn("Logging error", text,
+                         "the capture is corrupting the child's log stream")
+        self.assertNotIn("Invalid argument", text)
+        self.assertIn("line 399", text, "the capture lost the child's output")
+
+    def test_the_capture_file_is_rotated(self):
+        """A diagnostic that fills the disk is a fault of its own."""
+        c = self._child("pass")
+        c._err_path.write_text("x" * 2048, encoding="utf-8")
+        with patch.object(watchdog, "log"):
+            c._rotate_err(cap=1024)
+        self.assertTrue(c._err_path.with_suffix(".old.log").exists(),
+                        "the oversized capture was not rotated aside")
+        self.assertFalse(c._err_path.exists(), "the live file was not reset")
 
     def test_capture_failure_never_blocks_a_start(self):
         """Logging is housekeeping; it must not stop the scanner coming back."""

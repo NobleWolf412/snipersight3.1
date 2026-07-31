@@ -47,6 +47,7 @@ QUARANTINE_CLIMB_TICKS = 3        # consecutive audits elevated-and-not-recoveri
 RESTART_GRACE_SEC = 420           # > the slowest cycle measured (347.1s)
 SERVER_PROBE_TIMEOUT = 15         # > /api/status measured at 6.9s under load
 SERVER_MISSES_BEFORE_TAKEOVER = 3 # one slow answer is not a disappearance
+ERR_LOG_CAP_BYTES = 8 * 1024 * 1024   # a diagnostic must not fill the disk
 
 
 def log(msg: str):
@@ -234,9 +235,21 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
 
 
 class Child:
-    def __init__(self, name, args, notify_restart=False):
+    def __init__(self, name, args, notify_restart=False, capture_stderr=False):
         self.name, self.args = name, args
         self.notify_restart = notify_restart
+        # OFF by default, and deliberately. Capturing a child's stderr to a file
+        # is what made the scanner's deaths diagnosable at all — but handing
+        # uvicorn an inherited file handle broke its access logger outright:
+        # `OSError: [Errno 22] Invalid argument` on every request it logged,
+        # 8,461 of them and 48 MB in hours, and finally an api-server exit with
+        # 0xC000013A (STATUS_CONTROL_C_EXIT). Neither an unbuffered binary
+        # handle nor a non-append one fixed it.
+        #
+        # The scanner needs the capture and tolerates it; the server does not
+        # need it and does not. A diagnostic that breaks the process it watches
+        # has to be scoped to the process that benefits.
+        self.capture_stderr = capture_stderr
         self.proc = None
         self.started_at = 0.0
         self.backoff = 5
@@ -266,18 +279,48 @@ class Child:
         printed to a window nobody was reading and nothing kept. The exit code
         alone cannot distinguish a crash from a deliberate terminate, which is
         most of why those events went a day without a diagnosis.
+
+        NOT an append handle. Python's "a"/"ab" ask Windows for FILE_APPEND_DATA
+        only, and a child that inherits such a handle cannot flush it: every
+        uvicorn log line raised `OSError: [Errno 22] Invalid argument` inside
+        logging.flush(). Logging caught that and printed the traceback to the
+        same broken stream — 8,461 of them and 48 MB in a few hours. Switching
+        to binary was not enough; the append MODE is the problem, not the text
+        wrapper. live.py escaped it only because the watchdog gives that child
+        `-X utf8`; uvicorn gets no such flag.
+
+        So: a plain write handle, seeked to the end by hand. A capture that
+        corrupts the thing it captures is worse than no capture.
         """
-        try:
-            self._err_path.parent.mkdir(parents=True, exist_ok=True)
-            self._err = open(self._err_path, "a", encoding="utf-8", errors="replace")
-            self._err.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} start ===\n")
-            self._err.flush()
-        except Exception as e:                       # never block a start on logging
-            log(f"{self.name}: could not open {self._err_path.name} ({e})")
-            self._err = None
+        if self.capture_stderr:
+            try:
+                self._err_path.parent.mkdir(parents=True, exist_ok=True)
+                self._rotate_err()
+                fd = os.open(str(self._err_path),
+                             os.O_WRONLY | os.O_CREAT | getattr(os, "O_BINARY", 0))
+                os.lseek(fd, 0, os.SEEK_END)      # append by position, not by mode
+                self._err = os.fdopen(fd, "wb", buffering=0)
+                self._err.write(
+                    f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} start ===\n"
+                    .encode("utf-8"))
+            except Exception as e:                   # never block a start on logging
+                log(f"{self.name}: could not open {self._err_path.name} ({e})")
+                self._err = None
         self.proc = subprocess.Popen(self.args, cwd=APP, stderr=self._err or None)
         self.started_at = time.monotonic()
         log(f"{self.name} started pid={self.proc.pid}")
+
+    def _rotate_err(self, cap: int = ERR_LOG_CAP_BYTES) -> None:
+        """Keep the capture file bounded. It reached 48 MB in hours once, and a
+        diagnostic that fills the disk is a fault of its own. One generation is
+        kept — the previous run's tail is occasionally what explains this run."""
+        try:
+            if self._err_path.exists() and self._err_path.stat().st_size > cap:
+                self._err_path.replace(self._err_path.with_suffix(".old.log"))
+                log(f"{self.name}: rotated {self._err_path.name} at "
+                    f"{cap // (1024 * 1024)}MB")
+        except Exception:
+            pass
 
     def _last_error(self, max_lines: int = 12) -> str:
         """The tail of the child's stderr, so the exit explains itself."""
@@ -334,7 +377,11 @@ def main():
     # running is an orphan, and starting beside it would put two scanners on one
     # database.
     clear_orphans()
-    live = Child("live-scanner", [py, "-X", "utf8", "live.py"], notify_restart=True)
+    # Only the scanner gets its stderr captured: it is the process whose exits
+    # needed explaining, it runs under -X utf8 so the capture is clean, and
+    # uvicorn demonstrably cannot tolerate the same treatment.
+    live = Child("live-scanner", [py, "-X", "utf8", "live.py"],
+                 notify_restart=True, capture_stderr=True)
     server = Child("api-server", [py, "-m", "uvicorn", "server:app",
                                   "--port", "8422", "--host", "127.0.0.1"])
     external_server = server_up()

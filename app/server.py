@@ -201,11 +201,27 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
                     continue
                 if strategy and p.get("strategy") != strategy:
                     continue
+                # Keyed on setup_id alone, deliberately. A setup_id is
+                # `symbol|tf|strategy|zone_id|version` and a zone validates once,
+                # so this is already unique per VALIDATED setup: checked across
+                # every setup version in the store, zero setup_ids reach
+                # VALIDATED at two different confirmed_at. Repeat facts under one
+                # id are the same instance re-recorded with fresher `confluence`
+                # (144 of them in the current book), and collapsing those to the
+                # newest is the intended behaviour, not a merge defect.
                 setup_by_id[p["setup_id"]] = {
                     "symbol": sym, "tf": timeframe, "market_time": market_time,
                     "confirmed_at": confirmed_at, "algo_version": algo_version, **p}
 
         def lifecycle_map(kind, version):
+            """Latest downstream fact per setup.
+
+            `ORDER BY confirmed_at,id` plus overwrite means the newest event
+            wins, which is the point for orders — PLACED and FILLED both exist
+            and the later one is the state. Where one setup_id carries several
+            exec facts (the same trade re-simulated under a different cost
+            manifest) the newest is likewise the current costing.
+            """
             out = {}
             rows = con.execute(
                 "SELECT confirmed_at,payload FROM facts WHERE kind=? AND algo_version=? "
@@ -1650,6 +1666,66 @@ def credentials_store(payload: dict):
     get_logger().info(f"CREDENTIAL {'cleared' if payload.get('clear') else 'stored'}: "
                       f"{venue}/{field or 'all'}")
     return {"ok": True, "status": credentials.status()}
+
+
+@app.post("/api/manual/arm")
+def manual_arm(payload: dict):
+    """Arm one operator plan as a PAPER trade.
+
+    This places no live order and cannot: no order-placement code exists in
+    this system, so `live_enabled` is not consulted here — there is nothing for
+    it to gate. The intent is recorded under `manual-v0.1-draft`, a tag no
+    strategy consumer queries, so it cannot reach the record that
+    `edgestats`/`factorstats` grade. See `engine/manual.py` for why that
+    separation is structural rather than a filter someone has to remember.
+    """
+    import time
+    from engine import manual
+    symbol = str(payload.get("symbol") or "")
+    tf = str(payload.get("tf") or "")
+    if not symbol:
+        raise HTTPException(400, "symbol required")
+    if tf not in VALID_TFS:
+        raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
+    con = store.connect()
+    try:
+        try:
+            intent = manual.create_intent(
+                con, symbol, tf,
+                direction=str(payload.get("direction") or "").upper(),
+                entry=payload.get("entry"), tp=payload.get("tp"),
+                sl=payload.get("sl"),
+                created_at=int(payload.get("created_at") or time.time()),
+                risk_usd=payload.get("risk_usd"),
+                note=str(payload.get("note") or ""))
+        except manual.IntentRejected as exc:
+            # A refused plan is a 400 carrying the REASON. The operator needs to
+            # know which rule stopped them, not that "something went wrong".
+            raise HTTPException(400, str(exc))
+        except (ValueError, ArithmeticError) as exc:
+            raise HTTPException(400, str(exc))
+        # Resolve immediately, so the response reflects bars that have already
+        # closed. Usually a no-op — the order was just placed and no eligible
+        # bar exists yet — which is the correct causal answer, not a failure.
+        manual.run(con, symbol, tf, importer.TF_SECONDS[tf])
+        from engine.runlog import get_logger
+        get_logger().info(
+            f"MANUAL ARM {symbol} {tf} {intent['direction']} "
+            f"entry={intent['entry']} tp={intent['tp']} sl={intent['sl']} (paper)")
+        return {"ok": True, "intent": intent, "book": manual.book(con)}
+    finally:
+        con.close()
+
+
+@app.get("/api/manual/book")
+def manual_book():
+    """The operator's paper record — separate curve, separate everything."""
+    from engine import manual
+    con = store.connect()
+    try:
+        return manual.book(con)
+    finally:
+        con.close()
 
 
 @app.get("/api/settings")

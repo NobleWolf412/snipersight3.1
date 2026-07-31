@@ -24,7 +24,8 @@ engine you changed, and bump those too.
 """
 import unittest
 
-from engine import (breakout, cooldowns, cycles, execsim, venues, liquidity, ma, momentum, ranges, regime,
+from engine import (breakout, cooldowns, cycles, execsim, venues, liquidity, ma,
+                    manual, momentum, ranges, regime,
                     risk, scalein, setups, structure, swings, volatility,
                     volume, zones)
 
@@ -50,6 +51,13 @@ LOCKED = {
     # Observational satellite with no consumers — locked anyway, because
     # "nothing reads it" is exactly how it went dead unnoticed for 21 hours.
     "cycles": cycles.CYCLES_VERSION,
+    # The operator's hand-armed paper book. It has NO entry in CONSUMERS and
+    # that is the design, not an omission: no strategy engine may ever read
+    # `manual-*`, because the moment one does, discretionary trades enter the
+    # record that decides whether live execution is unlocked. Locked here so
+    # that if anyone ever wires it into the cascade, this file has to be
+    # edited in the same commit and the decision becomes visible.
+    "manual": manual.MANUAL_VERSION,
 }
 
 EXPECTED = {
@@ -92,6 +100,7 @@ EXPECTED = {
     "breakout": "breakout-v0.2-draft",
     "venues": "venues-v0.2-draft",
     "cycles": "cycles-v0.2-draft",
+    "manual": "manual-v0.1-draft",
 }
 
 # Who reads whose facts. Bumping a key REQUIRES considering every value.

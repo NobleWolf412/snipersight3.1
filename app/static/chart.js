@@ -29,6 +29,13 @@ window.SSChart = (() => {
   let riskOverride = null;
   let levels = {entry: null, tp: null, sl: null};
   let dir = 'LONG';
+  /* Whether the ticket currently on screen is a plan that could be armed on
+     PAPER. Deliberately separate from the live gate: "is this plan valid" and
+     "may this system send real orders" are different questions, and folding
+     them into one flag is what left the button permanently dead — `setLock()`
+     computed a live verdict and then disabled the button unconditionally, so a
+     valid paper plan and a missing trade config looked identical. */
+  let armable = false;
   let cfg = null, equity = null;
   let priceLines = {}, zoneLines = [], handles = {};
   let loadSeq = 0;                            // guards out-of-order responses
@@ -191,7 +198,7 @@ window.SSChart = (() => {
     if(!m.ok){
       out.innerHTML = '<div><span class="k">status</span><span class="v bad">invalid</span></div>';
       warn.hidden = false; warn.innerHTML = m.errors.join('<br>');
-      $('tkArm').disabled = true;
+      armable = false; refreshArm();
       return;
     }
 
@@ -234,7 +241,11 @@ window.SSChart = (() => {
     const notes = m.notes.map(n => WORDING[n] ? WORDING[n]() : n);
     warn.hidden = !notes.length;
     warn.innerHTML = notes.join('<br><br>');
-    $('tkArm').disabled = true;                 // live stays locked; see setLock()
+    /* Breaches in `notes` are shown, not used to block. They are the risk
+       authority's warnings about SIZE, and the operator's paper book is where
+       they are allowed to disagree with it — that is the point of keeping this
+       record separate. The engine's own book still refuses them. */
+    armable = true; refreshArm();
   }
 
   /* ---------- overlays + data ---------- */
@@ -255,7 +266,9 @@ window.SSChart = (() => {
     $('cPrice').textContent = '—';
     $('cPrice').className = 'chip';
     $('cRegime').textContent = '—';
-    $('tkArm').disabled = true;
+    // A cleared chart describes no market, so there is no plan to arm.
+    armable = false; refreshArm();
+    $('tkArmed').textContent = '';
     const el = $('chartEmpty');
     el.style.display = '';                    // the bug: only ever unset on success
     el.textContent = detail ? `${title} — ${detail}` : title;
@@ -532,13 +545,24 @@ window.SSChart = (() => {
     }
   }
 
-  function setLock(){
-    const locked = !cfg || !cfg.live_enabled;
-    $('tkArm').disabled = true;
-    $('tkLock').textContent = locked
-      ? (cfg ? cfg.live_locked_reason : 'trade config unavailable')
-      : '';
+  /* The Arm button commits to the OPERATOR's paper book and nothing else.
+
+     It is not gated on `live_enabled`, because that flag gates a capability
+     that does not exist: there is no order-placement code anywhere in this
+     system (`execsim` line 3). Wiring a paper button to a live flag would have
+     meant the button stayed dead until someone shipped an order router, which
+     is why it was dead. The live reason is still printed underneath, so the
+     distinction between "your paper trade was recorded" and "this system can
+     send real orders" is on screen rather than assumed. */
+  function refreshArm(){
+    $('tkArm').disabled = !armable || !sym;
+    $('tkLock').textContent = (cfg && cfg.live_enabled)
+      ? ''
+      : (cfg ? 'Live orders: ' + cfg.live_locked_reason
+             : 'trade config unavailable');
   }
+
+  function setLock(){ refreshArm(); }
 
   /* ---------- wiring ---------- */
   function wire(){
@@ -558,6 +582,40 @@ window.SSChart = (() => {
     $('tkDir').addEventListener('click', e => {
       const b = e.target.closest('button'); if(!b) return;
       setDir(b.dataset.d);
+    });
+    /* Arm -> the OPERATOR's paper book (`manual-v0.1-draft`), never the
+       strategy record. The reply is reported literally: if the server refuses
+       the plan it names the rule that refused it, because "failed" tells an
+       operator nothing about what to change. */
+    $('tkArm').addEventListener('click', async () => {
+      const btn = $('tkArm'), out = $('tkArmed');
+      if(btn.disabled) return;
+      const riskUsd = parseFloat(String($('tkRisk').value).replace(/[$,]/g, ''));
+      btn.disabled = true;
+      out.textContent = 'arming…';
+      try{
+        const r = await fetch('/api/manual/arm', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            symbol: sym, tf: tf, direction: dir,
+            entry: levels.entry, tp: levels.tp, sl: levels.sl,
+            risk_usd: isFinite(riskUsd) && riskUsd > 0 ? riskUsd : null})});
+        const d = await r.json().catch(() => ({}));
+        if(!r.ok){
+          out.textContent = 'refused — ' + (d.detail || ('HTTP ' + r.status));
+          return;
+        }
+        const n = d.book ? d.book.n : 0;
+        const openN = d.book ? (d.book.open_intents || []).length : 0;
+        out.textContent =
+          `armed on paper · ${dir} ${sym} ${tf} · entry ${pf(levels.entry)} · ` +
+          `your book: ${n} settled, ${openN} open`;
+      }catch(err){
+        // Never imply an order exists when the request never landed.
+        out.textContent = 'could not reach the server — nothing was armed';
+      }finally{
+        refreshArm();
+      }
     });
     for(const [id, key] of [['tkEntry', 'entry'], ['tkTp', 'tp'], ['tkSl', 'sl']])
       $(id).addEventListener('change', e => {

@@ -23,10 +23,20 @@ import json
 import os
 from pathlib import Path
 
+from . import venues as _venues
+
 VAULT = Path(__file__).resolve().parents[1] / "data" / "credentials.vault"
 # Only these may be stored. An open-ended store invites secrets nobody audits.
 FIELDS = ("api_key", "api_secret", "passphrase")
-VENUES = ("coinbase-spot", "phemex-perp")
+# DERIVED from `venues.ALL`, not typed here. This list was `("coinbase-spot",
+# "phemex-perp")` while `venues.py` had already declared a third venue, so
+# `/api/trade-config` offered kraken-perp and `store_secret` raised "unknown
+# venue" for it — a venue the operator could select but could never hold keys
+# for. `venues.py` says it plainly: "Adding a venue means adding a descriptor
+# here plus an adapter module. Nothing else in the engine should branch on venue
+# by name." A second hand-maintained list is exactly the branch it warns about,
+# and deriving it means adding a venue can never again half-arrive.
+VENUES = tuple(v.key for v in _venues.ALL)
 
 
 class _Blob(ctypes.Structure):
