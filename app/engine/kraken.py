@@ -220,6 +220,22 @@ def fetch_candles(symbol: str, tf: str, start_ts: int, end_ts: int) -> list[dict
     a missed division would silently place every bar 55,000 years in the future
     and the causality checks would never fire, because they compare timestamps
     to each other rather than to a plausible range.
+
+    The walk is bounded by a request BUDGET fixed before it starts. It used to be
+    re-evaluated every pass as `guard <= 2 + (end_ts - cursor) // window`, and
+    that allowance SHRINKS by one for every pass `guard` grows by one — so the
+    two met at the halfway mark and the walk abandoned the rest of the range
+    having said nothing. From ANY start date, not only 1970: a span needing N
+    windows always stopped near N/2. It went unnoticed because every floor in
+    `ingest.history_floor` fits inside a single 5000-bucket window (N = 0), so
+    the arithmetic never got a chance to be wrong until a cold symbol asked for
+    history from the epoch. Widening DAILY_SINCE or importing 4H natively would
+    have re-armed it.
+
+    Exhausting the budget is now LOUD. That is the half that actually cost us:
+    the old guard returned a short list indistinguishable from "the venue has
+    no more data", and `importer.backfill` then recorded every unreached bucket
+    as a gap — 1,983,795 of them in one 15m run.
     """
     if tf not in RESOLUTION:
         raise ValueError(f"unsupported tf {tf}")
@@ -230,10 +246,26 @@ def fetch_candles(symbol: str, tf: str, start_ts: int, end_ts: int) -> list[dict
     end_ts = min(end_ts, closed_until)
     out: list[dict] = []
     cursor = start_ts - start_ts % gran
-    guard = 0
-    while cursor < end_ts and guard <= 2 + (end_ts - cursor) // (gran * MAX_CANDLES_PER_REQ):
-        guard += 1
-        window_end = min(cursor + gran * MAX_CANDLES_PER_REQ, end_ts)
+    window = gran * MAX_CANDLES_PER_REQ
+    # Two requests per window, not one: a window holding only a few candles
+    # advances the cursor to the last of THEM rather than to its end, and the
+    # following pass finds the remainder empty and skips it. Termination does
+    # not rest on this number — the empty-window branch and the no-forward-
+    # progress break below already guarantee it. This is a backstop against a
+    # logic error, so it is sized never to fire on a healthy walk.
+    budget = 2 * (2 + max(0, end_ts - cursor) // window)
+    walked = 0
+    while cursor < end_ts:
+        if walked >= budget:
+            from .runlog import get_logger
+            get_logger().warning(
+                f"kraken {symbol} {tf}: request budget ({budget}) exhausted at "
+                f"{cursor} of {end_ts} — returning {len(out)} candles for a "
+                f"PARTIAL span. Everything past {cursor} is unreached, not "
+                f"absent; do not read it as a venue gap.")
+            break
+        walked += 1
+        window_end = min(cursor + window, end_ts)
         payload = _get(f"/api/charts/v1/trade/{symbol}/{res}"
                        f"?from={cursor}&to={window_end}")
         rows = (payload or {}).get("candles") or []
