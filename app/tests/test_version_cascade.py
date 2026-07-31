@@ -59,7 +59,17 @@ EXPECTED = {
     # swings not yet confirmed, inflating formation_quality on 7.9% of zones.
     # CONSUMERS["zone"] is ("setup",), and setup's own consumers are
     # ("exec", "risk", "scale"), so the whole trading path cascades.
-    "zone": "zone-v0.11-draft",
+    #
+    # zone-v0.12 is the SAME defect one layer down, and the measurement is
+    # worse: the cluster counted swing FACTS rather than swings. `swings`
+    # re-emits a pivot whenever its accrued evidence changes, so one pivot can
+    # hold 18 rows identical in everything zones reads, and `m != k` excludes
+    # the row rather than the swing — a zone counted copies of its own anchor.
+    # 65.8% of 2,066 anchors carried an inflated cluster; formation_quality was
+    # higher in 1,359 cases and lower in ZERO; worst was quality 90 on a cluster
+    # of 24 whose true membership was 0. Same cascade as v0.11, plus cooldown:
+    # zone -> setup -> (exec, risk, scale) -> (risk, scale, cooldown) -> risk.
+    "zone": "zone-v0.12-draft",
     "liquidity": "liq-v0.9-draft",
     "regime": "regime-v0.10-draft",
     "ranges": "ranges-v0.1-draft",
@@ -67,7 +77,7 @@ EXPECTED = {
     "momentum": "momentum-v0.1-draft",
     "volatility": "volatility-v0.1-draft",
     "volume": "volume-v0.1-draft",
-    "setup": "setup-v0.13-draft",
+    "setup": "setup-v0.14-draft",
     # S50 cascade. exec-v0.13 -> v0.14 corrected the MAKER_THEN_MARKET crossing
     # leg, which booked a market fill at the PLAN's price — two bars stale, and
     # outside the fill bar's own [low, high] on 78 of 95 crossed orders, never
@@ -85,10 +95,10 @@ EXPECTED = {
     # are derived purely from recorded exits. All four move together.
     # scale ALSO changed on its own account — its economics gate now prices the
     # add on the add's own venue instead of the process-wide Coinbase default.
-    "exec": "exec-v0.17-draft",
-    "risk": "risk-v0.16-draft",
-    "scale": "scale-v0.11-draft",
-    "cooldown": "cooldown-v0.5-draft",
+    "exec": "exec-v0.18-draft",
+    "risk": "risk-v0.17-draft",
+    "scale": "scale-v0.12-draft",
+    "cooldown": "cooldown-v0.6-draft",
     "breakout": "breakout-v0.2-draft",
     "venues": "venues-v0.2-draft",
     "cycles": "cycles-v0.2-draft",

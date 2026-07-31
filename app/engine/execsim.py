@@ -20,7 +20,10 @@ from .setups import SETUP_VERSION
 from .swings import compute_atr
 from .runlog import RunRecorder
 
-EXEC_VERSION = "exec-v0.17-draft"
+EXEC_VERSION = "exec-v0.18-draft"
+# v0.18: cascade from setup-v0.14 (itself a cascade from zone-v0.12). This
+# engine simulates the setup book, so a new setup generation is a new input set:
+# different plans, different fills. No rule here changed.
 # v0.17: two output changes, both labelling rather than economics.
 #  * `fees_price_units` is now EXCHANGE FEES ONLY. Funding was folded in while
 #    also reported as `funding_price_units`, so a consumer summing the two

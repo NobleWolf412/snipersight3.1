@@ -23,7 +23,10 @@ from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.16-draft"
+RISK_VERSION = "risk-v0.17-draft"
+# v0.17: cascade from exec-v0.18 and setup-v0.14, both downstream of zone-v0.12.
+# Same reasoning as v0.16 below: this engine replays the account from exec
+# facts, so a new exec generation is a new equity curve.
 # v0.16: cascade from exec-v0.17. risk replays the whole account from exec
 # facts, so an exec version move changes this engine's inputs and therefore its
 # decisions and equity curve — even though no rule here changed. Leaving the tag

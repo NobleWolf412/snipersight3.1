@@ -23,7 +23,29 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-ZONE_VERSION = "zone-v0.11-draft"
+ZONE_VERSION = "zone-v0.12-draft"
+# v0.12: the cluster counted swing FACTS, not swings. `swings` re-emits a pivot
+# whenever its accrued evidence changes (`held_candles` ticks every bar the
+# level holds), so one pivot carries many rows identical in market_time,
+# confirmed_at, tier, type and price. The `m != k` guard excludes the ROW, so a
+# zone counted re-emissions of its own anchor as cluster members. Measured over
+# 12 symbols x 4H/1D/1W (2,066 anchors): 65.8% carried an inflated cluster, and
+# `formation_quality` came out HIGHER in 1,359 cases and lower in ZERO. Worst
+# observed: quality 90 on a cluster of 24 whose true membership was 0.
+#
+# Same shape as v0.11, one layer down: v0.11 asked WHEN a member was knowable,
+# v0.12 asks whether it is a distinct member at all. Both inflated quality in
+# one direction only.
+#
+# What this does NOT do is change which setups are admitted. v0.11's note below
+# says strength "gates the REVERSAL playbook"; that was true when written and
+# S50 has since retired it — STRENGTH is recorded but absent from
+# `setups.REVERSAL_COMPONENTS`, so it counts toward nothing. What v0.12 fixes is
+# the recorded evidence a future grader will measure: `zone_cluster`,
+# `zone_quality` and `zone_strength` on every setup fact were wrong, always
+# high. Note also that this pushes many zones to the cluster-0 floor S50 already
+# analysed, so its finding holds unchanged — at cluster 0 quality is still >= 55
+# and strength still >= 77, so STRENGTH still cannot fail its own threshold.
 # v0.11: LOOKAHEAD CLOSED. The creation-time cluster count included swings that
 # were not yet confirmed, so `formation_quality` — and therefore `strength`,
 # which gates the REVERSAL playbook — was computed from the future on 7.9% of
@@ -71,13 +93,27 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         ticks = quote_ticks(candles)
         n_created = n_events = 0
 
-        swings = []
+        # One entry per SWING, not per swing FACT. `swings` re-emits a pivot
+        # every time its accrued evidence changes — `held_candles` ticks with
+        # every bar the level holds — so one pivot can carry 18 fact rows that
+        # differ in nothing this engine reads (same market_time, confirmed_at,
+        # tier, type, price). Counting rows let a zone count copies of its OWN
+        # anchor as cluster members, because `m != k` excludes the row and not
+        # the swing. `get_facts` orders by (market_time, confirmed_at, id), so
+        # the first row seen is the earliest that pivot was knowable — the
+        # causally correct one to keep.
+        swings, seen = [], set()
         for r in store.get_facts(con, symbol, tf, "swing", SWING_VERSION):
             p = json.loads(r["payload"])
-            if p["tier"] in ZONE_TIERS:
-                swings.append({"market_time": r["market_time"],
-                               "confirmed_at": r["confirmed_at"],
-                               "type": p["type"], "price": Decimal(p["price"])})
+            if p["tier"] not in ZONE_TIERS:
+                continue
+            key = (r["market_time"], p["type"])
+            if key in seen:
+                continue
+            seen.add(key)
+            swings.append({"market_time": r["market_time"],
+                           "confirmed_at": r["confirmed_at"],
+                           "type": p["type"], "price": Decimal(p["price"])})
         rec.n_inputs = len(swings)
 
         # precompute bands so cluster membership is knowable per zone

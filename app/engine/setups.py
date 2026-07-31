@@ -29,7 +29,18 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.13-draft"
+SETUP_VERSION = "setup-v0.14-draft"
+# v0.14: cascade from zone-v0.12, which stopped the zone cluster from counting
+# duplicate swing FACTS as distinct members — 65.8% of zone anchors carried an
+# inflated formation_quality, higher in 1,359 cases and lower in zero. No rule
+# here changed; the inputs did.
+#
+# ADMISSION IS UNAFFECTED, and the reason is the S50 ruling below: STRENGTH is
+# recorded but absent from REVERSAL_COMPONENTS, so a wrong zone strength could
+# not have changed which setups exist. What was wrong is the EVIDENCE this
+# engine records — `zone_cluster`, `zone_quality`, `zone_strength` — which is
+# exactly what a grader would later read to decide whether STRENGTH earns its
+# place back in the gate. It would have been graded on inflated numbers.
 # v0.12: cascade from zone-v0.11, which closed a lookahead in the zone cluster
 # count. `zone_strength` is one of the four REVERSAL evidence components, so a
 # zone quality computed from the future fed straight into playbook selection.
