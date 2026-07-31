@@ -103,6 +103,16 @@
      already holds — and could disagree with what is on screen. */
   let lastOverview = null;
 
+  /* Three missed minutes is behind rather than merely late: a 60s cycle that
+     has not reported in three of them is not going to catch up on its own. */
+  const STALE_AFTER_S = 180;
+  const agoText = s =>
+    s == null   ? 'a while ago' :
+    s < 45      ? 'just now' :
+    s < 90      ? 'a minute ago' :
+    s < 3600    ? Math.round(s / 60) + ' minutes ago' :
+                  Math.round(s / 3600) + ' hours ago';
+
   async function loadOverview(){
     const o = await api('/api/overview');
     lastOverview = o;
@@ -128,21 +138,40 @@
     $('mSetups').textContent = active.length;
     $('nCommand').textContent = active.length || '';
 
-    // scanner liveness
+    /* Scanner state, said as what it means for a trade rather than as a
+       progress report on a backend loop.
+
+       `SCANNER · IMPORT BTCUSDT (3/19)` narrated the import stage in the one
+       strip that is on screen whichever surface you are on, and it changed
+       every few seconds — constant motion in the top bar reads as alarm from
+       the corner of the eye, on a chip whose job is to be ignorable until
+       something is actually wrong. Which symbol is being imported is not a
+       fact a trader can act on; whether the engine is still watching, and
+       whether what is on screen is current, are the only two that are. */
     const sc = o.scanner || {};
-    $('scanOrb').className = 'orb ' + (sc.alive ? 'good' : 'bad');
-    // show WHAT it is doing, not just that it lives — the phase comes from the
-    // live loop's per-stage heartbeat
-    const phase = sc.phase && sc.phase !== 'idle' ? sc.phase.split(' (')[0] : null;
+    const fresh = sc.alive && sc.age_s != null && sc.age_s < STALE_AFTER_S;
+    const tone  = !sc.alive ? 'bad' : fresh ? 'good' : 'warn';
+    $('scanOrb').className = 'orb ' + tone;
     $('scanTxt').textContent = sc.alive
-      ? (phase ? 'SCANNER · ' + phase.toUpperCase() : 'SCANNER LIVE')
-      : 'SCANNER DOWN';
-    $('scanChip').title = sc.alive
-      ? `${sc.phase || 'idle'} · ${sc.cycles || 0} cycles · heartbeat ${sc.age_s}s ago`
-      : `no heartbeat for ${sc.age_s == null ? '?' : sc.age_s}s`;
+      ? (uc.admitted ? `WATCHING ${uc.admitted} SYMBOLS` : 'WATCHING')
+      : 'NOT WATCHING';
+    $('scanChip').title = !sc.alive
+      ? 'The engine has stopped watching. No new setups will appear until it restarts.'
+      : fresh
+        ? `The engine is watching for setups. Last checked ${agoText(sc.age_s)}.`
+        : `The engine is behind — last checked ${agoText(sc.age_s)}. ` +
+          'Setups and prices on screen may be out of date.';
+
+    // The same two facts restated along the bottom, so they are answerable
+    // from Chart or Rules without looking up at the header.
+    $('sbOrb').className = 'orb ' + tone;
+    $('sbLive').textContent = !sc.alive ? 'Not watching'
+      : fresh ? 'Watching the market' : 'Catching up';
+    $('sbWatch').textContent = sc.alive && uc.admitted
+      ? `${uc.admitted} symbols · checked ${agoText(sc.age_s)}`
+      : '';
 
     if(o.baseline){
-      $('sbBaseline').textContent = new Date(o.baseline.started_at * 1000).toISOString().slice(0, 10);
       $('baselineChip').textContent = o.baseline.label || 'forward window';
     }
     renderDeck(active, o.rejection_funnel || {});
@@ -177,6 +206,25 @@
     return h < 48 ? `expires in ${h}h` : `expires in ${Math.round(h / 24)}d`;
   }
 
+  /* When the engine found this — the question the deck could not answer.
+     A card with an expiry but no birth time reads as timeless, and "is this
+     fresh or have I been staring at it for a day?" decides whether the entry
+     is still worth taking. armed_at is the moment the paper order went live;
+     the confirming-bar close is the fallback for cards not yet armed. */
+  function foundAgo(s, now){
+    const ts = s.armed_at || s.confirmed_bar_ts || s.market_time;
+    if(!ts) return '';
+    const m = Math.round((now - ts) / 60);
+    if(m < 1) return 'found just now';
+    if(m < 60) return `found ${m}m ago`;
+    const h = Math.round(m / 60);
+    return h < 48 ? `found ${h}h ago` : `found ${Math.round(h / 24)}d ago`;
+  }
+  function foundTitle(s){
+    const ts = s.armed_at || s.confirmed_bar_ts || s.market_time;
+    return ts ? 'found ' + new Date(ts * 1000).toLocaleString() : '';
+  }
+
   /* One card per token, ordered by EXPIRY URGENCY — which decision dies first.
 
      The deck used to sort by `rank`. It no longer does, and the number is no
@@ -204,6 +252,21 @@
      The bracket carries real information (which exit started the rest, and how
      long), so it is kept and spelled out rather than stripped. The glossary
      entry does the rest. */
+  /* The sentence for a refusal comes from the shared dictionary in funnel.js,
+     which already carries one for every code the engine can emit.
+
+     Three surfaces lowercased the raw code instead, so the deck said
+     "stop beyond liquidation(0.4412" and the Command tile said "no eligible
+     playbook" while Diagnostics — the surface a trader has least reason to
+     open — said both of them in English. The translation existed; only its
+     distribution was inverted.
+
+     Guarded exactly the way wizard.js guards it: funnel.js is deferred, so a
+     dictionary that has not loaded yet must degrade to the old text rather
+     than throw on the surface that renders first. */
+  const plainReason = c => window.SSFunnel
+    ? SSFunnel.plain(c) : String(c).replace(/_/g, ' ').toLowerCase();
+
   function reasonText(reasons){
     if(!reasons || !reasons.length) return 'no reason given';
     return reasons.map(raw => {
@@ -214,7 +277,7 @@
                      m[1].toUpperCase() === 'TP' ? 'a target' : m[1].toLowerCase();
         return `<span class="term" data-t="cooldown">resting</span> after ${exit} — ${m[2]} left`;
       }
-      return s.replaceAll('_', ' ').toLowerCase();
+      return plainReason(s);
     }).join(', ');
   }
 
@@ -237,10 +300,11 @@
       const nSyms = (lastOverview && (lastOverview.universe_counts || {}).admitted) || 0;
       let body;
       if(total){
-        body = '<br><span style="color:var(--fg-3)">' + fmt(total) +
-          ' candidates rejected since baseline</span><br>' +
+        body = '<br><span style="color:var(--fg-3)">The engine looked at ' +
+          fmt(total) + ' chances in this window and passed on every one. ' +
+          'The most common reasons:</span><br>' +
           rows.map(([r, n]) => '<span style="color:var(--amber)">' + fmt(n) + '</span> ' +
-            r.replaceAll('_', ' ').toLowerCase()).join('<br>');
+            plainReason(r)).join('<br>');
       } else if(!cycles){
         body = '<br><span style="color:var(--fg-3)">Nothing has been rejected ' +
           'either, because nothing has been examined in this window yet.</span>';
@@ -329,6 +393,67 @@
 
   const deckRows = new Map();          // symbol -> {el, html, cls}
 
+  /* The engine's enums, said the way a trader would say them. Both maps fall
+     back to the de-underscored code, so a playbook or decision added to the
+     engine can never render a blank cell here — it just reads plainer once
+     someone adds a line. */
+  const DECISION_LABELS = {
+    APPROVED: 'CLEARED', REDUCED: 'REDUCED SIZE', REJECTED: 'NOT TRADED'
+  };
+  const PLAYBOOK_LABELS = {
+    PULLBACK: 'pullback', REVERSAL: 'reversal', SCALE_IN: 'scale-in add',
+    BREAKOUT_RETEST: 'breakout retest', RANGE_FADE: 'range fade'
+  };
+  const playbookLabel = k =>
+    PLAYBOOK_LABELS[String(k).toUpperCase()] || String(k).replace(/_/g, ' ').toLowerCase();
+
+  /* ---------- the trade story ----------
+     The engine composes its rationale server-side into one ` · `-joined line:
+
+       "TRANSITION regime · reversal off DEMAND zone 451.40-452.18 · confirmed
+        by a close back above the zone on 3.78x volume · TP 479.21 · R:R 2.76"
+
+     Every clause in that is a separate thing a trader weighs — what the market
+     was doing, which level, what confirmed it, where it is aimed — and run
+     together they read as one machine sentence that nobody finishes. The parts
+     arrive already delimited, so they are split back apart and labelled with
+     the question each one answers.
+
+     A clause that matches no label keeps its place unlabelled rather than
+     being dropped: a rationale that silently loses a line is worse than one
+     that reads slightly flat. */
+  /* Order is significant, and the specific patterns come first: the
+     confirmation clause reads "confirmed by a close back above the ZONE", so
+     a /zone/ test placed above /confirm/ swallows it and labels the trigger
+     as the level it fired at. */
+  const WHY_LABELS = [
+    [/confirm/i,                             'Confirmation'],
+    [/sweep|liquidity/i,                     'Trigger'],
+    [/^TP\b/i,                               'Target'],
+    [/^R:R\b/i,                              'Reward'],
+    [/cost|fee|slippage/i,                   'Costs'],
+    [/\bregime\b/i,                          'Trend'],
+    [/\bagrees\b|\bopposes\b|^\d+[DWHM]\b/i, 'Higher timeframe'],
+    [/\bzone\b/i,                            'Zone']
+  ];
+  const whyLabel = seg => (WHY_LABELS.find(([re]) => re.test(seg)) || [])[1] || '';
+
+  function storyOf(s){
+    if(!s.why) return '';
+    const teach = t => window.SSTeach ? window.SSTeach(t) : esc(t);
+    // The headline claims nothing the engine did not state outright.
+    const regime = String(s.regime || '').replace(/_/g, ' ').toLowerCase();
+    const head = `A ${playbookLabel(s.strategy)} ` +
+      (s.direction === 'LONG' ? 'long' : 'short') +
+      (regime ? ` in a ${regime} market` : '') + '.';
+    const rows = String(s.why).split(' · ').map(x => x.trim()).filter(Boolean)
+      .map(seg => `<div class="why-row"><span class="why-k">${whyLabel(seg)}</span>` +
+                  `<span class="why-d">${teach(seg)}</span></div>`).join('');
+    return `<div class="t-body deck-why">${esc(head)}</div>
+      <details class="deck-story"><summary>Why this trade</summary>
+        <div class="why-rows">${rows}</div></details>`;
+  }
+
   function deckRowInner(s, now){
     {
       const long = s.direction === 'LONG';
@@ -341,20 +466,22 @@
       const chip = dec === 'APPROVED' ? 'chip-green' : dec === 'REDUCED' ? 'chip-amber'
                  : dec === 'REJECTED' ? 'chip-red' : '';
       const verdict = dec
-        ? `<span class="chip ${chip}">${dec}</span>` +
+        ? `<span class="chip ${chip}">${DECISION_LABELS[dec] || dec}</span>` +
           (dec === 'REJECTED'
             ? `<div class="t-label" style="margin-top:4px;color:var(--red-2)">${
                 reasonText(r.reasons)}</div>`
             : `<div class="t-label" style="margin-top:4px">risks ${money(r.risk_usd) || '—'}${
                 r.units ? ' · ' + Number(r.units).toLocaleString() + ' units' : ''}</div>`)
-        : '<span class="chip">unsized</span><div class="t-label" style="margin-top:4px">no risk decision</div>';
+        : '<span class="chip">awaiting decision</span>' +
+          '<div class="t-label" style="margin-top:4px">the risk rules have not ruled on this one yet</div>';
 
       // wrapper element and its .dead class are owned by renderDeck's differ;
       // this returns the row's CONTENTS only
       return `
         <div>
           <div class="t-mono" style="font-size:13px;color:var(--fg)">${s.symbol.replace('-USD','')}</div>
-          <div class="t-label">${s.tf} · ${s.strategy.replace('_',' ')}</div>
+          <div class="t-label">${s.tf} · ${playbookLabel(s.strategy)}</div>
+          <div class="t-label" title="${foundTitle(s)}">${foundAgo(s, now)}</div>
           <!-- The sort key, made visible. A deck ordered by something the
                operator cannot see is worse than one ordered by a bad score. -->
           <div class="t-label" style="color:var(--amber)" title="how long this setup stays live"><span class="term" data-t="horizon">${expiresIn(s.expires_at_ts, now)}</span></div>
@@ -368,8 +495,7 @@
           tp <b style="color:var(--green)">${(+s.tp).toLocaleString()}</b> ·
           sl <b style="color:var(--red-2)">${(+s.sl).toLocaleString()}</b> ·
           <span class="term" data-t="rr">R:R</span> ${s.rr}
-          ${s.why ? `<div class="t-body deck-why">${
-            window.SSTeach ? window.SSTeach(s.why) : esc(s.why)}</div>` : ''}
+          ${storyOf(s)}
         </div>
         <div>${verdict}</div>
         <button class="btn" data-sym="${s.symbol}" data-tf="${s.tf}">Open chart</button>`;
@@ -380,9 +506,78 @@
     const rows = Object.entries(funnel).sort((a, b) => b[1] - a[1]);
     $('dFunnel').innerHTML = rows.length
       ? rows.map(([r, n]) => `<div style="display:flex;justify-content:space-between;padding:3px 0"
-            class="t-mono"><span style="color:var(--fg-3)">${r.replaceAll('_', ' ').toLowerCase()}</span>
+            class="t-mono"><span style="color:var(--fg-3)" title="${esc(r)}">${plainReason(r)}</span>
             <b style="color:var(--amber)">${fmt(n)}</b></div>`).join('')
       : '<span class="t-mono" style="color:var(--fg-4)">no rejections recorded yet</span>';
+  }
+
+  /* Open trades, drawn on the surface that asks what to do next.
+
+     `active_positions` has been in the portfolio payload the whole time and
+     reached no surface at all: an open trade appeared only inside the chart's
+     order ticket, and only while you happened to be looking at that symbol's
+     chart. "What am I in right now" cost one navigation per position.
+
+     One last close per open symbol is what turns a plan into a position — it
+     says whether the trade is winning and how far it is from either end. A
+     price that will not load costs that row its marker, never the row. */
+  async function renderPositions(p){
+    const panel = $('posPanel'), box = $('positions');
+    const list = p.active_positions || [];
+    if(!list.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
+    panel.style.display = '';
+    $('posRisk').textContent = money(p.open_risk_usd || 0) + ' at risk';
+
+    const prices = await Promise.all(list.map(t =>
+      api(`/api/candles?symbol=${encodeURIComponent(t.symbol)}&tf=${
+            encodeURIComponent(t.tf)}&limit=1`)
+        .then(rows => {
+          const arr = Array.isArray(rows) ? rows : [];
+          const last = arr[arr.length - 1];
+          return last ? +last.close : null;
+        })
+        .catch(() => null)));
+
+    /* Prices carry the venue's full stored precision — `4.59308636` for a stop
+       on a token that ticks in thousandths. Digits nobody trades on are noise
+       in a column meant to be compared at a glance. */
+    const px = v => {
+      const n = +v, a = Math.abs(n);
+      const d = a >= 1000 ? 0 : a >= 100 ? 2 : a >= 1 ? 3 : 5;
+      return n.toLocaleString(undefined,
+        {minimumFractionDigits: d, maximumFractionDigits: d});
+    };
+    box.innerHTML = list.map((t, i) => {
+      const long = t.direction === 'LONG';
+      const entry = +t.entry, sl = +t.sl, tp = +t.tp, now = prices[i];
+      const span = Math.abs(tp - sl);
+      // where price stands between the two ends, as a percentage of the trade
+      const at = (now == null || !span) ? null
+        : Math.max(2, Math.min(98, ((long ? now - sl : sl - now) / span) * 100));
+      const perR = Math.abs(entry - sl);
+      const r = (now == null || !perR) ? null
+        : (long ? now - entry : entry - now) / perR;
+      const tone = r == null ? '' : r >= 0 ? 'up' : 'down';
+      return `<div class="pos-row">
+        <div>
+          <div class="pos-sym">${esc(String(t.symbol).replace('-USD', ''))}</div>
+          <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
+            esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
+        </div>
+        <div>
+          <div class="pos-track">${at == null ? ''
+            : `<span class="pos-mark" style="left:${at.toFixed(1)}%"></span>`}</div>
+          <div class="pos-ends">
+            <span>stop ${px(sl)}</span>
+            <span class="now">${now == null ? 'price unavailable' : 'now ' + px(now)}</span>
+            <span>target ${px(tp)}</span>
+          </div>
+        </div>
+        <div class="pos-r ${tone}">${
+          r == null ? '—' : (r >= 0 ? '+' : '') + r.toFixed(1) + 'R'}
+          <span class="t-sub">${money(t.risk_usd)} at risk</span></div>
+      </div>`;
+    }).join('');
   }
 
   /* ---------- RESULTS ---------- */
@@ -407,6 +602,10 @@
       `open risk ${money(p.open_risk_usd || 0)}`;
     $('mEquity').textContent = money(p.equity);
     $('rEquity').textContent = money(p.equity);
+
+    // fire-and-forget: the positions panel fetches a price per open trade, and
+    // a slow venue must not hold up the equity numbers above it
+    renderPositions(p).catch(() => {});
 
     if(!ruled){
       // Em-dash, never 0% and never —%. The sub-line carries the denominator.
@@ -650,7 +849,6 @@
       (c.venues || []).map(v => row(
         v.key.replace('-', ' '),
         `${v.allow_shorts ? 'long+short' : 'long only'} · ${v.max_leverage}x`)).join('');
-    $('riskVer').textContent = c.cost.version;
   }
 
   /* ---------- settings: editable, audited, honest about the cost ---------- */
@@ -706,6 +904,13 @@
   };
   const settingLabel = name => SETTING_LABELS[name] || name.replaceAll('_', ' ');
 
+  /* The engine writes its own setting descriptions, and they quote engine
+     enums verbatim — "Allow SCALE_IN adds." The labels were humanised a while
+     back; the sentence underneath each one still shouted a constant name. */
+  const humaniseCodes = t => String(t).replace(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/g,
+    m => (typeof playbookLabel === 'function' ? playbookLabel(m)
+                                             : m.replace(/_/g, ' ').toLowerCase()));
+
   /* Full rebuild. Only ever called when the SHAPE of the spec changes — never
      on a keystroke and never on the refresh tick, both of which used to blow
      away the input under the operator's cursor. See patchSettingsState. */
@@ -721,7 +926,7 @@
           <span class="t-mono" style="color:var(--fg-2)">${escHtml(settingLabel(s.name))}</span>
           ${s.class === 'BEHAVIOURAL' ? '<span class="chip chip-amber">rule</span>' : ''}
           <span class="t-label" style="display:block;margin-top:2px;text-transform:none;
-            letter-spacing:0;color:var(--fg-4)">${escHtml(s.description)}</span>
+            letter-spacing:0;color:var(--fg-4)">${humaniseCodes(escHtml(s.description))}</span>
         </span>
         ${s.type === 'bool' ? '' : ctl}
       </label>`;
@@ -964,12 +1169,6 @@
       : '<div class="empty">no candidates recorded in this window yet</div>';
   }
 
-  async function loadStatus(){
-    const s = await api('/api/status');
-    $('sbFacts').textContent = fmt(s.facts);
-    $('sbAlgo').textContent = s.algo_version;
-  }
-
   /* ---------- actions ---------- */
   /* ---------- backend console: tail the log both processes write ---------- */
   let logOffset = -1, follow = true, scanning = false;
@@ -1132,9 +1331,35 @@
     b.disabled = false; b.textContent = was;
   });
 
+  /* ---------- developer mode ----------
+     Diagnostics is the surface that asks whether the machine is telling the
+     truth. That is a real question and a necessary surface — but it is a
+     developer's question, and it was sitting in the rail between Rules and
+     Learn where the first thing a new reader clicked showed them
+     `ohlc invariant failure` and a log tail. It is opt-in now.
+
+     The preference survives a reload, and turning it off while standing on
+     Diagnostics moves you somewhere that still exists rather than leaving a
+     blank stage. */
+  const DEV_KEY = 'ss.devMode';
+  const shellEl = document.querySelector('.shell');
+  const readDev = () => { try{ return localStorage.getItem(DEV_KEY) === '1'; }
+                          catch(e){ return false; } };
+  function setDev(on){
+    shellEl.classList.toggle('dev', on);
+    const b = $('devToggle');
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.textContent = on ? 'Developer mode · on' : 'Developer mode';
+    try{ localStorage.setItem(DEV_KEY, on ? '1' : '0'); }catch(e){}
+    if(!on && location.hash === '#diagnostics') go('command');
+  }
+  setDev(readDev());
+  $('devToggle').addEventListener('click',
+    () => setDev(!shellEl.classList.contains('dev')));
+
   /* ---------- refresh loop ---------- */
   async function refresh(){
-    const jobs = [loadOverview(), loadPortfolio(), loadHealth(), loadStatus(),
+    const jobs = [loadOverview(), loadPortfolio(), loadHealth(),
                   loadRisk(), loadSettings(), loadCredentials(), loadPerformance(),
                   loadTelemetry()];
     const results = await Promise.allSettled(jobs);
