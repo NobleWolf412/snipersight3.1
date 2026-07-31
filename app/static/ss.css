@@ -104,6 +104,21 @@ body{
 .chip-red{background:rgba(248,113,113,.10);color:var(--red-2)}
 .chip-amber{background:rgba(255,194,102,.10);color:var(--amber)}
 .chip-cyan{background:rgba(34,211,238,.10);color:var(--cyan)}
+/* the health chip becomes a route to Diagnostics only while it has something
+   to explain — a control that looks clickable at rest but is not lies twice */
+.chip.clickable{cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+/* The era label. Deliberately BODY PROSE, not a chip: it is two sentences that
+   have to be read and understood, and the all-caps mono treatment this app uses
+   for labels destroys word shape at sentence length. Neutral, not a warning —
+   nothing is wrong when Results and Diagnostics disagree, it just needs saying.
+   Same treatment on both surfaces so the two read as one statement. */
+.era-band{font-family:var(--f-body);font-size:12.5px;line-height:1.6;
+  color:var(--fg-2);max-width:78ch;
+  border-left:2px solid var(--border);padding:2px 0 2px var(--md);
+  margin-bottom:var(--lg)}
+.era-band a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.era-band b{color:var(--fg);font-weight:600}
 
 /* ---------- buttons ---------- */
 .btn{font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.14em;
@@ -289,6 +304,19 @@ body{
 .tk-actions{display:flex;gap:var(--sm)}
 .tk-actions .btn{flex:1}
 .tk-lock{color:var(--fg-4);font-size:10px;line-height:1.6;text-align:center}
+
+/* Row geometry lives here, not in a style attribute, because renderDeck now
+   creates the wrapper element once and patches only its contents. */
+.deck-row{display:grid;grid-template-columns:120px 92px 1fr 150px auto;
+  gap:var(--md);align-items:center;padding:var(--md) var(--lg);
+  border-bottom:1px solid var(--border-soft)}
+
+/* An expired setup fades where it stands and holds its slot for the duration,
+   so the rows below it do not jump up into a cursor already on its way down. */
+.deck-row.expiring{opacity:0;pointer-events:none;transition:opacity .9s ease}
+@media (prefers-reduced-motion: reduce){
+  .deck-row.expiring{transition:none}
+}
 
 /* a setup the risk authority refused is not an opportunity — do not dress it as one */
 .deck-row.dead{opacity:.55}

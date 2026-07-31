@@ -191,6 +191,12 @@
     <!-- ─── RESULTS ─── -->
     <section class="surface" id="s-results">
       <div class="surface-head"><h1 class="t-page">Results</h1><p>Is this actually working?</p></div>
+      <!-- Which ERA these numbers cover, stated before the numbers rather than
+           under them. Results is scoped to the active baseline and Diagnostics
+           measures the whole book, so the two trade counts legitimately differ
+           — and a reader who meets them unlabelled concludes the app is lying.
+           The reconciliation is the headline on BOTH panels, in one wording. -->
+      <div class="era-band" id="resultsEra">loading…</div>
       <div class="grid cols-4" style="margin-bottom:var(--lg)">
         <div class="tile"><span class="t-label">Equity</span><span class="t-metric" id="rEquity">—</span></div>
         <div class="tile"><span class="t-label">Return</span><span class="t-metric" id="rReturn">—</span></div>

@@ -58,6 +58,14 @@ window.GLOSSARY = {
   live:       "Real orders on a real exchange with real money.",
   scanner:    "The process that pulls market data, maps structure, and looks for setups.",
   baseline:   "The start date of the current forward test. Results before it belong to an older engine and are not mixed in.",
+
+  /* The two ERAS. Every trade count in this app belongs to one of them, and the
+     two legitimately disagree: Results can read zero while Diagnostics reads
+     several hundred. That is not a fault, but an operator who meets the two
+     numbers without these labels concludes the app is broken — so both surfaces
+     name their era in the same words, and both point at the other. */
+  forwardWindow:"The stretch of trading since the current baseline opened. Results reports ONLY this window, so it reads empty until the risk authority rules on its first setup — however many trades came before. Changing a rule starts a new one.",
+  recordedBook: "Every trade the simulator has ever closed, across all baselines and every engine version. Diagnostics measures the edge against this, because a confidence interval needs far more trades than one forward window usually holds.",
   fact:       "One recorded observation, stamped with when it happened, when the system could first know it, and which algorithm version produced it. Facts are never edited — only added.",
   algoVersion:"Which version of an engine produced a result. Changing a rule creates a NEW version rather than editing the old one, so past results stay reproducible.",
   rejection:  "A candidate the scanner looked at and turned down, with the reason recorded. Rejections are kept because knowing why nothing fired is as useful as knowing why something did.",

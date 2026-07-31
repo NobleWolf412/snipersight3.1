@@ -82,17 +82,65 @@ ok('Telemetry: zero records is grey "no data", not green "clean"', () => {
   assert(!/chip-green/.test(after), 'the no-data branch is painted green');
 });
 
+/* The colour behind the health word is no longer a literal at each call site —
+   it comes from one ladder, healthTone(), so the header orb and the diagnostics
+   verdict cannot disagree. Assert the ladder by RUNNING it: a source match
+   would pass on a function that returns the right string for the wrong reason. */
+function healthToneFn() {
+  const b = body('healthTone') + '}';        // body() stops ON the closing brace
+  const tones = SRC.slice(SRC.indexOf('const TONE_OF_STATUS'),
+                          SRC.indexOf('const TONE_VAR'));
+  return new Function(tones + '\n' + b + '\nreturn healthTone;')();
+}
+
 ok('Pipeline: a PENDING audit is not painted as a pass', () => {
   const b = body('loadHealth');
   assert(/h\.pending/.test(b), 'the endpoint ships `pending` and the UI ignores it');
   const p = b.indexOf('h.pending');
   const branch = b.slice(p, p + 700);
-  assert(/orb warn/.test(branch), 'pending audit does not use the warn orb');
+  assert(/healthTone\(h\)/.test(branch),
+         'pending branch picks its own colour instead of using the shared ladder');
   assert(/AUDITING/.test(branch), 'pending state is not named on screen');
   assert(/Nothing below has been checked/.test(branch),
          'does not say the verdict is absent rather than clean');
   assert(branch.indexOf('return') > 0,
          'pending branch falls through into the pass/fail rendering');
+
+  const tone = healthToneFn();
+  assert.strictEqual(tone({pending: true, evaluation_allowed: true, status: 'PASS'}),
+                     'warn', 'an audit that has not run is painted as a pass');
+});
+
+ok('Pipeline: DEGRADED never renders green', () => {
+  const tone = healthToneFn();
+  // the exact live state that rendered green: mildest non-clean rung, nothing
+  // blocked, evaluation still allowed. The old good-predicate was true here, so
+  // the verdict went green while the word beside it said DEGRADED.
+  assert.strictEqual(
+    tone({status: 'DEGRADED', evaluation_allowed: true, blockers: [], warnings: [1, 2]}),
+    'warn', 'DEGRADED with zero blockers is painted as a pass');
+  assert.strictEqual(
+    tone({status: 'BLOCKED', evaluation_allowed: false, blockers: [1]}), 'bad');
+  assert.strictEqual(
+    tone({status: 'PASS', evaluation_allowed: true, blockers: []}), 'good');
+  // a status this file has never seen must not default to reassurance
+  assert.notStrictEqual(
+    tone({status: 'SOMETHING_NEW', evaluation_allowed: true, blockers: []}), 'good',
+    'an unrecognised status falls through to green');
+});
+
+ok('Pipeline: header and verdict cannot disagree about colour', () => {
+  const b = body('loadHealth');
+  // both consumers must read the same computed tone, not re-derive one
+  assert(/const tone = healthTone\(h\)/.test(b), 'no single tone is computed');
+  assert(/healthOrb'\)\.className = 'orb ' \+ tone/.test(b),
+         'the orb re-derives its own colour');
+  assert(/dVerdict'\)\.style\.color = TONE_VAR\[tone\]/.test(b),
+         'the verdict re-derives its own colour');
+  // the file's comments still narrate the old predicate, deliberately — it is
+  // the bug history. What must not come back is the binding that APPLIED it.
+  assert(!/const\s+good\s*=/.test(b),
+         'the old good-predicate is still deciding a colour');
 });
 
 ok('Pipeline: severity rungs are translated, not dropped', () => {

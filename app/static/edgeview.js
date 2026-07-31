@@ -219,7 +219,22 @@
                shape rather than a sign something broke.` : ''}</div>`
       : '';
 
+    /* THE ERA LABEL, matching Results verbatim in its nouns. This panel counts
+       the whole recorded book; Results counts only the current forward window.
+       Left unlabelled, the two contradict each other on the two surfaces whose
+       stated jobs are "is this actually working" and "is the machine telling me
+       the truth" — the worst possible place to look like you are lying. */
+    const eraBand = `<div class="era-band">
+      These figures cover the whole
+      <span class="term" data-t="recordedBook">recorded book</span> — every trade
+      the simulator has closed, across every
+      <span class="term" data-t="baseline">baseline</span>. The current
+      <span class="term" data-t="forwardWindow">forward window</span> on its own is
+      on <a href="#results" data-era-link="results">Results</a>, and will show far
+      fewer trades, often none.</div>`;
+
     panel(`
+      ${eraBand}
       <div class="ev-grid">
         <div class="tile"><span class="t-label">Closed trades</span>
           <span class="t-metric">${b.n ?? '—'}</span>

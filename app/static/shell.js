@@ -32,12 +32,47 @@
     if(!r.ok) throw new Error(path + ' → ' + r.status);
     return r.json();
   }
-  function markDegraded(msg){
+  /* ONE severity ladder, ONE colour. The engine already grades every check on
+     PASS < DEGRADED < BLOCKED (engine/quality.py ORDER) and this file used to
+     re-derive a colour at three call sites from three different predicates.
+     That is how `DEGRADED` came to render GREEN in the diagnostics verdict and
+     amber in the header at the same instant — the verdict coloured off
+     `evaluation_allowed && !blockers`, which is true for the mildest non-clean
+     rung, while the text printed `h.status`. Colour and word now share a
+     source, and an unknown status can never resolve to green. */
+  const TONE_OF_STATUS = {PASS: 'good', DEGRADED: 'warn', BLOCKED: 'bad'};
+  const TONE_VAR = {good: 'var(--green)', warn: 'var(--amber)', bad: 'var(--red)'};
+  function healthTone(h){
+    if(h.pending) return 'warn';              // an audit that has not run is not a pass
+    if(!h.evaluation_allowed) return 'bad';
+    if((h.blockers || []).length) return 'bad';
+    return TONE_OF_STATUS[h.status] || 'warn';
+  }
+
+  /* An exception string is not operator copy. `TypeError: Failed to fetch` was
+     the ONLY explanation this chip ever offered, in a native tooltip. What an
+     operator needs is how many surfaces are stale and how old the numbers still
+     on screen are; the stack detail belongs in the console, where it already is.
+     The chip carries the count and routes to Diagnostics for the rest. */
+  let lastGoodAt = null;
+  function ageText(ts){
+    if(ts == null) return 'Nothing on this page has loaded successfully yet.';
+    const s = Math.round((Date.now() - ts) / 1000);
+    const age = s < 90 ? `${s} seconds` : `${Math.round(s / 60)} minutes`;
+    return `The numbers still on screen are ${age} old.`;
+  }
+  function markDegraded(detail, failedCount){
     degraded = true;
+    const n = failedCount || 1;
     $('healthOrb').className = 'orb bad';
     $('healthTxt').textContent = 'API DEGRADED';
-    $('healthChip').title = msg;
+    $('healthChip').title =
+      `${n} ${n === 1 ? 'panel' : 'panels'} on this page could not refresh. ` +
+      `${ageText(lastGoodAt)} Click for Diagnostics.`;
+    $('healthChip').classList.add('clickable');
+    console.warn('[shell] refresh failed:', detail);
   }
+  $('healthChip').addEventListener('click', () => go('diagnostics'));
 
   /* ---------- COMMAND + status bar ---------- */
   /* The last overview payload, so `renderDeck` can tell an unexamined window
@@ -194,6 +229,7 @@
           'Market Weather below shows which regimes they are in.</span>';
       }
       el.innerHTML = '<div class="empty">no setups right now' + body + '</div>';
+      deckRows.clear();          // the differ's nodes went with that innerHTML
       return;
     }
     const expiry = s => s.expires_at_ts || Infinity;   // no expiry -> sorts last
@@ -203,7 +239,62 @@
       if(!cur || expiry(s) < expiry(cur)) best.set(s.symbol, s);
     }
     const now = Date.now() / 1000;
-    el.innerHTML = [...best.values()].sort((a, b) => expiry(a) - expiry(b)).map(s => {
+    const ordered = [...best.values()].sort((a, b) => expiry(a) - expiry(b));
+
+    /* Keyed diff, because the next click on this surface opens an order ticket.
+       This deck used to be replaced wholesale via `innerHTML` every 30s: every
+       row was destroyed and rebuilt, and when a setup expired the rows beneath
+       it jumped up into the cursor. On the one screen where a misclick sizes
+       the wrong trade, the list must not move under the pointer.
+
+       Rows are keyed by symbol — `best` holds one per symbol, so the key is
+       stable even when the chosen timeframe or strategy for that symbol
+       changes. Survivors keep their node (and their position); a row that
+       leaves the payload fades OUT IN PLACE, holding its slot open, so nothing
+       below it shifts at the moment the operator is reaching for it. */
+    const seen = new Set();
+    ordered.forEach(s => {
+      const key = s.symbol;
+      seen.add(key);
+      const cls = 'deck-row' + (s.risk && s.risk.decision === 'REJECTED' ? ' dead' : '');
+      const html = deckRowInner(s, now);
+      let rec = deckRows.get(key);
+      if(!rec){
+        const node = document.createElement('div');
+        node.dataset.deckkey = key;
+        node.className = cls;
+        node.innerHTML = html;
+        rec = {el: node, html, cls};
+        deckRows.set(key, rec);
+      }else{
+        rec.el.classList.remove('expiring');
+        if(rec.cls !== cls){ rec.el.className = cls; rec.cls = cls; }
+        if(rec.html !== html){ rec.el.innerHTML = html; rec.html = html; }
+      }
+      el.appendChild(rec.el);          // appendChild MOVES an existing node
+    });
+
+    for(const [key, rec] of deckRows){
+      if(seen.has(key)) continue;
+      if(rec.el.classList.contains('expiring')) continue;   // already fading
+      rec.el.classList.add('expiring');
+      setTimeout(() => { rec.el.remove(); deckRows.delete(key); }, 900);
+    }
+
+    el.querySelectorAll('button[data-sym]').forEach(b => {
+      if(b.dataset.wired) return;      // survivors keep their handler
+      b.dataset.wired = '1';
+      b.addEventListener('click', () => {
+        go('chart');
+        if(window.SSChart) SSChart.open(b.dataset.sym, b.dataset.tf);
+      });
+    });
+  }
+
+  const deckRows = new Map();          // symbol -> {el, html, cls}
+
+  function deckRowInner(s, now){
+    {
       const long = s.direction === 'LONG';
       // The risk authority is the last word on whether a setup is tradeable.
       // Showing a rejected setup as if it were actionable is the worst thing
@@ -222,9 +313,9 @@
                 r.units ? ' · ' + Number(r.units).toLocaleString() + ' units' : ''}</div>`)
         : '<span class="chip">unsized</span><div class="t-label" style="margin-top:4px">no risk decision</div>';
 
-      return `<div class="deck-row${dec === 'REJECTED' ? ' dead' : ''}"
-        style="display:grid;grid-template-columns:120px 92px 1fr 150px auto;
-        gap:var(--md);align-items:center;padding:var(--md) var(--lg);border-bottom:1px solid var(--border-soft)">
+      // wrapper element and its .dead class are owned by renderDeck's differ;
+      // this returns the row's CONTENTS only
+      return `
         <div>
           <div class="t-mono" style="font-size:13px;color:var(--fg)">${s.symbol.replace('-USD','')}</div>
           <div class="t-label">${s.tf} · ${s.strategy.replace('_',' ')}</div>
@@ -245,14 +336,8 @@
             window.SSTeach ? window.SSTeach(s.why) : esc(s.why)}</div>` : ''}
         </div>
         <div>${verdict}</div>
-        <button class="btn" data-sym="${s.symbol}" data-tf="${s.tf}">Open chart</button>
-      </div>`;
-    }).join('');
-    el.querySelectorAll('button[data-sym]').forEach(b =>
-      b.addEventListener('click', () => {
-        go('chart');
-        if(window.SSChart) SSChart.open(b.dataset.sym, b.dataset.tf);
-      }));
+        <button class="btn" data-sym="${s.symbol}" data-tf="${s.tf}">Open chart</button>`;
+    }
   }
 
   function renderFunnel(funnel){
@@ -309,6 +394,20 @@
     const started = startedAt
       ? new Date(startedAt * 1000).toLocaleDateString(undefined, {day: 'numeric', month: 'short'})
       : null;
+
+    /* THE ERA LABEL. This surface counts ONLY the current forward window;
+       Diagnostics counts the whole recorded book. Both are correct and they
+       disagree by hundreds of trades, which reads as a broken app unless each
+       one says which era it covers and where the other number lives. Stated as
+       a headline above the tiles, in the same words the edge panel uses. */
+    $('resultsEra').innerHTML =
+      `Everything on this page counts the
+       <span class="term" data-t="forwardWindow">forward window</span> that opened${
+         started ? ' <b>' + started + '</b>' : ''} — not the whole history.
+       The full <span class="term" data-t="recordedBook">recorded book</span>,
+       across every <span class="term" data-t="baseline">baseline</span>, is measured on
+       <a href="#diagnostics" data-era-link="diagnostics">Diagnostics</a>${
+         ruled ? '' : ', which is why it can report trades while this page reports none'}.`;
     $('resultsNote').innerHTML = ruled
       ? `Risk authority decisions: <b>${d.APPROVED || 0}</b> approved,
          <b>${d.REDUCED || 0}</b> reduced, <b>${d.REJECTED || 0}</b> rejected.
@@ -421,10 +520,10 @@
        run was displayed as an audit that passed. The endpoint has always
        shipped `pending: true` and this file ignored it. */
     if(h.pending){
-      $('healthOrb').className = 'orb warn';
+      $('healthOrb').className = 'orb ' + healthTone(h);
       $('healthTxt').textContent = 'AUDITING…';
       $('dVerdict').textContent = 'AUDITING…';
-      $('dVerdict').style.color = 'var(--amber)';
+      $('dVerdict').style.color = TONE_VAR[healthTone(h)];
       $('dCounts').textContent = 'the audit has not produced a verdict yet — ' +
         'about a minute on this store. Nothing below has been checked.';
       $('nDiag').textContent = '';
@@ -432,11 +531,11 @@
       return;
     }
 
-    const good = h.evaluation_allowed && !blockers;
-    $('healthOrb').className = 'orb ' + (blockers ? 'bad' : (warns ? 'warn' : 'good'));
+    const tone = healthTone(h);
+    $('healthOrb').className = 'orb ' + tone;
     $('healthTxt').textContent = h.status;
     $('dVerdict').textContent = h.status + (h.evaluation_allowed ? '' : ' · BLOCKED');
-    $('dVerdict').style.color = good ? 'var(--green)' : (blockers ? 'var(--red)' : 'var(--amber)');
+    $('dVerdict').style.color = TONE_VAR[tone];
 
     /* `DEGRADED · 0 blockers · 92 warnings` reads far worse than the state is.
        The engine already grades severity on a ladder and the UI dropped it:
@@ -497,43 +596,95 @@
   /* ---------- settings: editable, audited, honest about the cost ---------- */
   let setSpec = [], setValues = {}, setPending = {};
 
-  function renderSettings(){
-    const esc = s => String(s).replace(/[<>&"]/g, c =>
-      ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+  /* An <input> hands back a STRING. The server hands back a typed value. The
+     dirty test used to be `pending !== values` — strict — so `max_drawdown_pct`
+     came back as "20" against the number 20.0 and never compared equal. The
+     effect was not cosmetic: the row stayed lit UNSAVED for the life of the
+     tab, `loadSettings` used the same test to retire satisfied edits so it
+     never retired that one, and Apply appeared to do nothing. A dirty flag
+     that lies is worse than no dirty flag. Coerce to the spec's own type, in
+     one place, and compare the coerced values. */
+  const specOf = name => setSpec.find(s => s.name === name);
+  function coerceSetting(name, raw){
+    const s = specOf(name);
+    if(!s) return raw;
+    if(s.type === 'bool')  return typeof raw === 'boolean' ? raw
+      : ['1','true','yes','on'].includes(String(raw).trim().toLowerCase());
+    if(s.type === 'int')   { const n = parseInt(raw, 10);   return Number.isNaN(n) ? raw : n; }
+    if(s.type === 'float') { const n = parseFloat(raw);     return Number.isNaN(n) ? raw : n; }
+    return String(raw);
+  }
+  const sameSetting = (name, a, b) => coerceSetting(name, a) === coerceSetting(name, b);
+  const dirtyKeys = () =>
+    Object.keys(setPending).filter(k => !sameSetting(k, setPending[k], setValues[k]));
+
+  const escHtml = s => String(s).replace(/[<>&"]/g, c =>
+    ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+
+  /* Full rebuild. Only ever called when the SHAPE of the spec changes — never
+     on a keystroke and never on the refresh tick, both of which used to blow
+     away the input under the operator's cursor. See patchSettingsState. */
+  function buildSettings(){
     $('setFields').innerHTML = setSpec.map(s => {
       const v = (s.name in setPending) ? setPending[s.name] : setValues[s.name];
-      const changed = (s.name in setPending) && setPending[s.name] !== setValues[s.name];
       const ctl = s.type === 'bool'
         ? `<input type="checkbox" data-set="${s.name}" ${v ? 'checked' : ''}>`
-        : `<input class="t-mono" data-set="${s.name}" value="${esc(v)}" style="width:110px">`;
-      return `<label class="set-row${changed ? ' changed' : ''}">
+        : `<input class="t-mono" data-set="${s.name}" value="${escHtml(v)}" style="width:110px">`;
+      return `<label class="set-row" data-setrow="${s.name}">
         ${s.type === 'bool' ? ctl : ''}
         <span>
           <span class="t-mono" style="color:var(--fg-2)">${s.name.replaceAll('_',' ')}</span>
           ${s.class === 'BEHAVIOURAL' ? '<span class="chip chip-amber">rule</span>' : ''}
           <span class="t-label" style="display:block;margin-top:2px;text-transform:none;
-            letter-spacing:0;color:var(--fg-4)">${esc(s.description)}</span>
+            letter-spacing:0;color:var(--fg-4)">${escHtml(s.description)}</span>
         </span>
         ${s.type === 'bool' ? '' : ctl}
       </label>`;
     }).join('');
-    const dirty = Object.keys(setPending).filter(k => setPending[k] !== setValues[k]);
+  }
+
+  /* Everything that can change without the control itself changing: the dirty
+     ring on a row, the Apply/Discard buttons, the new-forward-window warning.
+     Touches attributes only, so a focused input keeps focus and its value. */
+  function patchSettingsState(){
+    const dirty = dirtyKeys();
+    for(const s of setSpec){
+      const row = document.querySelector(`[data-setrow="${s.name}"]`);
+      if(row) row.classList.toggle('changed', dirty.includes(s.name));
+    }
     $('setDirty').hidden = !dirty.length;
     $('setApply').disabled = $('setReset').disabled = !dirty.length;
-    const rules = dirty.filter(k => (setSpec.find(s => s.name === k) || {}).class === 'BEHAVIOURAL');
+    const rules = dirty.filter(k => (specOf(k) || {}).class === 'BEHAVIOURAL');
     $('setWarn').hidden = !rules.length;
     if(rules.length) $('setWarn').innerHTML =
       `Changing <b>${rules.join(', ').replaceAll('_',' ')}</b> starts a NEW forward window. ` +
       'Your existing record is kept but stops accumulating. Nothing is deleted.';
   }
 
+  // adopt server values into inputs the operator is not editing
+  function syncSettingInputs(){
+    for(const s of setSpec){
+      if(s.name in setPending) continue;              // operator owns this one
+      const el = document.querySelector(`[data-set="${s.name}"]`);
+      if(!el || el === document.activeElement) continue;
+      if(s.type === 'bool') el.checked = !!setValues[s.name];
+      else el.value = setValues[s.name];
+    }
+  }
+
+  let setShape = null;
   async function loadSettings(){
     const d = await api('/api/settings');
     setSpec = d.spec; setValues = d.values;
-    // drop pending edits that the server now agrees with
+    // drop pending edits that the server now agrees with — typed comparison,
+    // or a float edit is never retired and Apply looks like it did nothing
     for(const k of Object.keys(setPending))
-      if(setPending[k] === setValues[k]) delete setPending[k];
-    renderSettings();
+      if(sameSetting(k, setPending[k], setValues[k])) delete setPending[k];
+
+    const shape = setSpec.map(s => s.name).join(',');
+    if(shape !== setShape){ buildSettings(); setShape = shape; }
+    syncSettingInputs();
+    patchSettingsState();
     // guardrails: every gate that can stop new entries, and whether it is armed
     const gr = (k, v, cls) => `<div><span class="k">${k}</span>` +
       `<span class="v ${cls || ''}">${v}</span></div>`;
@@ -560,13 +711,19 @@
     document.body.classList.toggle('is-halted', halted);
   }
 
-  document.addEventListener('change', e => {
+  /* `input`, not `change`: the dirty flag should follow typing, not wait for
+     blur. The handler patches state and never re-renders — calling the full
+     rebuild from here is what used to destroy and recreate the very input the
+     operator had just touched, losing focus and caret on every keystroke. */
+  document.addEventListener('input', e => {
     const el = e.target.closest('[data-set]');
     if(!el) return;
-    const spec = setSpec.find(s => s.name === el.dataset.set);
-    setPending[el.dataset.set] = spec.type === 'bool' ? el.checked
-      : (spec.type === 'int' ? parseInt(el.value, 10) : el.value);
-    renderSettings();
+    const name = el.dataset.set;
+    const spec = specOf(name);
+    if(!spec) return;
+    setPending[name] = coerceSetting(name, spec.type === 'bool' ? el.checked : el.value);
+    if(sameSetting(name, setPending[name], setValues[name])) delete setPending[name];
+    patchSettingsState();
   });
 
   async function applySettings(changes, note){
@@ -581,8 +738,7 @@
   $('setApply').addEventListener('click', async e => {
     const b = e.currentTarget;
     const changes = {};
-    for(const k of Object.keys(setPending))
-      if(setPending[k] !== setValues[k]) changes[k] = setPending[k];
+    for(const k of dirtyKeys()) changes[k] = setPending[k];
     if(!Object.keys(changes).length) return;
     b.disabled = true; b.textContent = 'Applying…';
     try{
@@ -593,10 +749,12 @@
         ').\nYour previous record is retained, but stops accumulating.');
     }catch(err){ markDegraded(String(err)); }
     b.textContent = 'Apply';
-    renderSettings();
+    syncSettingInputs(); patchSettingsState();
   });
 
-  $('setReset').addEventListener('click', () => { setPending = {}; renderSettings(); });
+  $('setReset').addEventListener('click', () => {
+    setPending = {}; syncSettingInputs(); patchSettingsState();
+  });
 
   $('btnHalt').addEventListener('click', async e => {
     const b = e.currentTarget, halting = !setValues.halted;
@@ -611,24 +769,50 @@
   });
 
   /* ---------- credentials: write-only, never displayed ---------- */
-  async function loadCredentials(){
-    const d = await api('/api/credentials');
+  /* This container is rebuilt by a 30s timer. It used to be rebuilt with
+     `innerHTML`, which destroyed every <input> inside it — including the one
+     the operator was mid-way through typing an API key into. Credential values
+     are deliberately never held in JS (write-only, and that is correct), so
+     there was no state to restore from: the field simply emptied, silently,
+     up to twice a minute while you typed.
+
+     So the rows are built ONCE and thereafter patched. Nothing that owns a
+     focused or partially-filled input may be re-rendered wholesale. */
+  let credShape = null;                 // venue|field list currently in the DOM
+
+  function buildCredRows(d){
     const venues = Object.keys(d.status);
-    $('credChip').textContent = d.available ? 'DPAPI' : 'unavailable';
-    $('credChip').className = 'chip ' + (d.available ? 'chip-green' : 'chip-red');
     $('credFields').innerHTML = venues.map(v => `
       <div style="margin-bottom:var(--md)">
         <div class="t-label" style="margin-bottom:6px">${v.replace('-', ' ')}</div>
-        ${d.fields.map(f => {
-          const set = d.status[v][f];
-          return `<div class="fld-row" style="margin-bottom:6px">
-            <input type="password" data-cred="${v}|${f}" autocomplete="off"
-              placeholder="${set ? '•••••••• stored' : f.replace('_', ' ')}">
+        ${d.fields.map(f => `
+          <div class="fld-row" style="margin-bottom:6px" data-credrow="${v}|${f}">
+            <input type="password" data-cred="${v}|${f}" autocomplete="off">
             <button class="btn" data-credsave="${v}|${f}">Save</button>
-            ${set ? `<button class="btn btn-red" data-credclear="${v}|${f}">Clear</button>` : ''}
-          </div>`;
-        }).join('')}
+            <button class="btn btn-red" data-credclear="${v}|${f}" hidden>Clear</button>
+          </div>`).join('')}
       </div>`).join('');
+  }
+
+  async function loadCredentials(){
+    const d = await api('/api/credentials');
+    $('credChip').textContent = d.available ? 'DPAPI' : 'unavailable';
+    $('credChip').className = 'chip ' + (d.available ? 'chip-green' : 'chip-red');
+
+    // rebuild only when the set of venues/fields itself changes
+    const shape = Object.keys(d.status).sort().join(',') + '::' + d.fields.join(',');
+    if(shape !== credShape){ buildCredRows(d); credShape = shape; }
+
+    // patch state per row: placeholder carries "is a key stored", Clear follows it
+    for(const v of Object.keys(d.status)){
+      for(const f of d.fields){
+        const set = d.status[v][f];
+        const input = document.querySelector(`[data-cred="${v}|${f}"]`);
+        const clear = document.querySelector(`[data-credclear="${v}|${f}"]`);
+        if(input) input.placeholder = set ? '•••••••• stored' : f.replace('_', ' ');
+        if(clear) clear.hidden = !set;
+      }
+    }
   }
 
   document.addEventListener('click', async e => {
@@ -789,8 +973,11 @@
                   loadTelemetry()];
     const results = await Promise.allSettled(jobs);
     const failed = results.filter(r => r.status === 'rejected');
-    if(failed.length) markDegraded(failed.map(f => f.reason).join('; '));
-    else if(degraded){ degraded = false; }        // health orb is reset by loadHealth
+    if(failed.length) markDegraded(failed.map(f => f.reason).join('; '), failed.length);
+    else {
+      lastGoodAt = Date.now();                    // the age the chip reports when it next fails
+      if(degraded){ degraded = false; $('healthChip').classList.remove('clickable'); }
+    }                                             // health orb is reset by loadHealth
   }
   refresh();
   setInterval(refresh, 30000);
