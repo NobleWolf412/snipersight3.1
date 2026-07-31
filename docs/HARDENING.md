@@ -6,30 +6,43 @@ artifacts and are not comparable with the current engine chain.
 
 ## Current venue contract
 
-- Venue/instrument: Coinbase Advanced **spot**.
-- Shorts: rejected by the risk authority.
-- Leverage: capped at 1× cash notional.
-- Execution: paper research only; no live order route exists.
-- Default cost profile: conservative lowest-volume maker/taker schedule.
+Revised 2026-07-31. The previous text — "Coinbase Advanced spot / shorts
+rejected / leverage capped at 1× cash notional" — was written 2026-07-22 and had
+been wrong for weeks: the scan universe is **19 Phemex perps and zero Coinbase
+symbols**. A venue contract that misdescribes the venue is worse than no contract
+at all, because it is the document someone checks *instead of* the code.
+
+- Venue/instrument: **three venues, derived per symbol, never globally selected.**
+  `BTC-USD` → Coinbase **spot**; `BTCUSDT` → Phemex **perp**; `PF_XBTUSD` →
+  Kraken **perp**. `venues.venue_for()` is the only thing that decides this and
+  it raises rather than guessing.
+- Shorts: **permitted on perps, rejected on spot** — a venue capability
+  (`venues.allow_shorts`), not a risk preference. Spot cannot sell what it does
+  not hold.
+- Leverage: **operator dial, capped at the venue maximum** (1× spot, 10× perps,
+  declared well below what the venues permit). It sets the MARGIN posted and the
+  liquidation price. It never changes position size, which stays
+  `risk / distance-to-stop` at every setting.
+- Liquidation: **ISOLATED margin, declared** (`venues.margin_mode`). A setup
+  whose stop sits beyond liquidation is refused — by `risk.py` for the strategy
+  book and by `manual.validate` for the operator's, on the same formula.
+- Funding: charged per settlement on perps; zero on spot by construction.
+- Execution: **paper research only. No order-placement code exists anywhere in
+  this repository.** `live_enabled` is a hard-coded literal in `server.py`, not a
+  setting, and there is nothing behind it to enable.
+- Cost profile: per venue, immutable, content-addressed. `costs.profile_for()`
+  raises on an unknown symbol rather than falling back.
 
 Changing venue, margin availability, fee tier, or execution policy requires a
 new immutable manifest and engine version. It must never be a hidden config edit.
 
 ## Engine chain
 
-- swing-v0.8: Decimal-native logarithmic volume scoring.
-- structure-v0.8 / regime-v0.8: version chain follows swing inputs.
-- zone-v0.9: formation quality is separate from decaying freshness.
-- liq-v0.8: overlapping clusters do not create duplicate pools; a sweep no
-  longer erases the later broken state.
-- setup-v0.6: a reversal requires both transition structure and a recent
-  directionally relevant liquidity sweep; costs come from a manifest; every
-  rejected candidate is retained as a reason-coded research fact.
-- exec-v0.7: signals are unavailable until confirmation; limit entries may be
-  missed; maker/taker fees differ; MAE/MFE and order facts are recorded; the
-  execution assumptions are content-addressed independently of the strategy.
-- risk-v0.5: start-of-day loss baseline, zero risk on rejection, point-in-time
-  universe gate, Coinbase-spot short rejection, 1× cash cap.
+**Not duplicated here.** Listing versions in prose is what made this document
+wrong for six consecutive bumps. The chain is pinned in
+`app/tests/test_version_cascade.py`, which fails the suite when any version moves
+without its consumers moving with it, and carries the reason for each bump beside
+it. That file is the authority; this one would only ever be a stale copy.
 
 ## Operational visibility
 
@@ -87,6 +100,12 @@ system remains paper-only until all of these are met:
 cd app
 python -m compileall -q .
 python -m unittest discover -s tests -v
+node tests/test_ticket_math.js
+node tests/test_lessons.js
 ```
 
-CI runs both commands on every push and pull request.
+The JavaScript suites are not optional extras: `ticket-math.js` decides how big
+a trade is and re-implements `venues.liquidation_price`, so it is the only thing
+proving the ticket and the engine agree about where a position dies.
+
+CI runs these on every push and pull request.

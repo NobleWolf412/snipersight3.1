@@ -1,7 +1,20 @@
 # SniperSight — UI & Capability Redesign Plan
 
-**Status:** proposed, not started. Written 2026-07-28 after an operator interview.
-**Rule:** no code until this is approved.
+**Status:** HISTORICAL as of 2026-07-31. Written 2026-07-28 after an operator
+interview, approved, and built — phases 1, 2, 3, 4 and 6 are complete, phase 5 is
+partial, and live submission remains locked with no order-placement code behind
+it. The design intent below is still authoritative; **the phase numbers in §6 are
+not.**
+
+**Do not plan new work with a phase number.** This document and
+`PROGRAM-PLAN.md` numbered two different sequences and both reached a "4":
+phase 4 here is *Perps*, wave 4 there is *expansion*. The UI quoted this
+document's numbering for months after the other renumbered everything, and told
+the operator that "Phemex lands in phase 4" while the scanner traded 19 Phemex
+perps and nothing else. `PROGRAM-PLAN.md` §1 carries the phase-to-status mapping
+and is canonical for anything forward-looking.
+
+**Rule (original):** no code until this is approved.
 
 ---
 
