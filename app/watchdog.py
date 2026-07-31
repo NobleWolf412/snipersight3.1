@@ -13,6 +13,7 @@ Run: python watchdog.py            (console mode — used by start.bat)
      pythonw watchdog.py           (headless — used by boot autostart)
 """
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -43,7 +44,9 @@ AUDIT_INTERVAL_SEC = 60           # kill-switch audit cadence (SQLite read)
 # allowed to complete its work cannot clear the condition being complained
 # about.
 QUARANTINE_CLIMB_TICKS = 3        # consecutive audits elevated-and-not-recovering
-RESTART_GRACE_SEC = 360           # > one measured ~296s cycle
+RESTART_GRACE_SEC = 420           # > the slowest cycle measured (347.1s)
+SERVER_PROBE_TIMEOUT = 15         # > /api/status measured at 6.9s under load
+SERVER_MISSES_BEFORE_TAKEOVER = 3 # one slow answer is not a disappearance
 
 
 def log(msg: str):
@@ -67,11 +70,67 @@ def toast(title: str, msg: str):
 
 
 def server_up() -> bool:
+    """Is an API server answering?
+
+    The timeout was 3s against an endpoint measured at 6.9s while the WAL was
+    bloated. One slow answer therefore read as "the external server vanished",
+    the watchdog took over supervision, and started a SECOND uvicorn on a port
+    the first one still held — which cannot bind, exits, and restarts forever.
+    A liveness probe must be slower than the thing it is probing.
+    """
     try:
-        urllib.request.urlopen(SERVER_URL, timeout=3)
+        urllib.request.urlopen(SERVER_URL, timeout=SERVER_PROBE_TIMEOUT)
         return True
     except Exception:
         return False
+
+
+def _orphans(exclude: set[int] | None = None) -> list[tuple[int, str]]:
+    """Scanner/server processes from a PREVIOUS supervisor, still running.
+
+    watchdog.log records 8 starts and 1 clean stop: seven supervisors died
+    without reaching the finally that terminates their children. Popen children
+    outlive their parent on Windows, so each of those left a live.py behind, and
+    the next supervisor started a SECOND one. Two scanners on one SQLite file is
+    exactly the `database is locked` storm the log shows — 154 of them inside a
+    single hour.
+
+    Adopting is not possible (no handle), so the only safe move is to clear them
+    before spawning, and to say plainly what was cleared.
+    """
+    out = []
+    if sys.platform != "win32":
+        return out
+    # NEVER this process, and never a child this supervisor is currently
+    # running: `exclude` carries those. Without it, calling this after startup
+    # would kill the very scanner we are supervising — the exact failure this
+    # function exists to prevent, caused by the fix for it.
+    skip = {os.getpid()} | (exclude or set())
+    try:
+        r = subprocess.run(
+            ["wmic", "process", "where", "name like '%python%'",
+             "get", "ProcessId,CommandLine", "/format:csv"],
+            capture_output=True, text=True, timeout=15)
+        for line in (r.stdout or "").splitlines():
+            if "live.py" not in line and "uvicorn" not in line:
+                continue
+            parts = [p for p in line.strip().split(",") if p]
+            pid = next((int(p) for p in reversed(parts) if p.isdigit()), None)
+            if pid and pid not in skip:
+                out.append((pid, "live.py" if "live.py" in line else "api-server"))
+    except Exception:
+        pass
+    return out
+
+
+def clear_orphans(exclude: set[int] | None = None) -> None:
+    for pid, what in _orphans(exclude):
+        try:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"],
+                           capture_output=True, timeout=10)
+            log(f"cleared orphaned {what} pid={pid} from a previous supervisor")
+        except Exception as e:
+            log(f"could not clear orphaned {what} pid={pid}: {e}")
 
 
 def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
@@ -247,6 +306,11 @@ def main():
 
     py = sys.executable.replace("pythonw.exe", "python.exe")
     log("watchdog start")
+    # Before spawning anything: clear children a previous supervisor left behind.
+    # Holding the lock proves no OTHER watchdog is live, so anything still
+    # running is an orphan, and starting beside it would put two scanners on one
+    # database.
+    clear_orphans()
     live = Child("live-scanner", [py, "-X", "utf8", "live.py"], notify_restart=True)
     server = Child("api-server", [py, "-m", "uvicorn", "server:app",
                                   "--port", "8422", "--host", "127.0.0.1"])
@@ -257,14 +321,27 @@ def main():
     # Warmup: seed prior counts so a first-tick QUARANTINE reading is not
     # misread as a climb-from-0 (Auditor FIND-2, 2026-07-26).
     audit_state: dict = audit_tick({"counts": {}, "at": 0.0}, live, warmup=True)
+    misses = 0
     try:
         while True:
             live.tick()
             if not external_server:
                 server.tick()
             elif not server_up():
-                log("external api-server disappeared — taking over supervision")
-                external_server = False
+                # A slow answer is not a disappearance. Taking over on one miss
+                # starts a second uvicorn on a port the first still holds, which
+                # cannot bind and then restart-loops forever.
+                misses += 1
+                log(f"external api-server did not answer ({misses}/"
+                    f"{SERVER_MISSES_BEFORE_TAKEOVER})")
+                if misses >= SERVER_MISSES_BEFORE_TAKEOVER:
+                    log("external api-server gone — taking over supervision")
+                    external_server = False
+                    # wedged rather than dead is possible; clear it, but never
+                    # the scanner this supervisor is already running
+                    clear_orphans(exclude={live.proc.pid} if live.alive() else set())
+            else:
+                misses = 0
             if time.monotonic() - audit_state.get("at", 0.0) >= AUDIT_INTERVAL_SEC:
                 audit_state = audit_tick(audit_state, live)
             time.sleep(10)

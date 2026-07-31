@@ -284,5 +284,86 @@ class TestChildErrorCapture(unittest.TestCase):
         self.assertEqual(c.proc.returncode, 0)
 
 
+class TestOrphanClearing(unittest.TestCase):
+    """watchdog.log records 8 starts and 1 clean stop. Seven supervisors died
+    without reaching the finally that terminates their children, and Popen
+    children outlive their parent on Windows — so each left a live.py running
+    and the next supervisor started a SECOND one beside it. Two scanners on one
+    SQLite file is the `database is locked` storm the log shows: 154 in an
+    hour."""
+
+    def _wmic(self, stdout):
+        return patch.object(watchdog.subprocess, "run",
+                            return_value=MagicMock(stdout=stdout, returncode=0))
+
+    def test_a_leftover_scanner_is_found(self):
+        rows = ("Node,CommandLine,ProcessId\n"
+                "PC,python.exe -X utf8 live.py,4321\n")
+        with self._wmic(rows), patch.object(watchdog.sys, "platform", "win32"):
+            found = watchdog._orphans()
+        self.assertIn((4321, "live.py"), found)
+
+    def test_this_process_is_never_its_own_orphan(self):
+        import os
+        rows = f"Node,CommandLine,ProcessId\nPC,python.exe live.py,{os.getpid()}\n"
+        with self._wmic(rows), patch.object(watchdog.sys, "platform", "win32"):
+            self.assertEqual(watchdog._orphans(), [])
+
+    def test_a_supervised_child_is_never_cleared(self):
+        """The takeover path clears orphans while this supervisor already has a
+        scanner running. Without an exclusion it would kill its own child —
+        the exact failure this function exists to prevent."""
+        rows = ("Node,CommandLine,ProcessId\n"
+                "PC,python.exe -X utf8 live.py,5555\n")
+        with self._wmic(rows), patch.object(watchdog.sys, "platform", "win32"):
+            self.assertEqual(watchdog._orphans(exclude={5555}), [])
+            self.assertEqual(watchdog._orphans(), [(5555, "live.py")])
+
+    def test_unrelated_python_is_left_alone(self):
+        rows = ("Node,CommandLine,ProcessId\n"
+                "PC,python.exe some_other_tool.py,999\n")
+        with self._wmic(rows), patch.object(watchdog.sys, "platform", "win32"):
+            self.assertEqual(watchdog._orphans(), [])
+
+    def test_clearing_survives_a_failing_taskkill(self):
+        with patch.object(watchdog, "_orphans", return_value=[(1234, "live.py")]), \
+             patch.object(watchdog.subprocess, "run", side_effect=OSError("nope")), \
+             patch.object(watchdog, "log") as log:
+            watchdog.clear_orphans()          # must not raise
+        self.assertTrue(any("could not clear" in str(c) for c in log.call_args_list))
+
+    def test_startup_clears_before_spawning(self):
+        """Order matters: clearing after spawning would kill the new scanner."""
+        src = (Path(watchdog.__file__)).read_text(encoding="utf-8")
+        body = src[src.index("def main("):]
+        self.assertIn("clear_orphans()", body, "startup never clears orphans")
+        self.assertLess(body.index("clear_orphans()"), body.index("live.tick()"),
+                        "orphans are cleared after the supervisor starts working")
+
+
+class TestTakeoverHysteresis(unittest.TestCase):
+    """`server_up()` probed with a 3s timeout an endpoint measured at 6.9s under
+    a bloated WAL. One slow answer read as "the external server vanished", so
+    the watchdog started a SECOND uvicorn on a port the first still held — which
+    cannot bind, exits, and restart-loops."""
+
+    def test_probe_timeout_exceeds_the_measured_endpoint(self):
+        self.assertGreaterEqual(
+            watchdog.SERVER_PROBE_TIMEOUT, 10,
+            "a liveness probe faster than the thing it probes reports false death")
+
+    def test_takeover_needs_repeated_misses(self):
+        self.assertGreaterEqual(watchdog.SERVER_MISSES_BEFORE_TAKEOVER, 2)
+        src = (Path(watchdog.__file__)).read_text(encoding="utf-8")
+        body = src[src.index("def main("):]
+        self.assertIn("SERVER_MISSES_BEFORE_TAKEOVER", body,
+                      "takeover still fires on a single missed probe")
+
+    def test_grace_covers_the_slowest_measured_cycle(self):
+        # 347.1s observed 2026-07-30; the constant was first sized from 295.8s
+        self.assertGreater(watchdog.RESTART_GRACE_SEC, 347,
+                           "the grace window is under a cycle time already seen")
+
+
 if __name__ == "__main__":
     unittest.main()

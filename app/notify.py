@@ -27,6 +27,18 @@ def _xml_escape(s: str) -> str:
 
 
 def toast(title: str, msg: str) -> bool:
+    """Show a Windows toast. Returns whether the toast pipeline reported success.
+
+    SNIPERSIGHT_NO_TOAST=1 turns the whole path into a no-op. Every toast spawns
+    a PowerShell process, and the scanner's two most frequent death sites sit
+    directly on a toast call, so being able to take this path out of the picture
+    without editing three call sites is what makes that testable at all. It is
+    also the right switch for a headless run, where a desktop notification has
+    nobody to notify.
+    """
+    import os
+    if os.environ.get("SNIPERSIGHT_NO_TOAST") == "1":
+        return False
     script = (PS_TEMPLATE
               .replace("__TITLE__", _xml_escape(title))
               .replace("__MSG__", _xml_escape(msg)))
