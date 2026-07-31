@@ -19,7 +19,12 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-STRUCTURE_VERSION = "structure-v0.11-draft"
+STRUCTURE_VERSION = "structure-v0.12-draft"
+# v0.12: the v0.11 pivot collapse keyed on market_time alone; a bar hosting
+# both a promoted HIGH and a promoted LOW (2025-10-10 carries a MAJOR pair on
+# three symbols) had one twin shadow the other out of the label walk and the
+# break levels. Identity is (market_time, type). Caught in the first live
+# v0.11 cycle.
 # v0.11: cascade from swing-v0.9, which stopped re-emitting every promoted pivot
 # each cycle (held_candles accrued inside the hashed payload) and moved a
 # promotion's confirmed_at to when its held window closes. Labels and breaks key
@@ -70,19 +75,21 @@ TIER_BY_TF = {"1W": "INTERMEDIATE", "1D": "MAJOR",
 
 def _tier_swings(con, symbol, tf):
     tier = TIER_BY_TF[tf]
-    # One pivot per market_time, LATEST promotion row winning (get_facts orders
-    # by market_time, confirmed_at, id). swing-v0.9 payloads are deterministic,
-    # but a pivot near the sequence tail can still be legitimately revised —
-    # margin, even tier — when a more extreme same-type swing replaces its right
-    # neighbour; 63 such revision groups measured in the v0.8 store. Collapse
-    # across BOTH promotion tiers before filtering, so a demoted pivot's stale
-    # higher-tier row cannot survive; the label walk below is sequence-sensitive
-    # and must never see the same pivot twice.
+    # One pivot per (market_time, TYPE), LATEST promotion row winning (get_facts
+    # orders by market_time, confirmed_at, id). swing-v0.9 payloads are
+    # deterministic, but a pivot near the sequence tail can still be
+    # legitimately revised — margin, even tier — when a more extreme same-type
+    # swing replaces its right neighbour; 63 such revision groups measured in
+    # the v0.8 store. Type is part of the key because one bar can host both a
+    # promoted HIGH and a promoted LOW. Collapse across BOTH promotion tiers
+    # before filtering, so a demoted pivot's stale higher-tier row cannot
+    # survive; the label walk below is sequence-sensitive and must never see
+    # the same pivot twice.
     latest = {}
     for r in store.get_facts(con, symbol, tf, "swing", SWING_VERSION):
         p = json.loads(r["payload"])
         if p["tier"] in ("INTERMEDIATE", "MAJOR"):
-            latest[r["market_time"]] = (r, p)
+            latest[(r["market_time"], p["type"])] = (r, p)
     return [{"market_time": r["market_time"], "confirmed_at": r["confirmed_at"],
              "type": p["type"], "price": Decimal(p["price"])}
             for r, p in latest.values() if p["tier"] == tier]

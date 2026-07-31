@@ -3445,3 +3445,29 @@ Forward baseline: every recorded number downstream changes generation; the
 S50 "baseline reset" operator ruling now covers this cascade too (TODO.md).
 
 658 python green.
+
+### S53 addendum — the collapse itself shipped a bug, caught in its first cycle
+
+The cascade merged, the services restarted through `/api/system/restart`, and
+the first v0.9 cycle backfilled the new generation end to end (149k swing
+facts, 142 symbol/tf pairs, the trading tail included). Verification of that
+cycle found 5 promotion keys duplicated on (symbol, tf, market_time, tier) —
+and zero on the key that includes TYPE. They were not duplicates. **One bar
+can host both a promoted HIGH and a promoted LOW** — 2025-10-10 carries a
+MAJOR pair on LTCUSDT, UNIUSDT and PF_UNIUSD — and the new consumer collapse
+keyed on market_time alone, so the later row shadowed its twin. Measured in
+the store the cycle had just written: all five bars created only their DEMAND
+zone; **five supply zones did not exist**, and the structure walk lost the
+same side.
+
+Pivot identity is **(market_time, type)**. structure/zones/liquidity rules
+changed again, so their tags and everything downstream moved again:
+structure-v0.12, zone-v0.13, liq-v0.11 → regime-v0.12, setup-v0.15,
+breakout-v0.4 → exec-v0.19, risk-v0.18, scale-v0.13, cooldown-v0.7. The
+one-cycle v0.11/v0.12/v0.10 facts remain in the store as the recorded dud.
+`test_zone_causality` passed against the shadowed store because it only
+recounts zones that EXIST — a missing zone is invisible to it. The new
+`test_zone_anchor_identity.py` writes a same-bar pair and requires both sides
+to survive into zones and the structure walk.
+
+660 python green.

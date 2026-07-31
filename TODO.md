@@ -248,8 +248,12 @@ window closes, `confirmed_at` moved to match. Score-identical for every settled
 pivot (freeze-at-confirmation was measured and rejected: 45% of pivots change
 tier — the v0.4 dud again). Full lockfile cascade swing→…→cooldown; `setup` and
 `breakout` were missing from `CONSUMERS["swing"]` and are now listed;
-count-sensitive consumers collapse to one row per pivot. Measurements, replay
-validation and the residual (63 sequence-tail revision groups) in BUILDLOG S53.
+count-sensitive consumers collapse to one row per pivot, keyed on
+(market_time, type) — the first version keyed on market_time alone and a
+same-bar HIGH+LOW pair shadowed five supply zones out of existence; caught in
+the first live cycle, fixed in the S53 addendum bump (structure-v0.12 /
+zone-v0.13 / liq-v0.11 and downstream). Measurements, replay validation and
+the residual (63 sequence-tail revision groups) in BUILDLOG S53.
 `test_zone_causality`'s live-store check heals once zone-v0.12 facts populate
 (it skips until the engines re-run). Baseline ruling extended below.
 

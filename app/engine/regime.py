@@ -19,7 +19,10 @@ from . import store
 from .structure import STRUCTURE_VERSION
 from .runlog import RunRecorder
 
-REGIME_VERSION = "regime-v0.11-draft"
+REGIME_VERSION = "regime-v0.12-draft"
+# v0.12: cascade from structure-v0.12 (same-bar HIGH+LOW pivot pairs no longer
+# shadow each other). This engine classifies FROM breaks; a new structure
+# generation is a new break series.
 # v0.11: cascade from structure-v0.11 (itself from swing-v0.9). This engine
 # classifies FROM breaks; a new structure generation is a new break series.
 # v0.10: no rule change. structure-v0.10 dropped 1W to INTERMEDIATE, so 1W

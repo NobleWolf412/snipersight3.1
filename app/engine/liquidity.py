@@ -16,7 +16,11 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-LIQ_VERSION = "liq-v0.10-draft"
+LIQ_VERSION = "liq-v0.11-draft"
+# v0.11: the v0.10 collapse keyed on market_time alone; a bar hosting both a
+# promoted HIGH and a promoted LOW (2025-10-10 carries a MAJOR pair on three
+# symbols) had one twin shadow the other out of pool membership. Identity is
+# (market_time, type). Caught in the first live v0.10 cycle.
 # v0.10: cascade from swing-v0.9. v0.8 swings re-emitted every promoted pivot
 # every cycle, and identical-price phantom copies are trivially inside any
 # equal-tolerance — pool n_members inflated as the scanner ran. The swing read
@@ -49,14 +53,16 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
         # One member per pivot, LATEST row winning (get_facts orders by
         # market_time, confirmed_at, id) — n_members counts pivots, not copies.
+        # Identity is (market_time, TYPE): a bar can host both a promoted HIGH
+        # and a promoted LOW, one per side.
         latest = {}
         for r in store.get_facts(con, symbol, tf, "swing", SWING_VERSION):
             p = json.loads(r["payload"])
             if p["tier"] in POOL_TIERS:
-                latest[r["market_time"]] = {"market_time": r["market_time"],
-                                            "confirmed_at": r["confirmed_at"],
-                                            "type": p["type"],
-                                            "price": Decimal(p["price"])}
+                latest[(r["market_time"], p["type"])] = {
+                    "market_time": r["market_time"],
+                    "confirmed_at": r["confirmed_at"],
+                    "type": p["type"], "price": Decimal(p["price"])}
         swings = {"HIGH": [], "LOW": []}
         for s in latest.values():
             swings[s.pop("type")].append(s)

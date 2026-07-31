@@ -23,7 +23,12 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-ZONE_VERSION = "zone-v0.12-draft"
+ZONE_VERSION = "zone-v0.13-draft"
+# v0.13: the v0.12 anchor collapse keyed on market_time ALONE, and one bar can
+# legitimately host BOTH a promoted HIGH and a promoted LOW — the 2025-10-10
+# crash bar carries a MAJOR pair on three symbols. The later row shadowed its
+# twin, so five supply zones store-wide were never created. A pivot's identity
+# is (market_time, type); caught in the first live v0.12 cycle.
 # v0.12: cascade from swing-v0.9. v0.8 swings re-emitted every promoted pivot
 # every cycle (held_candles accrued inside the hashed payload), and this
 # engine's cluster count treated each copy as a distinct neighbour — so
@@ -82,15 +87,17 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
         # One anchor per pivot, LATEST row winning (get_facts orders by
         # market_time, confirmed_at, id) — a revised pivot is one swing, not two,
-        # and the cluster count below counts anchors.
+        # and the cluster count below counts anchors. Identity is
+        # (market_time, TYPE): one bar can host both a promoted HIGH and a
+        # promoted LOW, and each anchors its own zone.
         latest = {}
         for r in store.get_facts(con, symbol, tf, "swing", SWING_VERSION):
             p = json.loads(r["payload"])
             if p["tier"] in ZONE_TIERS:
-                latest[r["market_time"]] = {"market_time": r["market_time"],
-                                            "confirmed_at": r["confirmed_at"],
-                                            "type": p["type"],
-                                            "price": Decimal(p["price"])}
+                latest[(r["market_time"], p["type"])] = {
+                    "market_time": r["market_time"],
+                    "confirmed_at": r["confirmed_at"],
+                    "type": p["type"], "price": Decimal(p["price"])}
         swings = list(latest.values())
         rec.n_inputs = len(swings)
 

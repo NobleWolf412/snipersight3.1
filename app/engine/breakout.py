@@ -45,7 +45,9 @@ from .setups import (CONFIRM_MAX_BARS, ENTRY_MAX_BARS, ENTRY_MODEL, GOOD_RR,
 from .structure import STRUCTURE_VERSION
 from .swings import SWING_VERSION, compute_atr, quote_ticks
 
-BREAKOUT_VERSION = "breakout-v0.3-draft"
+BREAKOUT_VERSION = "breakout-v0.4-draft"
+# v0.4: cascade from structure-v0.12 (same-bar pivot pairs no longer shadow
+# each other in the break series this engine trades from).
 # v0.3: cascade from swing-v0.9 and structure-v0.11. Targets come from
 # INTERMEDIATE+ swing prices and entries from structure breaks, so both input
 # generations moved under this engine. NOTE: this engine read swing facts all

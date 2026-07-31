@@ -29,7 +29,12 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.14-draft"
+SETUP_VERSION = "setup-v0.15-draft"
+# v0.15: cascade from zone-v0.13 / liq-v0.11 / structure-v0.12 / regime-v0.12 —
+# the S53 consumer collapse keyed pivots on market_time alone and a same-bar
+# HIGH+LOW pair shadowed one twin out of zones, pools and labels. Five supply
+# zones store-wide did not exist under v0.14's inputs; which setups exist
+# changes with them.
 # v0.14: cascade from swing-v0.9 — every upstream this engine reads moved with
 # it (zone-v0.12, liq-v0.10, regime-v0.11, structure-v0.11). The load-bearing
 # change: v0.8 swings re-emitted promoted pivots every cycle and zones counted

@@ -28,7 +28,9 @@ from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.12-draft"
+SCALE_VERSION = "scale-v0.13-draft"
+# v0.13: cascade from setup-v0.15 / exec-v0.19 / structure-v0.12 (the same-bar
+# pivot-pair fix upstream).
 # v0.12: cascade from setup-v0.14 / exec-v0.18 / structure-v0.11 (swing-v0.9 at
 # the root). An add is only placed against a position the simulator says is
 # open, and its structure reads moved generation with the rest.

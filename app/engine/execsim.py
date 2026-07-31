@@ -20,7 +20,8 @@ from .setups import SETUP_VERSION
 from .swings import compute_atr
 from .runlog import RunRecorder
 
-EXEC_VERSION = "exec-v0.18-draft"
+EXEC_VERSION = "exec-v0.19-draft"
+# v0.19: cascade from setup-v0.15 (the same-bar pivot-pair fix upstream).
 # v0.18: cascade from setup-v0.14 (swing-v0.9 at the root). The simulator
 # executes whatever setups exist; a new setup generation is a new order flow.
 # v0.17: two output changes, both labelling rather than economics.

@@ -23,7 +23,9 @@ from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.17-draft"
+RISK_VERSION = "risk-v0.18-draft"
+# v0.18: cascade from setup-v0.15 / exec-v0.19 / cooldown-v0.7 (the same-bar
+# pivot-pair fix upstream).
 # v0.17: cascade from setup-v0.14 / exec-v0.18 / cooldown-v0.6 (swing-v0.9 at
 # the root). risk replays the whole account from exec facts, so a new exec
 # generation changes its decisions and equity curve even with no rule change.

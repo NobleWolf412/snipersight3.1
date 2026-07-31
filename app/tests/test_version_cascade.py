@@ -77,20 +77,28 @@ EXPECTED = {
     # scale / cooldown through setup. ma, volatility, volume, venues, cycles,
     # manual are the only engines that stay put.
     "swing": "swing-v0.9-draft",
-    "structure": "structure-v0.11-draft",
+    # S53 addendum, caught in the FIRST live v0.9 cycle: the new consumer
+    # collapse keyed pivots on market_time alone, and one bar can host both a
+    # promoted HIGH and a promoted LOW (2025-10-10 carries a MAJOR pair on
+    # three symbols) — the later row shadowed its twin, so five supply zones
+    # store-wide were never created. Pivot identity is (market_time, type).
+    # structure/zone/liquidity rules changed, so they and everything downstream
+    # move AGAIN — the v0.11/v0.12/v0.10 facts from that one cycle remain in
+    # the store as the recorded dud.
+    "structure": "structure-v0.12-draft",
     # S50: zone-v0.11 closed a creation-time LOOKAHEAD — the cluster count read
     # swings not yet confirmed, inflating formation_quality on 7.9% of zones.
     # CONSUMERS["zone"] is ("setup",), and setup's own consumers are
     # ("exec", "risk", "scale"), so the whole trading path cascades.
-    "zone": "zone-v0.12-draft",
-    "liquidity": "liq-v0.10-draft",
-    "regime": "regime-v0.11-draft",
+    "zone": "zone-v0.13-draft",
+    "liquidity": "liq-v0.11-draft",
+    "regime": "regime-v0.12-draft",
     "ranges": "ranges-v0.2-draft",
     "ma": "ma-v0.1-draft",
     "momentum": "momentum-v0.2-draft",
     "volatility": "volatility-v0.1-draft",
     "volume": "volume-v0.1-draft",
-    "setup": "setup-v0.14-draft",
+    "setup": "setup-v0.15-draft",
     # S50 cascade. exec-v0.13 -> v0.14 corrected the MAKER_THEN_MARKET crossing
     # leg, which booked a market fill at the PLAN's price — two bars stale, and
     # outside the fill bar's own [low, high] on 78 of 95 crossed orders, never
@@ -108,11 +116,11 @@ EXPECTED = {
     # are derived purely from recorded exits. All four move together.
     # scale ALSO changed on its own account — its economics gate now prices the
     # add on the add's own venue instead of the process-wide Coinbase default.
-    "exec": "exec-v0.18-draft",
-    "risk": "risk-v0.17-draft",
-    "scale": "scale-v0.12-draft",
-    "cooldown": "cooldown-v0.6-draft",
-    "breakout": "breakout-v0.3-draft",
+    "exec": "exec-v0.19-draft",
+    "risk": "risk-v0.18-draft",
+    "scale": "scale-v0.13-draft",
+    "cooldown": "cooldown-v0.7-draft",
+    "breakout": "breakout-v0.4-draft",
     "venues": "venues-v0.2-draft",
     "cycles": "cycles-v0.2-draft",
     "manual": "manual-v0.1-draft",
