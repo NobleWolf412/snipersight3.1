@@ -403,6 +403,22 @@
         </div>
       </div>
 
+      <!-- "Is the edge real?" — moved here from Diagnostics (audit B6).
+           Whether the recorded book is distinguishable from zero is THE
+           Results question, and it sits directly under the equity curve so the
+           honesty check is in the same eyeline as the curve it disciplines: a
+           promising 12-trade window reads differently with the bootstrap
+           interval right beneath it. edgeview.js owns it, reads
+           /api/edge-stats, and measures the WHOLE recorded book — its era band
+           says so and distinguishes it from the forward-window tiles above. -->
+      <div id="edgeRoot" style="margin-bottom:var(--lg)">
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:64px"></div>
+          <div class="skel skel-line" style="width:60%"></div>
+          <div class="skel skel-line" style="width:85%"></div>
+        </div>
+      </div>
+
       <!-- The journal: every closed trade, one row each, newest first. The
            account's endings existed only as aggregates (return, drawdown,
            by-symbol tables) — no surface could answer "what were my last five
@@ -638,15 +654,12 @@
         </div>
       </div>
 
-      <!-- Edge statistics: is the recorded book distinguishable from zero?
-           edgeview.js owns it and reads /api/edge-stats. -->
-      <div id="edgeRoot" style="margin-top:var(--lg)">
-        <div class="skeleton" role="status" aria-label="loading">
-          <div class="skel" style="height:64px"></div>
-          <div class="skel skel-line" style="width:60%"></div>
-          <div class="skel skel-line" style="width:85%"></div>
-        </div>
-      </div>
+      <!-- The edge panel lived here until 2026-07-31 (audit B6). "Is the
+           recorded book distinguishable from zero?" is literally the Results
+           question, and keeping the answer one surface away meant someone
+           reading a 12-trade forward sample as a result had the correction
+           somewhere they were not looking. It now sits under the equity curve
+           on Results. -->
 
       <!-- static/diagnostics.html was a complete second application — its own
            header, stylesheet, and a searchable decision-provenance view this

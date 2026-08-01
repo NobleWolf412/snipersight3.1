@@ -985,14 +985,20 @@
        disagree by hundreds of trades, which reads as a broken app unless each
        one says which era it covers and where the other number lives. Stated as
        a headline above the tiles, in the same words the edge panel uses. */
+    /* Rewritten when the edge panel moved HERE from Diagnostics (audit B6).
+       The two eras now share one page, which makes this band more important,
+       not less: the tiles count the forward window and the panel below counts
+       the whole book, so without the label the page contradicts itself at a
+       glance. No in-page link on purpose — a bare href="#edgeRoot" would be
+       read by the hash router as a surface name and blank every surface. */
     $('resultsEra').innerHTML =
-      `Everything on this page counts the
+      `The tiles and curve count the
        <span class="term" data-t="forwardWindow">forward window</span> that opened${
          started ? ' <b>' + started + '</b>' : ''} — not the whole history.
        The full <span class="term" data-t="recordedBook">recorded book</span>,
-       across every <span class="term" data-t="baseline">baseline</span>, is measured on
-       <a href="#diagnostics" data-era-link="diagnostics">Diagnostics</a>${
-         ruled ? '' : ', which is why it can report trades while this page reports none'}.`;
+       across every <span class="term" data-t="baseline">baseline</span>, is measured
+       just below, under the equity curve${
+         ruled ? '' : ' — which is why that panel can report trades while these tiles report none'}.`;
     $('resultsNote').innerHTML = ruled
       ? `Risk authority decisions: <b>${d.APPROVED || 0}</b> approved,
          <b>${d.REDUCED || 0}</b> reduced, <b>${d.REJECTED || 0}</b> rejected.
