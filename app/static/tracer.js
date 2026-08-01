@@ -34,6 +34,31 @@
   const esc = s => String(s == null ? '' : s)
     .replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 
+  /* Numbers said the way a person reads them, raw values one hover away.
+     The drawer printed epochs (`confirmed at 1785470400`) and venue-precision
+     decimals (`stop distance 0.2140863565`) — true, and unreadable. Analysts
+     keep the exact value in the tooltip; everyone else gets a clock time and
+     a sane number of digits. */
+  const looksEpoch = s => /^1[5-9]\d{8}$/.test(s);   // seconds, ~2017-2033
+  const fmtEpoch = s => new Date(+s * 1000).toLocaleString(undefined,
+    { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const fmtNum = s => {
+    const n = +s, a = Math.abs(n);
+    const dp = a >= 1000 ? 2 : a >= 1 ? 4 : 6;
+    return n.toLocaleString(undefined, { maximumFractionDigits: dp });
+  };
+  // one fact value -> {txt, raw}; raw non-null only when we changed something
+  function human(v) {
+    const s = String(v);
+    if (looksEpoch(s)) return { txt: fmtEpoch(s), raw: s };
+    if (/^-?\d+\.\d{5,}$/.test(s)) return { txt: fmtNum(s), raw: s };
+    return { txt: s, raw: null };
+  }
+  // prose with long decimals or epochs embedded in it
+  const humanProse = s => String(s)
+    .replace(/-?\d+\.\d{5,}/g, m => fmtNum(m))
+    .replace(/1[5-9]\d{8}/g, m => fmtEpoch(m));
+
   // Pass / fail / warn / pending / skip, straight from the API. `skip` is
   // deliberately an em-dash and not a cross: a stage with no fact means the
   // pipeline stopped upstream, and marking it failed would blame execution for
@@ -91,9 +116,12 @@
   function factRow(facts) {
     const keys = Object.keys(facts || {}).filter(k => facts[k] !== null && facts[k] !== undefined);
     if (!keys.length) return '';
-    return '<span class="dx-tfacts">' + keys.map(k =>
-      `<span class="dx-tfact"><b>${esc(k.replace(/_/g, ' '))}</b> ${
-        esc(Array.isArray(facts[k]) ? facts[k].join(', ') : facts[k])}</span>`).join('') + '</span>';
+    return '<span class="dx-tfacts">' + keys.map(k => {
+      const v = Array.isArray(facts[k]) ? facts[k].join(', ') : facts[k];
+      const h = human(v);
+      return `<span class="dx-tfact"${h.raw ? ` title="raw: ${esc(h.raw)}"` : ''}><b>${
+        esc(k.replace(/_/g, ' '))}</b> ${esc(h.txt)}</span>`;
+    }).join('') + '</span>';
   }
 
   function render(t) {
@@ -128,9 +156,9 @@
         <span>
           <span class="dx-tlabel">${esc(s.label)}</span>
           <span class="dx-tvalue">${s.value === null || s.value === undefined
-            ? 'not recorded' : esc(s.value)}</span>
-          ${s.expected ? `<span class="dx-texpect">needed: ${esc(s.expected)}</span>` : ''}
-          ${s.detail ? `<span class="dx-tdetail">${esc(s.detail)}</span>` : ''}
+            ? 'not recorded' : esc(humanProse(s.value))}</span>
+          ${s.expected ? `<span class="dx-texpect">rule: ${esc(humanProse(s.expected))}</span>` : ''}
+          ${s.detail ? `<span class="dx-tdetail">${esc(humanProse(s.detail))}</span>` : ''}
           ${factRow(s.facts)}
         </span>
       </div>`;
@@ -146,7 +174,7 @@
         <span class="chip ${verdictChip}">${esc(life.failure_code || 'unknown')}</span>
         ${t.rank != null ? `<span class="chip"><span class="term" data-t="rank">rank</span> ${esc(t.rank)}</span>` : ''}
         <span class="dx-verdict-line">${esc(life.detail || 'no lifecycle verdict recorded')}</span>
-        ${t.why ? `<span class="dx-verdict-line" style="color:var(--fg-3)">${esc(t.why)}</span>` : ''}
+        ${t.why ? `<span class="dx-why"><b>why this trade</b>${esc(t.why)}</span>` : ''}
         <span class="dx-verdict-owner">${life.failure_owner
           ? 'attributed to ' + esc(String(life.failure_owner).replace(/_/g, ' ').toLowerCase())
           : 'no failure to attribute'}${life.classification

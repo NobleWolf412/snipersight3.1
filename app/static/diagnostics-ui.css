@@ -421,6 +421,31 @@ body.dx-funnel-live #dFunnel { display: none; }
   color: var(--fg);
   margin-top: 6px;
 }
+/* The rationale, promoted from a grey run-on line to the one block a
+   non-technical reader is meant to find. Body face on purpose: it is a
+   sentence, not chrome. */
+.dx-why {
+  display: block;
+  font-family: var(--f-body);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--fg-2);
+  background: rgba(255,255,255,.04);
+  border-left: 2px solid var(--accent);
+  border-radius: 4px;
+  padding: 7px 10px;
+  margin-top: 8px;
+}
+.dx-why b {
+  display: block;
+  font-family: var(--f-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--fg-4);
+  margin-bottom: 3px;
+}
 .dx-verdict-owner {
   font-family: var(--f-mono);
   font-size: 10px;
