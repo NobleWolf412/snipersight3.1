@@ -869,23 +869,32 @@
      never emitted, so every row rendered an em-dash and `+0.00R` in GREEN —
      a -3.91R book displayed as break-even, with `n` correct so the row looked
      alive. A missing number must never default to zero and read as flat. */
+  /* D3 — a REAL table, because this is real tabular data. These rows were CSS
+     grids inside divs, which look identical and read as nothing: a screen
+     reader in a div soup cannot answer "what column am I in" or jump between
+     rows, and this app's whole pitch is dense numbers. The headers exist for
+     the same reason — a sighted reader infers "42 trades" is a count from its
+     shape; column semantics make that answerable rather than inferable. */
   function perfRows(rows){
     if(!rows || !rows.length) return '<div class="empty">no closed trades yet</div>';
-    return rows.map(r => {
+    const body = rows.map(r => {
       const has = r.sum_r !== undefined && r.sum_r !== null;
       const pnl = +r.sum_r;
       const good = pnl >= 0;
-      const wr = (r.win_pct ?? null) === null ? '' : `${r.win_pct}% win`;
-      return `<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:var(--md);
-        align-items:center;padding:8px var(--lg);border-bottom:1px solid var(--border-soft)"
-        class="t-mono">
-        <span style="color:var(--fg-2)">${String(r.key ?? '—').replace('-USD','')}</span>
-        <span style="color:var(--fg-4)">${r.n ?? 0} trades</span>
-        <span style="color:var(--fg-4)">${wr}</span>
-        <b style="color:${!has ? 'var(--fg-4)' : (good ? 'var(--green)' : 'var(--red-2)')}">${
-          has ? `${good ? '+' : ''}${pnl.toFixed(2)}R` : 'n/a'}</b>
-      </div>`;
+      const wr = (r.win_pct ?? null) === null ? '—' : `${r.win_pct}%`;
+      return `<tr>
+        <th scope="row">${String(r.key ?? '—').replace('-USD','')}</th>
+        <td>${r.n ?? 0}</td>
+        <td>${wr}</td>
+        <td><b style="color:${!has ? 'var(--fg-4)' : (good ? 'var(--green)' : 'var(--red-2)')}">${
+          has ? `${good ? '+' : ''}${pnl.toFixed(2)}R` : 'n/a'}</b></td>
+      </tr>`;
     }).join('');
+    return `<table class="data-table t-mono">
+      <thead><tr><th scope="col">name</th><th scope="col">trades</th>
+        <th scope="col">win rate</th><th scope="col">net</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
   }
 
   /* A SHADOW venue is warmed but never tradeable — `risk.py` refuses every one
@@ -1081,8 +1090,17 @@
   /* Full rebuild. Only ever called when the SHAPE of the spec changes — never
      on a keystroke and never on the refresh tick, both of which used to blow
      away the input under the operator's cursor. See patchSettingsState. */
+  /* B4 — ONE path to a halt. `halted` is a real setting the server owns, but
+     rendering it here made a second, quieter route to the same state as the
+     big red HALT button: a checkbox in a list, applied with everything else,
+     no confirmation. Two paths to a destructive action means one of them is
+     the one nobody rehearsed. The button is the path — always visible, names
+     its consequence, confirms — and the guardrails panel still DISPLAYS the
+     halt state, so nothing is hidden, there is just one way to change it. */
+  const BUTTON_OWNED = new Set(['halted']);
+
   function buildSettings(){
-    $('setFields').innerHTML = setSpec.map(s => {
+    $('setFields').innerHTML = setSpec.filter(s => !BUTTON_OWNED.has(s.name)).map(s => {
       const v = (s.name in setPending) ? setPending[s.name] : setValues[s.name];
       const ctl = s.type === 'bool'
         ? `<input type="checkbox" data-set="${s.name}" ${v ? 'checked' : ''}>`
@@ -1327,12 +1345,14 @@
       $('telChip').textContent = 'clean · ' + n + ' checked';
       $('telChip').className = 'chip chip-green';
     }
+    // a real table for the same reason the perf panels are — see perfRows()
     $('dTelemetry').innerHTML = rows.length
-      ? rows.sort((a, b) => b[1] - a[1]).map(([k, n]) =>
-          `<div style="display:flex;justify-content:space-between;padding:7px var(--lg);
-            border-bottom:1px solid var(--border-soft)" class="t-mono">
-            <span style="color:var(--fg-3)">${k.replaceAll('_', ' ').toLowerCase()}</span>
-            <b style="color:var(--fg-2)">${fmt(n)}</b></div>`).join('')
+      ? `<table class="data-table t-mono">
+          <thead><tr><th scope="col">stage</th><th scope="col">count</th></tr></thead>
+          <tbody>${rows.sort((a, b) => b[1] - a[1]).map(([k, n]) =>
+            `<tr><th scope="row">${k.replaceAll('_', ' ').toLowerCase()}</th>
+             <td><b style="color:var(--fg-2)">${fmt(n)}</b></td></tr>`).join('')}
+          </tbody></table>`
       : '<div class="empty">no candidates recorded in this window yet</div>';
   }
 

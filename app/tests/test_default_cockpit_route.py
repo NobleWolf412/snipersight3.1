@@ -38,3 +38,44 @@ class ConsolidatedCockpitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VersionStampedShellTests(unittest.TestCase):
+    """The ?v=N cache busters in shell.html were HAND-MAINTAINED — thirteen
+    tags bumped by whoever remembered. One stale module against twelve fresh
+    ones does not error, it disagrees, which is the class of bug this codebase
+    keeps paying to remove. The route is the authority now: every tag served
+    from / carries one version derived from the newest static mtime."""
+
+    def test_every_served_tag_carries_one_version(self):
+        import re
+        import server
+        html = server.index().body.decode("utf-8")
+        stamped = set(re.findall(r"\?v=(\d+)", html))
+        self.assertEqual(len(stamped), 1,
+                         f"served tags disagree: {sorted(stamped)} — the exact "
+                         "stale-module hazard the stamping exists to remove")
+        self.assertEqual(stamped, {server._asset_version()},
+                         "the served version is not the asset version")
+
+    def test_the_version_follows_the_files(self):
+        import server
+        v1 = server._asset_version()
+        # The version is the MAX mtime, so nudging one file by a couple of
+        # seconds proves nothing — another file is usually newer, and the first
+        # draft of this test failed exactly that way. Push the file past
+        # EVERYTHING by using wall-clock now plus a margin.
+        target = next(p for p in (APP / "static").glob("*.js"))
+        st = target.stat()
+        try:
+            import os
+            import time
+            os.utime(target, ns=(st.st_atime_ns,
+                                 time.time_ns() + 10_000_000_000))
+            self.assertNotEqual(server._asset_version(), v1,
+                                "a changed file does not change the version, "
+                                "so clients keep the stale module")
+        finally:
+            os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns))
+        self.assertEqual(server._asset_version(), v1,
+                         "the version moved without a file changing")

@@ -366,6 +366,39 @@ window.SSChart = (() => {
       : 'no liquidation at 1x';
   }
 
+  /* ---------- the context ladder ----------
+     /api/context shipped with the docstring "compact synchronized context
+     strip for the decision workspace" and had zero callers. Meanwhile the
+     chart showed the regime of ONE timeframe, and the decision needs the
+     ladder: a 4H long inside a 1D downtrend is a different trade from the same
+     entry with the trend at its back. Market Weather already shows this per
+     symbol on Command — this is the same fact repeated at the point where the
+     trade is actually committed, which is where it earns its screen space.
+
+     Colour only, one letter-group per timeframe, detail in the title: the
+     ladder is context, and context must never be louder than the chart. */
+  const LADDER_TONE = {
+    BULL_TREND: 'lx-bull', WEAKENING_BULL: 'lx-bull-w',
+    BEAR_TREND: 'lx-bear', WEAKENING_BEAR: 'lx-bear-w',
+    TRANSITION: 'lx-trans', RANGE: 'lx-range',
+  };
+  async function loadContext(){
+    const el = $('cLadder');
+    if(!el || !sym) return;
+    try{
+      const c = await api('/api/context?symbol=' + encodeURIComponent(sym));
+      el.innerHTML = (c.timeframes || []).map(t => {
+        const label = t.regime ? t.regime.replace('_', ' ').toLowerCase() : 'no reading';
+        const extra = (t.active_zones ? ` · ${t.active_zones} active zone${t.active_zones === 1 ? '' : 's'}` : '')
+                    + (t.ready ? ` · ${t.ready} setup${t.ready === 1 ? '' : 's'} ready` : '');
+        return `<span class="lx ${LADDER_TONE[t.regime] || 'lx-none'}${t.tf === tf ? ' on' : ''}"
+          title="${t.tf}: ${label}${extra}">${t.tf}</span>`;
+      }).join('');
+    }catch(e){
+      el.innerHTML = '';               // absent context beats stale context
+    }
+  }
+
   /* ---------- live price ----------
      /api/ticker has existed since S-whenever with this docstring: "this exists
      purely so the human sees the market move between candle closes". It had
@@ -435,6 +468,9 @@ window.SSChart = (() => {
     $('cPrice').textContent = '—';
     $('cPrice').className = 'chip';
     $('cRegime').textContent = '—';
+    // market-specific like everything else here — a ladder for the WRONG
+    // symbol is worse than none (see the rule at the top of clearChart)
+    if($('cLadder')) $('cLadder').innerHTML = '';
     // A cleared chart describes no market, so there is no plan to arm.
     armable = false; refreshArm();
     $('tkArmed').textContent = '';
@@ -530,6 +566,7 @@ window.SSChart = (() => {
     $('cPrice').className = 'chip ' + (chg >= 0 ? 'chip-green' : 'chip-red');
     $('cPrice').title = 'last CLOSED candle on this timeframe — what the engines see';
     startTicker();
+    loadContext();
     const reg = regime.length ? regime[regime.length - 1].regime : null;
     $('cRegime').textContent = reg ? reg.replace('_', ' ') : 'no regime';
 

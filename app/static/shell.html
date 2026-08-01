@@ -193,6 +193,13 @@
              were looking at. -->
         <span class="chip" id="cVenue" title="the exchange these candles came from">—</span>
         <span class="chip" id="cRegime">—</span>
+        <!-- /api/context, finally wired. Built as "a compact synchronized
+             context strip for the decision workspace" and never called: the
+             chart showed the regime of ONE timeframe while the decision needs
+             the ladder — a 4H long inside a 1D downtrend is a different trade.
+             Market Weather shows this per symbol on Command; this is the same
+             fact at the point where the trade is actually committed. -->
+        <span class="ctx-ladder" id="cLadder" title="regime per timeframe — the same reading Market Weather shows, at the decision point"></span>
         <span class="chip" id="cPrice">—</span>
         <!-- The live tick sits BESIDE the closed-candle price and never
              replaces it. §5 is closed-candle-only: every engine, fact and setup
@@ -506,19 +513,28 @@
           <div class="panel-head"><h2 class="t-section">Risk</h2></div>
           <div class="panel-body">
             <div class="tk-out" id="riskNow"></div>
+            <!-- B7 — one line, then a disclosure. This was a nine-line essay
+                 standing between the operator and the numbers above it. The
+                 reasoning is worth keeping; it is not worth reading on every
+                 visit to a settings page. -->
             <p class="t-body" style="margin-top:var(--md);color:var(--fg-3)">
-              These are the live numbers the risk authority sizes with, read from
-              the engine. They are not editable here yet — and not because the
-              field is missing. Changing
-              <span class="term" data-t="riskPerTrade">risk per trade</span> re-sizes
-              the <em>entire</em> forward record, because the account is recomputed
-              by replaying every setup. Doing that in place would rewrite your paper
-              track record under the same
-              <span class="term" data-t="algoVersion">engine version</span>, which is
-              exactly what the versioning rule forbids. The envelope is also coupled:
-              the total cap holds two concurrent trades and the daily halt is about
-              three stop-outs, so one value cannot move alone.
+              These are the live numbers the risk authority sizes with — read
+              from the engine, not editable here.
             </p>
+            <details class="fine-print">
+              <summary>why not?</summary>
+              <p class="t-body" style="color:var(--fg-3)">
+                Changing <span class="term" data-t="riskPerTrade">risk per
+                trade</span> re-sizes the <em>entire</em> forward record,
+                because the account is recomputed by replaying every setup.
+                Doing that in place would rewrite your paper track record under
+                the same <span class="term" data-t="algoVersion">engine
+                version</span>, which is exactly what the versioning rule
+                forbids. The envelope is also coupled: the total cap holds two
+                concurrent trades and the daily halt is about three stop-outs,
+                so one value cannot move alone.
+              </p>
+            </details>
           </div>
         </div>
         <div class="panel">

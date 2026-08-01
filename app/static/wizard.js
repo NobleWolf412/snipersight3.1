@@ -104,9 +104,21 @@
       value: sc.age_s == null ? 'no heartbeat ever recorded' : `silent for ${sc.age_s}s`,
       means: M + ' It is not running. Nothing new can appear no matter how ' +
              'everything else is configured — this is the first thing to fix.',
-      doing: 'Run one scan by hand from Command to confirm the engine still works, ' +
-             'then restart the background scanner.',
-      cta: { href: '#command', label: 'Command' }
+      /* The instruction used to end in prose: "…then restart the background
+         scanner" — with no way to do it. /api/system/restart existed the whole
+         time, purpose-built and wired to nothing, so the wizard diagnosed the
+         fault and then told the operator to go find a terminal. The button IS
+         the instruction now; the watchdog respawns what it stops, and the
+         endpoint refuses outright when no watchdog is supervising, which the
+         result line reports verbatim. */
+      doing: 'Restart it. The watchdog stops the scanner and respawns it in a ' +
+             'few seconds; if nothing is supervising, the restart is refused ' +
+             'and says so.',
+      action: { id: 'restart-scanner', label: 'Restart scanner',
+                confirm: 'Restart the background scanner?\n\nThe current scan ' +
+                         'pass is abandoned and restarts from the top in ~5s. ' +
+                         'Recorded facts are append-only — nothing is lost.',
+                url: '/api/system/restart?target=scanner' }
     };
   }
 
@@ -417,6 +429,12 @@
             ${st.cta ? `<span class="dx-step-cta">
               <a class="btn" href="${st.cta.href}" data-close="1">Open ${esc(st.cta.label)} →</a>
             </span>` : ''}
+            ${st.action ? `<span class="dx-step-cta">
+              <button class="btn" data-action="${esc(st.action.id)}"
+                data-url="${esc(st.action.url)}"
+                data-confirm="${esc(st.action.confirm || '')}">${esc(st.action.label)}</button>
+              <span class="t-mono dx-action-result" data-result-for="${esc(st.action.id)}"></span>
+            </span>` : ''}
           </span>
         </div>`).join('') + '</div>';
     paint(body, 'Read-only · five endpoints · nothing here changes any setting');
@@ -452,7 +470,32 @@
     run();
   }
 
-  ROOT.addEventListener('click', e => {
+  ROOT.addEventListener('click', async e => {
+    /* A step's action button. The same rules as every other action in the app:
+       it confirms before anything irreversible-feeling, it reports its RESULT
+       and TIME beside the control, and a refusal (no watchdog supervising) is
+       shown verbatim rather than dressed up as success. The wizard re-runs
+       after a short wait so the step verdicts reflect what the restart did. */
+    const act = e.target.closest('[data-action]');
+    if (act) {
+      if (act.dataset.confirm && !confirm(act.dataset.confirm)) return;
+      const out = ROOT.querySelector(`[data-result-for="${act.dataset.action}"]`);
+      const stamp = () => new Date().toISOString().slice(11, 19) + 'Z';
+      act.disabled = true;
+      if (out) out.textContent = 'asking…';
+      try {
+        const r = await fetch(act.dataset.url, { method: 'POST' });
+        const d = await r.json().catch(() => ({}));
+        if (out) out.textContent = (r.ok
+          ? (d.detail || 'restarting — back in a few seconds')
+          : (d.detail || 'refused → HTTP ' + r.status)) + ' · ' + stamp();
+        if (r.ok) setTimeout(run, 8000);      // re-diagnose against the new state
+      } catch (err) {
+        if (out) out.textContent = 'could not reach the server · ' + stamp();
+      }
+      act.disabled = false;
+      return;
+    }
     if (e.target.closest('[data-rerun]')) { run(); return; }
     if (e.target.closest('[data-close]')) close();
   });

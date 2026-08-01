@@ -4,13 +4,14 @@ never derives them). Serves the chart UI at / and JSON at /api/*.
 Run: uvicorn server:app --port 8422
 """
 import json
+import re
 import threading
 import time
 from collections import Counter
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from engine import registry, store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
@@ -97,26 +98,17 @@ def candles(symbol: str = Query("BTC-USD", pattern=SYMBOL_PATTERN),
         con.close()
 
 
-@app.get("/api/swings")
-def swing_facts(symbol: str = "BTC-USD", tf: str = "1H",
-                as_of: int | None = None, tier: str | None = None):
-    """The exact as_of-cursored query the chart and (later) the strategy share."""
-    if tf not in VALID_TFS:
-        raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
-    con = store.connect()
-    try:
-        rows = store.get_facts(con, symbol, tf, "swing", swings.SWING_VERSION, as_of)
-        out = []
-        for r in rows:
-            p = json.loads(r["payload"])
-            if tier and p["tier"] != tier:
-                continue
-            out.append({"market_time": r["market_time"],
-                        "confirmed_at": r["confirmed_at"],
-                        "algo_version": r["algo_version"], **p})
-        return out
-    finally:
-        con.close()
+# /api/swings and /api/track retired 2026-07-31 (audit, part C).
+#
+# swings was a strict subset of /api/facts?kind=swing — the SAME store.get_facts
+# call with the same as_of cursor, plus a tier filter any client can apply to
+# the rows it already has. The chart moved to /api/facts long ago, and a second
+# route over one query is a second contract to keep honest for zero readers.
+#
+# track computed a per-symbol R record that /api/performance.by_symbol already
+# serves to Results. The audit's verdict was "surface it or delete"; it was
+# redundant with what is surfaced, so it is deleted. Neither route had a single
+# reference anywhere in static/, tests/ or tools when removed.
 
 
 @app.get("/api/facts")
@@ -139,33 +131,6 @@ def facts(kind: str, symbol: str = "BTC-USD", tf: str = "1H",
                             "algo_version": r["algo_version"], **json.loads(r["payload"])})
         out.sort(key=lambda f: f["market_time"])
         return out
-    finally:
-        con.close()
-
-
-@app.get("/api/track")
-def track(symbol: str = "BTC-USD", tf: str = "1H"):
-    """Paper track record from exec facts — §15 metrics, R-multiple based."""
-    if tf not in VALID_TFS:
-        raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
-    con = store.connect()
-    try:
-        baseline, eligible = _baseline_setup_ids(con, symbol=symbol, tf=tf)
-        rows = store.get_facts(con, symbol, tf, "exec", execsim.EXEC_VERSION)
-        outs = [p for r in rows if (p := json.loads(r["payload"]))["setup_id"] in eligible]
-        filled = [o for o in outs if o["outcome"] != "MISSED"]
-        rs = [float(o["r_multiple"]) for o in filled]
-        wins = [r for r in rs if r > 0]
-        losses = [r for r in rs if r < 0]
-        return {"baseline": baseline, "n": len(filled), "signals": len(outs),
-                "missed": sum(1 for o in outs if o["outcome"] == "MISSED"),
-                "fill_rate": round(len(filled) / len(outs), 3) if outs else None,
-                "tp": sum(1 for o in filled if o["outcome"] == "TP"),
-                "sl": sum(1 for o in filled if o["outcome"] == "SL"),
-                "timeout": sum(1 for o in filled if o["outcome"] == "TIMEOUT"),
-                "win_rate": round(len(wins) / len(rs), 3) if rs else None,
-                "profit_factor": round(sum(wins) / abs(sum(losses)), 2) if losses else None,
-                "sum_r": round(sum(rs), 2), "by_setup": {o["setup_id"]: o for o in outs}}
     finally:
         con.close()
 
@@ -2109,10 +2074,37 @@ def pipeline_health(symbol: str | None = None):
 NO_CACHE = {"Cache-Control": "no-cache, must-revalidate"}
 
 
+def _asset_version() -> str:
+    """One cache-busting version for every asset the shell loads, derived from
+    the newest mtime under static/.
+
+    The ?v=N query strings in shell.html were HAND-MAINTAINED — thirteen tags
+    edited by whoever remembered, sitting at ?v=1 for weeks and then bumped in
+    a batch. The failure mode is silent and nasty: one stale module running
+    against twelve fresh ones does not error, it disagrees — the exact class of
+    bug this codebase keeps paying to remove between panels, reintroduced
+    between files.
+
+    mtime rather than server start time, deliberately: a restart with unchanged
+    files should NOT invalidate every client cache, and a changed file must
+    bust even if the server happened to restart at the same second.
+    """
+    newest = max((p.stat().st_mtime_ns for p in STATIC.rglob("*")
+                  if p.is_file()), default=0)
+    return str(newest // 1_000_000_000)
+
+
 @app.get("/")
 def index():
-    """The redesigned shell (docs/REDESIGN-PLAN.md phase 1)."""
-    return FileResponse(STATIC / "shell.html", headers=NO_CACHE)
+    """The redesigned shell (docs/REDESIGN-PLAN.md phase 1).
+
+    Served with every ?v=N stamped to the current asset version rather than
+    whatever number was last hand-edited into the file. The file on disk keeps
+    plain ?v=N so it still works opened directly; the route is the authority.
+    """
+    html = (STATIC / "shell.html").read_text(encoding="utf-8")
+    html = re.sub(r"\?v=\d+", "?v=" + _asset_version(), html)
+    return HTMLResponse(html, headers=NO_CACHE)
 
 
 # /legacy retired 2026-07-29 (phase 6). Every surface it uniquely served now has

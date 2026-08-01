@@ -30,12 +30,16 @@ class TestSetupTelemetryAPI(unittest.TestCase):
             con.close()
 
             with patch("server.store.connect", side_effect=lambda: original_connect(db)):
-                track = server.track("BTC-USD", "1D")
+                # /api/track was retired 2026-07-31 (redundant with
+                # performance.by_symbol, zero readers). Its slice of this
+                # invariant — pre-baseline losses stay out of the per-symbol
+                # record — is carried by the by_symbol assertion below, so the
+                # property this test exists for is still checked everywhere it
+                # can be observed.
                 trace = server.setup_telemetry(None, None, None, 100)
                 performance = server.performance()
                 portfolio = server.portfolio()
 
-        self.assertEqual(track["n"], 0)
         self.assertEqual(trace["funnel"]["validated"], 0)
         self.assertEqual(performance["by_symbol"], [])
         self.assertEqual(portfolio["equity"], 10000.0)

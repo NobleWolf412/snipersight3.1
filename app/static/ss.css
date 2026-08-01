@@ -133,6 +133,52 @@ body{
 .era-band a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 .era-band b{color:var(--fg);font-weight:600}
 
+/* D3 — real tables for real tabular data. The perf and telemetry panels were
+   CSS grids inside divs: identical to look at, nothing to navigate for anyone
+   not using a mouse and eyes. Styled to match the div rows they replace, so
+   the semantics changed and the pixels did not. The WEATHER grid is left as it
+   is on purpose — its rows are buttons that expand, an interactive disclosure
+   list rather than a table, and table semantics would fight the button roles
+   it already announces. */
+.data-table{width:100%;border-collapse:collapse}
+.data-table thead th{font-family:var(--f-mono);font-size:9px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--fg-4);
+  padding:6px var(--sm);border-bottom:1px solid var(--border-soft);text-align:right}
+.data-table tbody th,.data-table td{padding:8px var(--sm);text-align:right;
+  border-bottom:1px solid var(--border-soft);font-weight:400;color:var(--fg-4);
+  font-variant-numeric:tabular-nums}
+.data-table tbody th{color:var(--fg-2)}
+.data-table tr > *:first-child{text-align:left;padding-left:var(--lg)}
+.data-table tr > *:last-child{padding-right:var(--lg)}
+
+/* The context ladder — /api/context on the chart. One cell per timeframe,
+   regime as colour, detail in the title. Context, so quieter than everything
+   that is actually the chart. The current timeframe gets the ring. */
+.ctx-ladder{display:inline-flex;gap:3px;align-items:center}
+.ctx-ladder .lx{font-family:var(--f-mono);font-size:9px;font-weight:600;
+  letter-spacing:.08em;padding:2px 5px;border-radius:var(--r-sm);
+  color:var(--bg);opacity:.8;cursor:help}
+.ctx-ladder .lx.on{outline:1px solid var(--fg-2);outline-offset:1px;opacity:1}
+.ctx-ladder .lx-bull{background:var(--green-soft)}
+.ctx-ladder .lx-bull-w{background:rgba(74,222,128,.5)}
+.ctx-ladder .lx-bear{background:var(--red-2)}
+.ctx-ladder .lx-bear-w{background:rgba(248,113,113,.5)}
+.ctx-ladder .lx-trans{background:var(--amber);opacity:.6}
+.ctx-ladder .lx-range{background:var(--fg-4)}
+/* absent data must not look flat — same rule the weather strip follows */
+.ctx-ladder .lx-none{background:transparent;color:var(--fg-4);
+  border:1px dashed var(--border)}
+
+/* B7 — reasoning behind a settings decision, folded. One line stays on the
+   page; the essay is a click away for whoever actually wants it. */
+.fine-print{margin-top:var(--sm)}
+.fine-print summary{cursor:pointer;list-style:none;font-family:var(--f-mono);
+  font-size:10px;letter-spacing:.08em;color:var(--fg-4);
+  text-decoration:underline dotted;text-underline-offset:3px}
+.fine-print summary::-webkit-details-marker{display:none}
+.fine-print summary:hover{color:var(--fg-2)}
+.fine-print[open] summary{margin-bottom:var(--sm)}
+
 /* The explainer. Body prose for the same reason the era band is: these are
    paragraphs to be read once and understood, and the all-caps mono this app
    uses for chrome is unreadable at that length. Closed by default — it is
