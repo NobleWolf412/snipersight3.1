@@ -3470,4 +3470,13 @@ recounts zones that EXIST — a missing zone is invisible to it. The new
 `test_zone_anchor_identity.py` writes a same-bar pair and requires both sides
 to survive into zones and the structure walk.
 
+**Verified live after the first v0.13-generation cycle** (17:02:33Z, 144.0s,
+2 new setups): all five bars carry BOTH zones and BOTH structure labels —
+LTCUSDT 1D got its SUPPLY back at [133.06 .. 135.86] beside the DEMAND at
+[50.04 .. 52.84], the twins' identical scores (65.04/65.04) confirming one
+recursion minted the pair; ETHUSDT's HIGH shows held=52 where its LOW shows
+90, the censored window settling each side on its own evidence.
+`test_zone_causality` re-run against the populated store: 3/3, no skips —
+the recount that drifted weekly under v0.8 is now a fixed point.
+
 660 python green.
