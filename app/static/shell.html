@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SniperSight</title>
 <link rel="icon" href="/static/assets/snipersight-logo.png">
-<link rel="stylesheet" href="/static/ss.css?v=1">
+<link rel="stylesheet" href="/static/ss.css?v=3">
 </head>
 <body data-mode="idle">
 
@@ -100,6 +100,22 @@
 
       <!-- first-run orientation; lessons.js owns it and self-hides once dismissed -->
       <div id="orientRoot"></div>
+
+      <!-- Open trades. `active_positions` has been in the portfolio payload the
+           whole time and was rendered on no surface: the only place an open
+           trade appeared was the chart's order ticket, and only while you
+           happened to be looking at that symbol's chart. Answering "what am I
+           in right now" meant visiting each chart in turn.
+
+           It belongs above the deck, because what you already hold is what
+           decides whether you can take anything on it. -->
+      <div class="panel" id="posPanel" style="margin-bottom:var(--lg);display:none">
+        <div class="panel-head">
+          <h2 class="t-section">Open trades</h2>
+          <span class="chip" id="posRisk" style="margin-left:auto">—</span>
+        </div>
+        <div id="positions"></div>
+      </div>
 
       <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head">
@@ -200,29 +216,25 @@
             <h2 class="t-section">Order Ticket</h2>
             <span class="chip" id="tkSrc" style="margin-left:auto">engine</span>
           </div>
+          <!-- Nine controls, a nine-row cost breakdown and the rationale were
+               one stacked column. At any real window height most of it sat
+               below the fold, and nothing told the operator what they had not
+               scrolled to — on the one panel that turns a setup into money at
+               risk. Grouped into panes, each answering one question.
+
+               The numbers that DECIDE the trade do not live in a pane: they
+               are pinned below, so changing pane can never hide them. -->
+          <div class="seg tk-tabs" id="tkTabs" role="tablist">
+            <button data-p="trade" class="on" type="button">Trade</button>
+            <button data-p="size" type="button">Size</button>
+            <button data-p="numbers" type="button">Numbers</button>
+            <button data-p="why" type="button">Why</button>
+          </div>
+
           <div class="ticket-body">
+           <div class="tk-pane on" data-p="trade">
             <div class="seg seg-dir" id="tkDir">
               <button data-d="LONG">Long</button><button data-d="SHORT">Short</button>
-            </div>
-
-            <!-- LEVERAGE, directly under direction — measured 280px below the
-                 fold of this scroll region in its old position, which meant the
-                 operator saw "up to 10x" in the header chip and could not find
-                 the dial that sets it. Direction and financing are the two
-                 facts about HOW the trade is taken; prices follow them. It sets
-                 the margin posted, never the position size — size stays
-                 risk / distance-to-stop at every setting — and the liquidation
-                 line sits directly beneath it because raising it is what pulls
-                 liquidation toward entry. Hidden on spot, where the venue max
-                 is 1x and the whole mechanism is inert. -->
-            <div class="fld" id="tkLevRow" hidden>
-              <span class="t-label">Leverage — this trade
-                <span id="tkLevMax" style="color:var(--fg-3)"></span></span>
-              <div class="fld-row">
-                <input id="tkLev" class="t-mono" type="range" min="1" step="1" value="1">
-                <span class="t-mono" id="tkLevVal" style="min-width:3.5em;text-align:right"></span>
-              </div>
-              <div class="t-mono" id="tkLiq" style="color:var(--fg-3);font-size:11px"></div>
             </div>
 
             <label class="fld"><span class="t-label"><span class="term" data-t="entry">Entry</span></span>
@@ -231,10 +243,33 @@
               <input id="tkTp" class="t-mono" inputmode="decimal" autocomplete="off"></label>
             <label class="fld"><span class="t-label"><span class="term" data-t="sl">Stop loss</span></span>
               <input id="tkSl" class="t-mono" inputmode="decimal" autocomplete="off"></label>
+           </div>
+
+           <div class="tk-pane" data-p="size">
+            <!-- LEVERAGE leads this pane. It sets the margin posted, never the
+                 position size — size stays risk / distance-to-stop at every
+                 setting — and the liquidation line sits directly beneath it
+                 because raising leverage is what pulls liquidation toward
+                 entry. Hidden on spot, where the venue max is 1x and the whole
+                 mechanism is inert. -->
+            <!-- Short labels on purpose: at 10px caps with .18em tracking the
+                 268px column fits ~28 characters, and every label that wraps
+                 to a second line is another pane that no longer fits without
+                 scrolling. "This trade only" is carried by the pane itself —
+                 everything on Size is per-trade. -->
+            <div class="fld" id="tkLevRow" hidden>
+              <span class="t-label">Leverage
+                <span id="tkLevMax" style="color:var(--fg-3)"></span></span>
+              <div class="fld-row">
+                <input id="tkLev" class="t-mono" type="range" min="1" step="1" value="1">
+                <span class="t-mono" id="tkLevVal" style="min-width:3.5em;text-align:right"></span>
+              </div>
+              <div class="t-mono" id="tkLiq" style="color:var(--fg-3);font-size:11px"></div>
+            </div>
 
             <!-- per-trade risk: affects THIS trade only, never the default -->
             <div class="fld">
-              <span class="t-label">Risk on this trade
+              <span class="t-label">Risk
                 <span id="tkRiskPct" style="color:var(--fg-3)"></span></span>
               <div class="fld-row">
                 <input id="tkRisk" class="t-mono" inputmode="decimal" autocomplete="off">
@@ -247,34 +282,46 @@
             <label class="fld fld-inline" id="tkTrailRow" hidden>
               <span class="t-label">Trail distance (R)</span>
               <input id="tkTrailR" class="t-mono" value="1.0" inputmode="decimal"></label>
+           </div>
 
-            <div class="tk-why t-body" id="tkWhy"></div>
-          </div>
-
-          <!-- The cost picture and the control that commits the trade live
-               OUTSIDE .ticket-body's scroll region, deliberately. An operator
-               must never scroll to find the number that decides the trade or
-               the button that acts on it. Inputs scroll; economics do not. -->
-          <div class="ticket-foot">
+           <!-- the full cost breakdown; the three that decide it are pinned below -->
+           <div class="tk-pane" data-p="numbers">
             <div class="tk-out" id="tkOut"></div>
-            <div class="tk-warn" id="tkWarn" hidden></div>
+           </div>
 
-            <div class="tk-actions">
-              <button class="btn" id="tkReset" disabled>Reset to engine</button>
-              <!-- The label says PAPER because the button is the last thing read
-                   before acting. "Arm" alone left an operator to infer which
-                   book they were writing to, and the two books mean different
-                   things: this one is theirs, the strategy record is not. -->
-              <button class="btn btn-cyan" id="tkArm" disabled>Arm (paper)</button>
-            </div>
-            <!-- The operator's open trade on THIS chart, marked to the last
-                 closed bar. Without it a trade vanished into the book the
-                 moment it was armed — no line, no P&L, nowhere to watch it. -->
-            <div class="t-mono tk-open" id="tkOpen"></div>
-            <div class="t-mono tk-armed" id="tkArmed"></div>
-            <div class="t-mono tk-lock" id="tkLock"></div>
+           <div class="tk-pane" data-p="why">
+            <div class="tk-why t-body" id="tkWhy"></div>
+           </div>
           </div>
         </aside>
+      </div>
+
+      <!-- THE COMMIT BAR. The deciding numbers, the breach warning and Arm
+           used to be a stack pinned inside the 268px ticket column, where the
+           warning alone wrapped to five lines and the stack (229px) starved
+           the controls above it into a scrolling slit at any real window
+           height. Laid flat under the chart the same content is one row: the
+           warning is a line instead of a paragraph, and nothing on the chart
+           surface scrolls. Never inside a pane — an operator must never have
+           to change tab to find the number that decides the trade, or the
+           button that acts on it. -->
+      <div class="commit-bar">
+        <div class="tk-key" id="tkKey"></div>
+        <div class="tk-warn" id="tkWarn" hidden></div>
+        <div class="tk-actions">
+          <button class="btn" id="tkReset" disabled>Reset to engine</button>
+          <!-- The label says PAPER because the button is the last thing read
+               before acting. "Arm" alone left an operator to infer which
+               book they were writing to, and the two books mean different
+               things: this one is theirs, the strategy record is not. -->
+          <button class="btn btn-cyan" id="tkArm" disabled>Arm (paper)</button>
+        </div>
+        <!-- The operator's open trade on THIS chart, marked to the last
+             closed bar. Without it a trade vanished into the book the
+             moment it was armed — no line, no P&L, nowhere to watch it. -->
+        <div class="t-mono tk-open" id="tkOpen"></div>
+        <div class="t-mono tk-armed" id="tkArmed"></div>
+        <div class="t-mono tk-lock" id="tkLock"></div>
       </div>
     </section>
 
@@ -349,33 +396,45 @@
           <span class="wx-sub">the five steps these rules control</span>
         </summary>
         <div class="explainer-body t-body">
-          <p><b>It is always running.</b> The scanner wakes every 60 seconds and
-          walks the whole universe; one full pass takes roughly five minutes, so
-          in practice it runs continuously. <b>Run Scan</b> on Command does not
-          do anything extra — it runs the same pass immediately instead of
-          waiting for the next wake-up.</p>
+          <!-- This described a data pipeline: rank, warm up, import closed
+               candles, run the engines over them. Two of the five steps were
+               about moving price history around, which is not a thing the
+               reader controls, judges or can act on — and the one step they
+               most need ("why did nothing appear today?") was buried last.
+
+               Same five stages, told as what the bot is doing to find a trade.
+               The "Controlled by" pointers stay: they are what ties a sentence
+               to the toggle underneath it, and they now name the controls as
+               the controls are actually labelled. -->
+          <p><b>It is always running.</b> The scanner re-checks every symbol it
+          watches, around the clock. <b>Run Scan</b> on Command does not do
+          anything extra — it runs the same check straight away instead of
+          waiting for the next one.</p>
 
           <ol class="explainer-steps">
-            <li><b>Rank the universe.</b> Every symbol on the venue is sorted by
-              24-hour volume and the top slice is admitted.
-              <em>Controlled by: top n, min volume usd, enable perps.</em></li>
-            <li><b>Warm up new symbols.</b> A symbol needs
-              <b>200 daily candles</b> of history before it can be traded — long
-              enough to map its structure. Until then it shows as
-              <span class="term" data-t="warming">WARMING</span> and is
-              deliberately excluded from sizing.</li>
-            <li><b>Import closed candles.</b> Only candles that have actually
-              closed are imported, never the one still forming. That is why a
-              fast move shows up as a drift alert before any engine reacts to
-              it.</li>
-            <li><b>Read the market.</b> Structure, zones, regime and the rest run
-              over the new candles and record what they find. This is what
-              <b>Market Weather</b> shows: what condition each symbol is in.</li>
-            <li><b>Wait for price to arrive.</b> A tradeable condition is not a
-              trade. A <span class="term" data-t="setup">setup</span> only
-              appears when price returns to one of that symbol's zones and
+            <li><b>Pick what to watch.</b> The most heavily traded symbols on
+              the venue are admitted and thin markets are left out — a stop in
+              a thin book does not get filled where you put it.
+              <em>Controlled by: how many symbols to admit, minimum 24h volume,
+              trade perpetual futures.</em></li>
+            <li><b>Learn each market before trading it.</b> A new symbol is
+              watched but never sized until there is enough history to map its
+              levels honestly — about six months. A market whose structure the
+              engine cannot see is one it will not risk money in.</li>
+            <li><b>Read the conditions.</b> For each symbol it works out the
+              trend, marks the supply and demand zones, and notes where
+              liquidity is resting. This is what <b>Market Weather</b> shows:
+              what state each market is in right now.</li>
+            <li><b>Wait for price to come to you.</b> A tradeable condition is
+              not a trade. A <span class="term" data-t="setup">setup</span>
+              appears only when price returns to one of those zones and
               confirms there — then it lands on the <b>Setup Deck</b>.
               <em>Controlled by: the playbook switches above.</em></li>
+            <li><b>Check it against your limits.</b> Even a valid setup is
+              refused if it would break a risk rule — too many trades open,
+              too much at stake, or resting after a recent stop-out. Command
+              says which rule stopped it.
+              <em>Controlled by: the risk settings below.</em></li>
           </ol>
 
           <p><b>So an empty Setup Deck beside a busy Market Weather is the
@@ -571,11 +630,22 @@
   <div id="wizardRoot"></div>
 
   <!-- ══ status bar ══ -->
+  <!-- The status bar answers ONE question, on every surface, permanently:
+       can I trust what is on screen right now? It used to answer three nobody
+       asked — how many rows the fact store holds, which build of the engine
+       produced them, and the date the current window opened. A trader reading
+       `Facts 4,182,993 · Engine swing-v0.7` learns nothing they can act on,
+       and pays for it with the only always-visible strip on the screen. -->
   <footer class="statusbar">
-    <span><span class="term" data-t="fact">Facts</span> <b id="sbFacts">—</b></span>
-    <span><span class="term" data-t="algoVersion">Engine</span> <b id="sbAlgo">—</b></span>
-    <span><span class="term" data-t="baseline">Baseline</span> <b id="sbBaseline">—</b></span>
+    <span class="sb-item"><span class="orb" id="sbOrb"></span><b id="sbLive">connecting…</b></span>
+    <span class="sb-item" id="sbWatch"></span>
     <span style="margin-left:auto">Sim only — no live orders</span>
+    <!-- Diagnostics answers "is the machine telling me the truth" — a real
+         question, and not one to put in front of somebody deciding whether
+         this product is for them. Raw quality codes, the backend console and
+         the fact tracer are opt-in now instead of a permanent tab sitting
+         between Rules and Learn. -->
+    <button class="sb-dev" id="devToggle" type="button" aria-pressed="false">Developer mode</button>
   </footer>
 
 </div>
@@ -592,20 +662,20 @@
      its own mount point, so there was never a reason for them to block. -->
 <script defer src="/static/lightweight-charts.js"></script>
 <!-- must load before any consumer: every module reads through it -->
-<script defer src="/static/ssdata.js?v=1"></script>
-<script defer src="/static/ticket-math.js?v=1"></script>
-<script defer src="/static/glossary.js?v=1"></script>
-<script defer src="/static/chart.js?v=1"></script>
-<script defer src="/static/shell.js?v=1"></script>
+<script defer src="/static/ssdata.js?v=3"></script>
+<script defer src="/static/ticket-math.js?v=3"></script>
+<script defer src="/static/glossary.js?v=3"></script>
+<script defer src="/static/chart.js?v=3"></script>
+<script defer src="/static/shell.js?v=3"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must
      never blank a surface that another owns. -->
-<script defer src="/static/playbooks.js?v=1"></script>
-<script defer src="/static/weather.js?v=1"></script>
-<script defer src="/static/lessons.js?v=1"></script>
-<script defer src="/static/funnel.js?v=1"></script>
-<script defer src="/static/tracer.js?v=1"></script>
-<script defer src="/static/wizard.js?v=1"></script>
-<script defer src="/static/edgeview.js?v=1"></script>
+<script defer src="/static/playbooks.js?v=3"></script>
+<script defer src="/static/weather.js?v=3"></script>
+<script defer src="/static/lessons.js?v=3"></script>
+<script defer src="/static/funnel.js?v=3"></script>
+<script defer src="/static/tracer.js?v=3"></script>
+<script defer src="/static/wizard.js?v=3"></script>
+<script defer src="/static/edgeview.js?v=3"></script>
 </body>
 </html>

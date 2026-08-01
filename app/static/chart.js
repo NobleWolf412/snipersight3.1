@@ -215,24 +215,28 @@ window.SSChart = (() => {
 
   /* ---------- the ticket maths ---------- */
   function recompute(){
-    const out = $('tkOut'), warn = $('tkWarn');
+    const out = $('tkOut'), key = $('tkKey'), warn = $('tkWarn');
     const e = levels.entry, tp = levels.tp, sl = levels.sl;
     const long = dir === 'LONG';
 
     // Say plainly whose numbers these are. Anything the operator touched is
     // excluded from the strategy record, so the label must never read "engine".
     const kind = base ? base.kind : 'none';
+    /* One word each. The long forms ("structure draft", "operator-modified")
+       overflowed the 268px head and wrapped it to two rows; the Why pane
+       already carries the full sentence for every one of these states. */
     $('tkSrc').textContent = kind === 'engine'
-      ? (modified ? 'operator-modified' : 'engine')
-      : kind === 'draft' ? (modified ? 'operator-modified' : 'structure draft')
-      : kind === 'seeded' ? 'not analysis' : 'no setup';
+      ? (modified ? 'edited' : 'engine')
+      : kind === 'draft' ? (modified ? 'edited' : 'draft')
+      : kind === 'seeded' ? 'manual' : 'no setup';
     $('tkSrc').className = 'chip ' +
       (kind === 'engine' && !modified ? 'chip-accent' : 'chip-amber');
     $('tkReset').textContent = base && base.kind === 'engine' ? 'Reset to engine' : 'Reset';
     $('tkReset').disabled = !base || !modified;
 
     if(e == null || tp == null || sl == null){
-      out.innerHTML = '<div><span class="k">status</span><span class="v">no levels</span></div>';
+      out.innerHTML = key.innerHTML =
+        '<div><span class="k">status</span><span class="v">no levels</span></div>';
       warn.hidden = true;
       return;
     }
@@ -242,7 +246,8 @@ window.SSChart = (() => {
        leverage});
 
     if(!m.ok){
-      out.innerHTML = '<div><span class="k">status</span><span class="v bad">invalid</span></div>';
+      out.innerHTML = key.innerHTML =
+        '<div><span class="k">status</span><span class="v bad">invalid</span></div>';
       warn.hidden = false; warn.innerHTML = m.errors.join('<br>');
       armable = false; refreshArm();
       return;
@@ -250,11 +255,22 @@ window.SSChart = (() => {
 
     const rrCls = m.rrNet == null ? '' : m.rrNet >= 2 ? 'good' : m.rrNet >= 1 ? 'warn' : 'bad';
     const row = (k, v, cls) => `<div><span class="k">${k}</span><span class="v ${cls || ''}">${v}</span></div>`;
+
+    /* The three that decide it, pinned outside the panes: what the trade pays
+       relative to what it risks, how big it is, and what it costs you if the
+       stop hits. Everything else is the working, and lives in the Numbers
+       pane — visible on request rather than occupying the panel by default. */
+    key.innerHTML =
+      row('R:R after fees', m.rrNet == null ? '—' : m.rrNet.toFixed(2), rrCls) +
+      row('size', m.size == null ? '—' : pf(m.size)) +
+      row('you risk', m.riskUsd == null ? '—' : usd(m.riskUsd));
+
+    /* The Numbers pane holds only the WORKING — the three figures the decision
+       rests on are pinned right beneath it, so repeating them here spent three
+       rows saying what is already permanently on screen an inch lower. */
     out.innerHTML =
       row('risk / unit', pf(m.riskPerUnit)) +
       row('R:R gross', m.rrGross.toFixed(2)) +
-      row('R:R after fees', m.rrNet == null ? '—' : m.rrNet.toFixed(2), rrCls) +
-      row('position size', m.size == null ? '—' : pf(m.size)) +
       row('notional', m.notional == null ? '—' : usd(m.notional)) +
       // Margin is what leverage actually moves. Shown next to notional so the
       // difference between "the position" and "what it costs to hold" is
@@ -269,9 +285,12 @@ window.SSChart = (() => {
 
     // reflect where the risk number came from, without touching the default
     $('tkRisk').value = m.riskUsd == null ? '' : Math.round(m.riskUsd);
+    /* "(engine default)" wrapped the label to a second line in the 268px
+       column; the disabled Default button already says the value IS the
+       default, so the suffix only flags the exceptional case. */
     $('tkRiskPct').textContent = m.riskPctEffective == null ? ''
       : '· ' + (m.riskPctEffective * 100).toFixed(2) + '% of account' +
-        (m.riskSource === 'operator' ? ' (yours)' : ' (engine default)');
+        (m.riskSource === 'operator' ? ' — yours' : '');
     $('tkRiskReset').disabled = m.riskSource !== 'operator';
 
     // The maths returns codes for breaches so the wording lives with the UI and
@@ -330,10 +349,12 @@ window.SSChart = (() => {
     slider.max = String(max);
     slider.value = String(m && m.leverage ? m.leverage : leverage);
     $('tkLevVal').textContent = slider.value + 'x';
-    $('tkLevMax').textContent = `· ${cfg.venue ? cfg.venue.key : ''} allows up to ${max}x`;
+    // "· phemex-perp allows up to 10x" wrapped the label to two lines in the
+    // 268px column; the venue is already named on the chart's venue chip.
+    $('tkLevMax').textContent = `· up to ${max}x`;
     $('tkLiq').textContent = (m && m.liquidation != null)
       ? `liquidation ${pf(m.liquidation)} · ${pf(m.liqDistance)} away`
-      : 'at 1x there is no liquidation — slide right to add leverage';
+      : 'no liquidation at 1x';
   }
 
   /* ---------- live price ----------
@@ -706,9 +727,12 @@ window.SSChart = (() => {
   function labelOverlays(n){
     document.querySelectorAll('#cOverlays button').forEach(b => {
       const k = b.dataset.o, c = n[k];
-      b.textContent = b.dataset.label + (c ? ' ' + c : '');
+      /* Name only. "Swings 42" put a fact-store row count on a toggle whose
+         only question is on/off — 42 of what, and is 42 good? The count keeps
+         living in the tooltip for whoever wants it. */
+      b.textContent = b.dataset.label;
       b.classList.toggle('empty', !c);
-      b.title = c ? `${c} on this timeframe`
+      b.title = c ? `${c} recorded on this timeframe`
                   : `nothing recorded for ${k} on ${sym} ${tf}`;
     });
   }
@@ -739,12 +763,22 @@ window.SSChart = (() => {
       // the operator to size a trade the engine already rejected.
       const d = (facts.riskF || []).filter(
         r => r.event === 'DECISION' && r.setup_id === setup.setup_id).pop();
+      /* The verdict names what happened to the TRADE, not which component ruled
+         on it. "RISK AUTHORITY: REJECTED / concurrent limit(2)" told the reader
+         the name of an internal module and then a raw enum; neither is a thing
+         a trader can act on. The refusals come from the shared dictionary that
+         funnel.js already owns. */
+      const plain = c => window.SSFunnel
+        ? SSFunnel.plain(c) : String(c).replace(/_/g, ' ').toLowerCase();
+      const HEAD = {APPROVED: 'CLEARED TO TRADE',
+                    REDUCED:  'CLEARED AT REDUCED SIZE',
+                    REJECTED: 'NOT TRADED'};
       const verdict = !d ? '' :
         `<div class="tk-verdict ${d.decision === 'APPROVED' ? 'ok'
            : d.decision === 'REDUCED' ? 'warn' : 'bad'}">` +
-        `<b>RISK AUTHORITY: ${d.decision}</b>` +
+        `<b>${HEAD[d.decision] || d.decision}</b>` +
         (d.decision === 'REJECTED'
-          ? `<br>${(d.reasons || []).join(', ').replaceAll('_', ' ').toLowerCase()}` +
+          ? `<br>${(d.reasons || []).map(plain).join('; ')}` +
             '<br>This setup would not be traded. Anything below is analysis only.'
           : `<br>sizes ${usd(+d.risk_usd)} of risk`) + '</div>';
       $('tkWhy').innerHTML = verdict +
@@ -759,9 +793,8 @@ window.SSChart = (() => {
       $('tkWhy').innerHTML =
         '<em>No engine setup — drafted from live structure</em>' +
         draftPlan.basis.map(b => '· ' + b).join('<br>') +
-        '<br><br>A starting point anchored to real levels, not an engine ' +
-        'setup — the engine has not judged this trade. Yours to change, and ' +
-        'nothing you do here counts toward the strategy record.';
+        '<br><br>The engine has not judged this trade. Arming it writes to ' +
+        'your paper book, never the strategy record.';
     }else{
       /* Nothing near price. The ruler stays ONLY as something to drag, and it
          now says outright that it is not analysis — previously it read as a
@@ -875,6 +908,16 @@ window.SSChart = (() => {
       pickerScope = pickerScope === 'scanned' ? 'all' : 'scanned';
       renderPicker();
     });
+    /* Ticket panes. Grouping only helps if the group you are in is obvious, so
+       the tab carries the state and the pane merely follows it. */
+    $('tkTabs').addEventListener('click', e => {
+      const b = e.target.closest('button[data-p]');
+      if(!b) return;
+      $('tkTabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+      document.querySelectorAll('.tk-pane').forEach(p =>
+        p.classList.toggle('on', p.dataset.p === b.dataset.p));
+    });
+
     $('cAnalyse').addEventListener('click', async () => {
       const b = $('cAnalyse'), was = b.textContent;
       if(!sym || b.disabled) return;
@@ -883,17 +926,21 @@ window.SSChart = (() => {
         const r = await fetch('/api/analyse?symbol=' + encodeURIComponent(sym),
                               {method: 'POST'});
         const d = await r.json().catch(() => ({}));
-        if(r.status === 404){ b.textContent = 'no candles'; return; }
+        if(r.status === 404){ b.textContent = 'no price history'; return; }
         if(!r.ok && r.status !== 207){ b.textContent = 'failed'; return; }
         // The facts just changed underneath the cache, so a plain reload would
         // redraw the pre-analysis answer for up to 25 seconds.
         for(const p of ['/api/facts', '/api/candles', '/api/draft'])
           window.SSData.invalidate(p);
         await load();
+        /* The button reports whether the CHART changed, not how many rows the
+           analysis wrote. `+412 facts` is a true number about the fact store
+           and an unanswerable one about the trade: nobody can tell whether 412
+           is a lot, or which of them they are now looking at. */
         const n = Object.values(d.new_facts || {}).reduce((s, v) => s + v, 0);
-        b.textContent = (d.errors && d.errors.length) ? `partial · ${n} facts`
+        b.textContent = (d.errors && d.errors.length) ? 'partly updated'
           : n === 0 ? 'already current'
-          : `+${n} facts`;
+          : 'chart updated';
       }catch(err){
         b.textContent = 'unreachable';
       }finally{

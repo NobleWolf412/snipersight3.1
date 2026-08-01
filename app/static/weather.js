@@ -205,15 +205,23 @@
         <span class="chip">observational</span>
       </summary>
       ${rows.join('')}
+      <!-- The caveat is the point of this line and it stays. How many candles
+           were read, and which build read them, are not part of it: they told
+           the reader nothing about how much to trust the reading, which is the
+           only question the sentence exists to answer. Which SERIES it came
+           from does bear on that, so that stays too. -->
       <div class="cy-foot">Never consumed by any trading engine — nothing here
         opens, sizes or blocks a trade. Read from
-        <b>${esc(c.source_symbol || '—')}</b>, ${esc(String(c.candles || '—'))} daily
-        candles${c.last_candle_ts ? ' to ' + D(c.last_candle_ts) : ''} ·
-        ${esc(c.algo_version || '')}. A different Bitcoin series gives a slightly
+        <b>${esc(c.source_symbol || '—')}</b>${
+          c.last_candle_ts ? ', current to ' + D(c.last_candle_ts) : ''}.
+        A different Bitcoin series gives a slightly
         different reading; this is one series, not a fact about Bitcoin.</div>
     </details>`;
   }
 
+  /* The engine build stamps (regime and strategy versions) used to sit under
+     the weather grid, on the surface a trader opens first. They are provenance
+     for whoever is debugging a reading, not for whoever is reading it. */
   function render(d) {
     lastWeather = d;
     const rows = showAll ? d.symbols : d.symbols.slice(0, COLLAPSED);
@@ -281,8 +289,7 @@
           ${hidden > 0 || showAll
             ? `<button class="btn" id="wxMore">${showAll ? 'Show fewer' : 'Show all ' + rowTotal}</button>`
             : ''}
-          <span class="wx-ver" title="the engine versions that produced these readings">${
-            esc(d.regime_version)} &middot; ${esc(d.strategy_version)}</span>
+
         </div>
       </details>
       ${cycleLede(cyc, backdropOpen)}

@@ -239,8 +239,7 @@
         Planned-playbook percentages are counted from
         <b>${num(s.total || 0)}</b> recorded
         <span class="term" data-t="rejection">rejections</span>
-        (${esc(s.basis || 'no corpus')}), not written down.
-        Engine <b>${esc(data.setup_version || '?')}</b>.
+        , not written down.
       </div>`;
   }
 
