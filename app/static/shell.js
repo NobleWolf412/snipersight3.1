@@ -175,6 +175,7 @@
       $('baselineChip').textContent = o.baseline.label || 'forward window';
     }
     renderDeck(active, o.rejection_funnel || {});
+    renderRadar(o.approaching);
     renderFunnel(o.rejection_funnel || {});
   }
 
@@ -521,6 +522,53 @@
             class="t-mono"><span style="color:var(--fg-3)" title="${esc(r)}">${plainReason(r)}</span>
             <b style="color:var(--amber)">${fmt(n)}</b></div>`).join('')
       : '<span class="t-mono" style="color:var(--fg-4)">no rejections recorded yet</span>';
+  }
+
+  /* Approaching: setups still FORMING — price closing on a zone, no verdict
+     yet. The engine sends these to desktop notifications and the feed drops
+     them (it is VALIDATED-only by construction), so the cockpit never showed
+     the one signal that says what might happen NEXT.
+
+     The sentence is composed from the payload's structured fields, not from
+     its machine `why` line ("price 1.8 ATR from DEMAND zone … · prospective
+     PULLBACK would pass all gates · watching") — the zone bounds are the only
+     thing lifted out of it, because they exist nowhere else on the payload.
+
+     The meter maps distance in ATR onto the zone-search radius (3 ATR): full
+     means price is at the zone's edge. Watch-only: nothing here can be armed,
+     so the only control is the chart. */
+  function renderRadar(list){
+    const panel = $('radarPanel'), box = $('radar');
+    list = list || [];
+    if(!list.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
+    panel.style.display = '';
+    $('radarCount').textContent = list.length + ' near a zone';
+    box.innerHTML = list.map(s => {
+      const long = s.direction === 'LONG';
+      const d = parseFloat(s.distance_atr);
+      const fill = isNaN(d) ? 10 : Math.max(8, Math.min(96, (1 - d / 3) * 100));
+      const zm = /\b(SUPPLY|DEMAND) zone ([\d.,]+-[\d.,]+)/.exec(s.why || '');
+      const zone = zm ? `${zm[1].toLowerCase()} at ${zm[2]}` : 'a zone the engine is watching';
+      const verb = long ? 'Pulling back toward' : 'Rising into';
+      return `<div class="radar-row">
+        <div>
+          <div class="radar-sym">${esc(String(s.symbol).replace('-USD',''))}</div>
+          <div class="t-label" style="margin-top:3px">${s.tf} · ${long ? 'long' : 'short'} · ${playbookLabel(s.strategy)}</div>
+        </div>
+        <div>
+          <div class="radar-say">${verb} <b>${esc(zone)}</b>. Becomes a trade only if price
+            gets there and a candle confirms.</div>
+          <div class="radar-meter"><i style="width:${fill.toFixed(0)}%"></i></div>
+        </div>
+        <div class="radar-dist">${isNaN(d) ? '—' : d.toFixed(1)}<span class="t-sub">ATR away</span>
+          <button class="btn" style="margin-top:6px" data-rsym="${esc(s.symbol)}" data-rtf="${esc(s.tf)}">Chart</button></div>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('button[data-rsym]').forEach(b =>
+      b.addEventListener('click', () => {
+        go('chart');
+        if(window.SSChart) SSChart.open(b.dataset.rsym, b.dataset.rtf);
+      }));
   }
 
   /* Open trades, drawn on the surface that asks what to do next.

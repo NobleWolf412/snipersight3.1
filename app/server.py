@@ -5,6 +5,7 @@ Run: uvicorn server:app --port 8422
 """
 import json
 import threading
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -1539,17 +1540,33 @@ def overview():
         # The output is byte-identical; only the number of round trips changed.
         feed = []
         last_state: dict = {}
+        # Setups still on approach. `eligible` is VALIDATED-only by definition,
+        # so a setup whose latest state is FORMING never reached the feed at
+        # all — the engine's own "price is closing on a zone" signal went to
+        # desktop notifications and nowhere in the cockpit. Same last-write-
+        # wins walk, second dict; a FORMING fact that later upgraded or was
+        # cancelled is overwritten here and never shown.
+        forming_last: dict = {}
         for sym, tf, mt, raw in con.execute(
                 "SELECT symbol, tf, market_time, payload FROM facts "
                 "WHERE kind='setup' AND algo_version IN (?,?) "
-                "ORDER BY confirmed_at, id",
-                (setups.SETUP_VERSION, scalein.SCALE_VERSION)).fetchall():
+                "AND confirmed_at>=? ORDER BY confirmed_at, id",
+                (setups.SETUP_VERSION, scalein.SCALE_VERSION,
+                 baseline["started_at"])).fetchall():
             p = json.loads(raw)
             if p.get("setup_id") not in eligible:
+                forming_last[p.get("setup_id")] = {"symbol": sym, "tf": tf,
+                                                   "market_time": mt, **p}
                 continue
             # later rows win, matching the previous loop's last-write-wins
             last_state[p["setup_id"]] = {"symbol": sym, "tf": tf,
                                          "market_time": mt, **p}
+        now_ts = int(time.time())
+        approaching = sorted(
+            (st for st in forming_last.values()
+             if st.get("state") == "FORMING"
+             and int(st.get("expires_at_ts") or 0) > now_ts),
+            key=lambda s: float(s.get("distance_atr") or 9e9))[:8]
         outs: dict = {}
         for (raw,) in con.execute(
                 "SELECT payload FROM facts WHERE kind='exec' AND algo_version=? "
@@ -1601,6 +1618,7 @@ def overview():
             rejection_funnel[reason] = rejection_funnel.get(reason, 0) + 1
 
         return {"baseline": baseline, "symbols": symbols, "feed": feed[:40], "scanner": scanner,
+                "approaching": approaching,
                 "universe_counts": universe_counts,
                 "rejection_funnel": rejection_funnel,
                 "engines": [{"engine": e, "last_run": t, "ms": ms}

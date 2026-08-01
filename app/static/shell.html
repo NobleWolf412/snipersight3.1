@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SniperSight</title>
 <link rel="icon" href="/static/assets/snipersight-logo.png">
-<link rel="stylesheet" href="/static/ss.css?v=3">
+<link rel="stylesheet" href="/static/ss.css?v=5">
 </head>
 <body data-mode="idle">
 
@@ -133,6 +133,21 @@
           <div class="skel" style="height:58px"></div>
           <div class="skel" style="height:58px"></div>
         </div></div>
+      </div>
+
+      <!-- Approaching: setups still forming — price closing on a zone but not
+           there yet. The engine has always produced this signal (it went to
+           desktop notifications) and the cockpit dropped it: the feed is
+           VALIDATED-only, so the most engaging near-term thing the scanner
+           knows was invisible on the surface that asks "what should I do
+           right now". Watch-only by design: a forming setup has no verdict
+           and no ticket, so the row offers the chart and nothing to arm. -->
+      <div class="panel" id="radarPanel" style="margin-bottom:var(--lg);display:none">
+        <div class="panel-head">
+          <h2 class="t-section">Approaching</h2>
+          <span class="chip chip-amber" id="radarCount" style="margin-left:auto">—</span>
+        </div>
+        <div id="radar"></div>
       </div>
 
       <!-- Market Weather: regime x timeframe, and what it MEANS. weather.js owns it. -->
@@ -662,20 +677,20 @@
      its own mount point, so there was never a reason for them to block. -->
 <script defer src="/static/lightweight-charts.js"></script>
 <!-- must load before any consumer: every module reads through it -->
-<script defer src="/static/ssdata.js?v=3"></script>
-<script defer src="/static/ticket-math.js?v=3"></script>
-<script defer src="/static/glossary.js?v=3"></script>
-<script defer src="/static/chart.js?v=3"></script>
-<script defer src="/static/shell.js?v=3"></script>
+<script defer src="/static/ssdata.js?v=5"></script>
+<script defer src="/static/ticket-math.js?v=5"></script>
+<script defer src="/static/glossary.js?v=5"></script>
+<script defer src="/static/chart.js?v=5"></script>
+<script defer src="/static/shell.js?v=5"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must
      never blank a surface that another owns. -->
-<script defer src="/static/playbooks.js?v=3"></script>
-<script defer src="/static/weather.js?v=3"></script>
-<script defer src="/static/lessons.js?v=3"></script>
-<script defer src="/static/funnel.js?v=3"></script>
-<script defer src="/static/tracer.js?v=3"></script>
-<script defer src="/static/wizard.js?v=3"></script>
-<script defer src="/static/edgeview.js?v=3"></script>
+<script defer src="/static/playbooks.js?v=5"></script>
+<script defer src="/static/weather.js?v=5"></script>
+<script defer src="/static/lessons.js?v=5"></script>
+<script defer src="/static/funnel.js?v=5"></script>
+<script defer src="/static/tracer.js?v=5"></script>
+<script defer src="/static/wizard.js?v=5"></script>
+<script defer src="/static/edgeview.js?v=5"></script>
 </body>
 </html>

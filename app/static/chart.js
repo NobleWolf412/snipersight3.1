@@ -296,10 +296,19 @@ window.SSChart = (() => {
     // The maths returns codes for breaches so the wording lives with the UI and
     // the arithmetic stays testable without asserting on prose.
     const WORDING = {
+      /* The check (ticket-math.js) compares margin at the CHOSEN leverage
+         against equity; this sentence used to quote buying power at the venue
+         MAXIMUM, so at 1x it claimed $30,699 exceeds $97,105 — a false
+         statement about a true breach. It now names the numbers that were
+         actually compared, and the fix that is in the operator's hands. */
       NOTIONAL_EXCEEDS_BUYING_POWER: () =>
-        `Notional ${usd(m.notional)} exceeds buying power ` +
-        `(${usd(equity * cfg.max_leverage)} at ${cfg.max_leverage}x). ` +
-        'The risk authority would cut this size.',
+        `A ${usd(m.notional)} position at ${m.leverage}x needs ${usd(m.margin)} ` +
+        `of margin — more than the ${usd(equity)} account. A tight stop sizes ` +
+        'a big position for the same risk. ' +
+        (m.leverage < cfg.max_leverage
+          ? `Raise leverage on the Size tab (up to ${cfg.max_leverage}x) or the ` +
+            'risk authority will cut this size.'
+          : 'The risk authority will cut this size.'),
       RISK_EXCEEDS_TOTAL_BUDGET: () =>
         `Risking ${usd(m.riskUsd)} on one trade is more than the whole ` +
         `open-risk budget (${usd(equity * cfg.max_total_risk_pct)}). ` +
