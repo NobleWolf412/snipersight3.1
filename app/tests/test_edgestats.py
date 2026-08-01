@@ -189,7 +189,13 @@ class TestSmallSampleRefusal(TempStore):
         self.assertFalse(rep["by_tf"]["1H"]["sufficient"])
         self.assertIsNone(rep["by_tf"]["1H"]["mean_r"])
         self.assertIsNone(rep["by_tf"]["1H"]["bootstrap"])
-        self.assertIn("below the 10-trade floor", rep["by_tf"]["1H"]["refusal"])
+        # Asserts the PROPERTY, not the phrasing: the refusal names the floor
+        # and says why a number is being withheld. edgeview.js prints this
+        # string verbatim on a trader surface, so the wording is allowed to be
+        # plain — what must not change is that it refuses and explains.
+        refusal = rep["by_tf"]["1H"]["refusal"]
+        self.assertIn("10 trades", refusal)
+        self.assertIn("these few trades", refusal)
         self.assertTrue(rep["by_tf"]["1D"]["sufficient"])
 
 
@@ -239,7 +245,14 @@ class TestBreakevenFee(TempStore):
         self.assertTrue(be["no_fee_rescues_it"])
         self.assertFalse(
             next(v for v in be["venues"] if v["venue"] == "coinbase-spot")["survives"])
-        self.assertIn("already losing at ZERO fees", rep["verdict"]["text"])
+        # The property, not the phrasing: the verdict must say that removing
+        # fees entirely would not rescue this book. edgeview.js prints this
+        # sentence verbatim on a trader surface, so the words are allowed to
+        # be plain — what must survive is the claim.
+        text = rep["verdict"]["text"]
+        self.assertIn("ZERO fees", text)
+        self.assertIn("slippage", text)
+        self.assertIn("Fees are not", text)
 
 
 class TestFeeScenarios(TempStore):

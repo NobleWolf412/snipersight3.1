@@ -116,7 +116,7 @@
         // Verbatim. The engine wrote a sentence explaining the refusal; this
         // panel does not paraphrase it and does not blank it.
         return `<div class="ev-tf t-mono">
-          <b>${esc(tf)}</b><span style="color:var(--fg-4)">n=${s.n ?? 0}</span>
+          <b>${esc(tf)}</b><span style="color:var(--fg-4)">${s.n ?? 0} trades</span>
           <span class="ev-tf-none t-label">${esc(s.refusal || 'no verdict reported')}</span>
         </div>`;
       }
@@ -132,7 +132,7 @@
         : '';
       return `<div class="ev-tf t-mono">
         <b>${esc(tf)}</b>
-        <span style="color:var(--fg-4)">n=${s.n}</span>
+        <span style="color:var(--fg-4)">${s.n} trades</span>
         <span style="color:var(--fg-2)">${num(s.mean_r, 3)} R</span>
         <div class="ev-tf-bar">
           <div class="ev-tf-track"></div>
@@ -182,8 +182,11 @@
        If the engine did not return a verdict, REFUSE. Falling back to
        locally-written prose is how the second authority came back. */
     const ev = d.verdict || {};
+    // The HEADLINE is the engine's too — authored beside the sentence it heads
+    // so the two cannot drift. This printed `ev.code` raw, so the panel's
+    // conclusion was a constant: "INDISTINGUISHABLE".
     const verdict = ev.text
-      ? `<b>${esc(ev.code || '')}</b> ${esc(ev.text)}`
+      ? `<b>${esc(ev.headline || ev.code || '')}</b> ${esc(ev.text)}`
       : '<span style="color:var(--amber)">The engine did not return a verdict for '
         + 'this book. The figures above are shown; the sentence that interprets '
         + 'them is not, because this panel does not write one.</span>';
@@ -235,8 +238,8 @@
       <span class="term" data-t="baseline">baseline</span> — not the
       <span class="term" data-t="forwardWindow">forward window</span> the tiles
       above are scoped to. That is why this panel can show hundreds of trades
-      while the window above shows few, or none. A confidence interval needs
-      far more trades than one window usually holds.</div>`;
+      while the window above shows few, or none. Telling a real edge from a
+      lucky run needs far more trades than one window usually holds.</div>`;
 
     panel(`
       ${eraBand}
@@ -244,8 +247,9 @@
         <div class="tile"><span class="t-label">Closed trades</span>
           <span class="t-metric">${b.n ?? '—'}</span>
           <span class="t-sub">${esc(denom)}</span></div>
-        <div class="tile"><span class="t-label"><span class="term" data-t="expectancy">Expectancy</span> per trade</span>
-          <span class="t-metric" style="color:${sign(exp)}">${num(exp)} R</span></div>
+        <div class="tile"><span class="t-label"><span class="term" data-t="expectancy">Average result per trade</span></span>
+          <span class="t-metric" style="color:${sign(exp)}">${num(exp)} R</span>
+          <span class="t-sub">1 R = what you planned to risk on that trade</span></div>
         <div class="tile"><span class="t-label">Win rate</span>
           <span class="t-metric">${b.win_rate == null ? '—' : (b.win_rate * 100).toFixed(1) + '%'}</span></div>
         <div class="tile"><span class="t-label">Worst losing streak</span>
@@ -253,18 +257,31 @@
       </div>
 
       ${hasCI ? ciBar(lo, hi, exp) : ''}
-      ${hasCI ? `<div class="t-label" style="color:var(--fg-3)">
-          95% confidence interval ${num(lo)} R to ${num(hi)} R ·
-          probability the edge is positive <b style="color:${crosses ? 'var(--amber)' : sign(exp)}">
-          ${p == null ? '—' : (p * 100).toFixed(1) + '%'}</b>
-          · ${ci.resamples ? Number(ci.resamples).toLocaleString() : '—'} resamples</div>` : ''}
+      <!-- Body prose, not the all-caps mono label this used to be: these are
+           sentences that have to be READ, and this file's own era-band rule
+           says caps destroy word shape at sentence length.
+
+           "Probability the edge is positive" was the worst line on the panel.
+           edgestats.py counts how many resampled books came out above break
+           even — that is a property of the resampling, not the probability
+           that the strategy works, and stating it as one overclaims. It now
+           says what was actually counted. -->
+      ${hasCI ? `<div class="t-body" style="color:var(--fg-3)">
+          Allowing for luck, the <span class="term" data-t="confidenceRange">honest range</span>
+          for the true average runs from <b>${num(lo)} R</b> to <b>${num(hi)} R</b> per trade.
+          <br><span style="color:var(--fg-4)">Measured by rebuilding this book
+          ${ci.resamples ? Number(ci.resamples).toLocaleString() : 'thousands of'} times from
+          its own trades, drawn at random with repeats. ${
+          p == null ? '' : `<b style="color:${crosses ? 'var(--amber)' : sign(exp)}">${
+          (p * 100).toFixed(1)}%</b> of those rebuilds came out above break even.`}</span></div>` : ''}
 
       <div class="ev-verdict t-body">${verdict}</div>
       ${costLine}
       ${byTimeframe(d.by_tf, d.confound)}
 
       ${(d.scenarios || []).length ? `<table class="ev-scn t-mono">
-        <tr><th>fee scenario</th><th>expectancy</th><th>P(&gt;0)</th></tr>
+        <tr><th>if fees were…</th><th>average per trade</th>
+          <th title="share of the rebuilt books that came out above break even">above break even</th></tr>
         ${d.scenarios.map(s => `<tr><td>${esc(s.scenario || '')}</td>
           <td style="color:${sign(s.mean_r)}">${num(s.mean_r)} R</td>
           <td>${(s.bootstrap||{}).p_gt_zero == null ? '—' : (s.bootstrap.p_gt_zero * 100).toFixed(1) + '%'}</td></tr>`).join('')}
@@ -285,7 +302,11 @@
         d.caveats.map(esc).join('<br>')}</div>` : ''}
     `);
     const v = document.getElementById('evVer');
-    if (v) v.textContent = d.algo_version || '—';
+    // The build stamp read "exec-v0.19-draft" on a trader surface. What the
+    // reader needs from it is that these numbers are recorded rather than
+    // editable; the constant itself is provenance and lives in the title.
+    if (v) { v.textContent = 'recorded, not editable';
+             v.title = 'measured from trades produced by ' + (d.algo_version || 'the engine'); }
   }
 
   async function load() {

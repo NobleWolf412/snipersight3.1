@@ -70,7 +70,9 @@ def test_performance_rows_expose_every_field_the_page_reads():
     assert reads, "perfRows reads nothing off the row — the parse is broken"
 
     payload = _client().get("/api/performance").json()
-    buckets = ["by_symbol", "by_strategy", "shadow_by_symbol", "shadow_by_strategy"]
+    buckets = ["by_symbol", "by_strategy",
+               "untaken_by_symbol", "untaken_by_strategy",
+               "shadow_by_symbol", "shadow_by_strategy"]
     rows = [r for b in buckets for r in (payload.get(b) or [])]
     if not rows:
         pytest.skip("no closed trades in this store — nothing to contract-check")
@@ -98,6 +100,42 @@ def test_performance_never_reports_a_loss_as_zero():
         assert "sum_r" in r and r["sum_r"] is not None, (
             f"row {r.get('key')} carries no sum_r; the page would render 0.00R")
         assert r.get("n"), f"row {r.get('key')} has trades but n={r.get('n')}"
+
+
+def test_untaken_and_shadow_rows_report_no_dollars_rather_than_zero():
+    """The same rule, on the rows the population split added.
+
+    A trade the account never funded has no dollar result. Emitting 0.0 would
+    render as break-even — the exact confusion this file already exists to
+    prevent one row up. Absent, not zero.
+    """
+    payload = _client().get("/api/performance").json()
+    for b in ("untaken_by_symbol", "untaken_by_strategy",
+              "shadow_by_symbol", "shadow_by_strategy"):
+        for r in payload.get(b) or []:
+            assert r["pnl_usd"] is None, (
+                f"{b} row {r.get('key')} reports pnl_usd={r['pnl_usd']}; money "
+                f"that was never at risk must read as absent, not as zero")
+            assert r.get("reasons"), (
+                f"{b} row {r.get('key')} does not say WHY it was not taken")
+
+
+def test_the_traded_table_points_at_what_it_excluded():
+    """`untaken_n` on a taken row is a pointer, so it must equal what the
+    reader will actually find in the untaken block — shadow trades live in
+    their own block and must not be counted into it."""
+    payload = _client().get("/api/performance").json()
+    for taken, untaken in (("by_symbol", "untaken_by_symbol"),
+                           ("by_strategy", "untaken_by_strategy")):
+        rows = payload.get(taken) or []
+        for r in rows:
+            assert "untaken_n" in r, f"{taken} row {r.get('key')} hides its exclusion"
+        pointed = sum(r["untaken_n"] for r in rows)
+        found = sum(r["n"] for r in (payload.get(untaken) or []))
+        assert pointed <= found, (
+            f"{taken} promises {pointed} untaken trades but {untaken} holds "
+            f"{found} — the pointer overcounts, most likely by folding in "
+            f"shadow trades that are not in that block")
 
 
 def test_shadow_trades_are_not_in_the_track_record():

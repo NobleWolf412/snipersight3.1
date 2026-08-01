@@ -121,7 +121,10 @@ class PlaybookCatalogueCase(unittest.TestCase):
         self.assertEqual(rec["n"], 3)
         self.assertEqual(rec["win_pct"], 33)
         self.assertEqual(rec["sum_r"], -1.5)
-        self.assertEqual(rec["sized"], 3)
+        # `sized` is gone: the taken bucket IS the sized trades, so the
+        # field could never disagree with n and would eventually be read
+        # as though it meant something different.
+        self.assertEqual(rec["untaken_n"], 0)
         self.assertEqual(rec["pnl_usd"], -300.0)
 
     def test_the_record_matches_performance_exactly(self):
@@ -137,7 +140,7 @@ class PlaybookCatalogueCase(unittest.TestCase):
             cards = self.by_key(server.playbooks())
         rows = {r["key"]: r for r in perf["by_strategy"]}
         for name, key in (("PULLBACK", "pullback"), ("REVERSAL", "reversal")):
-            for field in ("n", "win_pct", "sum_r", "sized", "pnl_usd"):
+            for field in ("n", "win_pct", "sum_r", "untaken_n", "pnl_usd"):
                 self.assertEqual(cards[key]["record"][field], rows[name][field],
                                  f"{key}.{field} diverged from /api/performance")
 

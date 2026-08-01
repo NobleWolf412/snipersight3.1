@@ -796,19 +796,44 @@ def system_restart(target: str = Query("both", pattern="^(server|scanner|both)$"
 
 @app.get("/api/performance")
 def performance():
-    """Per-symbol / per-strategy paper performance. R-stats cover every
-    simulated trade; $-PnL only trades the risk authority actually sized."""
+    """Per-symbol / per-strategy paper performance, PARTITIONED BY WHETHER THE
+    ACCOUNT ACTUALLY TOOK THE TRADE.
+
+    This used to mix two populations inside one row: n/win_pct/pf/sum_r counted
+    every trade the simulator closed, while sized/pnl_usd counted only the ones
+    the risk authority funded. The row described nothing — no arithmetic got you
+    from one column to the next. Live, BTCUSDT read "2 trades, 50% win, +1.77R"
+    beside "-$19.46", because a +1.87R trade the account was never allowed to
+    take was summed into the R column and correctly absent from the dollars.
+    The Trade Journal, three panels above, showed the same symbol at -0.10R.
+
+    Every exec fact now answers one question — did the risk authority put money
+    behind it? — and everything else (untradeable venue, concurrency cap,
+    point-in-time universe) is the REASON it did not, which belongs on the row
+    rather than in a bucket name:
+
+        by_*          the account's book: trades it funded
+        untaken_*     found on a tradeable symbol, never funded
+        shadow_*      found on a venue that was never tradeable at all
+
+    Every field in a row describes the same population, so the row reconciles.
+    """
     con = store.connect()
     try:
         baseline, eligible = _baseline_setup_ids(con)
-        sized = {}   # setup_id -> risk_usd for APPROVED/REDUCED
+        sized = {}    # setup_id -> risk_usd for APPROVED/REDUCED
+        refused = {}  # setup_id -> the reason it was not funded
         for sym in universe.all_tracked_symbols(con):
             for tf in ("15m", "1H", "4H", "1D", "1W"):
                 for r in store.get_facts(con, sym, tf, "risk", risk.RISK_VERSION):
                     p = json.loads(r["payload"])
-                    if (p.get("event") == "DECISION" and p.get("setup_id") in eligible
-                            and p["decision"] in ("APPROVED", "REDUCED")):
+                    if p.get("event") != "DECISION" or p.get("setup_id") not in eligible:
+                        continue
+                    if p["decision"] in ("APPROVED", "REDUCED"):
                         sized[p["setup_id"]] = float(p["risk_usd"])
+                    else:
+                        rs = p.get("reasons") or []
+                        refused[p["setup_id"]] = rs[0] if rs else "REJECTED"
 
         # A SHADOW symbol is imported and derived but never tradeable, and
         # `risk.py` rejects every one of its intents with
@@ -825,9 +850,11 @@ def performance():
 
         def blank():
             return {"n": 0, "wins": 0, "sum_r": 0.0, "pos_r": 0.0, "neg_r": 0.0,
-                    "sized": 0, "pnl_usd": 0.0}
-        by_sym, by_strat = {}, {}
-        sh_sym, sh_strat = {}, {}
+                    "pnl_usd": 0.0, "reasons": {}}
+        by_sym, by_strat = {}, {}          # taken — the account's book
+        un_sym, un_strat = {}, {}          # tradeable symbol, never funded
+        sh_sym, sh_strat = {}, {}          # untradeable venue
+        untaken_n = {}                     # taken key -> trades it did NOT fund
         for sym in universe.all_tracked_symbols(con):
             is_shadow = sym in shadow
             for tf in ("15m", "1H", "4H", "1D", "1W"):
@@ -836,32 +863,84 @@ def performance():
                     if p["setup_id"] not in eligible or p["outcome"] == "MISSED":
                         continue
                     rm = float(p["r_multiple"])
-                    tgt = ((sh_sym, sh_strat) if is_shadow else (by_sym, by_strat))
+                    ru = sized.get(p["setup_id"])
+                    # Route on MONEY first, venue second. Routing on shadow
+                    # first would file a funded trade under "never tradeable"
+                    # if its venue were demoted later in the window — the
+                    # membership is read at request time, the trade is not.
+                    if ru is not None:
+                        tgt = (by_sym, by_strat)
+                    elif is_shadow:
+                        tgt = (sh_sym, sh_strat)
+                    else:
+                        tgt = (un_sym, un_strat)
                     for key, bucket in ((sym, tgt[0]), (p["strategy"], tgt[1])):
                         a = bucket.setdefault(key, blank())
                         a["n"] += 1
                         a["wins"] += rm > 0
                         a["sum_r"] += rm
                         a["pos_r" if rm > 0 else "neg_r"] += rm
-                        ru = sized.get(p["setup_id"])
                         if ru is not None:
-                            a["sized"] += 1
                             a["pnl_usd"] += ru * rm
+                        else:
+                            why = refused.get(p["setup_id"], "not funded")
+                            a["reasons"][why] = a["reasons"].get(why, 0) + 1
+                            # Counts the UNTAKEN bucket only, never shadow.
+                            # This number is a pointer — "1 more found, not
+                            # funded" sends the reader to the untaken block, so
+                            # it has to equal what they will find there. Shadow
+                            # has its own block and its own count; folding it in
+                            # made by_strategy REVERSAL promise 5 rows against
+                            # an untaken block holding 2.
+                            if not is_shadow:
+                                untaken_n[key] = untaken_n.get(key, 0) + 1
 
-        def rows(bucket, is_shadow=False):
+        def rows(bucket, population):
+            taken = population == "taken"
             out = []
             for k, a in bucket.items():
                 pf = round(a["pos_r"] / abs(a["neg_r"]), 2) if a["neg_r"] < 0 and a["pos_r"] > 0 else None
-                out.append({"key": k, "n": a["n"], "win_pct": round(100 * a["wins"] / a["n"]) if a["n"] else 0,
-                            "pf": pf, "sum_r": round(a["sum_r"], 2),
-                            "sized": a["sized"], "pnl_usd": round(a["pnl_usd"], 2),
-                            "shadow": is_shadow})
+                row = {"key": k, "n": a["n"],
+                       "win_pct": round(100 * a["wins"] / a["n"]) if a["n"] else 0,
+                       "pf": pf, "sum_r": round(a["sum_r"], 2),
+                       # NEVER 0.0 off the book. Zero renders as break-even, and
+                       # a trade that was never funded did not break even — it
+                       # did not happen. The empty-window rule, on a new row.
+                       "pnl_usd": round(a["pnl_usd"], 2) if taken else None,
+                       "population": population,
+                       # kept for existing consumers that branch on it
+                       "shadow": population == "shadow"}
+                if taken:
+                    # The exclusion travels WITH the figure it changes the
+                    # meaning of: "1 trade, -0.10R" reads very differently once
+                    # you know one more was found and not funded. The COUNT
+                    # only — an R from the other population inside the traded
+                    # table is the exact bug this partition removes.
+                    row["untaken_n"] = untaken_n.get(k, 0)
+                else:
+                    row["reasons"] = dict(sorted(a["reasons"].items(),
+                                                 key=lambda kv: -kv[1]))
+                out.append(row)
             out.sort(key=lambda x: x["sum_r"])
             return out
+
+        def totals(bucket, population):
+            n = sum(a["n"] for a in bucket.values())
+            return {"n": n,
+                    "sum_r": round(sum(a["sum_r"] for a in bucket.values()), 2),
+                    "pnl_usd": (round(sum(a["pnl_usd"] for a in bucket.values()), 2)
+                                if population == "taken" else None)}
+
         return {"baseline": baseline,
-                "by_symbol": rows(by_sym), "by_strategy": rows(by_strat),
-                "shadow_by_symbol": rows(sh_sym, True),
-                "shadow_by_strategy": rows(sh_strat, True),
+                "by_symbol": rows(by_sym, "taken"),
+                "by_strategy": rows(by_strat, "taken"),
+                "untaken_by_symbol": rows(un_sym, "untaken"),
+                "untaken_by_strategy": rows(un_strat, "untaken"),
+                "shadow_by_symbol": rows(sh_sym, "shadow"),
+                "shadow_by_strategy": rows(sh_strat, "shadow"),
+                "totals": {"taken": totals(by_sym, "taken"),
+                           "untaken": totals(un_sym, "untaken"),
+                           "shadow": totals(sh_sym, "shadow")},
                 "shadow_symbols": sorted(shadow)}
     finally:
         con.close()
@@ -986,8 +1065,12 @@ def playbooks():
         if r is None:
             # No closed trade under this baseline. n=0 with a null win rate,
             # because a "0% win rate" is a claim about trades that happened.
+            # The record now counts only trades the account FUNDED, matching
+            # /api/performance's taken bucket — a catalogue that counted the
+            # engine's unfunded research would advertise a strategy on trades
+            # the operator was never allowed to take.
             return {"n": 0, "win_pct": None, "pf": None, "sum_r": 0.0,
-                    "sized": 0, "pnl_usd": 0.0}
+                    "pnl_usd": 0.0, "untaken_n": 0, "population": "taken"}
         return {k: v for k, v in r.items() if k != "key"}
 
     def gap(key):

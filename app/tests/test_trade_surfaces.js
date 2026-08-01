@@ -136,8 +136,41 @@ ok('the radar dates its distance instead of asserting it', () => {
 ok('Results "By Strategy" runs keys through the label map', () => {
   assert(/function perfRows\(rows, fmtKey\)/.test(JS));
   assert(JS.includes('perfRows(p.by_strategy, playbookLabel)'));
-  assert(JS.includes('shadowBlock(p.shadow_by_strategy, playbookLabel)'),
-    'the shadow table leaks the enum too');
+  // every not-taken table too, or the enum leaks one block lower
+  assert((JS.match(/notTakenBlock\(p\.\w+_by_strategy, playbookLabel/g) || []).length >= 2,
+    'the untaken and shadow strategy tables leak the enum');
+});
+
+/* ---------- Results reports the account's book, not the engine's research ---------- */
+
+ok('performance is partitioned by whether the account took the trade', () => {
+  const SERVER = fs.readFileSync(path.join(__dirname, '..', 'server.py'), 'utf8');
+  for (const b of ['untaken_by_symbol', 'untaken_by_strategy', '"totals"'])
+    assert(SERVER.includes(b), 'missing bucket: ' + b);
+  // route on money first — shadow membership is read at request time, the
+  // trade is not, so a demoted venue must not reclassify a funded trade
+  const perf = SERVER.slice(SERVER.indexOf('def performance'));
+  assert(/if ru is not None:\s*\n\s*tgt = \(by_sym, by_strat\)/.test(perf),
+    'routing must test funding before venue');
+});
+
+ok('a row never mixes populations', () => {
+  const SERVER = fs.readFileSync(path.join(__dirname, '..', 'server.py'), 'utf8');
+  const perf = SERVER.slice(SERVER.indexOf('def performance'));
+  assert(!/"sized": a\["sized"\]/.test(perf), 'sized/n could never disagree');
+  assert(/"population": population/.test(perf), 'every row must name its population');
+});
+
+ok('the traded table shows what it excluded, as a count only', () => {
+  assert(JS.includes('more found, not taken'),
+    'the exclusion must travel with the figure it changes the meaning of');
+  assert(!/untaken_sum_r|untaken_r/.test(JS),
+    'an R from the other population inside the traded table is the original bug');
+});
+
+ok('an unfunded table does not call its column "net"', () => {
+  assert(JS.includes("'would have been'"),
+    'net on unfunded rows lets a hypothetical read as a result');
 });
 
 ok('setting descriptions use bare nouns, not deck phrases', () => {

@@ -1078,17 +1078,32 @@
       const pnl = +r.sum_r;
       const good = pnl >= 0;
       const wr = (r.win_pct ?? null) === null ? '—' : `${r.win_pct}%`;
+      /* The exclusion travels WITH the number whose meaning it changes.
+         "1 trade, -0.10R" reads very differently once you know a second was
+         found on the same symbol and never funded — and that second trade is
+         exactly what used to be summed into this cell. The COUNT only: an R
+         from the other population inside this table is the defect being
+         removed, so it stays in the block below where it is labelled. */
+      const more = r.untaken_n
+        ? `<div class="t-label" style="margin-top:2px;color:var(--fg-4)">${
+            r.untaken_n} more found, not taken</div>` : '';
       return `<tr>
-        <th scope="row">${esc(fmtKey(r.key ?? '—'))}</th>
+        <th scope="row">${esc(fmtKey(r.key ?? '—'))}${more}</th>
         <td>${r.n ?? 0}</td>
         <td>${wr}</td>
         <td><b style="color:${!has ? 'var(--fg-4)' : (good ? 'var(--green)' : 'var(--red-2)')}">${
           has ? `${good ? '+' : ''}${pnl.toFixed(2)}R` : 'n/a'}</b></td>
       </tr>`;
     }).join('');
+    /* "net" on a taken table is money the account made or lost. On an untaken
+       table it is what the trade WOULD have returned, and saying "net" there
+       would let a hypothetical be read as a result. */
+    const taken = (rows[0] || {}).population !== 'untaken' &&
+                  (rows[0] || {}).population !== 'shadow';
     return `<table class="data-table t-mono">
       <thead><tr><th scope="col">name</th><th scope="col">trades</th>
-        <th scope="col">win rate</th><th scope="col">net</th></tr></thead>
+        <th scope="col">win rate</th>
+        <th scope="col">${taken ? 'net' : 'would have been'}</th></tr></thead>
       <tbody>${body}</tbody>
     </table>`;
   }
@@ -1097,24 +1112,42 @@
      of its intents. Its simulated record is evidence for admitting the venue,
      so it stays visible, but it is fenced off and labelled rather than added
      to the operator's track record. */
-  function shadowBlock(rows, fmtKey){
+  /* Trades the engine found and the account did NOT take, kept off the record
+     but not hidden. Two reasons a trade lands here, and the row says which:
+     the risk authority refused to fund it, or its venue was never tradeable.
+
+     This block exists because the table above it used to include these — the
+     BTCUSDT row read "2 trades, 50% win, +1.77R" on the strength of a +1.87R
+     trade the account was never allowed to take, three panels above a journal
+     showing the same symbol at -0.10R. */
+  function notTakenBlock(rows, fmtKey, what){
     if(!rows || !rows.length) return '';
-    const sum = rows.reduce((a, r) => a + (+r.sum_r || 0), 0);
     const n = rows.reduce((a, r) => a + (r.n || 0), 0);
+    const why = [...new Set(rows.flatMap(r => Object.keys(r.reasons || {})))]
+      .slice(0, 2).map(plainReason).join('; ');
+    // "trade" is the only word that pluralises; the rest of the phrase is a
+    // clause about the block, not a noun to be suffixed.
     return `<details style="border-top:1px solid var(--border-soft)">
       <summary style="padding:8px var(--lg);color:var(--fg-4);cursor:pointer" class="t-mono">
-        + ${n} shadow trade${n === 1 ? '' : 's'} (${sum >= 0 ? '+' : ''}${sum.toFixed(2)}R) —
-        warmed venue, never tradeable, excluded above</summary>
+        + ${n} trade${n === 1 ? '' : 's'} ${what}${
+          why ? ' — ' + esc(why) : ''}</summary>
+      <!-- No R total in the summary. A headline R for trades that were never
+           funded is the number that started this: it reads as performance. -->
       ${perfRows(rows, fmtKey)}</details>`;
   }
 
   async function loadPerformance(){
     const p = await api('/api/performance');
+    const NOT_TAKEN = 'the account did not take';
+    const NOT_TRADEABLE = 'on a venue the account cannot trade';
     $('perfSymbol').innerHTML =
-      perfRows(p.by_symbol) + shadowBlock(p.shadow_by_symbol);
+      perfRows(p.by_symbol) +
+      notTakenBlock(p.untaken_by_symbol, undefined, NOT_TAKEN) +
+      notTakenBlock(p.shadow_by_symbol, undefined, NOT_TRADEABLE);
     $('perfStrategy').innerHTML =
       perfRows(p.by_strategy, playbookLabel) +
-      shadowBlock(p.shadow_by_strategy, playbookLabel);
+      notTakenBlock(p.untaken_by_strategy, playbookLabel, NOT_TAKEN) +
+      notTakenBlock(p.shadow_by_strategy, playbookLabel, NOT_TRADEABLE);
   }
 
   /* ---------- DIAGNOSTICS ---------- */

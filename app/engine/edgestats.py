@@ -355,9 +355,13 @@ def _core(trades: list[dict], resamples: int, warnings: list[str],
         warnings.append(
             f"{label}: profit factor undefined — no losing trade in this book.")
     if n < MIN_TRADES:
-        out["refusal"] = (f"below the {MIN_TRADES}-trade floor. No expectancy, "
-                          f"CI or verdict is reported: on a book this short the "
-                          f"bootstrap would describe the sample, not the system.")
+        # Said plainly because it is READ on a trader surface — edgeview.js
+        # prints this string verbatim and deliberately does not paraphrase it.
+        # The refusal itself is unchanged; only the words are.
+        out["refusal"] = (f"fewer than {MIN_TRADES} trades. No average and no "
+                          f"range is shown for a slice this short: the numbers "
+                          f"would describe these few trades rather than the "
+                          f"system that produced them.")
         for k in ("mean_r", "win_rate", "profit_factor", "avg_win_r",
                   "avg_loss_r", "mean_r_gross", "mean_costs_r"):
             out[k] = None
@@ -420,21 +424,26 @@ def _venue_fee_r(t: dict) -> float:
 def _scenarios(trades: list[dict], resamples: int) -> list[dict]:
     """Expectancy under each fee model, slippage held at what execsim charged."""
     rows = [
-        ("as recorded (modelled costs, net)",
+        ("the costs actually charged",
          [t["r_net"] for t in trades],
          "r_multiple exactly as execsim wrote it — fees already netted."),
-        ("fee-free (slippage still charged)",
+        ("no fees at all — the best case",
          [t["r_ex_fee"] for t in trades],
          "fees added back; market-exit slippage untouched. The ceiling."),
-        ("venue-real fees (venues.py rates)",
+        # Rendered as a row label in the fee table on Results; the module it
+        # reads from is provenance, not something the reader chooses between.
+        ("what these venues actually charge",
          [t["r_ex_fee"] - _venue_fee_r(t) for t in trades],
          "re-priced at each symbol's own venue maker/taker rate."),
     ]
+    # Parallel to `rows`, in the same order. Consumers match on the KEY; the
+    # label above is free to be reworded for readers without breaking them.
+    keys = ("as_recorded", "fee_free", "venue_real")
     out = []
-    for label, vals, note in rows:
+    for (label, vals, note), key in zip(rows, keys):
         n = len(vals)
         boot = _bootstrap_mean(vals, resamples) if n >= MIN_TRADES else None
-        out.append({"scenario": label, "note": note, "n": n,
+        out.append({"key": key, "scenario": label, "note": note, "n": n,
                     "mean_r": sum(vals) / n if n else None,
                     "bootstrap": boot})
     return out
@@ -542,17 +551,25 @@ def report(con, *, algo_version: str | None = None, symbol: str | None = None,
         "resamples": resamples,
         "counts": counts,
         "warnings": warnings,
+        # These are printed under the panel on the Results surface, so they are
+        # written for the person deciding whether to trust the number above
+        # them — not for the person maintaining the module. Each one names a
+        # way the figures could be wrong; the field names and module paths that
+        # used to carry that meaning live in this file's header instead.
         "caveats": [
-            "r_multiple is ALREADY net of modelled fees and market-exit "
-            "slippage (costs_r = r_gross - r_multiple). Nothing here subtracts a "
-            "fee twice; the fee scenarios RE-PRICE the recorded fee.",
-            "Funding IS charged (execsim folds it into fees_price_units and the "
-            "venue-real scenario re-charges it as of edgestats-v0.2) — but from "
-            "a MODELLED CONSTANT, one rate for venues whose settlement "
-            "schedules differ 8x. It is an assumption, not a measurement.",
-            "MISSED orders never filled and are excluded — they are not trades.",
-            "Modelled costs come from the cost profile execsim recorded; the "
-            "venue-real scenario re-prices them from venues.py.",
+            "Every figure here is already after costs. Fees and the slippage "
+            "on stop and timeout exits are taken out before a trade is "
+            "counted, so nothing below is a gross number dressed as a net one.",
+            "Funding is charged, but from a single assumed rate applied to "
+            "every venue — and real venues settle up to eight times more often "
+            "than each other. Treat the funding part as an estimate, not a "
+            "measurement.",
+            "Orders that never filled are not counted. They are not trades, "
+            "and counting them would drag the average toward zero with rows "
+            "where no money ever moved.",
+            "The 'if fees were' rows re-price the same trades under a "
+            "different fee schedule. They do not re-run the strategy, so they "
+            "cannot tell you how it would have behaved at those costs.",
         ],
         "sufficient": False,
         "refusal": None,
@@ -675,34 +692,43 @@ def confound_report(trades: list[dict], slices: dict) -> dict:
 
 def _verdict(rep: dict) -> dict:
     """The one-line answer, phrased so a null result cannot read as a win."""
-    real = next(s for s in rep["scenarios"]
-                if s["scenario"].startswith("venue-real"))
+    real = next(s for s in rep["scenarios"] if s.get("key") == "venue_real")
     boot = real["bootstrap"]
     be = rep["breakeven_fee"]
     if boot is None:
         return {"code": "INSUFFICIENT",
-                "text": "too few trades to bootstrap a CI at venue-real fees."}
+                "headline": "Not measured yet",
+                "text": "There are too few closed trades to say anything about "
+                        "the edge at the fees these venues really charge. This "
+                        "is not a bad result — it is the absence of one."}
     lo, hi, p = boot["ci_lo"], boot["ci_hi"], boot["p_gt_zero"]
     if hi < 0:
         code = "NEGATIVE_EDGE"
-        text = (f"At venue-real fees the 95% CI [{lo:+.3f}, {hi:+.3f}] R lies "
-                f"ENTIRELY BELOW ZERO (P(edge>0)={p:.1%}). This is not noise: "
-                f"the system loses money per trade, and no fee schedule fixes it.")
+        text = (f"At the fees these venues really charge, the honest range for "
+                f"the average trade runs from {lo:+.3f} R to {hi:+.3f} R — all "
+                f"of it below break even. This is not bad luck: the system "
+                f"loses money per trade, and no fee schedule fixes it.")
     elif lo > 0:
         code = "POSITIVE_EDGE"
-        text = (f"At venue-real fees the 95% CI [{lo:+.3f}, {hi:+.3f}] R is "
-                f"ABOVE ZERO (P(edge>0)={p:.1%}) — a real, if modest, net edge. "
-                f"Funding is still unmodelled; verify on more trades first.")
+        text = (f"At the fees these venues really charge, the honest range for "
+                f"the average trade runs from {lo:+.3f} R to {hi:+.3f} R — all "
+                f"of it above break even. That is a real, if modest, edge. "
+                f"Funding costs are still not modelled, so check it again on "
+                f"more trades before trusting the size of it.")
     else:
         code = "INDISTINGUISHABLE"
-        text = (f"At venue-real fees the 95% CI [{lo:+.3f}, {hi:+.3f}] R "
-                f"INCLUDES ZERO (P(edge>0)={p:.1%}). No statistically "
-                f"demonstrated edge after fees — and no demonstrated loss either.")
+        text = (f"At the fees these venues really charge, the honest range for "
+                f"the average trade runs from {lo:+.3f} R to {hi:+.3f} R — it "
+                f"still crosses break even. This book has not shown it makes "
+                f"money, and it has not shown it loses money either. There is "
+                f"not enough evidence yet to say which.")
     if be["computable"] and be["no_fee_rescues_it"]:
-        text += (f" Breakeven per-side fee is {100*be['per_side']:+.4f}% — "
-                 f"non-positive, so the book is already losing at ZERO fees "
-                 f"(slippage alone). Fees are not the binding constraint.")
-    return {"code": code, "text": text,
+        text += (f" Even with ZERO fees this book still loses, on slippage "
+                 f"alone. Fees are not what is holding it back.")
+    headline = {"NEGATIVE_EDGE": "It loses money",
+                "POSITIVE_EDGE": "It makes money, modestly",
+                "INDISTINGUISHABLE": "Too close to call"}[code]
+    return {"code": code, "headline": headline, "text": text,
             "ci_lo": lo, "ci_hi": hi, "p_gt_zero": p}
 
 
