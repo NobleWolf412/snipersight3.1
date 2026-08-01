@@ -654,6 +654,32 @@ body{
 @media(max-width:900px){.why-row{grid-template-columns:1fr;gap:1px}}
 @media (prefers-reduced-motion: reduce){.deck-story summary::after{transition:none}}
 
+/* ---------- risk budget (Command) ----------
+   Three enforced limits as fills against their ceilings. The bar is the whole
+   point: "$195 at risk" is unreadable without the ceiling beside it, and a
+   number the operator has to divide in their head is a number they will not
+   check before arming. */
+.budget-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--lg);
+  padding:var(--lg)}
+.budget-cell{display:flex;flex-direction:column;gap:7px;min-width:0}
+.budget-bar{height:6px;border-radius:var(--r-pill);background:rgba(255,255,255,.06);
+  overflow:hidden}
+.budget-bar i{display:block;height:100%;border-radius:var(--r-pill);
+  background:var(--accent);transition:width .5s ease}
+.budget-bar i.warn{background:var(--amber)}
+.budget-bar i.bad{background:var(--red-2)}
+.budget-txt{font-family:var(--f-body);font-size:12.5px;color:var(--fg-3);line-height:1.4}
+@media(max-width:900px){.budget-grid{grid-template-columns:1fr}}
+@media (prefers-reduced-motion: reduce){.budget-bar i{transition:none}}
+
+/* an armed order that has not filled: committed, but nothing at stake yet, so
+   it reads quieter than a live position without disappearing */
+.pos-row.pending{background:rgba(255,255,255,.015)}
+.pos-row.pending .pos-sym{color:var(--fg-2)}
+.pos-wait{font-family:var(--f-body);font-size:12.5px;color:var(--fg-3);
+  line-height:1.45;margin-bottom:7px}
+.pos-wait b{color:var(--fg-2);font-weight:600;font-variant-numeric:tabular-nums}
+
 /* ---------- trade journal (Results) ----------
    One closed trade per row: what it was, how it ended in words, what it paid
    in R and dollars. The R column is the verdict, so it gets the display face;

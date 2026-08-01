@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SniperSight</title>
 <link rel="icon" href="/static/assets/snipersight-logo.png">
-<link rel="stylesheet" href="/static/ss.css?v=7">
+<link rel="stylesheet" href="/static/ss.css?v=8">
 </head>
 <body data-mode="idle">
 
@@ -104,6 +104,22 @@
 
       <!-- first-run orientation; lessons.js owns it and self-hides once dismissed -->
       <div id="orientRoot"></div>
+
+      <!-- Risk budget. The caps have always been enforced and never shown: the
+           ticket said "$195 at risk" without saying at risk AGAINST WHAT, so a
+           REDUCED verdict or a refused setup arrived with no context and read
+           as the engine being arbitrary. Three limits, each as a fill against
+           its ceiling — how much of the open-risk budget is spent, how many
+           position slots are used, and how close today's losses are to the
+           automatic halt. Always visible, including at zero: knowing there is
+           room is as operational as knowing there is none. -->
+      <div class="panel" id="budgetPanel" style="margin-bottom:var(--lg)">
+        <div class="panel-head">
+          <h2 class="t-section">Risk budget</h2>
+          <span class="chip" id="budgetChip" style="margin-left:auto">—</span>
+        </div>
+        <div class="budget-grid" id="budget"></div>
+      </div>
 
       <!-- Open trades. `active_positions` has been in the portfolio payload the
            whole time and was rendered on no surface: the only place an open
@@ -709,20 +725,20 @@
      its own mount point, so there was never a reason for them to block. -->
 <script defer src="/static/lightweight-charts.js"></script>
 <!-- must load before any consumer: every module reads through it -->
-<script defer src="/static/ssdata.js?v=7"></script>
-<script defer src="/static/ticket-math.js?v=7"></script>
-<script defer src="/static/glossary.js?v=7"></script>
-<script defer src="/static/chart.js?v=7"></script>
-<script defer src="/static/shell.js?v=7"></script>
+<script defer src="/static/ssdata.js?v=8"></script>
+<script defer src="/static/ticket-math.js?v=8"></script>
+<script defer src="/static/glossary.js?v=8"></script>
+<script defer src="/static/chart.js?v=8"></script>
+<script defer src="/static/shell.js?v=8"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must
      never blank a surface that another owns. -->
-<script defer src="/static/playbooks.js?v=7"></script>
-<script defer src="/static/weather.js?v=7"></script>
-<script defer src="/static/lessons.js?v=7"></script>
-<script defer src="/static/funnel.js?v=7"></script>
-<script defer src="/static/tracer.js?v=7"></script>
-<script defer src="/static/wizard.js?v=7"></script>
-<script defer src="/static/edgeview.js?v=7"></script>
+<script defer src="/static/playbooks.js?v=8"></script>
+<script defer src="/static/weather.js?v=8"></script>
+<script defer src="/static/lessons.js?v=8"></script>
+<script defer src="/static/funnel.js?v=8"></script>
+<script defer src="/static/tracer.js?v=8"></script>
+<script defer src="/static/wizard.js?v=8"></script>
+<script defer src="/static/edgeview.js?v=8"></script>
 </body>
 </html>

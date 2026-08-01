@@ -584,11 +584,21 @@
   async function renderPositions(p){
     const panel = $('posPanel'), box = $('positions');
     const list = p.active_positions || [];
-    if(!list.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
+    /* Armed orders that have not filled yet. Same payload, same builder — the
+       only difference is the order event (PLACED vs FILLED) — and they reached
+       no surface either. An armed order is money committed to a price: it is
+       holding a slot and it will become a position without asking again, so
+       leaving it invisible meant the deck could look idle while two orders sat
+       waiting to fire. */
+    const pending = p.pending_orders || [];
+    if(!list.length && !pending.length){
+      panel.style.display = 'none'; box.innerHTML = ''; return;
+    }
     panel.style.display = '';
-    $('posRisk').textContent = money(p.open_risk_usd || 0) + ' at risk';
+    $('posRisk').textContent = money(p.open_risk_usd || 0) + ' at risk' +
+      (pending.length ? ` · ${pending.length} waiting` : '');
 
-    const prices = await Promise.all(list.map(t =>
+    const priceOf = t =>
       api(`/api/candles?symbol=${encodeURIComponent(t.symbol)}&tf=${
             encodeURIComponent(t.tf)}&limit=1`)
         .then(rows => {
@@ -596,7 +606,9 @@
           const last = arr[arr.length - 1];
           return last ? +last.close : null;
         })
-        .catch(() => null)));
+        .catch(() => null);
+    const prices = await Promise.all(list.map(priceOf));
+    const pendPrices = await Promise.all(pending.map(priceOf));
 
     /* Prices carry the venue's full stored precision — `4.59308636` for a stop
        on a token that ticks in thousandths. Digits nobody trades on are noise
@@ -649,7 +661,105 @@
           r == null ? '—' : (r >= 0 ? '+' : '') + r.toFixed(1) + 'R'}
           <span class="t-sub">${money(t.risk_usd)} at risk</span></div>
       </div>`;
+    }).join('') + pending.map((t, i) => {
+      const long = t.direction === 'LONG';
+      const entry = +t.entry, now = pendPrices[i];
+      // How far price still has to travel to trigger this order. Percent, not
+      // ATR: this is a distance to a resting limit, not a volatility judgement.
+      const away = (now == null || !now) ? null
+        : Math.abs(now - entry) / now * 100;
+      return `<div class="pos-row pending traceable" data-trace="${esc(t.setup_id || '')}"
+        title="click for why this trade was taken — the zone, the confirmation, every gate">
+        <div>
+          <div class="pos-sym">${esc(String(t.symbol).replace('-USD', ''))}</div>
+          <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
+            esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
+        </div>
+        <div>
+          <div class="pos-wait">Order resting at <b>${px(entry)}</b>${
+            away == null ? '' : ` — price is ${away.toFixed(1)}% away`}.
+            Nothing is at stake until it fills.</div>
+          <div class="pos-ends">
+            <span>stop ${px(+t.sl)}</span>
+            <span class="now">${now == null ? 'price unavailable' : 'now ' + px(now)}</span>
+            <span>target ${px(+t.tp)}</span>
+          </div>
+        </div>
+        <div class="pos-r">
+          <span class="chip chip-amber">waiting</span>
+          <span class="t-sub">${money(t.risk_usd)} if it fills</span></div>
+      </div>`;
     }).join('');
+  }
+
+  /* ---------- risk budget ----------
+     The three limits the risk authority actually enforces, each drawn as a fill
+     against its ceiling. Every one of them has been enforced since day one and
+     shown nowhere: the ticket said "$195 at risk" without saying at risk
+     AGAINST WHAT, so a REDUCED verdict or a refused setup arrived with no
+     context and read as the engine being arbitrary rather than as a cap doing
+     its job. The chip names the BINDING constraint, because "can I take another
+     trade right now" is the question, and the answer is whichever limit runs
+     out first. */
+  function renderRiskBudget(p){
+    const cfg = p.config || {};
+    const eq = +p.equity || 0;
+    /* COMMITTED risk, not just filled risk. `open_risk_usd` sums filled
+       positions only, but risk.py budgets against `open_pos`, which a trade
+       joins the moment it is sized (risk.py:491 — anything not MISSED) rather
+       than when it fills. Metering the filled-only figure would show budget
+       room that the risk authority will refuse to give, which is precisely the
+       "the engine is being arbitrary" reading this panel exists to prevent. */
+    const openRisk = (p.active_positions || []).concat(p.pending_orders || [])
+      .reduce((s, t) => s + (+t.risk_usd || 0), 0);
+    const openCap = eq * (+cfg.max_total_risk_pct || 0) / 100;
+    const slots = (p.active_positions || []).length +
+                  (p.pending_orders || []).length;
+    const slotCap = +cfg.max_concurrent || 0;
+
+    // Today's realised loss, read from the same journal the scoreboard reads so
+    // the two can never disagree about what "today" means.
+    const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+    const cut = midnight.getTime() / 1000;
+    const todayPnl = (p.journal || [])
+      .filter(j => j.ts >= cut).reduce((s, j) => s + j.pnl_usd, 0);
+    const lost = Math.max(0, -todayPnl);
+    const lossCap = eq * (+cfg.daily_loss_pct || 0) / 100;
+
+    const cell = (label, used, cap, text) => {
+      const pct = cap > 0 ? Math.max(0, Math.min(100, (used / cap) * 100)) : 0;
+      const tone = cap > 0 && used >= cap ? 'bad' : pct >= 70 ? 'warn' : '';
+      return `<div class="budget-cell">
+        <span class="t-label">${label}</span>
+        <div class="budget-bar"><i class="${tone}" style="width:${pct.toFixed(0)}%"></i></div>
+        <span class="budget-txt">${text}</span>
+      </div>`;
+    };
+
+    $('budget').innerHTML =
+      cell('Open risk', openRisk, openCap,
+           openCap > 0 ? `${money(openRisk)} of ${money(openCap)} used`
+                       : 'no cap configured') +
+      cell('Position slots', slots, slotCap,
+           slotCap > 0
+             ? (slots >= slotCap
+                 ? `${slots} of ${slotCap} — full until one closes`
+                 : `${slots} of ${slotCap} used`)
+             : 'no cap configured') +
+      cell("Today's losses", lost, lossCap,
+           lossCap <= 0 ? 'no halt configured'
+             : lost > 0 ? `${money(lost)} of ${money(lossCap)} before trading halts`
+             : `nothing lost today · halts at ${money(lossCap)}`);
+
+    // The binding constraint, named. Order matters: the hardest stop first.
+    const chip = $('budgetChip');
+    let label, tone;
+    if(lossCap > 0 && lost >= lossCap){ label = 'halted for today'; tone = 'chip-red'; }
+    else if(slotCap > 0 && slots >= slotCap){ label = 'no slots free'; tone = 'chip-amber'; }
+    else if(openCap > 0 && openRisk >= openCap){ label = 'risk budget spent'; tone = 'chip-amber'; }
+    else { label = 'room for another trade'; tone = 'chip-green'; }
+    chip.textContent = label;
+    chip.className = 'chip ' + tone;
   }
 
   /* ---------- the trade journal + daily scoreboard ----------
@@ -772,6 +882,7 @@
     }
     // fire-and-forget: the positions panel fetches a price per open trade, and
     // a slow venue must not hold up the equity numbers above it
+    renderRiskBudget(p);
     renderPositions(p).catch(() => {});
 
     if(!ruled){

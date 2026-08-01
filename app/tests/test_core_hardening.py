@@ -381,9 +381,33 @@ class TestCockpitHierarchy(unittest.TestCase):
         self.assertIn("btnHalt", self.js)
 
     def test_forward_window_and_positions_are_surfaced(self):
-        for anchor in ('id="sbBaseline"', 'id="baselineChip"', 'id="deck"',
-                       'id="rEquity"', 'id="rDD"'):
+        """`id="sbBaseline"` was the status bar's baseline DATE. It is gone on
+        purpose: the bar answered three questions nobody asked (fact-store row
+        count, engine build, window start date) on the only strip that is on
+        screen no matter which surface you are on, and it now answers the one
+        that matters — whether what you are looking at is current.
+
+        The property this test defends is unchanged and is in fact better
+        served than it was: the forward window is still named, by the chip on
+        the equity curve, and POSITIONS are now genuinely surfaced rather than
+        merely implied by the deck — `#positions` did not exist when this test
+        was written, and an open trade was reachable only through the chart of
+        the symbol it was on."""
+        for anchor in ('id="baselineChip"', 'id="deck"',
+                       'id="positions"', 'id="rEquity"', 'id="rDD"'):
             self.assertIn(anchor, self.html, anchor)
+
+    def test_open_risk_is_shown_against_its_ceiling(self):
+        """A risk number without its cap beside it cannot be acted on: "$195 at
+        risk" says nothing about whether another trade fits. The caps were
+        enforced from day one and displayed nowhere, which is what made a
+        REDUCED verdict read as arbitrary."""
+        self.assertIn('id="budgetPanel"', self.html)
+        self.assertIn('id="budget"', self.html)
+        self.assertIn("renderRiskBudget", self.js)
+        # the binding constraint is named, not left to be inferred from bars
+        self.assertIn("no slots free", self.js)
+        self.assertIn("halted for today", self.js)
 
     def test_guardrails_and_telemetry_have_a_home(self):
         self.assertIn('id="guardRows"', self.html)
