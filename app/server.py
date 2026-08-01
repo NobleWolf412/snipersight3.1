@@ -1066,15 +1066,29 @@ def playbooks():
          "notes": ("Each add is sized as brand new exposure rather than folded "
                    "into the trade it joins, so a run of good luck cannot "
                    "quietly turn into one oversized bet.")},
+        # NOT "planned" — measured and declined, and the card must say so.
+        # ranges.py was built to hunt this trade and came back with the reason
+        # not to take it (S40/S44): of the RANGE-regime rejections, 3 had a
+        # live detected range at the moment of rejection, and on
+        # structure-sound symbols ZERO did. Most of "the market is ranging"
+        # was a blind structure engine (the tick floor), not a range to fade.
         {"key": "range_fade", "name": "Range Fade", "status": "planned",
          "record_key": None, "setting": None,
          "one_liner": "Sell the ceiling and buy the floor while a market goes nowhere.",
          "hunts": "Markets stuck between a ceiling and a floor, with no trend.",
-         "triggers": ("Planned: price reaching the edge of an established range "
-                      "rather than a trend continuation zone."),
-         "confirms": "Planned. Nothing is being traded on this yet.",
-         "stop_goes": "Planned: beyond the range edge, where the range is broken.",
-         "holds_for": "Planned.",
+         "triggers": ("Measured and declined, not pending. A range detector was "
+                      "built to hunt this trade — 1,882 ranges across the "
+                      "store — and at the moments this playbook would have "
+                      "fired, almost none of them were live: 3 rejections had "
+                      "an active range, zero on structurally sound symbols."),
+         "confirms": ("Nothing is traded on this, on evidence rather than by "
+                      "omission. Most of what looked like ranging markets was "
+                      "a measurement bug since fixed, not fadeable ranges."),
+         "stop_goes": "Would be beyond the range edge — untraded, so untested.",
+         "holds_for": ("Revisited if ranges are redefined over something "
+                       "longer-lived than a handful of consecutive pivots — "
+                       "the current detector describes boxes inside macro "
+                       "ranges, never the range itself."),
          "timeframes": [], "notes": None},
         # The 'Reversal, Reworked' planned card was REMOVED, not edited: the
         # work shipped in S38. Its 2-of-4 evidence gate replaced the sweep-only
