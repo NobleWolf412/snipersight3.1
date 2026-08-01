@@ -6,7 +6,15 @@
 (() => {
   const $ = id => document.getElementById(id);
   const fmt = n => Number(n).toLocaleString();
-  const money = n => '$' + Number(n).toLocaleString(undefined, {maximumFractionDigits: 0});
+  /* The sign goes OUTSIDE the currency symbol. Naively prefixing '$' produced
+     "$-19" for a loss, while chart.js's usd() produced "-$19" and the
+     scoreboard hand-rolled "−$19" with a Unicode minus — the same −$19.46
+     written three ways on three surfaces of one app. One helper, one form.
+     `signedMoney` adds an explicit + for gains, for the places where the
+     direction of a number is the point rather than its size. */
+  const money = n => (Number(n) < 0 ? '-$' : '$') +
+    Math.abs(Number(n)).toLocaleString(undefined, {maximumFractionDigits: 0});
+  const signedMoney = n => (Number(n) > 0 ? '+' : '') + money(n);
 
   /* ---------- navigation ---------- */
   // guards the console poll below, which cannot run until its own state exists
@@ -474,7 +482,11 @@
       // this deck can do — the operator would size a trade the engine refused.
       const r = s.risk;
       const dec = r ? r.decision : null;
-      const money = v => v == null ? null : '$' + Number(v).toLocaleString(undefined, {maximumFractionDigits: 0});
+      /* Delegates to the shared formatter rather than re-implementing it, so a
+         negative can never render one way here and another way on Results.
+         The null case stays local: an unsized setup must read "—", and the
+         shared helper would turn null into "$0", which is a different claim. */
+      const moneyOr = v => v == null ? null : money(v);
       const chip = dec === 'APPROVED' ? 'chip-green' : dec === 'REDUCED' ? 'chip-amber'
                  : dec === 'REJECTED' ? 'chip-red' : '';
       const verdict = dec
@@ -482,7 +494,7 @@
           (dec === 'REJECTED'
             ? `<div class="t-label" style="margin-top:4px;color:var(--red-2)">${
                 reasonText(r.reasons)}</div>`
-            : `<div class="t-label" style="margin-top:4px">risks ${money(r.risk_usd) || '—'}${
+            : `<div class="t-label" style="margin-top:4px">risks ${moneyOr(r.risk_usd) || '—'}${
                 r.units ? ' · ' + Number(r.units).toLocaleString() + ' units' : ''}</div>`)
         : '<span class="chip">awaiting decision</span>' +
           '<div class="t-label" style="margin-top:4px">the risk rules have not ruled on this one yet</div>';
@@ -817,7 +829,7 @@
           <div class="t-sub">${when} · ${heldText(j.holding_hours)} · risked ${money(j.risk_usd)}</div>
         </div>
         <div class="jnl-r">${(j.r_multiple >= 0 ? '+' : '') + j.r_multiple.toFixed(2)}R
-          <span class="t-sub">${(j.pnl_usd >= 0 ? '+' : '') + money(j.pnl_usd)}</span></div>
+          <span class="t-sub">${signedMoney(j.pnl_usd)}</span></div>
       </div>`;
     }).join('');
   }
@@ -838,7 +850,7 @@
     const losses = rows.length - wins;
     tile.classList.toggle('up', pnl > 0);
     tile.classList.toggle('down', pnl < 0);
-    val.textContent = (pnl >= 0 ? '+' : '−') + money(Math.abs(pnl));
+    val.textContent = signedMoney(pnl);
     const part = [];
     if(wins) part.push(wins + (wins === 1 ? ' winner' : ' winners'));
     if(losses) part.push(losses + (losses === 1 ? ' loss' : ' losses'));
