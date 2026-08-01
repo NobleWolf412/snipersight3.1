@@ -596,6 +596,7 @@ def portfolio():
         acct = json.loads(arow[0]) if arow else None
         recent, kills = [], 0
         setup_by_id, risk_by_id, latest_order, completed = {}, {}, {}, set()
+        exec_by_id: dict = {}
         for r in store.get_facts(con, "PORTFOLIO", "ALL", "risk", risk.RISK_VERSION):
             p = json.loads(r["payload"])
             if r["confirmed_at"] >= since and p.get("event") == "KILL_SWITCH":
@@ -624,9 +625,14 @@ def portfolio():
                         "symbol": sym, "tf": tf,
                         "confirmed_at": r["confirmed_at"], **p}
                 for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
-                    sid = json.loads(r["payload"])["setup_id"]
+                    p = json.loads(r["payload"])
+                    sid = p["setup_id"]
                     if sid in eligible:
                         completed.add(sid)
+                        # keep the ending, not just the fact that one exists —
+                        # this payload is the closed-trade journal's raw material
+                        exec_by_id[sid] = {"symbol": sym, "tf": tf,
+                                           "ts": r["confirmed_at"], **p}
         recent.sort(key=lambda d: d["ts"])
         positions, pending_orders = [], []
         for sid, order in latest_order.items():
@@ -653,6 +659,35 @@ def portfolio():
                 pending_orders.append(item)
         positions.sort(key=lambda p: p["updated_at"], reverse=True)
         pending_orders.sort(key=lambda p: p["updated_at"], reverse=True)
+
+        # The closed-trade journal. Only trades the risk authority actually
+        # sized (APPROVED/REDUCED) — execsim also simulates every validated
+        # setup as research, and mixing those shadow runs into the account's
+        # own history would overstate activity the book never had. pnl_usd is
+        # net R times the dollars that were at risk: the same arithmetic the
+        # equity curve is built from.
+        journal = []
+        for sid, ex in exec_by_id.items():
+            sized = risk_by_id.get(sid, {})
+            if sized.get("decision") not in ("APPROVED", "REDUCED"):
+                continue
+            risk_usd = float(sized.get("risk_usd") or 0)
+            r_net = float(ex.get("r_multiple") or 0)
+            journal.append({
+                "setup_id": sid, "symbol": ex["symbol"], "tf": ex["tf"],
+                "ts": ex["ts"],
+                "direction": ex.get("direction"),
+                "strategy": ex.get("strategy"),
+                "outcome": ex.get("outcome"),
+                "r_multiple": r_net,
+                "r_gross": float(ex.get("r_gross") or 0),
+                "costs_r": float(ex.get("costs_r") or 0),
+                "holding_hours": ex.get("holding_hours"),
+                "risk_usd": risk_usd,
+                "pnl_usd": round(r_net * risk_usd, 2),
+                "entry": ex.get("entry"), "exit_price": ex.get("exit_price"),
+                "decision": sized.get("decision")})
+        journal.sort(key=lambda j: -j["ts"])
         eq = float(acct["final_equity"]) if acct else float(risk.START_EQUITY)
         return {"baseline": baseline,
                 "start_equity": float(risk.START_EQUITY), "equity": round(eq, 2),
@@ -667,6 +702,7 @@ def portfolio():
                 "curve": [{"ts": c["ts"], "equity": float(c["equity"])}
                           for c in (acct["curve"] if acct else [])],
                 "recent": recent[-25:],
+                "journal": journal[:30],
                 "config": {"risk_pct": float(risk.RISK_PCT) * 100,
                            "max_total_risk_pct": float(risk.MAX_TOTAL_OPEN_RISK_PCT) * 100,
                            "max_concurrent": risk.MAX_CONCURRENT,

@@ -608,6 +608,24 @@ body{
 @media(max-width:900px){.why-row{grid-template-columns:1fr;gap:1px}}
 @media (prefers-reduced-motion: reduce){.deck-story summary::after{transition:none}}
 
+/* ---------- trade journal (Results) ----------
+   One closed trade per row: what it was, how it ended in words, what it paid
+   in R and dollars. The R column is the verdict, so it gets the display face;
+   everything else stays quiet. */
+.jnl-row{display:grid;grid-template-columns:150px minmax(0,1fr) 110px;gap:var(--lg);
+  align-items:center;padding:11px var(--lg);border-bottom:1px solid var(--border-soft)}
+.jnl-row:last-child{border-bottom:0}
+.jnl-say{font-family:var(--f-body);font-size:13px;color:var(--fg-2);line-height:1.5}
+.jnl-say .warn{color:var(--amber)}
+.jnl-say .t-sub{display:block;margin-top:3px}
+.jnl-r{text-align:right;font-family:var(--f-display);font-size:17px;font-weight:800;
+  color:var(--fg-2);font-variant-numeric:tabular-nums}
+.jnl-row.up .jnl-r{color:var(--green)}
+.jnl-row.down .jnl-r{color:var(--red-2)}
+.jnl-r .t-sub{display:block;text-align:right;margin-top:3px}
+@media(max-width:900px){.jnl-row{grid-template-columns:1fr;gap:var(--sm)}
+  .jnl-r,.jnl-r .t-sub{text-align:left}}
+
 /* ---------- open trades (Command) ----------
    The plan is three prices the reader otherwise has to compare in their head.
    Drawn as a stop-to-target track with price standing on it, the question

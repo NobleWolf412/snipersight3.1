@@ -652,6 +652,91 @@
     }).join('');
   }
 
+  /* ---------- the trade journal + daily scoreboard ----------
+     Both read the same `journal` list: closed, risk-sized trades with their
+     endings. The scoreboard is "today" in the OPERATOR'S clock, not UTC —
+     a trade closed at 22:10 local belongs to the evening the trader watched
+     it close, whatever day the exchange's clock had reached. */
+  const OUTCOME_WORDS = {
+    TP: 'hit target', SL: 'stopped out',
+    TIMEOUT: 'closed on time — went nowhere', TIME: 'closed on time'
+  };
+  const outcomeWord = o => OUTCOME_WORDS[String(o).toUpperCase()] ||
+    String(o).replace(/_/g, ' ').toLowerCase();
+  const heldText = h => {
+    const n = parseFloat(h);
+    if(isNaN(n)) return '';
+    if(n < 1) return 'held under an hour';
+    if(n < 48) return `held ${Math.round(n)}h`;
+    return `held ${Math.round(n / 24)}d`;
+  };
+
+  function renderJournal(journal){
+    const el = $('journal');
+    if(!journal.length){
+      el.innerHTML = '<div class="empty">no closed trades in this window yet</div>';
+      $('jnlCount').textContent = '0 closed';
+      return;
+    }
+    $('jnlCount').textContent = journal.length + ' closed';
+    el.innerHTML = journal.map(j => {
+      const up = j.pnl_usd > 0;
+      const flat = j.pnl_usd === 0;
+      const when = new Date(j.ts * 1000).toLocaleDateString(undefined,
+        {month: 'short', day: 'numeric'});
+      /* The one ending that deserves its own sentence: right direction, and
+         costs still turned it into a loss. Says entry/target placement, not
+         "bad pick" — a plain SL needs no extra prose. */
+      const costsAte = j.r_gross > 0 && j.r_multiple <= 0;
+      /* "hit target" beside a red −0.10R reads as a contradiction. It is not
+         one — the target was simply too close to pay — but the row has to say
+         that itself rather than leave the reader to reconcile it. */
+      const outcomeText =
+        String(j.outcome).toUpperCase() === 'TP' && j.r_multiple <= 0
+          ? 'hit target — too close to pay'
+          : outcomeWord(j.outcome);
+      return `<div class="jnl-row${flat ? '' : up ? ' up' : ' down'}">
+        <div>
+          <div class="t-mono" style="font-size:13px;color:var(--fg)">${esc(String(j.symbol).replace('-USD',''))}</div>
+          <div class="t-label" style="margin-top:3px">${esc(j.tf)} · ${
+            j.direction === 'LONG' ? 'long' : 'short'} · ${playbookLabel(j.strategy)}</div>
+        </div>
+        <div class="jnl-say">
+          ${outcomeText}${costsAte
+            ? ' — <span class="warn">right direction, fees and slippage ate it</span>' : ''}
+          <div class="t-sub">${when} · ${heldText(j.holding_hours)} · risked ${money(j.risk_usd)}</div>
+        </div>
+        <div class="jnl-r">${(j.r_multiple >= 0 ? '+' : '') + j.r_multiple.toFixed(2)}R
+          <span class="t-sub">${(j.pnl_usd >= 0 ? '+' : '') + money(j.pnl_usd)}</span></div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderScoreboard(journal){
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const cut = today.getTime() / 1000;
+    const rows = journal.filter(j => j.ts >= cut);
+    const tile = $('mTodayTile'), val = $('mToday'), sub = $('mTodaySub');
+    if(!rows.length){
+      tile.classList.remove('up', 'down');
+      val.textContent = '—';
+      sub.textContent = 'no trades closed yet today';
+      return;
+    }
+    const pnl = rows.reduce((s, j) => s + j.pnl_usd, 0);
+    const wins = rows.filter(j => j.pnl_usd > 0).length;
+    const losses = rows.length - wins;
+    tile.classList.toggle('up', pnl > 0);
+    tile.classList.toggle('down', pnl < 0);
+    val.textContent = (pnl >= 0 ? '+' : '−') + money(Math.abs(pnl));
+    const part = [];
+    if(wins) part.push(wins + (wins === 1 ? ' winner' : ' winners'));
+    if(losses) part.push(losses + (losses === 1 ? ' loss' : ' losses'));
+    const netR = rows.reduce((s, j) => s + j.r_multiple, 0);
+    sub.textContent = part.join(' · ') +
+      ` · ${netR >= 0 ? '+' : ''}${netR.toFixed(1)}R net`;
+  }
+
   /* ---------- RESULTS ---------- */
   async function loadPortfolio(){
     const p = await api('/api/portfolio');
@@ -672,8 +757,11 @@
     $('equityRet').textContent = ruled ? '  ' + (up ? '+' : '') + p.return_pct + '%' : '';
     $('equityChip').title = `account equity (paper) — start ${money(p.start_equity)}, ` +
       `open risk ${money(p.open_risk_usd || 0)}`;
-    $('mEquity').textContent = money(p.equity);
     $('rEquity').textContent = money(p.equity);
+
+    const journal = p.journal || [];
+    renderJournal(journal);
+    renderScoreboard(journal);
 
     if(!$('positions').dataset.traceWired){
       $('positions').dataset.traceWired = '1';
