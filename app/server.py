@@ -8,6 +8,7 @@ import re
 import threading
 import time
 from collections import Counter
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Response
@@ -636,6 +637,16 @@ def portfolio():
             sized = risk_by_id.get(sid, {})
             if sized.get("decision") not in ("APPROVED", "REDUCED"):
                 continue
+            # A MISSED order is not a trade. execsim writes outcome='MISSED'
+            # with r_multiple='0' when an armed limit's entry window expires
+            # without price returning, and risk.py:490 excludes exactly these
+            # from open_pos so they never become a position. Admitting them
+            # here put a phantom row in the journal AND — because the
+            # scoreboard counts anything not a winner as a loss — reported it
+            # as a losing trade. Every other consumer in this file already
+            # excludes MISSED; this is the one that forgot.
+            if ex.get("outcome") == "MISSED":
+                continue
             risk_usd = float(sized.get("risk_usd") or 0)
             r_net = float(ex.get("r_multiple") or 0)
             journal.append({
@@ -649,7 +660,16 @@ def portfolio():
                 "costs_r": float(ex.get("costs_r") or 0),
                 "holding_hours": ex.get("holding_hours"),
                 "risk_usd": risk_usd,
-                "pnl_usd": round(r_net * risk_usd, 2),
+                # Decimal, from the raw payload strings, quantized the same way
+                # risk.py builds the equity curve. Both operands arrive 2dp-
+                # quantized, so the product lands on exactly 4 decimals and
+                # half-cent ties are reachable — where Python's round() banks
+                # to even and the engine's quantize() rounds half up. A journal
+                # that disagrees with the curve by a cent is a journal nobody
+                # trusts the rest of.
+                "pnl_usd": float((Decimal(str(ex.get("r_multiple") or 0)) *
+                                  Decimal(str(sized.get("risk_usd") or 0)))
+                                 .quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
                 "entry": ex.get("entry"), "exit_price": ex.get("exit_price"),
                 "decision": sized.get("decision")})
         journal.sort(key=lambda j: -j["ts"])
@@ -667,7 +687,15 @@ def portfolio():
                 "curve": [{"ts": c["ts"], "equity": float(c["equity"])}
                           for c in (acct["curve"] if acct else [])],
                 "recent": recent[-25:],
-                "journal": journal[:30],
+                # Untruncated. The UI reduces over this list to produce the
+                # "closed today" tile and the risk-budget loss meter, and a
+                # sliced list would make both quietly wrong the moment the
+                # window held more trades than the slice — while the chip
+                # above them read "30 closed" as if it were the window total.
+                # `journal_total` is emitted regardless so that a cap
+                # reintroduced later cannot silently lie about being complete.
+                "journal": journal,
+                "journal_total": len(journal),
                 "config": {"risk_pct": float(risk.RISK_PCT) * 100,
                            "max_total_risk_pct": float(risk.MAX_TOTAL_OPEN_RISK_PCT) * 100,
                            "max_concurrent": risk.MAX_CONCURRENT,
@@ -1548,8 +1576,8 @@ def overview():
         # wins walk, second dict; a FORMING fact that later upgraded or was
         # cancelled is overwritten here and never shown.
         forming_last: dict = {}
-        for sym, tf, mt, raw in con.execute(
-                "SELECT symbol, tf, market_time, payload FROM facts "
+        for sym, tf, mt, cat, raw in con.execute(
+                "SELECT symbol, tf, market_time, confirmed_at, payload FROM facts "
                 "WHERE kind='setup' AND algo_version IN (?,?) "
                 "AND confirmed_at>=? ORDER BY confirmed_at, id",
                 (setups.SETUP_VERSION, scalein.SCALE_VERSION,
@@ -1557,7 +1585,8 @@ def overview():
             p = json.loads(raw)
             if p.get("setup_id") not in eligible:
                 forming_last[p.get("setup_id")] = {"symbol": sym, "tf": tf,
-                                                   "market_time": mt, **p}
+                                                   "market_time": mt,
+                                                   "confirmed_at": cat, **p}
                 continue
             # later rows win, matching the previous loop's last-write-wins
             last_state[p["setup_id"]] = {"symbol": sym, "tf": tf,
@@ -1568,6 +1597,15 @@ def overview():
              if st.get("state") == "FORMING"
              and int(st.get("expires_at_ts") or 0) > now_ts),
             key=lambda s: float(s.get("distance_atr") or 9e9))[:8]
+        # `distance_atr` is measured ONCE, at the bar that armed the setup
+        # (setups.py breaks after the first qualifying bar, so there is exactly
+        # one FORMING fact per setup_id) and is never refreshed. The UI must be
+        # able to date it rather than assert a days-old figure in the present
+        # tense, so carry the measurement time and the engine's own proximity
+        # bound instead of leaving the client to hard-code either.
+        for st in approaching:
+            st["measured_at"] = st.get("confirmed_at") or st.get("market_time")
+        prox_atr = float(setups.PROX_ATR)
         outs: dict = {}
         for (raw,) in con.execute(
                 "SELECT payload FROM facts WHERE kind='exec' AND algo_version=? "
@@ -1620,6 +1658,7 @@ def overview():
 
         return {"baseline": baseline, "symbols": symbols, "feed": feed[:40], "scanner": scanner,
                 "approaching": approaching,
+                "prox_atr": prox_atr,
                 "universe_counts": universe_counts,
                 "rejection_funnel": rejection_funnel,
                 "engines": [{"engine": e, "last_run": t, "ms": ms}

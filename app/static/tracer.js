@@ -170,9 +170,22 @@
       `${notes}
       <div class="dx-verdict">
         <span class="chip ${dirChip}">${esc(t.direction || '—')}</span>
-        <span class="chip">${esc(String(t.strategy || 'unknown').replace('_', ' '))}</span>
-        <span class="chip ${verdictChip}">${esc(life.failure_code || 'unknown')}</span>
-        ${t.rank != null ? `<span class="chip"><span class="term" data-t="rank">rank</span> ${esc(t.rank)}</span>` : ''}
+        <span class="chip">${esc(String(t.strategy || 'unknown').replace(/_/g, ' ').toLowerCase())}</span>
+        <!-- The drawer is reachable from Command now (deck verdict, open and
+             pending rows), so it is a trader surface and its verdict has to
+             read like one. SSFunnel is loaded on this page and has a sentence
+             for every code telemetry.classify_failure emits; the raw code
+             stays in the title for whoever is debugging. -->
+        <span class="chip ${verdictChip}" title="${esc(life.failure_code || '')}">${
+          esc(window.SSFunnel && life.failure_code
+                ? SSFunnel.plain(life.failure_code)
+                : (life.failure_code || 'unknown'))}</span>
+        <!-- The rank chip is deliberately absent. The deck removed it after
+             grading it against 228 closed trades: it is non-monotone — its
+             modal bucket was the WORST performing — so showing it invites
+             trust in an ordering the data contradicts. Re-exposing it in a
+             drawer opened FROM the deck would undo that on the same surface.
+             Still in the PLAYBOOK stage facts below, for developers. -->
         <span class="dx-verdict-line">${esc(life.detail || 'no lifecycle verdict recorded')}</span>
         ${t.why ? `<span class="dx-why"><b>why this trade</b>${esc(t.why)}</span>` : ''}
         <span class="dx-verdict-owner">${life.failure_owner

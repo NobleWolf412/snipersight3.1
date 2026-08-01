@@ -16,6 +16,20 @@
     Math.abs(Number(n)).toLocaleString(undefined, {maximumFractionDigits: 0});
   const signedMoney = n => (Number(n) > 0 ? '+' : '') + money(n);
 
+  /* A PRICE, scaled to the magnitude it trades at. `toLocaleString()` defaults
+     to three fraction digits, which on a sub-cent token collapses entry, stop
+     and target into the same displayed number — u1000PEPEUSDT's 0.0041588 /
+     0.0043328 / 0.0041008 all render "0.004", on the deck row where the
+     operator decides whether the trade is worth opening. Module scope because
+     the deck, the open-trades panel and the pending rows must all agree; it
+     lived inside renderPositions and only that panel was correct. */
+  const px = v => {
+    const n = +v, a = Math.abs(n);
+    const d = a >= 1000 ? 0 : a >= 100 ? 2 : a >= 1 ? 3 : 5;
+    return n.toLocaleString(undefined,
+      {minimumFractionDigits: d, maximumFractionDigits: d});
+  };
+
   /* ---------- navigation ---------- */
   // guards the console poll below, which cannot run until its own state exists
   let consoleReady = false;
@@ -183,7 +197,7 @@
       $('baselineChip').textContent = o.baseline.label || 'forward window';
     }
     renderDeck(active, o.rejection_funnel || {});
-    renderRadar(o.approaching);
+    renderRadar(o.approaching, o.prox_atr);
     renderFunnel(o.rejection_funnel || {});
   }
 
@@ -405,9 +419,28 @@
     el.querySelectorAll('[data-trace]').forEach(d => {
       if(d.dataset.wired || !d.dataset.trace) return;
       d.dataset.wired = '1';
+      activatable(d);
       d.addEventListener('click', () => {
         if(window.SSTracer) SSTracer.open(d.dataset.trace);
       });
+    });
+  }
+
+  /* Makes a non-button element genuinely operable rather than merely
+     clickable. Every trace opener was a bare <div> with a click handler, so
+     the drawer that answers "why was this trade taken / why was it refused"
+     — the most explanatory thing in the app — could not be reached at all
+     without a mouse. One helper, so the next element that opens something
+     cannot forget half of it. */
+  function activatable(el){
+    if(!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+    if(!el.hasAttribute('role')) el.setAttribute('role', 'button');
+    if(el.dataset.keyed) return;
+    el.dataset.keyed = '1';
+    el.addEventListener('keydown', e => {
+      if(e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();                       // Space must not scroll
+      el.click();
     });
   }
 
@@ -515,9 +548,9 @@
           <div class="t-label" style="margin-top:4px">${htfChip(s)}</div>
         </div>
         <div class="t-mono" style="color:var(--fg-3)">
-          entry <b style="color:var(--fg)">${(+s.entry).toLocaleString()}</b> ·
-          tp <b style="color:var(--green)">${(+s.tp).toLocaleString()}</b> ·
-          sl <b style="color:var(--red-2)">${(+s.sl).toLocaleString()}</b> ·
+          entry <b style="color:var(--fg)">${px(s.entry)}</b> ·
+          tp <b style="color:var(--green)">${px(s.tp)}</b> ·
+          sl <b style="color:var(--red-2)">${px(s.sl)}</b> ·
           <span class="term" data-t="rr">R:R</span> ${s.rr}
           ${storyOf(s)}
         </div>
@@ -549,7 +582,7 @@
      The meter maps distance in ATR onto the zone-search radius (3 ATR): full
      means price is at the zone's edge. Watch-only: nothing here can be armed,
      so the only control is the chart. */
-  function renderRadar(list){
+  function renderRadar(list, prox){
     const panel = $('radarPanel'), box = $('radar');
     list = list || [];
     if(!list.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
@@ -558,7 +591,21 @@
     box.innerHTML = list.map(s => {
       const long = s.direction === 'LONG';
       const d = parseFloat(s.distance_atr);
-      const fill = isNaN(d) ? 10 : Math.max(8, Math.min(96, (1 - d / 3) * 100));
+      /* Scaled against the engine's OWN proximity bound (setups.PROX_ATR, sent
+         on the payload), not against draft.py's 3-ATR search radius — a
+         constant from a different feature that happened to be nearby. With
+         the wrong divisor the bar only ever occupied 67–96% of its track, so
+         the farthest setup the engine can report looked near-identical to one
+         sitting on the zone, and the proportional encoding said nothing. */
+      const bound = +prox || 1;
+      const fill = isNaN(d) ? 10 : Math.max(8, Math.min(96, (1 - d / bound) * 100));
+      /* The figure is a one-shot measurement taken when the setup armed and is
+         never refreshed, so it is dated rather than asserted in the present
+         tense — "0.5 ATR away when it armed, 3d ago" is true; "0.5 ATR away"
+         about a 28-day-old fact is not. */
+      const agoTxt = s.measured_at
+        ? ' when it armed, ' + agoText(Math.max(0, Date.now() / 1000 - s.measured_at))
+        : '';
       const zm = /\b(SUPPLY|DEMAND) zone ([\d.,]+-[\d.,]+)/.exec(s.why || '');
       const zone = zm ? `${zm[1].toLowerCase()} at ${zm[2]}` : 'a zone the engine is watching';
       const verb = long ? 'Pulling back toward' : 'Rising into';
@@ -572,7 +619,7 @@
             gets there and a candle confirms.</div>
           <div class="radar-meter"><i style="width:${fill.toFixed(0)}%"></i></div>
         </div>
-        <div class="radar-dist">${isNaN(d) ? '—' : d.toFixed(1)}<span class="t-sub">ATR away</span>
+        <div class="radar-dist">${isNaN(d) ? '—' : d.toFixed(1)}<span class="t-sub">ATR away${esc(agoTxt)}</span>
           <button class="btn" style="margin-top:6px" data-rsym="${esc(s.symbol)}" data-rtf="${esc(s.tf)}">Chart</button></div>
       </div>`;
     }).join('');
@@ -622,15 +669,6 @@
     const prices = await Promise.all(list.map(priceOf));
     const pendPrices = await Promise.all(pending.map(priceOf));
 
-    /* Prices carry the venue's full stored precision — `4.59308636` for a stop
-       on a token that ticks in thousandths. Digits nobody trades on are noise
-       in a column meant to be compared at a glance. */
-    const px = v => {
-      const n = +v, a = Math.abs(n);
-      const d = a >= 1000 ? 0 : a >= 100 ? 2 : a >= 1 ? 3 : 5;
-      return n.toLocaleString(undefined,
-        {minimumFractionDigits: d, maximumFractionDigits: d});
-    };
     box.innerHTML = list.map((t, i) => {
       const long = t.direction === 'LONG';
       const entry = +t.entry, sl = +t.sl, tp = +t.tp, now = prices[i];
@@ -643,6 +681,7 @@
         : (long ? now - entry : entry - now) / perR;
       const tone = r == null ? '' : r >= 0 ? 'up' : 'down';
       return `<div class="pos-row traceable" data-trace="${esc(t.setup_id || '')}"
+        tabindex="0" role="button"
         title="click for why this trade was taken — the zone, the confirmation, every gate">
         <div>
           <div class="pos-sym">${esc(String(t.symbol).replace('-USD', ''))}</div>
@@ -681,6 +720,7 @@
       const away = (now == null || !now) ? null
         : Math.abs(now - entry) / now * 100;
       return `<div class="pos-row pending traceable" data-trace="${esc(t.setup_id || '')}"
+        tabindex="0" role="button"
         title="click for why this trade was taken — the zone, the confirmation, every gate">
         <div>
           <div class="pos-sym">${esc(String(t.symbol).replace('-USD', ''))}</div>
@@ -793,14 +833,20 @@
     return `held ${Math.round(n / 24)}d`;
   };
 
-  function renderJournal(journal){
+  function renderJournal(journal, total){
     const el = $('journal');
+    total = total == null ? journal.length : total;
     if(!journal.length){
       el.innerHTML = '<div class="empty">no closed trades in this window yet</div>';
       $('jnlCount').textContent = '0 closed';
       return;
     }
-    $('jnlCount').textContent = journal.length + ' closed';
+    /* Says "showing N of M" whenever the server sends a slice, so the chip can
+       never read as a window total it is not. Today it always sends the whole
+       list, and this stays correct if that ever changes. */
+    $('jnlCount').textContent = total > journal.length
+      ? `showing ${journal.length} of ${total} closed`
+      : journal.length + ' closed';
     el.innerHTML = journal.map(j => {
       const up = j.pnl_usd > 0;
       const flat = j.pnl_usd === 0;
@@ -826,7 +872,12 @@
         <div class="jnl-say">
           ${outcomeText}${costsAte
             ? ' — <span class="warn">right direction, fees and slippage ate it</span>' : ''}
-          <div class="t-sub">${when} · ${heldText(j.holding_hours)} · risked ${money(j.risk_usd)}</div>
+          <!-- joined rather than concatenated: heldText returns '' when the
+               exec fact carries no holding_hours, which produced a doubled
+               separator ("Jul 30 ·  · risked $195"). Any future absent field
+               now degrades to one fewer clause instead of a visible gap. -->
+          <div class="t-sub">${[when, heldText(j.holding_hours),
+            'risked ' + money(j.risk_usd)].filter(Boolean).join(' · ')}</div>
         </div>
         <div class="jnl-r">${(j.r_multiple >= 0 ? '+' : '') + j.r_multiple.toFixed(2)}R
           <span class="t-sub">${signedMoney(j.pnl_usd)}</span></div>
@@ -882,7 +933,7 @@
     $('rEquity').textContent = money(p.equity);
 
     const journal = p.journal || [];
-    renderJournal(journal);
+    renderJournal(journal, p.journal_total);
     renderScoreboard(journal);
 
     if(!$('positions').dataset.traceWired){
@@ -890,6 +941,15 @@
       $('positions').addEventListener('click', e => {
         const d = e.target.closest('[data-trace]');
         if(d && d.dataset.trace && window.SSTracer) SSTracer.open(d.dataset.trace);
+      });
+      // delegation covers the click; the rows still have to be reachable and
+      // operable, which is per-element and has to run after each render
+      $('positions').addEventListener('keydown', e => {
+        if(e.key !== 'Enter' && e.key !== ' ') return;
+        const d = e.target.closest('[data-trace]');
+        if(!d || !d.dataset.trace) return;
+        e.preventDefault();
+        if(window.SSTracer) SSTracer.open(d.dataset.trace);
       });
     }
     // fire-and-forget: the positions panel fetches a price per open trade, and
@@ -998,7 +1058,14 @@
      rows, and this app's whole pitch is dense numbers. The headers exist for
      the same reason — a sighted reader infers "42 trades" is a count from its
      shape; column semantics make that answerable rather than inferable. */
-  function perfRows(rows){
+  /* The key formatter is passed in because perfRows cannot tell a SYMBOL key
+     from a STRATEGY key, and they need opposite treatment: symbols get their
+     venue suffix stripped, strategies are engine enums and must go through the
+     same label map the deck uses. Without this the "By Strategy" table on
+     Results printed BREAKOUT_RETEST — a raw constant on a trader surface, in
+     the middle of a remodel whose whole point was removing them. */
+  function perfRows(rows, fmtKey){
+    fmtKey = fmtKey || (k => String(k).replace('-USD', ''));
     if(!rows || !rows.length) return '<div class="empty">no closed trades yet</div>';
     const body = rows.map(r => {
       const has = r.sum_r !== undefined && r.sum_r !== null;
@@ -1006,7 +1073,7 @@
       const good = pnl >= 0;
       const wr = (r.win_pct ?? null) === null ? '—' : `${r.win_pct}%`;
       return `<tr>
-        <th scope="row">${String(r.key ?? '—').replace('-USD','')}</th>
+        <th scope="row">${esc(fmtKey(r.key ?? '—'))}</th>
         <td>${r.n ?? 0}</td>
         <td>${wr}</td>
         <td><b style="color:${!has ? 'var(--fg-4)' : (good ? 'var(--green)' : 'var(--red-2)')}">${
@@ -1024,7 +1091,7 @@
      of its intents. Its simulated record is evidence for admitting the venue,
      so it stays visible, but it is fenced off and labelled rather than added
      to the operator's track record. */
-  function shadowBlock(rows){
+  function shadowBlock(rows, fmtKey){
     if(!rows || !rows.length) return '';
     const sum = rows.reduce((a, r) => a + (+r.sum_r || 0), 0);
     const n = rows.reduce((a, r) => a + (r.n || 0), 0);
@@ -1032,13 +1099,16 @@
       <summary style="padding:8px var(--lg);color:var(--fg-4);cursor:pointer" class="t-mono">
         + ${n} shadow trade${n === 1 ? '' : 's'} (${sum >= 0 ? '+' : ''}${sum.toFixed(2)}R) —
         warmed venue, never tradeable, excluded above</summary>
-      ${perfRows(rows)}</details>`;
+      ${perfRows(rows, fmtKey)}</details>`;
   }
 
   async function loadPerformance(){
     const p = await api('/api/performance');
-    $('perfSymbol').innerHTML = perfRows(p.by_symbol) + shadowBlock(p.shadow_by_symbol);
-    $('perfStrategy').innerHTML = perfRows(p.by_strategy) + shadowBlock(p.shadow_by_strategy);
+    $('perfSymbol').innerHTML =
+      perfRows(p.by_symbol) + shadowBlock(p.shadow_by_symbol);
+    $('perfStrategy').innerHTML =
+      perfRows(p.by_strategy, playbookLabel) +
+      shadowBlock(p.shadow_by_strategy, playbookLabel);
   }
 
   /* ---------- DIAGNOSTICS ---------- */
@@ -1206,9 +1276,18 @@
   /* The engine writes its own setting descriptions, and they quote engine
      enums verbatim — "Allow SCALE_IN adds." The labels were humanised a while
      back; the sentence underneath each one still shouted a constant name. */
+  /* Its own BARE-NOUN map rather than PLAYBOOK_LABELS: those values are deck
+     display phrases that already carry the noun, so reusing them turned
+     "Allow SCALE_IN adds." into "Allow scale-in add adds." The underscore
+     requirement in the pattern is deliberate and stays — matching bare
+     all-caps words would start rewriting BLOCKED inside
+     halt_on_data_blocked's description, which is meant to read as it does. */
+  const CODE_NOUNS = {
+    SCALE_IN: 'scale-in', BREAKOUT_RETEST: 'breakout-retest',
+    RANGE_FADE: 'range-fade', PULLBACK: 'pullback', REVERSAL: 'reversal'
+  };
   const humaniseCodes = t => String(t).replace(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/g,
-    m => (typeof playbookLabel === 'function' ? playbookLabel(m)
-                                             : m.replace(/_/g, ' ').toLowerCase()));
+    m => CODE_NOUNS[m] || m.replace(/_/g, ' ').toLowerCase());
 
   /* Full rebuild. Only ever called when the SHAPE of the spec changes — never
      on a keystroke and never on the refresh tick, both of which used to blow

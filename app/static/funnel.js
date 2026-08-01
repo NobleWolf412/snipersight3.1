@@ -120,6 +120,29 @@
              'halt working, not a fault.',
       cta: SETUP_SURFACE },
 
+    /* Three refusals the engine emits that had no entry here, so they reached
+       the deck as raw codes on the one surface this dictionary exists to keep
+       clean. DRAWDOWN_HALT arrives parameterised with the percentage. */
+    DRAWDOWN_HALT: {
+      plain: 'the account is too far below its high-water mark to keep trading',
+      means: 'A drawdown halt is deeper than the daily one: it stops new ' +
+             'entries until the account recovers, rather than until tomorrow. ' +
+             'The bracket carries how far down it is.',
+      cta: RESULTS_SURF },
+    PARTICIPATION_TOO_THIN: {
+      plain: 'the position would have been too large a share of what actually trades here',
+      means: 'Size is capped against real traded volume, not just against the ' +
+             'account. A position that is a big fraction of a thin book moves ' +
+             'the price it is trying to get, so the fill you model is not the ' +
+             'fill you would get.',
+      cta: SETUP_SURFACE },
+    VETOED: {
+      plain: 'a safety check on the trade itself refused it',
+      means: 'The setup passed its playbook but failed a structural check — ' +
+             'the confirming candle was too narrow to trust, or the stop sat ' +
+             'inside the venue tick resolution. The trace names which.',
+      cta: DIAG_SURFACE },
+
     /* `cooldown(sl,12.0h)` has been rendering raw and lowercased on the deck
        and in the order ticket with no glossary entry and no card here, while
        DAILY_LOSS_HALT and RISK_REJECTED both had hand-written ones. `baseCode`
@@ -252,8 +275,16 @@
   // argument to look the sentence up, but keep the original on screen.
   const baseCode = c => String(c).split('(')[0];
   const lookup = c => REASONS[baseCode(c)] || null;
-  const plainOf = c => (lookup(c) || {}).plain ||
-    String(c).replace(/_/g, ' ').toLowerCase();
+  /* The fallback lowercases the BASE code, not the original. Left on the whole
+     string, `DRAWDOWN_HALT(12.5%)` came out as "drawdown halt(12.5%)" — the
+     parenthetical is stripped for the lookup and must be stripped for the
+     fallback too, then re-appended so the number survives. */
+  const plainOf = c => {
+    const hit = (lookup(c) || {}).plain;
+    if(hit) return hit;
+    const s = String(c), arg = s.slice(baseCode(s).length);
+    return baseCode(s).replace(/_/g, ' ').toLowerCase() + arg;
+  };
 
   // Shared with wizard.js, which needs the same sentences. Exposed rather than
   // duplicated; wizard.js still guards for its absence so neither module can

@@ -234,10 +234,23 @@ window.SSChart = (() => {
     $('tkReset').textContent = base && base.kind === 'engine' ? 'Reset to engine' : 'Reset';
     $('tkReset').disabled = !base || !modified;
 
+    /* Both early returns skip syncLeverage(), which is the ONLY writer of the
+       leverage row, the dial bounds and the liquidation line — so a symbol
+       with no plan kept showing the previous symbol's "liquidation X · Y away"
+       and the previous venue's "up to Nx". Cleared before either return, and
+       the no-levels branch now disarms like its sibling does. */
+    const clearSized = () => {
+      try{ syncLeverage(null); }catch(err){ /* row may not exist yet */ }
+      $('tkRiskPct').textContent = '';
+      $('tkRisk').value = '';
+    };
+
     if(e == null || tp == null || sl == null){
       out.innerHTML = key.innerHTML =
         '<div><span class="k">status</span><span class="v">no levels</span></div>';
       warn.hidden = true;
+      clearSized();
+      armable = false; refreshArm();
       return;
     }
 
@@ -249,6 +262,7 @@ window.SSChart = (() => {
       out.innerHTML = key.innerHTML =
         '<div><span class="k">status</span><span class="v bad">invalid</span></div>';
       warn.hidden = false; warn.innerHTML = m.errors.join('<br>');
+      clearSized();
       armable = false; refreshArm();
       return;
     }
@@ -301,14 +315,23 @@ window.SSChart = (() => {
          MAXIMUM, so at 1x it claimed $30,699 exceeds $97,105 — a false
          statement about a true breach. It now names the numbers that were
          actually compared, and the fix that is in the operator's hands. */
-      NOTIONAL_EXCEEDS_BUYING_POWER: () =>
-        `A ${usd(m.notional)} position at ${m.leverage}x needs ${usd(m.margin)} ` +
-        `of margin — more than the ${usd(equity)} account. A tight stop sizes ` +
-        'a big position for the same risk. ' +
-        (m.leverage < cfg.max_leverage
-          ? `Raise leverage on the Size tab (up to ${cfg.max_leverage}x) or the ` +
-            'risk authority will cut this size.'
-          : 'The risk authority will cut this size.'),
+      /* The remedy names the leverage that ACTUALLY clears the breach, not
+         merely that headroom exists. Gating on `m.leverage < cfg.max_leverage`
+         alone advised raising the dial in cases where even the venue maximum
+         still leaves margin above equity — telling someone to take more
+         leverage on a trade that will be cut anyway. It also stays silent
+         about the cost: leverage clears this by posting less, and posting
+         less is what pulls liquidation toward the entry. */
+      NOTIONAL_EXCEEDS_BUYING_POWER: () => {
+        const need = Math.ceil(m.notional / equity);
+        return `A ${usd(m.notional)} position at ${m.leverage}x needs ` +
+          `${usd(m.margin)} of margin — more than the ${usd(equity)} account. ` +
+          'A tight stop sizes a big position for the same risk. ' +
+          (need <= cfg.max_leverage && m.leverage < need
+            ? `At ${need}x you would post ${usd(m.notional / need)} instead — ` +
+              'but that pulls liquidation toward your entry.'
+            : 'The risk authority will cut this size.');
+      },
       RISK_EXCEEDS_TOTAL_BUDGET: () =>
         `Risking ${usd(m.riskUsd)} on one trade is more than the whole ` +
         `open-risk budget (${usd(equity * cfg.max_total_risk_pct)}). ` +
@@ -431,8 +454,11 @@ window.SSChart = (() => {
       }
       el.hidden = false;
       el.textContent = 'LIVE ' + pf(t.price);
-      el.title = 'live ticker price, display only — no engine reads this (§5: '
-               + 'analysis is closed-candle only)';
+      // The spec-section pointer belongs in the source comment above, not in
+      // rendered copy — it was the only § anywhere in the UI.
+      el.title = 'live exchange price, shown for the eye only — every setup, '
+               + 'level and decision in this app is computed on closed candles, '
+               + 'so nothing here acts on this number';
     }catch(e){
       const el = $('cLive');
       if(el) el.hidden = true;                 // a failed tick shows nothing
@@ -457,12 +483,21 @@ window.SSChart = (() => {
      banners, so a populated chart of the WRONG market is more dangerous than
      an empty one — especially with an order ticket attached to it. Every
      figure here is market-specific and must go: series, overlays, bracket
-     lines, both header chips, and the Arm button. */
+     lines, both header chips, the Arm button, and the whole order ticket —
+     its pinned figures, its warning, its rationale and its source chip. */
   function clearChart(title, detail){
     candles = [];
     facts = {swing: [], struct: [], zone: [], liq: [], regime: [],
              setupF: [], cycle: [], riskF: []};
     levels = {entry: null, tp: null, sl: null};
+    /* Nulling `levels` is not clearing them: applyLevels() is the only thing
+       that removes the entry/tp/sl price lines from the series and blanks the
+       three inputs, so without this call a cleared chart kept the previous
+       market's bracket drawn on it and editable. `base`, `modified` and the
+       per-trade risk override are market-specific for the same reason — a
+       stale `base` would let Reset restore the WRONG symbol's plan. */
+    base = null; modified = false; riskOverride = null;
+    try{ applyLevels(); }catch(e){ /* chart may not be built yet */ }
     try{ series.setData([]); }catch(e){ /* chart may not be built yet */ }
     try{ drawOverlays(); }catch(e){ /* overlays follow the now-empty facts */ }
     $('cPrice').textContent = '—';
@@ -473,6 +508,17 @@ window.SSChart = (() => {
     if($('cLadder')) $('cLadder').innerHTML = '';
     // A cleared chart describes no market, so there is no plan to arm.
     armable = false; refreshArm();
+    /* The TICKET is market-specific too, and it was the one thing clearChart
+       never touched: a blank chart labelled XRPUSDT sat directly above BTC's
+       R:R, BTC's position size and BTC's dollar risk, in 17px display type on
+       the strip whose whole job is to be the last thing read before arming.
+       recompute()'s no-levels branch writes both #tkKey and #tkOut and hides
+       #tkWarn, and with `base` nulled above it resets the source chip to
+       "no setup". It runs AFTER refreshArm() so it cannot re-enable Arm. */
+    try{ recompute(); }catch(e){ /* ticket may not be built yet */ }
+    $('tkWhy').innerHTML = '';
+    $('tkLiq').textContent = '';
+    $('tkRiskPct').textContent = '';
     $('tkArmed').textContent = '';
     openPos = [];
     for(const l of posLines){ try{ series.removePriceLine(l); }catch(e){} }
@@ -778,8 +824,13 @@ window.SSChart = (() => {
          living in the tooltip for whoever wants it. */
       b.textContent = b.dataset.label;
       b.classList.toggle('empty', !c);
-      b.title = c ? `${c} recorded on this timeframe`
-                  : `nothing recorded for ${k} on ${sym} ${tf}`;
+      /* Composed, not replaced. Overwriting the title destroyed the authored
+         notes on Liquidity and Cycle — the only place the chart says those
+         overlays are INFERRED rather than measured — leaving a bare count in
+         their place. The note lives in data-note now and the count joins it. */
+      const count = c ? `${c} recorded on this timeframe`
+                      : `nothing recorded for ${k} on ${sym} ${tf}`;
+      b.title = [b.dataset.note, count].filter(Boolean).join(' — ');
     });
   }
 
@@ -959,8 +1010,12 @@ window.SSChart = (() => {
     $('tkTabs').addEventListener('click', e => {
       const b = e.target.closest('button[data-p]');
       if(!b) return;
-      $('tkTabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
-      document.querySelectorAll('.tk-pane').forEach(p =>
+      $('tkTabs').querySelectorAll('button').forEach(x => {
+        x.classList.toggle('on', x === b);
+        // the pressed state is the only thing a screen reader can read here
+        x.setAttribute('aria-pressed', String(x === b));
+      });
+      $('ticket').querySelectorAll('.tk-pane').forEach(p =>
         p.classList.toggle('on', p.dataset.p === b.dataset.p));
     });
 
@@ -1254,7 +1309,7 @@ window.SSChart = (() => {
       : `the exchange these candles came from — state ${m.state}, the engine is `
         + 'not scanning this symbol, so it will have no setups')
       + (v.max_leverage > 1
-         ? '. Leverage is set per trade with the dial at the top of the order ticket.'
+         ? '. Leverage is set per trade on the Size tab of the order ticket.'
          : '');
   }
 

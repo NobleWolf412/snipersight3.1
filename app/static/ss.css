@@ -41,6 +41,8 @@
   /* spacing + radii */
   --xs:4px; --sm:8px; --md:14px; --lg:18px; --xl:24px; --shell-x:28px;
   --r-sm:8px; --r-md:10px; --r-lg:12px; --r-xl:14px; --r-pill:999px;
+  /* shell chrome heights — read by the .shell grid AND by #s-chart.on's calc */
+  --topbar-h:56px; --statusbar-h:26px;
 }
 /* Dynamic Accent Rule: the whole shell restates its accent by mode. */
 [data-mode="paper"]{--accent:var(--amber);--accent-rgb:255,194,102}
@@ -48,6 +50,15 @@
 [data-mode="idle"] {--accent:var(--green);--accent-rgb:0,255,170}
 
 *{box-sizing:border-box;margin:0;padding:0}
+/* `hidden` must actually hide. The [hidden] default belongs to the user agent,
+   so ANY author rule that sets display outranks it — `.fld{display:flex}` did,
+   and so does `.chip{display:inline-flex}`. This was first fixed scoped to
+   `.ticket`, which guaranteed it would come back the moment another
+   display-setting class met a `hidden` element, and it did: #cLive kept
+   rendering a stale price still labelled LIVE after the ticker failed, and
+   #setDirty showed a permanent "unsaved" chip on a clean config. Global and
+   !important, because every future display-setting class re-breaks it. */
+[hidden]{display:none !important}
 html,body{height:100%}
 body{
   background:var(--bg);color:var(--fg-2);
@@ -315,7 +326,12 @@ body{
 #gloss .g-def{font-family:var(--f-body);font-size:13px;line-height:1.5;color:var(--fg-2)}
 
 /* ---------- app shell ---------- */
-.shell{display:grid;height:100vh;grid-template-rows:56px 1fr 26px;grid-template-columns:186px 1fr}
+/* --topbar-h/--statusbar-h are tokens because #s-chart.on subtracts BOTH of
+   them in a calc() that has to agree with this declaration; as literals in two
+   places they had already drifted once. */
+.shell{display:grid;height:100vh;
+  grid-template-rows:var(--topbar-h) 1fr var(--statusbar-h);
+  grid-template-columns:186px 1fr}
 .topbar{grid-column:1/-1;display:flex;align-items:center;gap:var(--lg);padding:0 var(--shell-x);
   border-bottom:1px solid var(--border-soft);background:linear-gradient(180deg,var(--bg-2),var(--bg))}
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-size:16px;
@@ -370,6 +386,15 @@ body{
 .statusbar{grid-column:1/-1;display:flex;align-items:center;gap:var(--lg);padding:0 var(--shell-x);
   border-top:1px solid var(--border-soft);background:var(--bg-2);
   font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;color:var(--fg-4);text-transform:uppercase}
+/* The overlay mounts are direct children of the `.shell` grid, so auto-placement
+   seated them in row 3 — the status-bar row — and pushed .statusbar into an
+   implicit fourth row. Measured: `56px 801.5px 26px 16.5px`, i.e. a status bar
+   rendering 16.5px instead of its declared 26, a dead band above it, and a
+   stage row 16px shorter than #s-chart.on's calc() assumes, which is why the
+   Chart surface scrolled exactly 16px at every viewport. They are mount points
+   for fixed-position drawers and have no business occupying grid tracks. */
+.shell > #tracerRoot, .shell > #wizardRoot{position:absolute}
+
 .statusbar b{color:var(--fg-2);font-weight:600}
 /* the orb is a sized box, so its container has to be a flex line for it to
    have any size at all — inline it collapses to nothing */
@@ -409,7 +434,7 @@ body{
 /* ---------- CHART surface: the chart owns the screen ---------- */
 /* stage rows are 56 topbar + 26 statusbar; --xl padding top and bottom */
 #s-chart.on{display:flex;flex-direction:column;gap:var(--md);
-  height:calc(100vh - 56px - 26px - var(--xl) * 2)}
+  height:calc(100vh - var(--topbar-h) - var(--statusbar-h) - var(--xl) * 2)}
 /* The chart still owns the screen. Its heading is compact — inline, small, no
    bottom margin of its own — because the surface height is calculated and the
    pane needs it. Stating the question costs one line; not stating it left the
@@ -507,11 +532,6 @@ body{
 .tk-pane{display:none;flex-direction:column;gap:var(--md)}
 .tk-pane.on{display:flex}
 
-/* `hidden` did not hide: `.fld{display:flex}` is an author rule and the
-   [hidden] default is the user agent's, so it always lost. The leverage dial
-   and the trail-distance field were both rendering on venues that cannot use
-   them. Author-level, and scoped to the ticket rather than changed globally. */
-.ticket [hidden]{display:none}
 
 /* The three numbers the decision rests on, in the display face so they read
    as the headline of the bar rather than three more stats. */
@@ -561,7 +581,15 @@ body{
 .commit-bar .tk-actions .btn{flex:none}
 /* message rows: full-width second line, only when non-empty */
 .commit-bar .tk-open,.commit-bar .tk-armed,.commit-bar .tk-lock{
-  flex:1 1 100%;text-align:left;margin:0;border:0;padding:0}
+  flex:1 1 100%;text-align:left;margin:0;padding:0}
+.commit-bar .tk-armed,.commit-bar .tk-lock{border:0}
+/* The open-position line keeps a marker. Flattening all three rows stripped
+   the amber border that made this one — the only row describing money
+   currently at stake rather than a plan — distinguishable from the two that
+   describe outcomes. A left rule survives the horizontal layout where the
+   original box did not. */
+.commit-bar .tk-open{border:0;border-left:2px solid rgba(251,191,36,.55);
+  padding-left:9px}
 .commit-bar .tk-armed:empty,.commit-bar .tk-lock:empty{display:none;min-height:0}
 
 .tk-out{display:flex;flex-direction:column;gap:1px;padding:0}
@@ -599,7 +627,11 @@ body{
 .tk-armed:empty{min-height:0}
 /* The open-position readout. Amber border because it is the one element on
    the ticket describing money currently at stake rather than a plan. */
-.tk-open{color:var(--fg-1);font-size:11px;line-height:1.7;text-align:center;
+/* --fg-1 never existed: the ramp is --fg / --fg-2 / --fg-3 / --fg-4, so this
+   declaration was invalid at computed-value time and the colour silently
+   inherited, making the at-stake line identical to the armed line it is
+   meant to outrank. */
+.tk-open{color:var(--fg);font-size:11px;line-height:1.7;text-align:center;
          border:1px solid rgba(251,191,36,.35);border-radius:4px;
          padding:4px 6px;margin-bottom:4px}
 .tk-open:empty{display:none}
@@ -694,7 +726,8 @@ body{
   color:var(--fg-2);font-variant-numeric:tabular-nums}
 .jnl-row.up .jnl-r{color:var(--green)}
 .jnl-row.down .jnl-r{color:var(--red-2)}
-.jnl-r .t-sub{display:block;text-align:right;margin-top:3px}
+/* the dollar result of a closed trade — the figure the row exists to report */
+.jnl-r .t-sub{display:block;text-align:right;margin-top:3px;color:var(--fg-2)}
 @media(max-width:900px){.jnl-row{grid-template-columns:1fr;gap:var(--sm)}
   .jnl-r,.jnl-r .t-sub{text-align:left}}
 
@@ -728,18 +761,28 @@ body{
 .pos-prog.down{background:rgba(248,113,113,.5)}
 .pos-mark{position:absolute;top:50%;width:3px;height:15px;border-radius:2px;background:var(--fg);
   transform:translate(-50%,-50%);box-shadow:0 0 10px rgba(255,255,255,.45)}
+/* --fg-2, not --fg-4. These are the stop and target PRICES of a live position,
+   and --fg-4 is 2.2:1 on this ground — below the 4.5:1 AA floor at any size,
+   let alone 10px. --fg-3 measures 4.42:1 on --bg and 3.6:1 on --card, so it
+   does not clear it either; --fg-2 is the first step that does. The token
+   itself is left alone: it backs ~35 genuinely decorative rules. */
 .pos-ends{display:flex;justify-content:space-between;gap:var(--sm);
-  font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;color:var(--fg-4);
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;color:var(--fg-2);
   text-transform:uppercase;font-variant-numeric:tabular-nums}
-.pos-ends .now{color:var(--fg-2)}
+.pos-ends .now{color:var(--fg)}
 /* anything carrying data-trace opens the per-setup trace drawer */
 .traceable{cursor:pointer}
 .traceable:hover .chip{filter:brightness(1.25)}
 .pos-row.traceable:hover{background:rgba(255,255,255,.03)}
+/* the drawer is keyboard-reachable, so its focus must be visible */
+.traceable:focus-visible{outline:1px solid var(--accent);outline-offset:-2px;
+  border-radius:var(--r-sm)}
 .pos-r{text-align:right;font-family:var(--f-display);font-size:20px;font-weight:800;color:var(--fg)}
 .pos-r.up{color:var(--green)} .pos-r.down{color:var(--red-2)}
+/* the dollars at risk on a live position — data, not decoration; see the
+   contrast note on .pos-ends above */
 .pos-r .t-sub{display:block;font-family:var(--f-mono);font-size:10px;font-weight:400;
-  color:var(--fg-4);margin-top:4px}
+  color:var(--fg-2);margin-top:4px}
 @media(max-width:900px){
   .pos-row{grid-template-columns:1fr;gap:var(--sm)}
   .pos-r{text-align:left}

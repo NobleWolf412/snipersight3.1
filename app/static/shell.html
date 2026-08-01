@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SniperSight</title>
 <link rel="icon" href="/static/assets/snipersight-logo.png">
-<link rel="stylesheet" href="/static/ss.css?v=9">
+<link rel="stylesheet" href="/static/ss.css?v=10">
 </head>
 <body data-mode="idle">
 
@@ -235,13 +235,15 @@
         <button class="btn" id="cAnalyse"
                 title="run the engine chain (swings, structure, zones, liquidity, regime) over this symbol now, ~10-20s — mainly useful on symbols the scanner is not watching">Analyze</button>
         <div style="margin-left:auto"></div>
-        <!-- data-label is the base text; chart.js appends the live fact count -->
+        <!-- data-label is the button's NAME and chart.js resets textContent from it;
+             data-note is the authored explanation, which chart.js composes with
+             the recorded count rather than overwriting. -->
         <div class="seg seg-toggle" id="cOverlays">
           <button data-o="swings"    data-label="Swings"    class="on">Swings</button
           ><button data-o="structure" data-label="Structure" class="on">Structure</button
           ><button data-o="zones"     data-label="Zones"     class="on">Zones</button
-          ><button data-o="liquidity" data-label="Liquidity" title="stop clusters inferred from the chart's own shape — a likely place for stops, not a measured one">Liquidity</button
-          ><button data-o="cycle"     data-label="Cycle" title="daily and weekly cycle lows — observational, never traded">Cycle</button>
+          ><button data-o="liquidity" data-label="Liquidity" data-note="stop clusters inferred from the chart's own shape — a likely place for stops, not a measured one">Liquidity</button
+          ><button data-o="cycle"     data-label="Cycle" data-note="daily and weekly cycle lows — observational, never traded">Cycle</button>
         </div>
       </div>
 
@@ -266,11 +268,18 @@
 
                The numbers that DECIDE the trade do not live in a pane: they
                are pinned below, so changing pane can never hide them. -->
-          <div class="seg tk-tabs" id="tkTabs" role="tablist">
-            <button data-p="trade" class="on" type="button">Trade</button>
-            <button data-p="size" type="button">Size</button>
-            <button data-p="numbers" type="button">Numbers</button>
-            <button data-p="why" type="button">Why</button>
+          <!-- Deliberately NOT role="tablist". It carried that role while
+               implementing none of the pattern — no role=tab, no
+               aria-selected, no tabpanels, no arrow-key model — so it promised
+               a screen-reader user a behaviour that was not there, which is
+               worse than plain buttons. These are pressable buttons that swap
+               a pane, and aria-pressed says exactly that, matching how the
+               rest of this app marks its segmented controls. -->
+          <div class="seg tk-tabs" id="tkTabs">
+            <button data-p="trade" class="on" type="button" aria-pressed="true">Trade</button>
+            <button data-p="size" type="button" aria-pressed="false">Size</button>
+            <button data-p="numbers" type="button" aria-pressed="false">Numbers</button>
+            <button data-p="why" type="button" aria-pressed="false">Why</button>
           </div>
 
           <div class="ticket-body">
@@ -725,20 +734,20 @@
      its own mount point, so there was never a reason for them to block. -->
 <script defer src="/static/lightweight-charts.js"></script>
 <!-- must load before any consumer: every module reads through it -->
-<script defer src="/static/ssdata.js?v=9"></script>
-<script defer src="/static/ticket-math.js?v=9"></script>
-<script defer src="/static/glossary.js?v=9"></script>
-<script defer src="/static/chart.js?v=9"></script>
-<script defer src="/static/shell.js?v=9"></script>
+<script defer src="/static/ssdata.js?v=10"></script>
+<script defer src="/static/ticket-math.js?v=10"></script>
+<script defer src="/static/glossary.js?v=10"></script>
+<script defer src="/static/chart.js?v=10"></script>
+<script defer src="/static/shell.js?v=10"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must
      never blank a surface that another owns. -->
-<script defer src="/static/playbooks.js?v=9"></script>
-<script defer src="/static/weather.js?v=9"></script>
-<script defer src="/static/lessons.js?v=9"></script>
-<script defer src="/static/funnel.js?v=9"></script>
-<script defer src="/static/tracer.js?v=9"></script>
-<script defer src="/static/wizard.js?v=9"></script>
-<script defer src="/static/edgeview.js?v=9"></script>
+<script defer src="/static/playbooks.js?v=10"></script>
+<script defer src="/static/weather.js?v=10"></script>
+<script defer src="/static/lessons.js?v=10"></script>
+<script defer src="/static/funnel.js?v=10"></script>
+<script defer src="/static/tracer.js?v=10"></script>
+<script defer src="/static/wizard.js?v=10"></script>
+<script defer src="/static/edgeview.js?v=10"></script>
 </body>
 </html>
