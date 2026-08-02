@@ -300,4 +300,53 @@ ok('reset names what it reverts to', () => {
   assert.ok(CHART.includes("'Back to live levels'"));
 });
 
+
+/* THE DECK CARD FOR A TRADE YOU ARE ALREADY IN. The card and the position are
+   the same trade at two moments, and the deck said nothing — so a held symbol
+   read as an untaken opportunity, and "Open chart" landed on a position editor
+   the operator had no reason to expect. */
+console.log('deck: what you already hold');
+ok('the deck is told what the book holds', () => {
+  assert.ok(/function indexHeld\(p\)/.test(JS), 'the held index must exist');
+  assert.ok(/indexHeld\(p\);/.test(JS), 'and something must feed it');
+  assert.ok(JS.includes('active_positions') && JS.includes('pending_orders'),
+            'both books count as exposure');
+});
+ok('setup_id is the exact link, symbol only the fallback', () => {
+  assert.ok(/heldSids\.has\(sid\)/.test(JS), 'exact match first');
+  assert.ok(/heldSyms\.get\(s\.symbol\)/.test(JS), 'then the market');
+  assert.ok(/in this trade/.test(JS) && /already \$\{h\.kind === 'open' \? 'in' : 'bidding'\}/.test(JS),
+            'the two claims must read differently — they are different claims');
+});
+ok('a resting order is not a position', () => {
+  assert.ok(/order resting on this — not filled yet/.test(JS));
+  // /api/manual/open returns `engine` from active_positions ALONE, so a
+  // pending order must not promise a position editor it will not get.
+  assert.ok(/const mine = \(heldSyms\.get\(s\.symbol\) \|\| \{\}\)\.kind === 'open'/.test(JS));
+  assert.ok(/mine \? 'Manage trade' : 'Open chart'/.test(JS));
+});
+ok('an opposite-direction card on a held symbol says so', () => {
+  assert.ok(/this card is the other way/.test(JS));
+});
+ok('Manage trade opens the timeframe the POSITION is on', () => {
+  assert.ok(/mine \? heldSyms\.get\(s\.symbol\)\.tf : s\.tf/.test(JS),
+            'the deck card tf is not necessarily the trade tf');
+});
+ok('a filled position outranks a resting order on the same name', () => {
+  assert.ok(/if\(!syms\.has\(t\.symbol\)\)/.test(JS),
+            'iteration order must not decide which claim wins');
+});
+ok('the deck repaints when the book changes, not on the next poll', () => {
+  assert.ok(/lastDeckArgs = \[setups, funnel\]/.test(JS), 'args must be cached');
+  assert.ok(/if\(lastDeckArgs\) renderDeck\(lastDeckArgs\[0\], lastDeckArgs\[1\]\)/.test(JS));
+  assert.ok(/if\(sig === indexHeld\.sig\) return/.test(JS), 'and only when it changed');
+});
+ok('the held row is marked, and wears the same amber as the chart', () => {
+  assert.ok(CSS.includes('.deck-row.held'), 'held rows need chrome');
+  assert.ok(CSS.includes('.deck-row.held-sym'), 'exposure-only is quieter');
+  assert.ok(/\.deck-held\{grid-column:1\/-1/.test(CSS),
+            'the banner spans the row — 120px would crush the sentence');
+  assert.ok(CSS.includes('.btn-amber'), 'Manage trade is an amber action');
+});
+
 console.log(`  ${passed} passed`);

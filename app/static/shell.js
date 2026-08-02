@@ -305,6 +305,7 @@
   }
 
   function renderDeck(setups, funnel){
+    lastDeckArgs = [setups, funnel];
     const el = $('deck');
     if(!setups.length){
       /* THE EMPTY-WINDOW RULE, site 4 of 4.
@@ -379,7 +380,9 @@
     ordered.forEach(s => {
       const key = s.symbol;
       seen.add(key);
-      const cls = 'deck-row' + (s.risk && s.risk.decision === 'REJECTED' ? ' dead' : '');
+      const held = heldSids.has(s.setup_id || '') || pendSids.has(s.setup_id || '');
+      const cls = 'deck-row' + (s.risk && s.risk.decision === 'REJECTED' ? ' dead' : '')
+                + (held ? ' held' : heldSyms.has(s.symbol) ? ' held-sym' : '');
       const html = deckRowInner(s, now);
       let rec = deckRows.get(key);
       if(!rec){
@@ -452,6 +455,67 @@
 
   const deckRows = new Map();          // symbol -> {el, html, cls}
 
+  /* WHAT THE OPERATOR IS ALREADY IN, indexed for the deck.
+
+     A setup card and an open position are the same trade seen at two moments:
+     the plan the engine cleared, and the money that went in on it. The deck
+     never said so, so UNIUSDT sat there reading like an untaken opportunity
+     while the operator held it — and clicking "Open chart" landed on a
+     position editor they had no reason to expect.
+
+     Two different claims, deliberately kept apart:
+       · by setup_id — THIS card is the trade you are in. Exact.
+       · by symbol   — a DIFFERENT setup on a market you already hold. The deck
+         keeps one card per symbol and picks the soonest to expire, so the card
+         on screen is often not the one that was entered. Arming it would stack
+         exposure on a name you are already exposed to, which is the thing the
+         operator most needs told before they click, not after. */
+  let heldSids = new Set();            // setup_id -> filled position
+  let pendSids = new Set();            // setup_id -> order placed, not filled
+  let heldSyms = new Map();            // symbol -> {direction, tf, kind}
+  let lastDeckArgs = null;             // so a change in the book can repaint
+
+  function indexHeld(p){
+    const sids = new Set(), pend = new Set(), syms = new Map();
+    for(const t of (p.active_positions || [])){
+      if(t.setup_id) sids.add(t.setup_id);
+      syms.set(t.symbol, {direction: t.direction, tf: t.tf, kind: 'open'});
+    }
+    for(const t of (p.pending_orders || [])){
+      if(t.setup_id) pend.add(t.setup_id);
+      // A filled position outranks a resting order on the same name: it is the
+      // stronger claim and must not be overwritten by iteration order.
+      if(!syms.has(t.symbol))
+        syms.set(t.symbol, {direction: t.direction, tf: t.tf, kind: 'pending'});
+    }
+    const sig = JSON.stringify([[...sids].sort(), [...pend].sort(),
+                                [...syms.keys()].sort()]);
+    if(sig === indexHeld.sig) return;
+    indexHeld.sig = sig;
+    heldSids = sids; pendSids = pend; heldSyms = syms;
+    /* The deck and the portfolio arrive on separate payloads, so whichever
+       lands second would otherwise paint a deck that disagrees with the book
+       until the next poll — a full cycle of "you are not in this" on a trade
+       that just opened. Repaint from the cached args instead. */
+    if(lastDeckArgs) renderDeck(lastDeckArgs[0], lastDeckArgs[1]);
+  }
+
+  /* The banner a held card wears, or ''. */
+  function heldBadge(s){
+    const sid = s.setup_id || '';
+    if(heldSids.has(sid))
+      return '<div class="deck-held">in this trade — you are holding it now</div>';
+    if(pendSids.has(sid))
+      return '<div class="deck-held pend">order resting on this — not filled yet</div>';
+    const h = heldSyms.get(s.symbol);
+    if(h)
+      return `<div class="deck-held other">already ${h.kind === 'open' ? 'in' : 'bidding'} ${
+        esc(s.symbol.replace('-USD', ''))} — ${esc(h.direction || '')} on ${esc(h.tf || '')}${
+        h.direction && s.direction && h.direction !== s.direction
+          ? ' · this card is the other way' : ''}</div>`;
+    return '';
+  }
+
   /* The engine's enums, said the way a trader would say them. Both maps fall
      back to the de-underscored code, so a playbook or decision added to the
      engine can never render a blank cell here — it just reads plainer once
@@ -521,6 +585,11 @@
       // this deck can do — the operator would size a trade the engine refused.
       const r = s.risk;
       const dec = r ? r.decision : null;
+      /* Only a FILLED position turns the chart into a position editor —
+         /api/manual/open returns `engine` from active_positions alone. A
+         resting order must not promise "Manage trade" and then hand back a
+         planning ticket. */
+      const mine = (heldSyms.get(s.symbol) || {}).kind === 'open';
       /* Delegates to the shared formatter rather than re-implementing it, so a
          negative can never render one way here and another way on Results.
          The null case stays local: an unsized setup must read "—", and the
@@ -541,6 +610,7 @@
       // wrapper element and its .dead class are owned by renderDeck's differ;
       // this returns the row's CONTENTS only
       return `
+        ${heldBadge(s)}
         <div>
           <div class="t-mono" style="font-size:13px;color:var(--fg)">${s.symbol.replace('-USD','')}</div>
           <div class="t-label">${s.tf} · ${playbookLabel(s.strategy)}</div>
@@ -565,7 +635,11 @@
         <button class="btn" data-copilot="1" data-sym="${s.symbol}" data-tf="${s.tf}"
                 data-sid="${esc(s.setup_id || '')}"
                 title="ask the copilot about this setup — it reads the trace and cannot arm">Ask copilot</button>
-        <button class="btn" data-sym="${s.symbol}" data-tf="${s.tf}">Open chart</button>`;
+        <button class="btn${mine ? ' btn-amber' : ''}" data-sym="${s.symbol}" data-tf="${
+          mine ? heldSyms.get(s.symbol).tf : s.tf}"
+                title="${mine ? 'open the chart on the trade you are holding — the ticket manages it'
+                              : 'open this plan on the chart'}">${
+          mine ? 'Manage trade' : 'Open chart'}</button>`;
     }
   }
 
@@ -986,6 +1060,7 @@
     }
     // fire-and-forget: the positions panel fetches a price per open trade, and
     // a slow venue must not hold up the equity numbers above it
+    indexHeld(p);
     renderRiskBudget(p);
     renderPositions(p).catch(() => {});
 

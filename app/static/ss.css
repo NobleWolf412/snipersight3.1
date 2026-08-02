@@ -294,6 +294,8 @@ body{
   color:#67e8f9;border-color:#164e63;box-shadow:0 1px 0 #22d3ee inset,0 2px 6px rgba(0,0,0,.5)}
 .btn-cyan:hover{color:#a5f3fc;border-color:#22d3ee}
 .btn-cyan:active{transform:translateY(1px);box-shadow:0 0 0 #000 inset}
+.btn-amber{background:rgba(251,191,36,.10);color:var(--amber-2);border-color:rgba(251,191,36,.40)}
+.btn-amber:hover{border-color:var(--amber-2);color:var(--amber)}
 .btn-red{background:rgba(248,113,113,.10);color:var(--red-2);border-color:rgba(248,113,113,.35)}
 .btn-red:hover{border-color:var(--red);color:var(--red)}
 .btn-lg{font-size:13px;padding:12px 20px}
@@ -886,3 +888,26 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .ticket.managing #tkMode{color:var(--amber-2)}
 .ticket.managing #tkMode::before{background:var(--amber-2);
   box-shadow:0 0 8px rgba(251,191,36,.8)}
+
+/* A DECK CARD FOR A TRADE YOU ARE ALREADY IN.
+
+   The deck reads as a list of things you could take. For a symbol already on
+   the book that is false and expensive: the operator opened UNIUSDT expecting
+   a fresh plan and got a position editor. Amber is this app's "your money is
+   on this" accent — the same one the chart's managing ticket wears, so the two
+   surfaces agree at a glance before either is read. */
+.deck-row.held{background:linear-gradient(90deg,rgba(251,191,36,.07),transparent 55%);
+  box-shadow:inset 3px 0 0 var(--amber-2)}
+/* Exposure on the name, but a different plan — quieter, because it is a
+   warning about stacking rather than a statement about this card. */
+.deck-row.held-sym{box-shadow:inset 3px 0 0 rgba(251,191,36,.35)}
+/* Spans every column and sits above the card's own five, so the sentence gets
+   the full width instead of being crushed into the 120px symbol cell. */
+.deck-held{grid-column:1/-1;font-family:var(--f-mono);font-size:10px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;margin-bottom:2px;
+  color:var(--amber-2);line-height:1.35;display:flex;align-items:center;gap:6px}
+.deck-held::before{content:'';width:5px;height:5px;border-radius:50%;flex:none;
+  background:currentColor;box-shadow:0 0 7px currentColor}
+.deck-held.pend{color:var(--amber);opacity:.85}
+.deck-held.other{color:var(--fg-3);letter-spacing:.06em;text-transform:none;
+  font-size:10px}
