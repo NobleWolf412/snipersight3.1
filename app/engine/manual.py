@@ -228,6 +228,69 @@ def overridden_setups(con) -> dict:
     return out
 
 
+def adopt_position(con, setup_id: str, symbol: str, tf: str, direction: str,
+                   entry, sl, tp, fill_ts: int, adopted_at: int,
+                   risk_usd=None, trail_r=None, note: str = "") -> dict:
+    """Take custody of an engine position with the operator's own levels.
+
+    The engine entered this trade; the operator is changing where it ends. Two
+    facts are written and the strategy record is touched by neither:
+
+      · an OVERRIDE marking the engine position adopted, so the cockpit stops
+        reporting it as engine exposure the operator no longer governs;
+      · an INTENT carrying the ORIGINAL fill price as entry and the operator's
+        new stop and target, flagged `adopted_fill_ts` so the resolver knows
+        the entry already happened and must not hunt for one.
+
+    From here it is an ordinary manual trade: it settles on the operator's
+    book, it can trail, and the engine's simulation keeps running its own
+    plan. That pairing is the point — the operator's exit and the rule's exit
+    both get recorded, so which one was better stops being a matter of opinion.
+    """
+    entry = Decimal(str(entry))
+    sl, tp = Decimal(str(sl)), Decimal(str(tp))
+    validate(symbol, direction, entry, tp, sl)
+    if trail_r is not None:
+        trail_r = Decimal(str(trail_r))
+        if trail_r < Decimal("0.1"):
+            raise IntentRejected("trail distance must be at least 0.1R")
+    per_unit = risk_per_unit(direction, entry, sl)
+    size_units = ((Decimal(str(risk_usd)) / per_unit)
+                  if risk_usd is not None and per_unit > 0 else None)
+    intent_id = f"{symbol}|{tf}|ADOPTED|{adopted_at}"
+    payload = {
+        "intent_id": intent_id, "source": "OPERATOR", "state": "ADOPTED",
+        "direction": direction,
+        "entry": str(entry), "tp": str(tp), "sl": str(sl),
+        "risk_per_unit": str(per_unit),
+        "risk_usd": None if risk_usd is None else str(risk_usd),
+        "size_units": None if size_units is None else str(size_units),
+        "trail_r": None if trail_r is None else str(trail_r),
+        "armed_at": adopted_at,
+        # The entry already happened. This is what tells the resolver to hold
+        # rather than hunt for a fill it would never find.
+        "adopted_fill_ts": fill_ts,
+        "adopted_from": setup_id,
+        "note": note[:280],
+        "cost_manifest_hash": costs.record(con, costs.profile_for(symbol)),
+    }
+    store.insert_fact(con, symbol=symbol, tf=tf, kind=INTENT_KIND,
+                      market_time=adopted_at, confirmed_at=adopted_at,
+                      algo_version=MANUAL_VERSION, payload=payload)
+    store.insert_fact(
+        con, symbol=symbol, tf=tf, kind=OVERRIDE_KIND,
+        market_time=adopted_at, confirmed_at=adopted_at,
+        algo_version=MANUAL_VERSION,
+        payload={"setup_id": setup_id, "source": "OPERATOR",
+                 "event": "ADOPTED", "symbol": symbol, "tf": tf,
+                 "direction": direction, "entry": str(entry),
+                 "new_sl": str(sl), "new_tp": str(tp),
+                 "intent_id": intent_id,
+                 "not_the_strategy_record": True})
+    con.commit()
+    return {"intent_id": intent_id, **payload}
+
+
 def close_engine_position(con, setup_id: str, symbol: str, tf: str,
                           direction: str, entry, sl, risk_usd=None,
                           note: str = "") -> dict:
@@ -451,6 +514,17 @@ def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
     if risk <= 0:
         return {"phase": "INVALID"}
 
+    # An ADOPTED position is already filled — the operator took custody of a
+    # trade the engine had entered — so the entry search is skipped entirely.
+    # Hunting for a limit fill would be wrong twice: the fill already happened
+    # at a price the engine recorded, and a failed search would mark a live
+    # position as never entered.
+    if p.get("adopted_fill_ts") is not None:
+        fi = bisect_left(candle_times, p["adopted_fill_ts"])
+        if fi >= len(candles):
+            return {"phase": "PENDING", "bars_left": 0}
+        return _exit_walk(p, candles, fi, fi)
+
     order_i = _first_eligible_bar(candle_times, tf_seconds, p["armed_at"])
     if order_i >= len(candles):
         return {"phase": "PENDING", "bars_left": MAX_ENTRY_BARS}
@@ -467,6 +541,21 @@ def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
         return {"phase": "MISSED", "miss_i": order_i + MAX_ENTRY_BARS - 1,
                 "order_i": order_i}
 
+    return _exit_walk(p, candles, fill_i, order_i)
+
+
+def _exit_walk(p: dict, candles: list, fill_i: int, order_i: int) -> dict:
+    """The hold: stop, target, trail and timeout, from the fill bar onward.
+
+    Shared by the ordinary path and the adopted one so a position taken over
+    from the engine is held to exactly the rules a hand-armed trade is.
+    """
+    direction = p["direction"]
+    long = direction == "LONG"
+    entry, sl, tp = Decimal(p["entry"]), Decimal(p["sl"]), Decimal(p["tp"])
+    trail = p.get("trail_r")
+    trail = Decimal(str(trail)) if trail else None
+    risk = risk_per_unit(direction, entry, sl)
     stop, best, trailed = sl, entry, False
     for j in range(fill_i, min(fill_i + MAX_BARS, len(candles))):
         hi, lo = Decimal(candles[j]["high"]), Decimal(candles[j]["low"])

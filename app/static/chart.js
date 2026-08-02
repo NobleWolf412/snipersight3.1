@@ -27,6 +27,7 @@ window.SSChart = (() => {
   let pickerScope = 'scanned';                // 'scanned' | 'all' — see renderPicker()
   let draftPlan = null;                       // engine/draft.py bracket, or null
   let openPos = [];                           // open manual trades on this chart
+  let enginePos = null;                       // the ENGINE's open trade here, if any
   let posLines = [];                          // their price lines, redrawn per load
   let modified = false;
   // Per-trade risk. Null means "use the engine default". Deliberately reset on
@@ -225,7 +226,9 @@ window.SSChart = (() => {
     /* One word each. The long forms ("structure draft", "operator-modified")
        overflowed the 268px head and wrapped it to two rows; the Why pane
        already carries the full sentence for every one of these states. */
-    $('tkSrc').textContent = kind === 'engine'
+    $('tkSrc').textContent = kind === 'position'
+      ? (modified ? 'your exit — unsaved' : 'open position')
+      : kind === 'engine'
       ? (modified ? 'edited' : 'engine')
       : kind === 'draft' ? (modified ? 'edited' : 'draft')
       : kind === 'seeded' ? 'manual' : 'no setup';
@@ -560,8 +563,11 @@ window.SSChart = (() => {
       // The operator's open trades here. Same seq guard, same reason.
       try{
         const op = await api(`/api/manual/open?symbol=${encodeURIComponent(sym)}&tf=${tf}`);
-        if(seq === loadSeq) openPos = (op && op.open) || [];
-      }catch(err){ if(seq === loadSeq) openPos = []; }
+        if(seq === loadSeq){
+          openPos = (op && op.open) || [];
+          enginePos = (op && op.engine) || null;
+        }
+      }catch(err){ if(seq === loadSeq){ openPos = []; enginePos = null; } }
     }catch(err){
       // The failure path used to write into #chartEmpty and return — but
       // #chartEmpty is only ever un-hidden on the SUCCESS path below, so after
@@ -852,6 +858,28 @@ window.SSChart = (() => {
        every 60 seconds, which is worse than the staleness it fixes. */
     const editing = keepTicket && (modified || riskOverride != null);
     if(!editing) modified = false;
+
+    /* An OPEN ENGINE POSITION outranks everything else this ticket could
+       show. You are already in the trade; the only decision left is where it
+       ends, so the ticket loads its live levels and the commit button becomes
+       "Update trade". Dragging a level then takes custody: the operator's
+       stop and target settle on THEIR book while the engine keeps simulating
+       the plan it entered on, which is what makes the two comparable. */
+    if(enginePos){
+      base = {entry: +enginePos.entry, tp: +enginePos.tp, sl: +enginePos.sl,
+              dir: enginePos.direction, kind: 'position'};
+      $('tkWhy').innerHTML =
+        '<em>You are in this trade — the engine entered it</em>' +
+        `Filled ${pf(+enginePos.entry)} · stop ${pf(+enginePos.sl)} · target ` +
+        `${pf(+enginePos.tp)}. Drag a level and press <b>Update trade</b> to ` +
+        'take it onto your book with your own exit — trailing included. The ' +
+        'engine keeps simulating its original plan either way, so both ' +
+        'outcomes get recorded and you can see which was better.';
+      if(editing){ applyLevels(); recompute(); }
+      else restore();
+      return;
+    }
+
     if(setup){
       base = {entry: +setup.entry, tp: +setup.tp, sl: +setup.sl,
               dir: setup.direction, kind: 'engine'};
@@ -955,7 +983,20 @@ window.SSChart = (() => {
      distinction between "your paper trade was recorded" and "this system can
      send real orders" is on screen rather than assumed. */
   function refreshArm(){
-    $('tkArm').disabled = !armable || !sym;
+    const holding = !!enginePos;
+    const btn = $('tkArm');
+    // Holding a position: the only honest commit is changing where it ends,
+    // and only once a level has actually moved.
+    btn.textContent = holding ? 'Update trade' : 'Arm (paper)';
+    // Holding: BOTH a moved level and valid geometry. `armable` alone was not
+    // checked, so dragging a short's stop below its entry left Update live on
+    // a ticket the maths had already called invalid — the server would refuse
+    // it, but offering an impossible action is its own defect.
+    btn.disabled = holding ? (!modified || !armable) : (!armable || !sym);
+    btn.title = holding
+      ? (modified ? 'take this trade onto your book with these levels'
+                  : 'drag the stop or target to change where this trade ends')
+      : '';
     $('tkLock').textContent = (cfg && cfg.live_enabled)
       ? ''
       : (cfg ? 'Live orders: ' + cfg.live_locked_reason

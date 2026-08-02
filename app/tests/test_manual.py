@@ -460,6 +460,57 @@ class ManualCase(unittest.TestCase):
             manual.close_engine_position(self.con, "S3", SPOT, "1H", "LONG",
                                          entry=100, sl=98)
 
+    # ---------- adopting an engine position ----------
+
+    def test_an_adopted_position_holds_instead_of_hunting_for_a_fill(self):
+        """The entry already happened. Searching for a limit fill would be
+        wrong twice: the price is recorded, and a failed search would mark a
+        live position as never entered."""
+        # fill on bar 1; entry 100 is never touched again afterwards
+        self.load([(100, 101, 99, 100), (100, 100.5, 99.5, 100),
+                   (90, 91, 89, 90), (90, 91, 84, 85)])
+        manual.adopt_position(self.con, "ENG|1", SPOT, "1H", "LONG",
+                              entry=100, sl=86, tp=130,
+                              fill_ts=1 * TF, adopted_at=2 * TF, risk_usd=140)
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertEqual(row["outcome"], "SL")       # held, then stopped at 86
+        self.assertEqual(row["exit_price"], "86")
+
+    def test_adoption_moves_the_position_off_the_engine_book(self):
+        self.load(self.flat(3))
+        manual.adopt_position(self.con, "ENG|2", SPOT, "1H", "LONG",
+                              entry=100, sl=95, tp=120,
+                              fill_ts=0, adopted_at=TF)
+        ov = manual.overridden_setups(self.con)
+        self.assertIn("ENG|2", ov)
+        self.assertEqual(ov["ENG|2"]["event"], "ADOPTED")
+        self.assertTrue(ov["ENG|2"]["not_the_strategy_record"])
+        # and the strategy record itself is still untouched
+        for kind in ("setup", "exec", "order"):
+            self.assertEqual(store.get_facts(self.con, SPOT, "1H", kind,
+                                             execsim.EXEC_VERSION), [])
+
+    def test_an_adopted_position_can_trail(self):
+        """Custody means the operator's exit rules apply, trailing included."""
+        self.load([(100, 100.5, 99.5, 100),      # fill bar
+                   (100, 110, 99.5, 109),        # best 110 -> stop 108 next bar
+                   (109, 109.5, 107, 107.5)])    # trailed out
+        manual.adopt_position(self.con, "ENG|3", SPOT, "1H", "LONG",
+                              entry=100, sl=98, tp=200,
+                              fill_ts=0, adopted_at=0, trail_r=1.0)
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertEqual(row["outcome"], "TRAIL_STOP")
+        self.assertEqual(row["exit_price"], "108.0")
+
+    def test_adoption_refuses_a_stop_on_the_wrong_side(self):
+        self.load(self.flat(3))
+        with self.assertRaises(manual.IntentRejected):
+            manual.adopt_position(self.con, "ENG|4", SPOT, "1H", "LONG",
+                                  entry=100, sl=105, tp=120,
+                                  fill_ts=0, adopted_at=TF)
+
     # ---------- the book ----------
 
     def test_book_reports_only_manual_trades(self):

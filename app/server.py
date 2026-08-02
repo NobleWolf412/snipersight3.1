@@ -2048,6 +2048,62 @@ def close_position(payload: dict):
         con.close()
 
 
+@app.post("/api/positions/adopt")
+def adopt_position(payload: dict):
+    """Operator takes custody of an engine position with their own levels.
+
+    The engine entered it; the operator changes where it ends. Writes an
+    intent (seeded at the ORIGINAL fill price, flagged already-filled) plus an
+    override marking the engine position adopted. The engine's simulation
+    keeps running its own plan, so both exits get recorded and the comparison
+    is real rather than rhetorical.
+    """
+    import time
+    from engine import manual
+    sid = str(payload.get("setup_id") or "")
+    if not sid:
+        raise HTTPException(400, "setup_id required")
+    con = store.connect()
+    try:
+        pf = portfolio()
+        pos = next((p for p in pf.get("active_positions", [])
+                    if p["setup_id"] == sid), None)
+        if not pos:
+            raise HTTPException(404, "no open engine position with that setup id")
+        # The fill bar is where custody starts; without it the resolver would
+        # hunt for an entry that already happened.
+        row = con.execute(
+            "SELECT confirmed_at, payload FROM facts WHERE symbol=? AND tf=? "
+            "AND kind='order' AND algo_version=? "
+            "AND json_extract(payload,'$.setup_id')=? "
+            "AND json_extract(payload,'$.event')='FILLED' ORDER BY id DESC LIMIT 1",
+            (pos["symbol"], pos["tf"], execsim.EXEC_VERSION, sid)).fetchone()
+        if not row:
+            raise HTTPException(409, "that position has no recorded fill to adopt")
+        fill = json.loads(row[1])
+        try:
+            out = manual.adopt_position(
+                con, sid, pos["symbol"], pos["tf"], pos["direction"],
+                entry=fill.get("fill_price") or pos["entry"],
+                sl=payload.get("sl", pos["sl"]), tp=payload.get("tp", pos["tp"]),
+                fill_ts=row[0], adopted_at=int(time.time()),
+                risk_usd=pos.get("risk_usd"), trail_r=payload.get("trail_r"),
+                note=str(payload.get("note") or ""))
+        except manual.IntentRejected as exc:
+            raise HTTPException(400, str(exc))
+        manual.run(con, pos["symbol"], pos["tf"],
+                   importer.TF_SECONDS[pos["tf"]])
+        from engine.runlog import get_logger
+        get_logger().info(
+            f"OPERATOR ADOPTED {pos['symbol']} {pos['tf']} — sl {out['sl']} "
+            f"tp {out['tp']}"
+            + (f" trail {out['trail_r']}R" if out.get('trail_r') else "")
+            + f"; engine simulation of {sid} continues on its own plan")
+        return {"ok": True, "adopted": out}
+    finally:
+        con.close()
+
+
 @app.get("/api/manual/open")
 def manual_open(symbol: str, tf: str = "1H"):
     """Live state of the operator's open trades on one chart.
@@ -2062,8 +2118,13 @@ def manual_open(symbol: str, tf: str = "1H"):
     con = store.connect()
     try:
         manual.run(con, symbol, tf, importer.TF_SECONDS[tf])
+        # The ENGINE's position on this chart too, so the ticket can offer to
+        # take custody of it. One fetch, both books.
+        eng = next((p for p in portfolio().get("active_positions", [])
+                    if p["symbol"] == symbol and p["tf"] == tf), None)
         return {"symbol": symbol, "tf": tf,
-                "open": manual.status(con, symbol, tf, importer.TF_SECONDS[tf])}
+                "open": manual.status(con, symbol, tf, importer.TF_SECONDS[tf]),
+                "engine": eng}
     finally:
         con.close()
 
