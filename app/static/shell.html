@@ -232,6 +232,8 @@
         <!-- 48 of the symbols in the picker sit outside the scan universe, so
              the engine has never looked at them and they carry no zones, no
              regime and no setups. This is how you ask it to look at one. -->
+        <button class="btn btn-cyan" id="cCopilot"
+                title="ask the copilot about this chart — it reads the setup's trace, the draft, weather and costs, and it cannot arm anything">Copilot</button>
         <button class="btn" id="cAnalyse"
                 title="run the engine chain (swings, structure, zones, liquidity, regime) over this symbol now, ~10-20s — mainly useful on symbols the scanner is not watching">Analyze</button>
         <div style="margin-left:auto"></div>
@@ -712,6 +714,9 @@
 
   <!-- overlay mounts: modals/drawers render here, above the shell -->
   <div id="tracerRoot"></div>
+  <!-- copilot chat drawer; copilot.js owns it. Observer only, by the same
+       constitution rule the Apex bridge states: analysis in, nothing armed. -->
+  <div id="copilotRoot"></div>
   <div id="wizardRoot"></div>
 
   <!-- ══ status bar ══ -->
@@ -765,6 +770,7 @@
 <script defer src="/static/weather.js?v=16"></script>
 <script defer src="/static/lessons.js?v=16"></script>
 <script defer src="/static/tracer.js?v=16"></script>
+<script defer src="/static/copilot.js?v=1"></script>
 <script defer src="/static/wizard.js?v=16"></script>
 <script defer src="/static/edgeview.js?v=16"></script>
 </body>

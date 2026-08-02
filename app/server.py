@@ -2021,6 +2021,43 @@ def manual_open(symbol: str, tf: str = "1H"):
         con.close()
 
 
+@app.post("/api/copilot")
+def copilot_chat(payload: dict):
+    """One copilot turn. Observer only: returns prose, writes no facts.
+
+    Runs on the operator's Claude subscription through the local `claude` CLI
+    (print mode) — no API key, no per-token bill. The context pack is
+    assembled server-side from the fact store and sent once per conversation;
+    resumed turns ride the CLI session. Tools are disabled in the spawned
+    session; even if they were not, its working directory is an empty scratch
+    folder.
+    """
+    from engine import copilot
+    message = str(payload.get("message") or "").strip()
+    if not message:
+        raise HTTPException(400, "message required")
+    symbol = str(payload.get("symbol") or "")
+    tf = str(payload.get("tf") or "1H")
+    session_id = payload.get("session_id") or None
+    model = str(payload.get("model") or copilot.DEFAULT_MODEL)
+    pack = None
+    if not session_id:
+        if not symbol:
+            raise HTTPException(400, "symbol required on the first turn")
+        if tf not in VALID_TFS:
+            raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
+        con = store.connect()
+        try:
+            pack = copilot.build_pack(con, symbol, tf,
+                                      payload.get("setup_id") or None)
+        finally:
+            con.close()
+    out = copilot.ask(message, pack=pack, session_id=session_id, model=model)
+    if not out.get("ok"):
+        raise HTTPException(502, out.get("error", "copilot failed"))
+    return out
+
+
 @app.get("/api/manual/book")
 def manual_book():
     """The operator's paper record — separate curve, separate everything."""

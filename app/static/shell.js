@@ -408,6 +408,12 @@
       if(b.dataset.wired) return;      // survivors keep their handler
       b.dataset.wired = '1';
       b.addEventListener('click', () => {
+        if(b.dataset.copilot){
+          if(window.SSCopilot)
+            SSCopilot.open({symbol: b.dataset.sym, tf: b.dataset.tf,
+                            setupId: b.dataset.sid || null});
+          return;
+        }
         go('chart');
         if(window.SSChart) SSChart.open(b.dataset.sym, b.dataset.tf);
       });
@@ -556,6 +562,9 @@
         </div>
         <div class="traceable" data-trace="${esc(s.setup_id || '')}"
              title="click for the gate-by-gate story: the zone, the confirmation, every rule it passed or failed">${verdict}</div>
+        <button class="btn" data-copilot="1" data-sym="${s.symbol}" data-tf="${s.tf}"
+                data-sid="${esc(s.setup_id || '')}"
+                title="ask the copilot about this setup — it reads the trace and cannot arm">Ask copilot</button>
         <button class="btn" data-sym="${s.symbol}" data-tf="${s.tf}">Open chart</button>`;
     }
   }

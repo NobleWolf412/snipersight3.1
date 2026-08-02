@@ -1019,6 +1019,11 @@ window.SSChart = (() => {
         p.classList.toggle('on', p.dataset.p === b.dataset.p));
     });
 
+    $('cCopilot').addEventListener('click', () => {
+      if(!sym || !window.SSCopilot) return;
+      SSCopilot.open({symbol: sym, tf,
+                      setupId: setup ? setup.setup_id : null});
+    });
     $('cAnalyse').addEventListener('click', async () => {
       const b = $('cAnalyse'), was = b.textContent;
       if(!sym || b.disabled) return;
