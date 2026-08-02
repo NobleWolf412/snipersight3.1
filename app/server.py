@@ -600,9 +600,15 @@ def portfolio():
                         exec_by_id[sid] = {"symbol": sym, "tf": tf,
                                            "ts": r["confirmed_at"], **p}
         recent.sort(key=lambda d: d["ts"])
+        # An operator override closes the position on the OPERATOR's book. The
+        # engine's simulation is untouched and will still record its own
+        # outcome for this setup; this only stops the cockpit showing exposure
+        # the operator has declared finished.
+        from engine import manual as _manual
+        overrides = _manual.overridden_setups(con)
         positions, pending_orders = [], []
         for sid, order in latest_order.items():
-            if sid in completed:
+            if sid in completed or sid in overrides:
                 continue
             detail = setup_by_id.get(sid, {})
             sized = risk_by_id.get(sid, {})
@@ -681,6 +687,9 @@ def portfolio():
                 "decisions": acct["decisions"] if acct else {},
                 "kill_switch_days": kills,
                 "active_positions": positions,
+                "operator_closed": sorted(overrides.values(),
+                                          key=lambda d: d["closed_at"],
+                                          reverse=True)[:20],
                 "pending_orders": pending_orders,
                 "open_risk_usd": round(sum(float(p["risk_usd"] or 0)
                                            for p in positions), 2),
@@ -1997,6 +2006,44 @@ def analyse_symbol(symbol: str, response: Response):
                 "seconds": round(_t.time() - t0, 1),
                 "new_facts": {k: v for k, v in produced.items() if v},
                 "errors": failed}
+    finally:
+        con.close()
+
+
+@app.post("/api/positions/close")
+def close_position(payload: dict):
+    """Operator closes an ENGINE position early, at the last closed bar.
+
+    Records ONE override fact under the manual version and changes nothing
+    else. The engine's simulation of that setup carries on and still records
+    what holding to SL/TP produced, so the strategy record stays pure AND the
+    pair of outcomes measures whether the early exit beat the rule.
+    """
+    from engine import manual
+    sid = str(payload.get("setup_id") or "")
+    if not sid:
+        raise HTTPException(400, "setup_id required")
+    con = store.connect()
+    try:
+        pf = portfolio()
+        pos = next((p for p in pf.get("active_positions", [])
+                    if p["setup_id"] == sid), None)
+        if not pos:
+            raise HTTPException(404, "no open engine position with that setup id "
+                                     "— it may have already resolved")
+        try:
+            out = manual.close_engine_position(
+                con, sid, pos["symbol"], pos["tf"], pos["direction"],
+                pos["entry"], pos["sl"], risk_usd=pos.get("risk_usd"),
+                note=str(payload.get("note") or ""))
+        except manual.IntentRejected as exc:
+            raise HTTPException(400, str(exc))
+        from engine.runlog import get_logger
+        get_logger().info(
+            f"OPERATOR CLOSED {pos['symbol']} {pos['tf']} early at "
+            f"{out['exit_price']} ({out['r_at_close']}R) — engine simulation "
+            f"of {sid} continues and still records the held outcome")
+        return {"ok": True, "closed": out}
     finally:
         con.close()
 

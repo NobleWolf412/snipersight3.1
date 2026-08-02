@@ -409,6 +409,41 @@ class ManualCase(unittest.TestCase):
         self.assertEqual(b["n"], 1)
         self.assertEqual(b["wins"], 1, "TRAIL_STOP at +4R gross is a win")
 
+    # ---------- operator override of an ENGINE position ----------
+
+    def test_closing_an_engine_position_never_touches_the_strategy_record(self):
+        """The override is the whole design: the engine's simulation of this
+        setup must carry on and still record what holding produced, or the
+        comparison the override exists to enable does not exist."""
+        self.load([(100, 101, 99, 100), (100, 106, 99, 105)])
+        out = manual.close_engine_position(
+            self.con, "SID|4H|X", SPOT, "1H", "LONG",
+            entry=100, sl=98, risk_usd=200)
+        self.assertTrue(out["written"])
+        # priced at the last CLOSED bar: (105-100)/2 = 2.5R
+        self.assertEqual(out["r_at_close"], "2.50")
+        self.assertEqual(out["usd_at_close"], "500.00")
+        self.assertEqual(out["exit_price"], "105")
+        self.assertTrue(out["not_the_strategy_record"])
+        # nothing written under any strategy version or kind
+        for kind in ("exec", "order", "setup"):
+            self.assertEqual(
+                store.get_facts(self.con, SPOT, "1H", kind,
+                                execsim.EXEC_VERSION), [],
+                f"an override reached {kind}/{execsim.EXEC_VERSION}")
+        self.assertIn("SID|4H|X", manual.overridden_setups(self.con))
+
+    def test_a_short_override_prices_the_right_direction(self):
+        self.load([(100, 101, 99, 100), (100, 101, 94, 95)], symbol=PERP)
+        out = manual.close_engine_position(
+            self.con, "S2", PERP, "1H", "SHORT", entry=100, sl=102)
+        self.assertEqual(out["r_at_close"], "2.50")   # (100-95)/2
+
+    def test_an_override_without_candles_is_refused_not_guessed(self):
+        with self.assertRaises(manual.IntentRejected):
+            manual.close_engine_position(self.con, "S3", SPOT, "1H", "LONG",
+                                         entry=100, sl=98)
+
     # ---------- the book ----------
 
     def test_book_reports_only_manual_trades(self):

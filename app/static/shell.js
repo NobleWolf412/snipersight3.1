@@ -719,7 +719,9 @@
         </div>
         <div class="pos-r ${tone}">${
           r == null ? '—' : (r >= 0 ? '+' : '') + r.toFixed(1) + 'R'}
-          <span class="t-sub">${money(t.risk_usd)} at risk</span></div>
+          <span class="t-sub">${money(t.risk_usd)} at risk</span>
+          <button class="btn pos-close" data-close-sid="${esc(t.setup_id || '')}"
+            title="close this on YOUR book at the last closed price — the engine keeps simulating its own plan, so the two outcomes can be compared">Close</button></div>
       </div>`;
     }).join('') + pending.map((t, i) => {
       const long = t.direction === 'LONG';
@@ -947,7 +949,28 @@
 
     if(!$('positions').dataset.traceWired){
       $('positions').dataset.traceWired = '1';
-      $('positions').addEventListener('click', e => {
+      $('positions').addEventListener('click', async e => {
+        /* Close comes first: it lives INSIDE a traceable row, so letting the
+           trace handler see the event would open the drawer instead. */
+        const c = e.target.closest('[data-close-sid]');
+        if(c){
+          e.stopPropagation();
+          if(c.disabled) return;
+          const was = c.textContent;
+          c.disabled = true; c.textContent = 'closing…';
+          try{
+            const r = await fetch('/api/positions/close', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({setup_id: c.dataset.closeSid})});
+            const d = await r.json().catch(() => ({}));
+            c.textContent = r.ok
+              ? (d.closed ? `closed ${d.closed.r_at_close}R` : 'closed')
+              : 'failed — ' + (d.detail || r.status);
+            if(r.ok) refresh();
+          }catch(err){ c.textContent = 'unreachable'; }
+          setTimeout(() => { c.disabled = false; c.textContent = was; }, 3000);
+          return;
+        }
         const d = e.target.closest('[data-trace]');
         if(d && d.dataset.trace && window.SSTracer) SSTracer.open(d.dataset.trace);
       });

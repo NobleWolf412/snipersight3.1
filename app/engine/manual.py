@@ -59,6 +59,21 @@ Q2 = Decimal("0.01")
 #: forgets to filter on algo_version cannot pick these up by accident.
 INTENT_KIND = "manual_intent"
 EXEC_KIND = "manual_exec"
+#: An operator closing an ENGINE position early. Its own kind, under the
+#: manual version, for a reason worth stating: the engine's book is a
+#: deterministic replay, not a stateful holding. `execsim` re-derives every
+#: setup from the candles on every run and does not skip ones already
+#: resolved, so an override written under EXEC_VERSION would (a) enter the
+#: graded record that decides whether live execution unlocks, and (b) collide
+#: with the simulator's own terminal fact for the same setup_id — the S37
+#: two-generations-under-one-label defect in a new costume.
+#:
+#: So the override never touches the strategy record. The simulation carries
+#: on and still records what holding to SL/TP would have produced, which is
+#: the whole point: the pair of outcomes MEASURES whether the operator's early
+#: exit beat the rule. That is the open question the rejected managed-exit
+#: experiment (S44) left behind, and this answers it with real decisions.
+OVERRIDE_KIND = "manual_override"
 
 VALID_DIRECTIONS = ("LONG", "SHORT")
 
@@ -198,6 +213,76 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
         confirmed_at=created_at, algo_version=MANUAL_VERSION, payload=payload)
     con.commit()
     return {"intent_id": intent_id, "written": bool(written), **payload}
+
+
+def overridden_setups(con) -> dict:
+    """setup_id -> the operator's early close, for the portfolio view."""
+    import sqlite3
+    con.row_factory = sqlite3.Row
+    out = {}
+    for r in con.execute(
+            "SELECT confirmed_at, payload FROM facts WHERE kind=? AND algo_version=?",
+            (OVERRIDE_KIND, MANUAL_VERSION)):
+        p = json.loads(r["payload"])
+        out[p["setup_id"]] = {**p, "closed_at": r["confirmed_at"]}
+    return out
+
+
+def close_engine_position(con, setup_id: str, symbol: str, tf: str,
+                          direction: str, entry, sl, risk_usd=None,
+                          note: str = "") -> dict:
+    """Record an operator closing an engine position early, at the last close.
+
+    Priced at the last CLOSED bar, like every other number on the screen — a
+    live tick here would make the one number the operator acted on fresher
+    than the chart it was read from.
+
+    Writes ONE fact and changes nothing else. The engine's simulation of this
+    setup continues untouched, so the strategy record still gets the outcome
+    holding would have produced.
+    """
+    entry, sl = Decimal(str(entry)), Decimal(str(sl))
+    long = direction == "LONG"
+    risk = risk_per_unit(direction, entry, sl)
+    if risk <= 0:
+        raise IntentRejected("this position has no measurable risk to close against")
+    candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
+    if not candles:
+        raise IntentRejected(f"no candles for {symbol} {tf} — nothing to price against")
+    last = candles[-1]
+    px = Decimal(last["close"])
+    closed_at = last["open_ts"] + _tf_seconds_of(tf)
+    gross = (px - entry) if long else (entry - px)
+    r_mult = (gross / risk).quantize(Q2)
+    profile = costs.profile_for(symbol)
+    # A discretionary exit is a market order: taker, both the fee and the
+    # slippage the engine charges its own stops.
+    fees = profile.taker_rate * px
+    payload = {
+        "setup_id": setup_id, "source": "OPERATOR", "event": "CLOSED_EARLY",
+        "symbol": symbol, "tf": tf, "direction": direction,
+        "entry": str(entry), "sl": str(sl),
+        "exit_price": str(px), "priced_at": "last closed bar",
+        "r_at_close": str(r_mult),
+        "usd_at_close": (None if risk_usd is None
+                         else str((r_mult * Decimal(str(risk_usd))).quantize(Q2))),
+        "fees_price_units": str(fees),
+        "risk_usd": None if risk_usd is None else str(risk_usd),
+        "note": note[:280],
+        # Stated on the fact itself so a row read in isolation cannot be
+        # mistaken for the strategy's own result.
+        "not_the_strategy_record": True,
+    }
+    written = store.insert_fact(
+        con, symbol=symbol, tf=tf, kind=OVERRIDE_KIND, market_time=last["open_ts"],
+        confirmed_at=closed_at, algo_version=MANUAL_VERSION, payload=payload)
+    con.commit()
+    return {"written": bool(written), **payload}
+
+
+def _tf_seconds_of(tf: str) -> int:
+    from .importer import TF_SECONDS
+    return TF_SECONDS[tf]
 
 
 def unresolved(con) -> dict:
