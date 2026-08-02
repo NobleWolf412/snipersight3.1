@@ -875,3 +875,14 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
    of a rule the engine is still simulating, not the primary way trades end. */
 .pos-close{margin-top:6px;font-size:10px;padding:2px 8px;opacity:.75}
 .pos-close:hover{opacity:1}
+
+/* MANAGING A LIVE POSITION. The ticket is the same controls doing a different
+   job — money already at stake rather than a plan being drawn — so the panel
+   states it rather than leaving one chip to carry the distinction. Amber is
+   this app's "armed" accent, already used by the position readout. */
+.ticket.managing{border-color:rgba(251,191,36,.5);
+  box-shadow:0 0 0 1px rgba(251,191,36,.12), 0 0 22px -8px rgba(251,191,36,.4)}
+.ticket.managing .panel-head{background:rgba(251,191,36,.07)}
+.ticket.managing #tkMode{color:var(--amber-2)}
+.ticket.managing #tkMode::before{background:var(--amber-2);
+  box-shadow:0 0 8px rgba(251,191,36,.8)}

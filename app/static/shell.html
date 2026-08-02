@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SniperSight</title>
 <link rel="icon" href="/static/assets/snipersight-logo.png">
-<link rel="stylesheet" href="/static/ss.css?v=16">
+<link rel="stylesheet" href="/static/ss.css?v=17">
 </head>
 <body data-mode="idle">
 
@@ -258,8 +258,14 @@
 
         <!-- order ticket: the only surface that turns a setup into a decision -->
         <aside class="panel ticket" id="ticket">
+          <!-- The heading is the MODE. Managing a live position and planning
+               a new one are different jobs with different consequences, and
+               the only thing distinguishing them used to be a small chip and
+               the wording of one button — an operator read a position editor
+               as a new-trade form and could not understand why it refused a
+               profit-locking stop. -->
           <div class="panel-head">
-            <h2 class="t-section">Order Ticket</h2>
+            <h2 class="t-section" id="tkMode">Order Ticket</h2>
             <span class="chip" id="tkSrc" style="margin-left:auto">engine</span>
           </div>
           <!-- Nine controls, a nine-row cost breakdown and the rationale were

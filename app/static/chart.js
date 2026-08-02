@@ -176,8 +176,16 @@ window.SSChart = (() => {
      levels and dragged ones both. Solid and bright therefore carries one
      meaning: this is the engine's plan, untouched. */
   function applyLevels(){
-    const draft = !base || base.kind !== 'engine' || modified;
-    const spec = draft ? {
+    /* Three visual states, because they mean three different things:
+       LIVE (gold, solid) is money at stake right now; ENGINE (bright) is the
+       machine's untouched plan; DRAFT (dotted, dim) is a sketch. */
+    const live = !!enginePos;
+    const draft = !live && (!base || base.kind !== 'engine' || modified);
+    const spec = live ? {
+      entry: {c: '#fbbf24', s: 0, t: 'LIVE · IN AT'},
+      tp:    {c: '#fbbf24', s: 2, t: modified ? 'YOUR TARGET' : 'LIVE · TARGET'},
+      sl:    {c: '#fbbf24', s: 2, t: modified ? 'YOUR STOP' : 'LIVE · STOP'},
+    } : draft ? {
       entry: {c: 'rgba(34,211,238,.40)',  s: 1, t: 'ENTRY · DRAFT'},
       tp:    {c: 'rgba(74,222,128,.40)',  s: 1, t: 'TP · DRAFT'},
       sl:    {c: 'rgba(248,113,113,.40)', s: 1, t: 'SL · DRAFT'},
@@ -189,7 +197,8 @@ window.SSChart = (() => {
     // Price lines only take `price` on update, so a kind change has to redraw
     // them — otherwise dragging an engine plan would keep its solid styling and
     // the distinction would silently stop working after the first edit.
-    const want = draft ? 'draft' : 'engine';
+    const want = live ? ('live' + (modified ? '-edited' : ''))
+               : draft ? 'draft' : 'engine';
     if(drawnKind !== want){
       for(const k of Object.keys(priceLines)){
         series.removePriceLine(priceLines[k]);
@@ -234,7 +243,11 @@ window.SSChart = (() => {
       : kind === 'seeded' ? 'manual' : 'no setup';
     $('tkSrc').className = 'chip ' +
       (kind === 'engine' && !modified ? 'chip-accent' : 'chip-amber');
-    $('tkReset').textContent = base && base.kind === 'engine' ? 'Reset to engine' : 'Reset';
+    // Name what you are reverting TO. On a live position that is the levels
+    // the trade is actually resting at, which is not the same promise as
+    // "reset" on a plan that has never been committed to anything.
+    $('tkReset').textContent = kind === 'position' ? 'Back to live levels'
+      : base && base.kind === 'engine' ? 'Reset to engine' : 'Reset';
     $('tkReset').disabled = !base || !modified;
 
     /* Both early returns skip syncLeverage(), which is the ONLY writer of the
@@ -994,6 +1007,14 @@ window.SSChart = (() => {
   function refreshArm(){
     const holding = !!enginePos;
     const btn = $('tkArm');
+    // Say which job this ticket is doing, in the heading, where a heading is
+    // read. `managing` recolours the whole panel so the two modes are never
+    // mistaken at a glance.
+    const mode = $('tkMode');
+    if(mode) mode.textContent = holding
+      ? (modified ? 'Managing trade — unsaved' : 'Managing open trade')
+      : 'New trade';
+    $('ticket').classList.toggle('managing', holding);
     // Holding a position: the only honest commit is changing where it ends,
     // and only once a level has actually moved.
     btn.textContent = holding ? 'Update trade' : 'Arm (paper)';

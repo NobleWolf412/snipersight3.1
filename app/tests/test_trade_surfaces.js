@@ -265,4 +265,39 @@ ok('authored overlay notes survive the count', () => {
   assert(CHART.includes("[b.dataset.note, count].filter(Boolean).join"));
 });
 
+
+/* MANAGING vs PLANNING. An operator opened the chart on a live short, read the
+   position editor as a new-trade form, and could not understand why it refused
+   a profit-locking stop. The two modes were separated by one small chip and the
+   wording of one button — not enough for a surface where the difference is
+   "money at stake" versus "an idea". */
+console.log('ticket mode: managing vs new');
+ok('the heading names the mode', () => {
+  assert.ok(HTML.includes('id="tkMode"'), 'ticket heading must be addressable');
+  assert.ok(CHART.includes("'Managing open trade'"), 'holding must say so');
+  assert.ok(CHART.includes("'New trade'"), 'not holding must say so');
+});
+ok('unsaved edits are named in the heading, not just the chip', () => {
+  assert.ok(/Managing trade — unsaved/.test(CHART));
+});
+ok('the whole panel changes, not one chip', () => {
+  assert.ok(/classList\.toggle\('managing', holding\)/.test(CHART));
+  assert.ok(CSS.includes('.ticket.managing'), 'managing needs its own chrome');
+});
+ok('live levels are gold, distinct from engine plan and draft', () => {
+  const m = CHART.match(/function applyLevels\(\)[\s\S]*?const want/);
+  assert.ok(m, 'applyLevels not found');
+  assert.ok(m[0].includes("'LIVE · IN AT'"), 'a filled entry is not an ENTRY');
+  assert.ok(m[0].includes('#fbbf24'), 'live levels use the armed amber');
+  assert.ok(m[0].includes("'ENTRY · DRAFT'") && m[0].includes("t: 'ENTRY'"),
+            'draft and engine styles must both survive');
+});
+ok('a kind change forces a redraw so live styling cannot go stale', () => {
+  assert.ok(/want = live \? \('live' \+ \(modified \? '-edited' : ''\)\)/.test(CHART),
+            'drawnKind must distinguish live and edited-live');
+});
+ok('reset names what it reverts to', () => {
+  assert.ok(CHART.includes("'Back to live levels'"));
+});
+
 console.log(`  ${passed} passed`);
