@@ -45,6 +45,16 @@ class PackCase(unittest.TestCase):
         self.assertIn("not possible", pack)
         self.assertIn("The operator decides. You analyse.", pack)
 
+    def test_round_trip_fee_is_the_house_model_not_taker_squared(self):
+        """First live answer quoted taker x2 (0.120%) where the engine prices
+        maker-in/taker-out (0.070%). Defensible worst case, wrong house number
+        — the pack now states the model figure and names taker x2 as the worst
+        case, so the copilot leads with the number the book is priced on."""
+        pack = copilot.build_pack(self.con, "BTCUSDT", "1H")
+        self.assertIn("ROUND-TRIP FEE: 0.070%", pack)
+        self.assertIn("not taker x2", pack)
+        self.assertIn("0.120%", pack)          # the worst case, named as such
+
     def test_open_manual_trade_reaches_the_pack(self):
         self.load([(100, 100.5, 99.5, 100), (100, 104, 99, 103)])
         manual.create_intent(self.con, "BTCUSDT", "1H", "LONG",

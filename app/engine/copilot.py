@@ -145,9 +145,13 @@ def build_pack(con, symbol: str, tf: str, setup_id: str | None = None) -> str:
         f"FACT PACK — {symbol} {tf}, assembled from the SniperSight fact store.",
         "",
         f"VENUE: {v.key} ({v.kind}); shorts {'allowed' if v.allow_shorts else 'not possible'}; "
-        f"max leverage {v.max_leverage}x; maker {_fmt_pct(v.maker_rate)} / "
-        f"taker {_fmt_pct(v.taker_rate)} per side; funding "
-        f"{v.funding_settlements_per_day}x/day (perps pay it while held).",
+        f"max leverage {v.max_leverage}x. ROUND-TRIP FEE: "
+        f"{_fmt_pct(venues.round_trip_cost_rate(symbol))} of notional — the "
+        f"house model, maker entry {_fmt_pct(v.maker_rate)} + taker exit "
+        f"{_fmt_pct(v.taker_rate)}; quote THIS as the round trip, not taker x2 "
+        f"(taker both sides would be {_fmt_pct(v.taker_rate * 2)}, the "
+        f"worst case, and worth naming only as that). Funding "
+        f"{v.funding_settlements_per_day}x/day accrues while a perp is held.",
         "",
         "REGIME BY TIMEFRAME: " + ("; ".join(_latest_regimes(con, symbol)) or "none recorded"),
         "",
