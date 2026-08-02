@@ -55,7 +55,15 @@
       return out;
     }
 
-    const riskU = long ? entry - sl : sl - entry;
+    /* HOLDING an open position changes what R means. Risk is what was taken
+       at entry and does not move when the stop does, so `originalRisk` is the
+       denominator and a stop on the PROFIT side is legal — that is what
+       locking in a winner is. Refusing it told an operator up +1.5R on a short
+       to "place the stop above entry", advice for a trade that has not
+       happened yet. */
+    const holding = inp.holding === true &&
+      typeof inp.originalRisk === 'number' && inp.originalRisk > 0;
+    const riskU = holding ? inp.originalRisk : (long ? entry - sl : sl - entry);
     const rewU  = long ? tp - entry : entry - tp;
     out.riskPerUnit = riskU;
     out.rewardPerUnit = rewU;
@@ -63,6 +71,13 @@
     if(riskU <= 0)
       out.errors.push(long ? 'Stop must sit BELOW entry for a long.'
                            : 'Stop must sit ABOVE entry for a short.');
+    if(holding){
+      // What the stop guarantees, if it is already past the entry.
+      const locked = long ? (sl - entry) / riskU : (entry - sl) / riskU;
+      if(locked > 0) out.lockedR = locked;
+      if(long ? sl >= tp : sl <= tp)
+        out.errors.push('The stop cannot sit at or beyond the target.');
+    }
     if(rewU <= 0)
       out.errors.push(long ? 'Target must sit ABOVE entry for a long.'
                            : 'Target must sit BELOW entry for a short.');

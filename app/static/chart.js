@@ -259,7 +259,12 @@ window.SSChart = (() => {
 
     const m = SSTicketMath.ticketMath(
       {dir, entry: e, tp, sl, equity, cfg, riskUsdOverride: riskOverride,
-       leverage});
+       leverage,
+       // Holding: R keeps the denominator the trade was ENTERED with, so the
+       // stop can be dragged past entry to lock in a winner.
+       holding: !!enginePos,
+       originalRisk: enginePos
+         ? Math.abs(+enginePos.entry - +enginePos.sl) : null});
 
     if(!m.ok){
       out.innerHTML = key.innerHTML =
@@ -298,7 +303,11 @@ window.SSChart = (() => {
       row('round-trip fees', m.fees == null ? '—' : usd(m.fees),
           m.fees && m.riskUsd && m.fees > m.riskUsd * 0.3 ? 'warn' : '') +
       row('net if target hits', m.netUsd == null ? '—' : usd(m.netUsd),
-          m.netUsd > 0 ? 'good' : 'bad');
+          m.netUsd > 0 ? 'good' : 'bad') +
+      // A stop past the entry cannot lose. Say what it guarantees, because
+      // that is the entire reason for dragging it there.
+      (m.lockedR == null ? ''
+        : row('stop now locks in', '+' + m.lockedR.toFixed(2) + 'R', 'good'));
 
     // reflect where the risk number came from, without touching the default
     $('tkRisk').value = m.riskUsd == null ? '' : Math.round(m.riskUsd);

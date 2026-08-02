@@ -504,11 +504,81 @@ class ManualCase(unittest.TestCase):
         self.assertEqual(row["outcome"], "TRAIL_STOP")
         self.assertEqual(row["exit_price"], "108.0")
 
-    def test_adoption_refuses_a_stop_on_the_wrong_side(self):
+    def test_a_winning_position_may_move_its_stop_into_profit(self):
+        """The bug an operator hit: up +1.5R on a SHORT, dragging the stop down
+        to lock it in, and being told "a SHORT stop must sit ABOVE the entry" —
+        advice for a trade that has not happened yet. R is fixed by the risk
+        TAKEN at entry, so a profit-side stop simply guarantees a win."""
+        self.load(self.flat(3), symbol=PERP)
+        out = manual.adopt_position(
+            self.con, "ENG|W", PERP, "1H", "SHORT",
+            entry=100, original_sl=104, sl=96, tp=80,   # stop now in profit
+            fill_ts=0, adopted_at=TF, risk_usd=200)
+        # denominator stays the ENTRY risk (104-100), not the new stop
+        self.assertEqual(Decimal(out["risk_per_unit"]), Decimal(4))
+        self.assertEqual(Decimal(out["risk_ref_sl"]), Decimal(104))
+        self.assertEqual(Decimal(out["size_units"]), Decimal(50))
+
+    def test_a_profit_stop_settles_as_a_win_on_the_original_R(self):
+        # short from 100, risk 4; stop locked at 96 -> +1R when it triggers
+        self.load([(100, 101, 99, 100), (97, 99, 95, 96)], symbol=PERP)
+        manual.adopt_position(self.con, "ENG|W2", PERP, "1H", "SHORT",
+                              entry=100, original_sl=104, sl=96, tp=80,
+                              fill_ts=0, adopted_at=0)
+        self.run_engine(symbol=PERP)
+        row = self.execs(symbol=PERP)[0]
+        self.assertEqual(row["outcome"], "SL")          # the stop, but a winning one
+        self.assertEqual(row["r_gross"], "1.00")
+        self.assertGreater(Decimal(row["r_multiple"]), 0)
+
+    def test_the_chart_shows_the_same_sign_the_book_settles(self):
+        """status() priced R off the CURRENT stop, so a profit-side stop
+        inverted unrealized R on screen while the book settled it correctly —
+        the two surfaces disagreeing about whether a trade was winning."""
+        # A profit-lock on a SHORT sits BELOW entry and ABOVE the market:
+        # entered 100, price now 97.5, stop moved to 99. Adopted at bar 1, so
+        # the new stop applies from bar 1 — bar 0's high of 101 belongs to the
+        # trade as it was, not as it has just been redefined.
+        self.load([(100, 101, 99, 100), (98, 98.5, 97, 97.5)], symbol=PERP)
+        manual.adopt_position(self.con, "ENG|SIGN", PERP, "1H", "SHORT",
+                              entry=100, original_sl=104, sl=99, tp=80,
+                              fill_ts=0, adopted_at=TF, risk_usd=200)
+        st = manual.status(self.con, PERP, "1H", TF)
+        self.assertEqual(st[0]["state"], "OPEN")
+        # short from 100 now at 97.5, risk 4 -> +0.625R, POSITIVE.
+        # 0.62 not 0.63: Decimal quantizes half-to-even, like every other R
+        # in this book.
+        self.assertGreater(Decimal(st[0]["unrealized_r"]), 0)
+        self.assertEqual(st[0]["unrealized_r"], "0.62")
+
+    def test_new_levels_do_not_reach_back_and_stop_an_old_bar(self):
+        """Moving a stop today must not stop the trade out on a bar that
+        closed days ago. Those bars provably hit nothing — the position is
+        still open — so re-judging them against new levels would fabricate an
+        exit that never happened."""
+        # bar 0 spiked to 101; a stop moved to 99 at bar 2 must ignore it
+        self.load([(100, 101, 99, 100), (99, 99.5, 97, 97.5),
+                   (97, 98, 96, 97)], symbol=PERP)
+        manual.adopt_position(self.con, "ENG|BACK", PERP, "1H", "SHORT",
+                              entry=100, original_sl=104, sl=99, tp=80,
+                              fill_ts=0, adopted_at=2 * TF)
+        self.run_engine(symbol=PERP)
+        self.assertEqual(self.execs(symbol=PERP), [],
+                         "an old bar was allowed to trigger a new stop")
+
+    def test_adoption_still_refuses_a_target_on_the_wrong_side(self):
+        """Position geometry is looser than entry geometry, not absent."""
         self.load(self.flat(3))
         with self.assertRaises(manual.IntentRejected):
             manual.adopt_position(self.con, "ENG|4", SPOT, "1H", "LONG",
-                                  entry=100, sl=105, tp=120,
+                                  entry=100, original_sl=95, sl=98, tp=90,
+                                  fill_ts=0, adopted_at=TF)
+
+    def test_a_stop_beyond_the_target_is_refused(self):
+        self.load(self.flat(3))
+        with self.assertRaises(manual.IntentRejected):
+            manual.adopt_position(self.con, "ENG|5", SPOT, "1H", "LONG",
+                                  entry=100, original_sl=95, sl=125, tp=120,
                                   fill_ts=0, adopted_at=TF)
 
     # ---------- the book ----------

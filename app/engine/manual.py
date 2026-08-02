@@ -135,6 +135,37 @@ def validate(symbol: str, direction: str, entry: Decimal, tp: Decimal,
             "liquidation": None if liq is None else str(liq)}
 
 
+def validate_position(symbol: str, direction: str, entry: Decimal,
+                      tp: Decimal, sl: Decimal) -> None:
+    """Geometry rules for a trade ALREADY OPEN — deliberately not `validate`.
+
+    `validate` refuses a stop on the profit side of the entry, and for a NEW
+    trade that is right: you cannot enter with a stop already in profit, and
+    the R denominator would be negative. Applied to an OPEN position it is
+    exactly backwards. A short entered at 4.379 and now trading at 4.05 has a
+    stop at 4.30 that guarantees a win — locking in profit is the defining act
+    of trade management, and the first version of adoption refused it with
+    "a SHORT stop must sit ABOVE the entry", advice meant for a trade that has
+    not happened yet.
+
+    R does not move when the stop does. It is fixed by the risk actually taken
+    at entry, so a profit-side stop simply means every outcome is positive.
+    What still has to hold is direction: the target stays on the profit side,
+    or the trade has no thesis left.
+    """
+    for name, v in (("entry", entry), ("take profit", tp), ("stop loss", sl)):
+        if v is None or v <= 0:
+            raise IntentRejected(f"{name} must be a positive price")
+    if direction == "LONG" and tp <= entry:
+        raise IntentRejected("a LONG target must sit ABOVE the entry")
+    if direction == "SHORT" and tp >= entry:
+        raise IntentRejected("a SHORT target must sit BELOW the entry")
+    if direction == "LONG" and sl >= tp:
+        raise IntentRejected("the stop cannot sit at or beyond the target")
+    if direction == "SHORT" and sl <= tp:
+        raise IntentRejected("the stop cannot sit at or beyond the target")
+
+
 def risk_per_unit(direction: str, entry: Decimal, sl: Decimal) -> Decimal:
     return (entry - sl) if direction == "LONG" else (sl - entry)
 
@@ -230,7 +261,8 @@ def overridden_setups(con) -> dict:
 
 def adopt_position(con, setup_id: str, symbol: str, tf: str, direction: str,
                    entry, sl, tp, fill_ts: int, adopted_at: int,
-                   risk_usd=None, trail_r=None, note: str = "") -> dict:
+                   risk_usd=None, trail_r=None, note: str = "",
+                   original_sl=None) -> dict:
     """Take custody of an engine position with the operator's own levels.
 
     The engine entered this trade; the operator is changing where it ends. Two
@@ -249,20 +281,30 @@ def adopt_position(con, setup_id: str, symbol: str, tf: str, direction: str,
     """
     entry = Decimal(str(entry))
     sl, tp = Decimal(str(sl)), Decimal(str(tp))
-    validate(symbol, direction, entry, tp, sl)
+    validate_position(symbol, direction, entry, tp, sl)
     if trail_r is not None:
         trail_r = Decimal(str(trail_r))
         if trail_r < Decimal("0.1"):
             raise IntentRejected("trail distance must be at least 0.1R")
-    per_unit = risk_per_unit(direction, entry, sl)
+    # R is the risk actually TAKEN, measured to the stop this trade was entered
+    # with — not to wherever the operator has since moved it. Recomputing it
+    # from a profit-side stop would give a negative denominator and invert
+    # every subsequent number.
+    ref_sl = Decimal(str(original_sl if original_sl is not None else sl))
+    per_unit = risk_per_unit(direction, entry, ref_sl)
+    if per_unit <= 0:
+        raise IntentRejected("this position has no measurable risk to price R against")
     size_units = ((Decimal(str(risk_usd)) / per_unit)
-                  if risk_usd is not None and per_unit > 0 else None)
+                  if risk_usd is not None else None)
     intent_id = f"{symbol}|{tf}|ADOPTED|{adopted_at}"
     payload = {
         "intent_id": intent_id, "source": "OPERATOR", "state": "ADOPTED",
         "direction": direction,
         "entry": str(entry), "tp": str(tp), "sl": str(sl),
         "risk_per_unit": str(per_unit),
+        # The stop R is measured against, kept so the denominator survives the
+        # operator moving the live stop anywhere they like.
+        "risk_ref_sl": str(ref_sl),
         "risk_usd": None if risk_usd is None else str(risk_usd),
         "size_units": None if size_units is None else str(size_units),
         "trail_r": None if trail_r is None else str(trail_r),
@@ -424,7 +466,10 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
     for p in open_here:
         direction, long = p["direction"], p["direction"] == "LONG"
         entry, sl = Decimal(p["entry"]), Decimal(p["sl"])
-        risk = risk_per_unit(direction, entry, sl)
+        # Same denominator the settlement uses, for the same reason: a
+        # profit-side stop would otherwise flip the sign of the unrealized R
+        # shown on the chart while the book settled it correctly.
+        risk = _risk_of(p, direction, entry, sl)
         # The SAME walk that settles the trade — see _walk. status() only
         # reports its live phases, so screen and settlement cannot disagree.
         w = _walk(p, candles, candle_times, tf_seconds)
@@ -459,6 +504,24 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
                                             .quantize(Q2))))
         out.append(row)
     return out
+
+
+def _risk_of(p: dict, direction: str, entry: Decimal, sl: Decimal) -> Decimal:
+    """R's denominator: the risk taken at entry, never the current stop.
+
+    Stored on every intent at creation, so this is identical to
+    `risk_per_unit(entry, sl)` for an ordinary trade and stays correct for an
+    adopted one whose stop has since been moved into profit.
+    """
+    stored = p.get("risk_per_unit")
+    if stored:
+        try:
+            v = Decimal(str(stored))
+            if v > 0:
+                return v
+        except Exception:
+            pass
+    return risk_per_unit(direction, entry, sl)
 
 
 def _first_eligible_bar(candle_times: list, tf_seconds: int,
@@ -510,7 +573,7 @@ def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
     entry, sl, tp = Decimal(p["entry"]), Decimal(p["sl"]), Decimal(p["tp"])
     trail = p.get("trail_r")
     trail = Decimal(str(trail)) if trail else None
-    risk = risk_per_unit(direction, entry, sl)
+    risk = _risk_of(p, direction, entry, sl)
     if risk <= 0:
         return {"phase": "INVALID"}
 
@@ -523,7 +586,17 @@ def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
         fi = bisect_left(candle_times, p["adopted_fill_ts"])
         if fi >= len(candles):
             return {"phase": "PENDING", "bars_left": 0}
-        return _exit_walk(p, candles, fi, fi)
+        # The operator's levels apply from when they were SET, not from the
+        # fill. Testing a stop moved today against bars that closed days ago
+        # would stop the trade out retroactively — the position is provably
+        # still open, so those bars did not hit anything, and re-judging them
+        # against new levels would fabricate an exit that never happened.
+        start = max(fi, bisect_left(candle_times, p["armed_at"]))
+        if start >= len(candles):
+            return {"phase": "OPEN", "fill_i": fi, "order_i": fi,
+                    "current_stop": Decimal(p["sl"]), "best": entry,
+                    "trailed": False}
+        return _exit_walk(p, candles, start, fi, fi)
 
     order_i = _first_eligible_bar(candle_times, tf_seconds, p["armed_at"])
     if order_i >= len(candles):
@@ -541,10 +614,11 @@ def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
         return {"phase": "MISSED", "miss_i": order_i + MAX_ENTRY_BARS - 1,
                 "order_i": order_i}
 
-    return _exit_walk(p, candles, fill_i, order_i)
+    return _exit_walk(p, candles, fill_i, fill_i, order_i)
 
 
-def _exit_walk(p: dict, candles: list, fill_i: int, order_i: int) -> dict:
+def _exit_walk(p: dict, candles: list, start_i: int, fill_i: int,
+               order_i: int) -> dict:
     """The hold: stop, target, trail and timeout, from the fill bar onward.
 
     Shared by the ordinary path and the adopted one so a position taken over
@@ -555,9 +629,9 @@ def _exit_walk(p: dict, candles: list, fill_i: int, order_i: int) -> dict:
     entry, sl, tp = Decimal(p["entry"]), Decimal(p["sl"]), Decimal(p["tp"])
     trail = p.get("trail_r")
     trail = Decimal(str(trail)) if trail else None
-    risk = risk_per_unit(direction, entry, sl)
+    risk = _risk_of(p, direction, entry, sl)
     stop, best, trailed = sl, entry, False
-    for j in range(fill_i, min(fill_i + MAX_BARS, len(candles))):
+    for j in range(start_i, min(fill_i + MAX_BARS, len(candles))):
         hi, lo = Decimal(candles[j]["high"]), Decimal(candles[j]["low"])
         hit_stop = lo <= stop if long else hi >= stop
         hit_tp = hi >= tp if long else lo <= tp
@@ -622,7 +696,11 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             direction = s["direction"]
             long = direction == "LONG"
             entry = Decimal(s["entry"])
-            risk = risk_per_unit(direction, entry, Decimal(s["sl"]))
+            # The denominator is the risk TAKEN, not the distance to wherever
+            # the stop now sits. Deriving it from a profit-side stop gives a
+            # negative risk and inverts the sign of the whole trade — a
+            # locked-in winner settled as r_gross -1.00.
+            risk = _risk_of(s, direction, entry, Decimal(s["sl"]))
 
             # ONE walk settles and displays — see _walk. run() only turns its
             # terminal phases into facts.

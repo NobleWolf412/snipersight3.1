@@ -2086,6 +2086,7 @@ def adopt_position(payload: dict):
                 con, sid, pos["symbol"], pos["tf"], pos["direction"],
                 entry=fill.get("fill_price") or pos["entry"],
                 sl=payload.get("sl", pos["sl"]), tp=payload.get("tp", pos["tp"]),
+                original_sl=pos["sl"],
                 fill_ts=row[0], adopted_at=int(time.time()),
                 risk_usd=pos.get("risk_usd"), trail_r=payload.get("trail_r"),
                 note=str(payload.get("note") or ""))
