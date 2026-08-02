@@ -439,6 +439,22 @@ class ManualCase(unittest.TestCase):
             self.con, "S2", PERP, "1H", "SHORT", entry=100, sl=102)
         self.assertEqual(out["r_at_close"], "2.50")   # (100-95)/2
 
+    def test_a_market_close_pays_slippage_like_every_other_market_exit(self):
+        """execsim charges its market exits fee AND slippage. The first cut of
+        the override charged the fee alone, which priced operator closes better
+        than engine stops and would have biased the operator-vs-rule comparison
+        this feature exists to enable — flatteringly, and invisibly."""
+        # 20 flat-range bars so ATR is defined, then a close at 105
+        self.load([(100, 102, 98, 100)] * 20 + [(100, 106, 99, 105)])
+        out = manual.close_engine_position(
+            self.con, "SLIP", SPOT, "1H", "LONG", entry=100, sl=98)
+        self.assertEqual(out["order_type"], "MARKET")
+        self.assertGreater(Decimal(out["slippage_price_units"]), 0)
+        # effective exit is WORSE than the quoted close for a long
+        self.assertLess(Decimal(out["effective_exit_price"]),
+                        Decimal(out["exit_price"]))
+        self.assertLess(Decimal(out["r_at_close"]), Decimal("2.50"))
+
     def test_an_override_without_candles_is_refused_not_guessed(self):
         with self.assertRaises(manual.IntentRejected):
             manual.close_engine_position(self.con, "S3", SPOT, "1H", "LONG",

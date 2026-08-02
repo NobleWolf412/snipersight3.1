@@ -252,17 +252,38 @@ def close_engine_position(con, setup_id: str, symbol: str, tf: str,
     last = candles[-1]
     px = Decimal(last["close"])
     closed_at = last["open_ts"] + _tf_seconds_of(tf)
-    gross = (px - entry) if long else (entry - px)
-    r_mult = (gross / risk).quantize(Q2)
     profile = costs.profile_for(symbol)
-    # A discretionary exit is a market order: taker, both the fee and the
-    # slippage the engine charges its own stops.
-    fees = profile.taker_rate * px
+    # A discretionary close is a MARKET order — the operator wants out now and
+    # crosses the spread for it — so it pays exactly what execsim charges its
+    # own market exits: taker fee AND slippage. Charging the fee alone (the
+    # first cut of this function) priced operator exits better than engine
+    # stops, which would have biased the one comparison this feature exists
+    # for, in the operator's favour, invisibly.
+    #
+    # A LIMIT close is a different thing and already has a home: resting an
+    # order at a price and waiting for it is what moving the take-profit is.
+    slip = Decimal(0)
+    atr_series = compute_atr(candles)
+    if atr_series and atr_series[-1] is not None:
+        slip = profile.market_slippage_atr * atr_series[-1]
+    else:
+        # loud-fallback rule: a degraded price must be audible, never silent
+        from .runlog import get_logger
+        get_logger().warning(
+            f"operator close {symbol} {tf}: no ATR at the exit bar — slippage "
+            f"NOT modelled, so this close is priced slightly flatteringly")
+    eff_exit = (px - slip) if long else (px + slip)
+    gross = (eff_exit - entry) if long else (entry - eff_exit)
+    r_mult = (gross / risk).quantize(Q2)
+    fees = profile.taker_rate * eff_exit
     payload = {
         "setup_id": setup_id, "source": "OPERATOR", "event": "CLOSED_EARLY",
         "symbol": symbol, "tf": tf, "direction": direction,
         "entry": str(entry), "sl": str(sl),
         "exit_price": str(px), "priced_at": "last closed bar",
+        "effective_exit_price": str(eff_exit),
+        "slippage_price_units": str(slip),
+        "order_type": "MARKET",
         "r_at_close": str(r_mult),
         "usd_at_close": (None if risk_usd is None
                          else str((r_mult * Decimal(str(risk_usd))).quantize(Q2))),
