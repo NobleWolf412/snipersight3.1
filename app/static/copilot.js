@@ -9,11 +9,14 @@
        footer says so because a chat box that silently spends quota is rude.
 
    Sessions: one CLI session per context (symbol|tf|setup), resumed across
-   messages so the fact pack is transmitted once per conversation. Held in
-   sessionStorage — a browser restart starts fresh conversations, which is
-   the right default for advice that goes stale with the chart.
+   messages so the fact pack is transmitted once per conversation. The session
+   id AND the transcript are both held in sessionStorage against that context,
+   so closing the drawer, switching symbol and back, or reloading the page all
+   return to the conversation where it was left. A browser restart starts
+   fresh, which is the right default for advice that goes stale with the
+   chart; "New" discards a conversation on purpose.
 
-   Public: window.SSCopilot.open({symbol, tf, setupId?}) / .close() */
+   Public: window.SSCopilot.open({symbol, tf, setupId?}) / .close() / .clear() */
 (() => {
   'use strict';
   const ROOT = document.getElementById('copilotRoot');
@@ -27,9 +30,29 @@
   let msgs = [];           // {who:'op'|'cp'|'err', text}
   let model = localStorage.getItem('ss-cp-model') || 'sonnet';
 
-  const key = c => `ss-cp-session|${c.symbol}|${c.tf}|${c.setupId || ''}`;
-  const getSession = () => sessionStorage.getItem(key(ctx));
-  const setSession = id => id && sessionStorage.setItem(key(ctx), id);
+  /* Context identity. The CLI session id AND the visible transcript are both
+     stored against it, because losing either one alone is worse than losing
+     both: the session survived a close while the transcript did not, so the
+     model remembered an exchange the operator could no longer read, and a
+     follow-up question got "as noted above" about text that was gone. */
+  const ctxKey = c => `${c.symbol}|${c.tf}|${c.setupId || ''}`;
+  const sKey = c => 'ss-cp-session|' + ctxKey(c);
+  const mKey = c => 'ss-cp-msgs|' + ctxKey(c);
+  const MAX_KEPT = 40;
+
+  const getSession = () => { try { return sessionStorage.getItem(sKey(ctx)); }
+                             catch(e){ return null; } };
+  const setSession = id => { try { if(id) sessionStorage.setItem(sKey(ctx), id); }
+                             catch(e){} };
+  function loadMsgs(c){
+    try{ return JSON.parse(sessionStorage.getItem(mKey(c)) || '[]'); }
+    catch(e){ return []; }
+  }
+  function saveMsgs(){
+    // Storage can be full or blocked; a failed save must never break the chat.
+    try{ sessionStorage.setItem(mKey(ctx), JSON.stringify(msgs.slice(-MAX_KEPT))); }
+    catch(e){}
+  }
 
   function render(){
     if(!ctx){ ROOT.innerHTML = ''; return; }
@@ -47,6 +70,7 @@
             <option value="haiku"${model==='haiku'?' selected':''}>Haiku</option>
             <option value="opus"${model==='opus'?' selected':''}>Opus</option>
           </select>
+          <button class="btn" id="cpClear" title="forget this conversation and start a new one">New</button>
           <button class="btn" data-close="1">Close</button>
         </div>
         <div class="cp-chips">${chips.map(c => `<span class="chip">${c}</span>`).join('')}</div>
@@ -82,6 +106,7 @@
       if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
     });
     document.getElementById('cpSend').addEventListener('click', send);
+    document.getElementById('cpClear').addEventListener('click', clear);
     ta.focus();
   }
 
@@ -90,6 +115,7 @@
     const text = (ta.value || '').trim();
     if(!text || busy) return;
     msgs.push({who: 'op', text});
+    saveMsgs();
     busy = true; render();
     try{
       const body = {message: text, model,
@@ -109,18 +135,32 @@
     }catch(err){
       msgs.push({who: 'err', text: 'could not reach the server — nothing was sent'});
     }finally{
+      saveMsgs();
       busy = false; render();
     }
   }
 
   function open(c){
     const next = {symbol: c.symbol, tf: c.tf || '1H', setupId: c.setupId || null};
-    // switching context starts a fresh transcript; same context re-opens it
-    if(!ctx || key(ctx) !== key(next)) msgs = [];
+    /* Reopening restores the transcript. It did not: close() nulls `ctx`, so
+       the guard `!ctx || ...` was true on EVERY reopen and wiped the history
+       the comment claimed it kept. Reading it from storage keyed by context
+       fixes both that and the page reload — the transcript now lives exactly
+       as long as the CLI session it belongs to. */
     ctx = next;
+    msgs = loadMsgs(next);
     render();
   }
   function close(){ ctx = null; render(); }
 
-  window.SSCopilot = {open, close};
+  /* A transcript is worth keeping until the operator says otherwise. */
+  function clear(){
+    if(!ctx) return;
+    msgs = [];
+    try{ sessionStorage.removeItem(mKey(ctx)); sessionStorage.removeItem(sKey(ctx)); }
+    catch(e){}
+    render();
+  }
+
+  window.SSCopilot = {open, close, clear};
 })();
