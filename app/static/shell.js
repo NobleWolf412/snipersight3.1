@@ -38,6 +38,7 @@
      link in the wizard's prose, or anything the operator saved must not land on
      a blank screen because we improved a word. */
   const SURFACE_ALIASES = {setup: 'rules'};
+  let pendingJump = null;
   function go(name){
     name = SURFACE_ALIASES[name] || name;
     document.querySelectorAll('.surface').forEach(s => s.classList.toggle('on', s.id === 's' + '-' + name));
@@ -49,6 +50,17 @@
     // The console polls slowly while it is off screen; arriving on it should
     // not mean waiting out that slow tick for the first paint.
     if(name === 'diagnostics' && consoleReady) pollConsole();
+    /* A dead-end number becomes a door. Anything with data-jump routes to the
+       surface AND scrolls the panel that answers it into view, because landing
+       at the top of Diagnostics is not the same as being shown the funnel. */
+    if(pendingJump){
+      const target = pendingJump; pendingJump = null;
+      requestAnimationFrame(() => {
+        const el = document.getElementById(target + 'Root') || document.getElementById(target);
+        if(el) el.scrollIntoView({block: 'center',
+          behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+      });
+    }
     /* A new surface starts at its top. The stage kept the previous route's
        offset, so arriving on Learn from halfway down Results dropped the
        reader into the middle of a chapter with no way to tell they had
@@ -58,6 +70,14 @@
   }
   document.querySelectorAll('.nav a').forEach(a =>
     a.addEventListener('click', e => { e.preventDefault(); go(a.dataset.s); }));
+  // delegated: a figure rendered later still becomes a door
+  document.addEventListener('click', e => {
+    const j = e.target.closest && e.target.closest('[data-jump]');
+    if(!j) return;
+    e.preventDefault();
+    pendingJump = j.dataset.jump;
+    go((j.getAttribute('href') || '#command').slice(1));
+  });
   addEventListener('hashchange', () => go(location.hash.slice(1) || 'command'));
   go(location.hash.slice(1) || 'command');
 
@@ -1326,8 +1346,14 @@
        just below, under the equity curve${
          ruled ? '' : ' — which is why that panel can report trades while these tiles report none'}.`;
     $('resultsNote').innerHTML = ruled
+      /* "12 rejected" is the most useful number on this surface for anyone
+         asking "why didn't it trade?" and it went nowhere. It routes into the
+         funnel now, which already holds the per-reason breakdown and the
+         per-setup trace — the answer existed, it just had no door. */
       ? `Risk authority decisions: <b>${d.APPROVED || 0}</b> approved,
-         <b>${d.REDUCED || 0}</b> reduced, <b>${d.REJECTED || 0}</b> rejected.
+         <b>${d.REDUCED || 0}</b> reduced,
+         <a href="#diagnostics" class="num-link" data-jump="funnel"
+            title="see every refusal, grouped by reason"><b>${d.REJECTED || 0}</b> rejected</a>.
          Sizing runs at ${p.config ? p.config.risk_pct : '—'}% per trade with a
          ${p.config ? p.config.max_total_risk_pct : '—'}% total cap.
          Everything here is <span class="term" data-t="paper">paper</span>.`
@@ -1353,31 +1379,172 @@
   }
 
   /* ---------- RESULTS: curve + per-symbol/strategy breakdown ---------- */
+  /* This was a bare polyline on a 0-800 viewBox with preserveAspectRatio="none"
+     and no axis of any kind: a shape that rose or fell without ever saying by
+     how much, over what period, or where one trade ended and the next began.
+     It is the headline picture of the operator's record, so it now carries a
+     dollar scale, a dated x axis, a dot per settlement, and a hover/arrow-key
+     readout naming the trade under the cursor. The viewBox is measured in CSS
+     pixels rather than stretched, because a stretched viewBox distorts every
+     glyph in it — which is exactly why the old one could not afford labels. */
+  const EQ = {curve: null, start: 0, geo: null, idx: -1};
+  const dayFmt = ts => new Date(ts * 1000)
+    .toLocaleDateString(undefined, {day: 'numeric', month: 'short'});
+
   function drawCurve(curve, start){
+    EQ.curve = curve; EQ.start = start; EQ.idx = -1;
     const el = $('eqCurve');
+    if(!el) return;
+    const W = Math.max(320, Math.round(el.clientWidth || el.parentElement.clientWidth || 800));
+    const H = 200;
+    el.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+    const note = $('eqNote'), hov = $('eqHover');
+    if(hov) hov.textContent = '';
+
     if(!curve || curve.length < 2){
-      el.innerHTML = `<text x="400" y="84" text-anchor="middle" fill="var(--fg-4)"
+      EQ.geo = null;
+      el.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" fill="var(--fg-3)"
         font-family="var(--f-mono)" font-size="11">no closed trades in this window yet</text>`;
-      $('eqNote').textContent = curve && curve.length === 1
+      el.setAttribute('aria-label', 'Equity curve: no closed trades in this window yet');
+      note.textContent = curve && curve.length === 1
         ? '1 settlement — a curve needs at least two points' : '';
       return;
     }
+
     const ys = curve.map(p => +p.equity);
+    const last = ys[ys.length - 1];
     const lo = Math.min(...ys, start), hi = Math.max(...ys, start);
-    const pad = (hi - lo) * 0.1 || 1;
-    const y = v => 150 - ((v - (lo - pad)) / ((hi + pad) - (lo - pad))) * 140;
-    const x = i => (i / (curve.length - 1)) * 800;
-    const pts = curve.map((p, i) => `${x(i).toFixed(1)},${y(+p.equity).toFixed(1)}`).join(' ');
-    const up = ys[ys.length - 1] >= start;
+    const pad = (hi - lo) * 0.12 || Math.max(1, Math.abs(start) * 0.001);
+    const dLo = lo - pad, dHi = hi + pad;
+    const L = 62, R = 12, T = 14, B = 30;         // gutters: $ labels left, dates below
+    const y = v => T + (1 - (v - dLo) / (dHi - dLo)) * (H - T - B);
+    const x = i => L + (i / (curve.length - 1)) * (W - L - R);
+    EQ.geo = {x, y, L, R, T, B, W, H};
+
+    const up = last >= start;
     const col = up ? 'var(--green)' : 'var(--red-2)';
+    const pts = curve.map((p, i) => `${x(i).toFixed(1)},${y(+p.equity).toFixed(1)}`).join(' ');
+
+    // Four horizontal rules with the dollars they stand for. Without these the
+    // same rise reads as a fortune or as noise depending only on the crop.
+    let grid = '';
+    for(let k = 0; k <= 3; k++){
+      const v = dLo + (dHi - dLo) * (k / 3), gy = y(v).toFixed(1);
+      grid += `<line x1="${L}" y1="${gy}" x2="${W - R}" y2="${gy}"
+                     stroke="var(--border-soft)" stroke-width="1"/>
+               <text x="${L - 8}" y="${(+gy + 3.5).toFixed(1)}" text-anchor="end"
+                     fill="var(--fg-4)" font-family="var(--f-mono)" font-size="10"
+                     >${money(v)}</text>`;
+    }
+
+    // Dates under the plot — first, last, and the middle if there is room.
+    const stamps = [0];
+    if(curve.length > 3 && (W - L - R) > 300) stamps.push(Math.floor((curve.length - 1) / 2));
+    stamps.push(curve.length - 1);
+    const dates = [...new Set(stamps)].map(i => {
+      const anchor = i === 0 ? 'start' : (i === curve.length - 1 ? 'end' : 'middle');
+      return `<text x="${x(i).toFixed(1)}" y="${H - 10}" text-anchor="${anchor}"
+                    fill="var(--fg-4)" font-family="var(--f-mono)" font-size="10"
+                    >${dayFmt(curve[i].ts)}</text>`;
+    }).join('');
+
+    // One dot per settlement, so the operator can count trades in the shape.
+    // Above ~90 closes the dots merge into a band and are dropped.
+    const dots = curve.length <= 90
+      ? curve.map((p, i) =>
+          `<circle cx="${x(i).toFixed(1)}" cy="${y(+p.equity).toFixed(1)}" r="2.4"
+                   fill="var(--bg-1)" stroke="${col}" stroke-width="1.4"/>`).join('')
+      : '';
+
     el.innerHTML =
-      `<line x1="0" y1="${y(start).toFixed(1)}" x2="800" y2="${y(start).toFixed(1)}"
-             stroke="var(--fg-4)" stroke-dasharray="3 4" stroke-width="1" opacity=".6"/>
+      `${grid}
+       <line x1="${L}" y1="${y(start).toFixed(1)}" x2="${W - R}" y2="${y(start).toFixed(1)}"
+             stroke="var(--fg-3)" stroke-dasharray="3 4" stroke-width="1"/>
+       <text x="${W - R - 3}" y="${(y(start) - 5).toFixed(1)}" text-anchor="end"
+             fill="var(--fg-3)" font-family="var(--f-mono)" font-size="9.5"
+             >break even ${money(start)}</text>
        <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2"
-                 vector-effect="non-scaling-stroke"/>`;
-    $('eqNote').textContent =
-      `${curve.length} settlements · start ${money(start)} · peak ${money(hi)} · now ${money(ys[ys.length-1])}`;
+                 stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+       ${dots}
+       ${dates}
+       <g id="eqCursor" opacity="0">
+         <line y1="${T}" y2="${H - B}" stroke="var(--accent)" stroke-width="1" opacity=".7"/>
+         <circle r="4" fill="var(--accent)"/>
+       </g>`;
+
+    el.setAttribute('aria-label',
+      `Equity curve, ${curve.length} settlements from ${dayFmt(curve[0].ts)} to ` +
+      `${dayFmt(curve[curve.length - 1].ts)}. Started ${money(start)}, now ${money(last)}, ` +
+      `peak ${money(hi)}, low ${money(lo)}.`);
+    note.textContent =
+      `${curve.length} settlements · start ${money(start)} · peak ${money(hi)} · now ${money(last)}`;
   }
+
+  /* Point the cursor at settlement i and say what it was. Shared by the mouse
+     and the arrow keys — the readout is the only way to get an exact number off
+     this picture, so it cannot be mouse-only. */
+  function eqPoint(i){
+    const g = EQ.geo, el = $('eqCurve'), hov = $('eqHover');
+    if(!g || !EQ.curve) return;
+    i = Math.max(0, Math.min(EQ.curve.length - 1, i));
+    EQ.idx = i;
+    const p = EQ.curve[i], v = +p.equity;
+    const prev = i > 0 ? +EQ.curve[i - 1].equity : EQ.start;
+    const step = v - prev;
+    const cur = el.querySelector('#eqCursor');
+    if(cur){
+      cur.setAttribute('opacity', '1');
+      cur.querySelector('line').setAttribute('x1', g.x(i));
+      cur.querySelector('line').setAttribute('x2', g.x(i));
+      cur.querySelector('circle').setAttribute('cx', g.x(i));
+      cur.querySelector('circle').setAttribute('cy', g.y(v));
+    }
+    if(hov) hov.innerHTML =
+      `settlement <b>${i + 1}</b>/${EQ.curve.length} · ${dayFmt(p.ts)} ·
+       equity <b>${money(v)}</b> ·
+       <span class="${step >= 0 ? 'up' : 'down'}">${step >= 0 ? '+' : ''}${money(step)}</span>
+       this trade · ${signedMoney(v - EQ.start)} since the window opened`;
+  }
+  function eqClear(){
+    const cur = $('eqCurve') && $('eqCurve').querySelector('#eqCursor');
+    if(cur) cur.setAttribute('opacity', '0');
+    if($('eqHover')) $('eqHover').textContent = '';
+    EQ.idx = -1;
+  }
+
+  (function wireCurve(){
+    const el = $('eqCurve');
+    if(!el) return;
+    const nearest = ev => {
+      const g = EQ.geo;
+      if(!g || !EQ.curve) return -1;
+      const box = el.getBoundingClientRect();
+      const px = (ev.clientX - box.left) * (g.W / box.width);
+      const frac = (px - g.L) / (g.W - g.L - g.R);
+      return Math.round(frac * (EQ.curve.length - 1));
+    };
+    el.addEventListener('pointermove', ev => { const i = nearest(ev); if(i >= 0) eqPoint(i); });
+    el.addEventListener('pointerleave', eqClear);
+    el.addEventListener('blur', eqClear);
+    el.addEventListener('focus', () => { if(EQ.curve && EQ.idx < 0) eqPoint(EQ.curve.length - 1); });
+    el.addEventListener('keydown', ev => {
+      if(!EQ.curve) return;
+      const jump = {ArrowLeft: -1, ArrowRight: 1, Home: -1e9, End: 1e9}[ev.key];
+      if(jump === undefined) return;
+      ev.preventDefault();
+      eqPoint(EQ.idx < 0 ? EQ.curve.length - 1 : EQ.idx + jump);
+    });
+    // The viewBox is measured in pixels, so a width change needs a redraw or
+    // the labels land in the wrong places. Cheap: only fires on real resizes.
+    if(window.ResizeObserver){
+      let w = 0;
+      new ResizeObserver(() => {
+        const now = Math.round(el.clientWidth);
+        if(now && Math.abs(now - w) > 4){ w = now; if(EQ.curve) drawCurve(EQ.curve, EQ.start); }
+      }).observe(el);
+    }
+  })();
 
   /* `/api/performance` keys every row `key` and reports R as `sum_r`. This read
      was `r[key]` / `r.net_r ?? r.total_r ?? 0` against fields the endpoint has
@@ -1684,13 +1851,28 @@
       const ctl = s.type === 'bool'
         ? `<input type="checkbox" data-set="${s.name}" ${v ? 'checked' : ''}>`
         : `<input class="t-mono" data-set="${s.name}" value="${escHtml(v)}" style="width:110px">`;
+      /* The description is dropped when it merely restates the label —
+         "Pullback playbook · Trade PULLBACK setups." taught nothing and cost a
+         line on every row. Compared on words, not characters, so a genuinely
+         informative sentence that happens to share a noun survives. */
+      const label = settingLabel(s.name);
+      const desc = humaniseCodes(String(s.description || ''));
+      const words = t => new Set(String(t).toLowerCase().match(/[a-z]+/g) || []);
+      const dw = words(desc), lw = words(label);
+      const novel = [...dw].filter(w => !lw.has(w) && w.length > 3);
+      const tautological = dw.size > 0 && novel.length <= 1;
+
+      /* The "rule" badge was on nearly every row, which is the definition of
+         a badge that means nothing. Behavioural settings are the MAJORITY
+         here; what is worth marking is the exception, so the badge is gone
+         and the consequence is carried by the confirm dialog and the banner —
+         where it is read at the moment it applies. */
       return `<label class="set-row" data-setrow="${s.name}">
         ${s.type === 'bool' ? ctl : ''}
         <span>
-          <span class="t-mono" style="color:var(--fg-2)">${escHtml(settingLabel(s.name))}</span>
-          ${s.class === 'BEHAVIOURAL' ? '<span class="chip chip-amber">rule</span>' : ''}
-          <span class="t-label" style="display:block;margin-top:2px;text-transform:none;
-            letter-spacing:0;color:var(--fg-4)">${humaniseCodes(escHtml(s.description))}</span>
+          <span class="t-mono" style="color:var(--fg-2)">${escHtml(label)}</span>
+          ${tautological ? '' : `<span class="t-label" style="display:block;margin-top:2px;
+            text-transform:none;letter-spacing:0;color:var(--fg-3)">${escHtml(desc)}</span>`}
         </span>
         ${s.type === 'bool' ? '' : ctl}
       </label>`;
@@ -1708,6 +1890,17 @@
     }
     $('setDirty').hidden = !dirty.length;
     $('setApply').disabled = $('setReset').disabled = !dirty.length;
+    /* The banner appears only when there IS something to apply. Two buttons
+       sitting permanently disabled taught the reader to stop looking at them,
+       so the one moment they mattered looked like every other moment. */
+    const banner = $('dirtyBanner'), what = $('dirtyWhat');
+    if(banner){
+      banner.hidden = !dirty.length;
+      if(dirty.length && what)
+        what.textContent = dirty.length === 1
+          ? `Unsaved change to ${settingLabel(dirty[0])}.`
+          : `${dirty.length} unsaved rule changes.`;
+    }
     const rules = dirty.filter(k => (specOf(k) || {}).class === 'BEHAVIOURAL');
     $('setWarn').hidden = !rules.length;
     if(rules.length) $('setWarn').innerHTML =
@@ -1805,6 +1998,20 @@
     const changes = {};
     for(const k of dirtyKeys()) changes[k] = setPending[k];
     if(!Object.keys(changes).length) return;
+    /* The consequence is stated BEFORE the action, not in 10px grey below the
+       button that causes it. Only for behavioural rules — a cosmetic setting
+       does not open a new window and should not be dressed as if it might. */
+    const behavioural = Object.keys(changes)
+      .filter(k => (specOf(k) || {}).class === 'BEHAVIOURAL');
+    if(behavioural.length){
+      const names = behavioural.map(settingLabel).join(', ');
+      if(!confirm(
+        `Apply these rule changes?\n\n${names}\n\n` +
+        'This starts a NEW forward window: your existing record is kept but ' +
+        'stops accumulating, because a record spanning two configurations ' +
+        'cannot tell you which one produced which result.\n\n' +
+        'Nothing is deleted.')) return;
+    }
     b.disabled = true; b.textContent = 'Applying…';
     try{
       const d = await applySettings(changes, 'scanner setup');
@@ -1849,18 +2056,66 @@
      focused or partially-filled input may be re-rendered wholesale. */
   let credShape = null;                 // venue|field list currently in the DOM
 
+  /* ONE CARD PER VENUE. Nine bright browser-default boxes sat against the dark
+     theme, each with its own Save button, each labelled only by a placeholder —
+     which disappears the moment you type, and which a screen reader is not
+     required to announce as a name at all. Twelve of the app's unlabelled
+     controls were these.
+
+     Now: real <label for>, a masked input with a reveal, ONE Save per venue,
+     and a connection state that says whether the venue is usable rather than
+     leaving the operator to infer it from an empty box. Values are never
+     echoed back by the server and are never logged here. */
+  const CRED_LABELS = {
+    api_key:    'API key',
+    api_secret: 'API secret',
+    passphrase: 'Passphrase',
+  };
+  const CRED_SCOPES = {
+    'coinbase-spot': 'Needs READ on accounts and products. No trade or ' +
+                     'withdraw permission is required — this app never sends ' +
+                     'a real order.',
+    'phemex-perp':   'Needs READ only. Do not grant withdrawal rights.',
+    'kraken-perp':   'Needs READ only. Do not grant withdrawal rights.',
+  };
   function buildCredRows(d){
     const venues = Object.keys(d.status);
-    $('credFields').innerHTML = venues.map(v => `
-      <div style="margin-bottom:var(--md)">
-        <div class="t-label" style="margin-bottom:6px">${v.replace('-', ' ')}</div>
-        ${d.fields.map(f => `
-          <div class="fld-row" style="margin-bottom:6px" data-credrow="${v}|${f}">
-            <input type="password" data-cred="${v}|${f}" autocomplete="off">
-            <button class="btn" data-credsave="${v}|${f}">Save</button>
-            <button class="btn btn-red" data-credclear="${v}|${f}" hidden>Clear</button>
-          </div>`).join('')}
-      </div>`).join('');
+    $('credFields').innerHTML = venues.map(v => {
+      const nice = v.replace(/-/g, ' ');
+      const scope = CRED_SCOPES[v] || 'Read-only access is enough; this app ' +
+                                      'never places a real order.';
+      return `
+      <section class="cred-card" data-credcard="${esc(v)}">
+        <header class="cred-head">
+          <h3 class="t-label" style="font-size:11px">${esc(nice)}</h3>
+          <span class="chip" data-credstate="${esc(v)}">—</span>
+        </header>
+        ${d.fields.map(f => {
+          const id = `cred-${v}-${f}`.replace(/[^a-zA-Z0-9-]/g, '-');
+          return `
+          <div class="cred-field" data-credrow="${esc(v)}|${esc(f)}">
+            <label class="t-label" for="${id}">${esc(CRED_LABELS[f] || f.replace(/_/g, ' '))}</label>
+            <div class="fld-row">
+              <input id="${id}" type="password" class="t-mono"
+                     data-cred="${esc(v)}|${esc(f)}" autocomplete="off"
+                     spellcheck="false">
+              <button class="btn cred-eye" type="button"
+                      data-credreveal="${esc(v)}|${esc(f)}"
+                      aria-label="Show ${esc(CRED_LABELS[f] || f)}"
+                      aria-pressed="false">Show</button>
+              <button class="btn btn-red" type="button"
+                      data-credclear="${esc(v)}|${esc(f)}" hidden>Clear</button>
+            </div>
+          </div>`;
+        }).join('')}
+        <p class="cred-scope t-body">${esc(scope)}</p>
+        <div class="cred-actions">
+          <button class="btn btn-cyan" type="button" data-credsaveall="${esc(v)}">Save ${esc(nice)}</button>
+          <button class="btn" type="button" data-credtest="${esc(v)}">Test connection</button>
+          <span class="t-mono cred-result" data-credresult="${esc(v)}"></span>
+        </div>
+      </section>`;
+    }).join('');
   }
 
   async function loadCredentials(){
@@ -1872,17 +2127,115 @@
     const shape = Object.keys(d.status).sort().join(',') + '::' + d.fields.join(',');
     if(shape !== credShape){ buildCredRows(d); credShape = shape; }
 
-    // patch state per row: placeholder carries "is a key stored", Clear follows it
     for(const v of Object.keys(d.status)){
+      let stored = 0;
       for(const f of d.fields){
         const set = d.status[v][f];
+        if(set) stored++;
         const input = document.querySelector(`[data-cred="${v}|${f}"]`);
         const clear = document.querySelector(`[data-credclear="${v}|${f}"]`);
-        if(input) input.placeholder = set ? '•••••••• stored' : f.replace('_', ' ');
+        // The label carries the name now, so the placeholder is free to carry
+        // STATE — whether something is already stored under this field.
+        if(input) input.placeholder = set ? '•••••••• stored' : 'not set';
         if(clear) clear.hidden = !set;
+      }
+      /* Connected / Partly set / Not connected, stated rather than inferred
+         from whether a box looks empty. "Partly" is its own state because a
+         venue with a key and no secret is not usable and not untouched. */
+      const chip = document.querySelector(`[data-credstate="${v}"]`);
+      if(chip){
+        const n = d.fields.length;
+        chip.textContent = stored === 0 ? 'not connected'
+          : stored < n ? `partly set — ${stored} of ${n}` : 'connected';
+        chip.className = 'chip ' + (stored === 0 ? '' : stored < n ? 'chip-amber' : 'chip-green');
       }
     }
   }
+
+  /* Reveal. A masked field the operator cannot check is a field they paste
+     into twice. Toggles type only — the value is never copied anywhere. */
+  document.addEventListener('click', e => {
+    const eye = e.target.closest('[data-credreveal]');
+    if(!eye) return;
+    const input = document.querySelector(`[data-cred="${eye.dataset.credreveal}"]`);
+    if(!input) return;
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    eye.textContent = show ? 'Hide' : 'Show';
+    eye.setAttribute('aria-pressed', String(show));
+  });
+
+  /* ONE Save per venue. Nine Save buttons meant nine chances to fill a key,
+     press the wrong one and believe you were connected. Sends only the fields
+     that were actually typed into — an empty box must not clear a stored key. */
+  document.addEventListener('click', async e => {
+    const b = e.target.closest('[data-credsaveall]');
+    if(!b) return;
+    const venue = b.dataset.credsaveall;
+    const out = document.querySelector(`[data-credresult="${venue}"]`);
+    const inputs = [...document.querySelectorAll(`[data-cred^="${venue}|"]`)]
+      .filter(i => i.value.trim() !== '');
+    if(!inputs.length){
+      if(out) out.textContent = 'nothing typed to save';
+      return;
+    }
+    b.disabled = true;
+    if(out) out.textContent = 'saving…';
+    try{
+      for(const input of inputs){
+        const [v, field] = input.dataset.cred.split('|');
+        const r = await fetch('/api/credentials', {method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({venue: v, field, value: input.value})});
+        const j = await r.json().catch(() => ({}));
+        if(!r.ok) throw new Error(j.detail || ('credentials → ' + r.status));
+        input.value = '';                 // never leave a secret in the DOM
+        input.type = 'password';
+      }
+      window.SSData.invalidate('/api/credentials');
+      await loadCredentials();
+      if(out) out.textContent = '';
+      toast(`Saved ${inputs.length} field${inputs.length === 1 ? '' : 's'} for ` +
+            `${venue.replace(/-/g, ' ')}.`, 'good');
+    }catch(err){
+      if(out) out.textContent = '';
+      // the message, never the value
+      toast('Could not save: ' + err.message, 'bad');
+    }
+    b.disabled = false;
+  });
+
+  /* Test connection. Read-only: it asks the venue whether the stored key is
+     accepted, and reports the answer. Nothing is echoed back. */
+  document.addEventListener('click', async e => {
+    const b = e.target.closest('[data-credtest]');
+    if(!b) return;
+    const venue = b.dataset.credtest;
+    const out = document.querySelector(`[data-credresult="${venue}"]`);
+    b.disabled = true;
+    if(out) out.textContent = 'testing…';
+    try{
+      const r = await fetch('/api/credentials/test', {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({venue})});
+      const j = await r.json().catch(() => ({}));
+      if(r.status === 404){
+        // The endpoint is not built yet. Say so rather than implying a pass.
+        if(out) out.textContent = 'not available in this build';
+      } else if(r.ok && j.ok){
+        if(out) out.textContent = '';
+        toast(`${venue.replace(/-/g, ' ')} accepted the key.`, 'good');
+      } else {
+        if(out) out.textContent = '';
+        toast(`${venue.replace(/-/g, ' ')} refused the key — ` +
+              `${j.detail || 'no reason given'}`, 'bad');
+      }
+    }catch(err){
+      if(out) out.textContent = '';
+      toast('Could not reach the venue to test.', 'bad');
+    }
+    b.disabled = false;
+  });
 
   document.addEventListener('click', async e => {
     const save = e.target.closest('[data-credsave]');

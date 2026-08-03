@@ -1785,8 +1785,20 @@
   /* The last line the operator reads on their first visit. It is the handle on
      everything else: one hover teaches one word, and there are 47 of them. */
   const ORIENT_CLOSER = 'Everything underlined explains itself — hover it.';
+  /* Each step also names the REAL element it is about, and carries a one- or
+     two-sentence `lede`. The orientation used to render as four dense columns
+     of prose above the fold on Command — a wall that described the app beside
+     the app, so nothing in it was ever pointed AT anything. The tour walks the
+     actual screen instead: the ring lands on the tile or the panel being
+     described, and the paragraph you are reading now stays available behind
+     "more" for anyone who wants it. `ring` climbs to the ancestor worth
+     outlining when the anchor itself is a number inside a bigger box. */
   const ORIENT_STEPS = [
     {
+      anchor: '#mUniverse', ring: '.tile', surface: '#command',
+      lede: 'Each symbol trades on exactly one venue, and that decides what it can do: ' +
+        'spot is long-only at 1x, perpetuals can short and use leverage. The scanner ' +
+        'picks this list — a symbol needs history and volume before it is watched at all.',
       title: 'Pick your market',
       /* "one venue at a time" contradicted the MULTI-VENUE badge in the header
          — and the badge is the accurate one. Venue is derived PER SYMBOL at
@@ -1803,6 +1815,10 @@
         'history and enough volume before it is watched at all.</p>'
     },
     {
+      anchor: '#btnScan', ring: '.panel', surface: '#command',
+      lede: 'It re-reads every market on a loop and only speaks up when something is ' +
+        'genuinely tradeable. Expect roughly one setup a day — an empty deck almost ' +
+        'always means no market was in a state with a playbook, not that anything broke.',
       title: 'The scanner watches',
       quiet: true,
       html: '<p>It re-reads the market on a loop and only speaks up when something is ' +
@@ -1815,6 +1831,10 @@
         'explains why RANGE has no play.</p>'
     },
     {
+      anchor: '#deck', ring: '.panel', surface: '#command',
+      lede: 'A card lands here naming its reasoning, its bracket and its risk. Open it on ' +
+        'the Chart to drag any of the three levels — size recalculates from the stop as ' +
+        'you move it, so a wider stop visibly costs you position size.',
       title: 'When a setup appears',
       html: '<p>The card names its reasoning, its bracket and its risk: what the ' +
         t('regime', 'regime') + ' was, which zone, what confirmed it, the ' +
@@ -1825,6 +1845,10 @@
         'size. Chapter 8 of Learn walks the card line by line.</p>'
     },
     {
+      anchor: '#modeChip',
+      lede: 'This badge is the whole point: same code, same decisions, no real orders. ' +
+        'Live submission is locked until the forward record earns it, and everything on ' +
+        'Results is measured from the current baseline forward.',
       title: 'Nothing here is real',
       html: '<p>This is ' + t('paper', 'paper') + ' trading: the same code, the same ' +
         'decisions, no real orders. Live order submission is locked, and it stays locked ' +
@@ -2060,36 +2084,201 @@
     catch (e) { storageOk = false; }
   }
 
+  /* Where the operator stopped, so "Resume" means it. Separate from the
+     dismissed flag: dismissing at step 3 and coming back should not restart. */
+  const AT_KEY = 'ss.orientation.v1.at';
+  function atStep() {
+    try { return Math.max(0, Math.min(ORIENT_STEPS.length - 1, +localStorage.getItem(AT_KEY) || 0)); }
+    catch (e) { return 0; }
+  }
+  function setAt(i) { try { localStorage.setItem(AT_KEY, String(i)); } catch (e) { /* no-op */ } }
+
+  const reduced = () => typeof matchMedia === 'function' &&
+    matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ─────────── the guided tour ───────────
+     A coach mark that rings the real control and says one thing about it. The
+     ring is a single fixed div with a 9999px shadow, so the rest of the screen
+     dims without a second overlay element intercepting anything. */
+
+  const tour = {open: false, i: 0, root: null, prevFocus: null};
+
+  function tourEls() {
+    return {
+      pop: document.getElementById('tourPop'),
+      ring: document.getElementById('tourRing')
+    };
+  }
+
+  function tourTarget(step) {
+    let el = step.anchor && document.querySelector(step.anchor);
+    if (el && step.ring) el = el.closest(step.ring) || el;
+    // A target that is display:none (its surface is not showing) is no target.
+    return el && el.getClientRects().length ? el : null;
+  }
+
+  function placeTour() {
+    if (!tour.open) return;
+    const {pop, ring} = tourEls();
+    if (!pop) return;
+    const step = ORIENT_STEPS[tour.i];
+    const el = tourTarget(step);
+    const vw = window.innerWidth, vh = window.innerHeight;
+    if (!el) {
+      // No anchor on screen — the step still has something to say, so it says
+      // it in the middle rather than vanishing.
+      ring.style.display = 'none';
+      pop.style.left = Math.round((vw - pop.offsetWidth) / 2) + 'px';
+      pop.style.top = Math.round((vh - pop.offsetHeight) / 2) + 'px';
+      return;
+    }
+    const r = el.getBoundingClientRect(), pad = 6;
+    ring.style.display = '';
+    ring.style.left = (r.left - pad) + 'px';
+    ring.style.top = (r.top - pad) + 'px';
+    ring.style.width = (r.width + pad * 2) + 'px';
+    ring.style.height = (r.height + pad * 2) + 'px';
+
+    const pw = pop.offsetWidth, ph = pop.offsetHeight, gap = 14;
+    let top = r.bottom + gap;
+    if (top + ph > vh - 8) top = r.top - gap - ph;      // flip above
+    if (top < 8) top = Math.min(vh - ph - 8, Math.max(8, r.top));  // beside, clamped
+    let left = r.left + r.width / 2 - pw / 2;
+    left = Math.max(8, Math.min(vw - pw - 8, left));
+    pop.style.left = Math.round(left) + 'px';
+    pop.style.top = Math.round(top) + 'px';
+  }
+
+  function drawTour() {
+    const step = ORIENT_STEPS[tour.i];
+    const pop = document.getElementById('tourPop');
+    const last = tour.i === ORIENT_STEPS.length - 1;
+    pop.innerHTML =
+      '<div class="tour-n">Step ' + (tour.i + 1) + ' of ' + ORIENT_STEPS.length + '</div>' +
+      '<h3 id="tourTitle">' + esc(step.title) + '</h3>' +
+      '<p class="tour-lede">' + esc(step.lede) + '</p>' +
+      '<details class="tour-more"><summary>more</summary>' + step.html + '</details>' +
+      (last ? '<p class="tour-closer"><b>' + esc(ORIENT_CLOSER) + '</b></p>' : '') +
+      '<div class="tour-acts">' +
+      '<button type="button" class="btn tour-skip" id="tourSkip">' +
+      (last ? 'Close' : 'Skip tour') + '</button>' +
+      '<span class="spacer"></span>' +
+      (tour.i > 0 ? '<button type="button" class="btn" id="tourBack">Back</button>' : '') +
+      '<button type="button" class="btn btn-cyan" id="tourNext">' +
+      (last ? 'Done' : 'Next') + '</button></div>';
+
+    /* Every step points at something on Command, and the tour can be started
+       from anywhere — so route there first rather than falling back to a
+       centred card that describes a control the operator cannot see. */
+    let target = tourTarget(step);
+    if (!target && step.surface && location.hash !== step.surface) {
+      location.hash = step.surface;
+      setTimeout(() => { if (tour.open && tour.i === ORIENT_STEPS.indexOf(step)) drawTour(); }, 60);
+      return;
+    }
+    if (target) target.scrollIntoView({block: 'center', behavior: reduced() ? 'auto' : 'smooth'});
+    // measure after the scroll settles; twice, because a smooth scroll moves
+    requestAnimationFrame(placeTour);
+    setTimeout(placeTour, reduced() ? 0 : 320);
+
+    pop.querySelector('#tourNext').addEventListener('click',
+      () => last ? endTour(true) : goTour(tour.i + 1));
+    pop.querySelector('#tourSkip').addEventListener('click', () => endTour(last));
+    const back = pop.querySelector('#tourBack');
+    if (back) back.addEventListener('click', () => goTour(tour.i - 1));
+    pop.querySelector('.tour-more').addEventListener('toggle', placeTour);
+    pop.focus();
+  }
+
+  function goTour(i) {
+    tour.i = Math.max(0, Math.min(ORIENT_STEPS.length - 1, i));
+    setAt(tour.i);
+    drawTour();
+  }
+
+  function onTourKey(ev) {
+    if (!tour.open) return;
+    if (ev.key === 'Escape') { ev.preventDefault(); endTour(false); return; }
+    if (ev.key === 'ArrowRight') { ev.preventDefault(); goTour(tour.i + 1); return; }
+    if (ev.key === 'ArrowLeft') { ev.preventDefault(); goTour(tour.i - 1); return; }
+    if (ev.key !== 'Tab') return;
+    // Trap: the tour dims the screen, so tabbing out of it lands on controls
+    // the operator cannot see.
+    const pop = document.getElementById('tourPop');
+    const f = pop.querySelectorAll('button, summary, a[href]');
+    if (!f.length) return;
+    const first = f[0], lastEl = f[f.length - 1];
+    if (ev.shiftKey && (document.activeElement === first || document.activeElement === pop)) {
+      ev.preventDefault(); lastEl.focus();
+    } else if (!ev.shiftKey && document.activeElement === lastEl) {
+      ev.preventDefault(); first.focus();
+    }
+  }
+
+  function startTour(from) {
+    if (tour.open) return;
+    tour.open = true;
+    tour.prevFocus = document.activeElement;
+    tour.i = Math.max(0, Math.min(ORIENT_STEPS.length - 1, from || 0));
+    const host = document.createElement('div');
+    host.id = 'tourRoot';
+    host.innerHTML =
+      '<div id="tourRing" class="tour-ring"></div>' +
+      '<div id="tourPop" class="tour-pop" role="dialog" aria-modal="true" ' +
+      'aria-labelledby="tourTitle" tabindex="-1"></div>';
+    document.body.appendChild(host);
+    document.addEventListener('keydown', onTourKey, true);
+    window.addEventListener('resize', placeTour);
+    document.addEventListener('scroll', placeTour, true);
+    drawTour();
+  }
+
+  function endTour(completed) {
+    if (!tour.open) return;
+    tour.open = false;
+    document.removeEventListener('keydown', onTourKey, true);
+    window.removeEventListener('resize', placeTour);
+    document.removeEventListener('scroll', placeTour, true);
+    const host = document.getElementById('tourRoot');
+    if (host) host.remove();
+    if (completed) setAt(0);
+    markSeen(true);
+    const root = document.getElementById('orientRoot');
+    if (root) renderOrient(root, false);
+    const back = document.getElementById('orientOpen');
+    if (back) back.focus();
+    else if (tour.prevFocus && tour.prevFocus.focus) tour.prevFocus.focus();
+  }
+
+  /* `open` now means "offer the tour", not "print the whole manual". The card
+     is three lines; the content lives in the tour and on Learn. */
   function renderOrient(root, open) {
+    const at = atStep();
     if (!open) {
+      const resuming = at > 0;
       root.innerHTML = '<div class="orient-min">' +
-        '<button type="button" class="btn" id="orientOpen" ' +
-        'title="show the four-step orientation again">? &nbsp;Orientation</button></div>';
-      root.querySelector('#orientOpen').addEventListener('click', () => {
-        markSeen(false);
-        renderOrient(root, true);
-      });
+        '<button type="button" class="btn" id="orientOpen">' +
+        (resuming ? 'Resume tour · step ' + (at + 1) + ' of ' + ORIENT_STEPS.length
+          : '? &nbsp;Take the tour') + '</button></div>';
+      root.querySelector('#orientOpen').addEventListener('click', () => startTour(at));
       return;
     }
     root.innerHTML =
       '<div class="orient">' +
       '<div class="orient-head">' +
-      '<h2>Start here</h2>' +
-      '<span class="orient-sub">four steps · about a minute</span>' +
-      '<button type="button" class="btn orient-x" id="orientDismiss">Got it</button>' +
-      '</div>' +
-      '<div class="orient-body">' +
-      ORIENT_STEPS.map((s, i) =>
-        '<div class="orient-step' + (s.quiet ? ' quiet' : '') + '">' +
-        '<span class="orient-n">STEP ' + (i + 1) + '</span>' +
-        '<h3>' + esc(s.title) + '</h3>' + s.html + '</div>').join('') +
+      '<h2>New here?</h2>' +
+      '<span class="orient-sub">' + ORIENT_STEPS.length +
+      ' steps · about a minute · points at the real screen</span>' +
+      '<button type="button" class="btn orient-x" id="orientDismiss">No thanks</button>' +
       '</div>' +
       '<div class="orient-foot">' +
-      '<p><b>' + esc(ORIENT_CLOSER) + '</b> The Learn surface goes further: eight chapters on ' +
-      'what the engine does and why it works.</p>' +
+      '<p>' + esc(ORIENT_CLOSER) + ' The tour shows you where the four things that ' +
+      'matter live: what it watches, when it speaks, what a setup is, and why none ' +
+      'of it is real money yet.</p>' +
       '<span class="orient-acts">' +
       '<a class="btn" href="#learn">Open Learn</a>' +
-      '<button type="button" class="btn btn-cyan" id="orientDone">Got it</button>' +
+      '<button type="button" class="btn btn-cyan" id="orientStart">' +
+      (at > 0 ? 'Resume tour' : 'Start tour') + '</button>' +
       '</span></div>' +
       (storageOk ? '' :
         '<div class="orient-warn">This browser is blocking local storage, so dismissing ' +
@@ -2097,7 +2286,11 @@
       '</div>';
     const close = () => { markSeen(true); renderOrient(root, false); };
     root.querySelector('#orientDismiss').addEventListener('click', close);
-    root.querySelector('#orientDone').addEventListener('click', close);
+    root.querySelector('#orientStart').addEventListener('click', () => {
+      markSeen(true);
+      renderOrient(root, false);
+      startTour(at);
+    });
   }
 
   function bootOrient() {
@@ -2112,7 +2305,7 @@
   function boot() {
     const css = document.createElement('link');
     css.rel = 'stylesheet';
-    css.href = '/static/lessons.css?v=1';
+    css.href = '/static/lessons.css?v=2';
     /* Loud fallback: unstyled lesson content is readable but looks broken, and
        "looks broken" is precisely the impression this whole surface exists to
        remove. Say which file is missing. */
@@ -2150,6 +2343,8 @@
       key: ORIENT_KEY,
       closer: ORIENT_CLOSER,
       isDismissed: seen,
+      at: atStep,
+      start: function (i) { if (typeof document !== 'undefined') startTour(i || atStep()); },
       open: function () {
         const r = typeof document !== 'undefined' && document.getElementById('orientRoot');
         if (r) { markSeen(false); renderOrient(r, true); }

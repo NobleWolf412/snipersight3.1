@@ -9,7 +9,12 @@
        steal attention from the Setup Deck above it.
      · Flat at rest. No shadows, no side-stripe status borders. */
 
-.wx{ --wx-cols: 112px 132px 132px minmax(0, 1fr); }
+/* Regime columns size to their content rather than to a guess.
+   "Bear weakening" needs ~150px and the cell was 132, so it
+   clipped to "Bear weaken…" while roughly a third of the row
+   was empty space to its right. max-content with a floor keeps
+   the columns aligned and lets the longest label decide. */
+.wx{ --wx-cols: 112px minmax(132px, max-content) minmax(132px, max-content) minmax(0, 1fr); }
 .wx .panel-head{ gap: var(--md); }
 
 /* orientation line: what the strip is for, said once */
@@ -108,15 +113,15 @@
   color: var(--fg-4); word-break: break-all; }
 
 /* ---- responsive ---- */
-@media (max-width: 1180px){ .wx{ --wx-cols: 96px 118px 118px minmax(0, 1fr); } }
-@media (max-width: 1000px){
+@media (max-width:1180px){ .wx{ --wx-cols: 96px minmax(112px, max-content) minmax(112px, max-content) minmax(0, 1fr); } }
+@media (max-width:1100px){
   .wx-sub{ display: none; }
-  .wx{ --wx-cols: 88px 112px 112px minmax(0, 1fr); }
+  .wx{ --wx-cols: 88px minmax(104px, max-content) minmax(104px, max-content) minmax(0, 1fr); }
   .wx-mean{ font-size: 12px; }
 }
 /* stacked: symbol on its own line, the two timeframes still side by side so the
    agreement rule stays readable, meaning underneath */
-@media (max-width: 780px){
+@media (max-width:900px){
   .wx-row{ grid-template-columns: 1fr 1fr; padding: 4px 0 6px; }
   .wx-head{ display: none; }
   .wx-sym{ grid-column: 1 / -1; padding-bottom: 2px; }

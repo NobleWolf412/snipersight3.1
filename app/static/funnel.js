@@ -32,7 +32,7 @@
     const link = document.createElement('link');
     link.id = 'dx-css';
     link.rel = 'stylesheet';
-    link.href = '/static/diagnostics-ui.css?v=1';
+    link.href = '/static/diagnostics-ui.css?v=2';
     document.head.appendChild(link);
   }
 
@@ -483,7 +483,14 @@
           <span class="dx-stage-count">${fmt(r.n)}</span>
         </span>
         <span class="dx-stage-track">
-          <span class="dx-stage-fill" style="width:${width.toFixed(2)}%"></span>
+          <!-- A survival of 2 out of 3,000 is 0.07% — mathematically right
+               and a sub-pixel sliver on screen, so every heavy-loss stage
+               looked identical to every other. The fill keeps its true
+               proportion and gains a visible floor when ANY candidate
+               survived, so "a few got through" is distinguishable from
+               "none did". Zero stays genuinely zero. -->
+          <span class="dx-stage-fill" style="width:${width.toFixed(2)}%${
+            r.n > 0 ? ';min-width:4px' : ''}"></span>
           ${isBn ? '<span class="dx-stage-tag">bottleneck</span>' : ''}
         </span>
         <span class="dx-stage-foot">

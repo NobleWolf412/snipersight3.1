@@ -53,6 +53,17 @@
   --r-sm:8px; --r-md:10px; --r-lg:12px; --r-xl:14px; --r-pill:999px;
   /* shell chrome heights — read by the .shell grid AND by #s-chart.on's calc */
   --topbar-h:56px; --statusbar-h:26px;
+  /* ── THE BREAKPOINT SCALE ──
+     Four steps, not the twelve ad-hoc values this file had grown
+     (560/620/640/720/760/780/900/950/960/1000/1100/1180). Twelve
+     thresholds is twelve chances for two components to disagree about
+     what "narrow" means and reflow against each other.
+       640  phone
+       900  tablet, or the app in a split pane
+      1100  small laptop
+      1180  the chart's two-column threshold — the ticket needs its width
+     Media queries cannot read a custom property, so these are documented
+     here and written literally at each @media. Use one of these four. */
 }
 /* Dynamic Accent Rule: the whole shell restates its accent by mode. */
 [data-mode="paper"]{--accent:var(--amber);--accent-rgb:255,194,102}
@@ -337,7 +348,7 @@ body{
    something invisible and cannot tell what will happen if they press Enter. */
 .term:focus-visible{color:var(--accent);border-bottom-color:var(--accent);
   outline:1px solid var(--accent);outline-offset:2px;border-radius:2px}
-#gloss{position:fixed;z-index:9000;max-width:320px;padding:10px 12px;border-radius:var(--r-md);
+#gloss{position:fixed;z-index:9000;max-width:640px;padding:10px 12px;border-radius:var(--r-md);
   background:var(--card);border:1px solid var(--accent);display:none;
   box-shadow:0 8px 30px rgba(0,0,0,.6)}
 #gloss .g-term{font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.18em;
@@ -1010,3 +1021,95 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .deck-held.done{color:var(--fg-3);letter-spacing:.06em;text-transform:none;
   font-size:10px}
 .deck-held.done::before{background:var(--fg-4);box-shadow:none}
+
+/* ---------- credentials: one card per venue ----------
+   Nine bright browser-default boxes against a dark theme, each with its own
+   Save and labelled only by a placeholder — which vanishes on first keypress
+   and which a screen reader need not announce as a name at all. */
+.cred-card{border:1px solid var(--border-soft);border-radius:var(--r-lg);
+  padding:var(--md);margin-bottom:var(--md);background:rgba(0,0,0,.22)}
+.cred-head{display:flex;align-items:center;gap:var(--sm);margin-bottom:var(--sm)}
+.cred-head h3{margin:0;text-transform:capitalize}
+.cred-head .chip{margin-left:auto}
+.cred-field{display:flex;flex-direction:column;gap:4px;margin-bottom:var(--sm)}
+.cred-field input{flex:1;background:rgba(0,0,0,.5);border:1px solid var(--border);
+  border-radius:var(--r-md);padding:7px 10px;color:var(--fg);font-size:12px;
+  min-width:0}
+.cred-field input:focus{outline:0;border-color:var(--accent)}
+.cred-eye{flex:none;min-width:62px}
+.cred-scope{font-size:12px;color:var(--fg-3);margin:var(--sm) 0;max-width:64ch}
+.cred-actions{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap}
+.cred-result{color:var(--fg-3);font-size:11px}
+
+/* ---------- Rules: what you can change vs what the engine reports ----------
+   Inputs and static readouts looked nearly identical, so a number you cannot
+   edit invited clicks and a setting you can edit read as a label. */
+.set-row input:not([type=checkbox]),.set-row input[type=checkbox]{
+  outline:1px solid transparent}
+.readonly-block{border-left:2px solid var(--border);padding-left:var(--md)}
+.readonly-block .t-label::after{content:' · reported';color:var(--fg-4);
+  letter-spacing:.08em}
+
+/* The consequence of applying, promoted out of 10px grey text sitting BELOW
+   the buttons it describes. */
+.dirty-banner{position:sticky;bottom:0;z-index:20;display:flex;align-items:center;
+  gap:var(--md);flex-wrap:wrap;margin-top:var(--md);padding:10px var(--md);
+  border:1px solid rgba(255,194,102,.45);border-radius:var(--r-lg);
+  background:oklch(0.22 0.02 80 / 0.96);color:var(--amber);font-size:12.5px;
+  line-height:1.45}
+.dirty-banner .spacer{margin-left:auto}
+.dirty-banner[hidden]{display:none}
+
+/* ---------- the A–Z glossary (Learn) ----------
+   67 terms the app underlines, browsable rather than only stumble-into-able. */
+.gl-search{display:flex;align-items:center;gap:var(--sm);margin-left:auto}
+.gl-search input{background:rgba(0,0,0,.5);border:1px solid var(--border);
+  border-radius:var(--r-md);padding:6px 10px;color:var(--fg);font-size:12px;
+  min-width:190px}
+.gl-search input:focus{outline:0;border-color:var(--accent)}
+.gl-body{padding:var(--lg);display:block;max-height:none}
+.gl-letter{font-family:var(--f-display);font-size:13px;letter-spacing:.22em;
+  color:var(--accent);margin:var(--lg) 0 var(--sm);padding-bottom:4px;
+  border-bottom:1px solid var(--border-soft)}
+.gl-letter:first-child{margin-top:0}
+.gl-entry{display:grid;grid-template-columns:minmax(140px,22%) minmax(0,1fr);
+  gap:var(--md);padding:7px 0;border-bottom:1px solid var(--border-soft)}
+.gl-entry:last-child{border-bottom:0}
+.gl-term{font-family:var(--f-mono);font-size:11.5px;font-weight:600;
+  letter-spacing:.08em;color:var(--fg);margin:0}
+.gl-def{font-family:var(--f-body);font-size:12.5px;line-height:1.55;
+  color:var(--fg-2);margin:0;max-width:72ch}
+@media(max-width:900px){.gl-entry{grid-template-columns:1fr;gap:2px}
+  .gl-search input{min-width:120px}}
+
+/* A term whose trigger was demoted because the same word already carries one
+   in this card. Still readable, no longer another tab stop. */
+.term-plain{border-bottom:0;cursor:inherit;color:inherit}
+
+/* Equity-curve hover/keyboard readout. Reserves its line whether or not
+   anything is pointed at — the panel must not jump when the cursor enters. */
+.eq-hover{min-height:16px;font-size:11.5px;color:var(--fg-2);margin-top:6px}
+.eq-hover b{color:var(--fg)}
+.eq-hover .up{color:var(--green)}
+.eq-hover .down{color:var(--red-2)}
+#eqCurve:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-sm)}
+
+/* Packed columns instead of a stretched 2-up grid. A `grid cols-2` gives every
+   cell the height of its tallest sibling, so a short panel beside a tall one
+   renders as a mostly-empty bordered box — 800px of it on Rules once
+   Credentials became three venue cards, 836px on Diagnostics beside the
+   funnel. Multicolumn packs in DOM order: each panel is its natural height and
+   the next starts under it. Reading and focus order are still source order. */
+.pack-cols{column-count:2;column-gap:var(--md)}
+.pack-cols > .panel{break-inside:avoid;margin:0 0 var(--md)}
+@media(max-width:900px){.pack-cols{column-count:1}}
+
+/* One plain sentence above a dense block, saying what it is and how to read
+   it. Prose font on purpose: these panels are walls of monospace figures, and
+   a summary set in the same face as the data is not read as a summary. Sits
+   between the head and the body so it cannot be mistaken for a caption on any
+   one number. */
+.panel-sub{font-family:var(--f-body);font-size:12.5px;line-height:1.5;
+  color:var(--fg-3);margin:0;padding:var(--sm) var(--lg) 0;max-width:78ch}
+.panel-sub + .panel-body{padding-top:var(--md)}
+@media(max-width:640px){.panel-sub{font-size:12px}}

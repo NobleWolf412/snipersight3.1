@@ -46,7 +46,7 @@
   color:var(--fg-3)}
 /* narrow cards stack the label above its rule rather than squeezing prose into
    a 120px column, which is where this layout would otherwise break first */
-@media(max-width:560px){
+@media(max-width:640px){
   .pb-rule{grid-template-columns:minmax(0,1fr);gap:2px}
 }
 .pb-tfs{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}

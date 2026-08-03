@@ -27,7 +27,7 @@
     const link = document.createElement('link');
     link.id = 'dx-css';
     link.rel = 'stylesheet';
-    link.href = '/static/diagnostics-ui.css?v=1';
+    link.href = '/static/diagnostics-ui.css?v=2';
     document.head.appendChild(link);
   }
 
@@ -116,11 +116,17 @@
   function factRow(facts) {
     const keys = Object.keys(facts || {}).filter(k => facts[k] !== null && facts[k] !== undefined);
     if (!keys.length) return '';
+    /* A ROW PER GATE, with the name and the value in their own columns. These
+       ran together as one inline paragraph — "rr 2.41 costs r 0.08 zone type
+       SUPPLY bars since break 2" — so the reader had to parse where each
+       label ended and its value began, on the panel whose entire job is
+       showing what each gate compared. */
     return '<span class="dx-tfacts">' + keys.map(k => {
       const v = Array.isArray(facts[k]) ? facts[k].join(', ') : facts[k];
       const h = human(v);
-      return `<span class="dx-tfact"${h.raw ? ` title="raw: ${esc(h.raw)}"` : ''}><b>${
-        esc(k.replace(/_/g, ' '))}</b> ${esc(h.txt)}</span>`;
+      return `<span class="dx-tfact"${h.raw ? ` title="raw: ${esc(h.raw)}"` : ''}>` +
+        `<b class="dx-tfact-k">${esc(k.replace(/_/g, ' '))}</b>` +
+        `<span class="dx-tfact-v">${esc(h.txt)}</span></span>`;
     }).join('') + '</span>';
   }
 
@@ -166,7 +172,17 @@
 
     paint(shell(
       esc(String(t.symbol || '').replace('-USD', '')) + ' · ' + esc(t.tf || ''),
-      esc(t.setup_id),
+      /* The subtitle was the raw composite key —
+         "UNIUSDT|4H|REVERSAL|UNIUSDT|4H|SUPPLY|1770811200|setup-v0.15-draft" —
+         which is a database identifier printed where a human summary belongs,
+         on a drawer now reachable from Command. The summary says what the
+         trade WAS; the id stays available as something to copy, because a
+         developer chasing a fact still needs it. */
+      `${esc(String(t.strategy || '').replace(/_/g, ' ').toLowerCase())} ` +
+      `${esc(String(t.direction || '').toLowerCase())}` +
+      (t.why ? ' · ' + esc(String(t.why).split(' · ')[0]) : '') +
+      `<button class="dx-copyid" type="button" data-copyid="${esc(t.setup_id)}"
+               title="copy the internal id for this setup">copy id</button>`,
       `${notes}
       <div class="dx-verdict">
         <span class="chip ${dirChip}">${esc(t.direction || '—')}</span>
@@ -233,6 +249,18 @@
   /* ---------- events ---------- */
 
   ROOT.addEventListener('click', e => { if (e.target.closest('[data-close]')) close(); });
+  /* The id is still one click away for anyone who needs it — it just is not
+     the headline any more. Reports success in place rather than a toast: the
+     drawer is modal, so a message behind it would be unread. */
+  ROOT.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('[data-copyid]');
+    if (!b) return;
+    const id = b.dataset.copyid;
+    const done = () => { const was = b.textContent; b.textContent = 'copied';
+                         setTimeout(() => { b.textContent = was; }, 1500); };
+    if (navigator.clipboard) navigator.clipboard.writeText(id).then(done, () => {});
+    else done();
+  });
   document.addEventListener('keydown', e => { if (open && e.key === 'Escape') close(); });
 
   window.SSTracer = { open: openTrace, close };

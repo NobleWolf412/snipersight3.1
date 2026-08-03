@@ -23,7 +23,7 @@
     const link = document.createElement('link');
     link.id = 'wxCss';
     link.rel = 'stylesheet';
-    link.href = '/static/weather.css?v=1';
+    link.href = '/static/weather.css?v=2';
     document.head.appendChild(link);
   }
 

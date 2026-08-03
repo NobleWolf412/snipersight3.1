@@ -37,7 +37,17 @@
     background:var(--card-2)}
   .ev-tf-band{position:absolute;top:6px;height:3px;border-radius:var(--r-pill)}
   .ev-tf-mean{position:absolute;top:2px;width:2px;height:11px;background:var(--fg-2)}
-  .ev-tf-zero{position:absolute;top:0;width:1px;height:14px;background:var(--fg-4)}
+  .ev-tf-zero{position:absolute;top:0;width:1px;height:14px;background:var(--fg-3)}
+  /* the scale the bars were already drawn against, finally drawn */
+  .ev-tf-axis{border-bottom:0;padding-bottom:2px;align-items:end}
+  .ev-tf-scale{position:relative;height:26px}
+  .ev-tf-tick{position:absolute;bottom:0;width:1px;height:5px;background:var(--fg-4)}
+  .ev-tf-tick.on{height:9px;background:var(--fg-3)}
+  .ev-tf-ticklab{position:absolute;bottom:7px;transform:translateX(-50%);white-space:nowrap;
+    font-family:var(--f-mono);font-size:9.5px;letter-spacing:.06em;color:var(--fg-4)}
+  .ev-tf-ticklab.on{bottom:11px;color:var(--fg-3)}
+  .ev-tf-ticklab.lo{transform:none}
+  .ev-tf-ticklab.hi{transform:translateX(-100%)}
   .ev-tf-none{color:var(--fg-4);grid-column:2 / -1}
   .ev-flow{margin-top:var(--sm);color:var(--fg-3)}
   `;
@@ -148,10 +158,31 @@
       ? `Not one of these ${measured} has cleared break even, and their intervals overlap each other heavily.`
       : `${cleared} of ${measured} clear break even on their own interval.`;
 
+    /* The bars carried a shared scale and never showed it: five intervals of
+       different widths, no tick, no unit, and a zero line drawn as an unlabelled
+       hairline. A reader could see which side of a mark a bar sat on without
+       being able to say what the mark was or what one bar-width was worth.
+       Three ticks and the unit, in the bar column, aligned to the same scale. */
+    // `edge` shifts the two end labels inward — a centred label at 0% or 100%
+    // hangs half of itself outside the track and gets clipped.
+    const tick = (v, label, kind) =>
+      `<span class="ev-tf-tick${kind === 'on' ? ' on' : ''}" style="left:${pct(v).toFixed(2)}%"></span>
+       <span class="ev-tf-ticklab ${kind}" style="left:${pct(v).toFixed(2)}%">${label}</span>`;
+    const axis = `<div class="ev-tf ev-tf-axis t-mono">
+        <span></span><span></span>
+        <span class="t-label" style="color:var(--fg-4)">R per trade</span>
+        <div class="ev-tf-scale">
+          ${tick(min, num(min, 2), 'lo')}
+          ${tick(0, 'break even', 'on')}
+          ${tick(max, '+' + num(max, 2), 'hi')}
+        </div>
+      </div>`;
+
     return `<div style="margin-top:var(--lg)">
       <div class="t-section">By timeframe</div>
       <div class="t-label" style="color:var(--fg-4);margin-bottom:var(--xs)">
         the same book cut five ways, against the same break-even line</div>
+      ${axis}
       ${body}
       <div class="t-body ev-flow">${lede}
         This is one book cut five ways after the fact — with five slices, one will

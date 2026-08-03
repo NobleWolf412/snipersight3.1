@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SniperSight</title>
 <link rel="icon" href="/static/assets/snipersight-logo.png">
-<link rel="stylesheet" href="/static/ss.css?v=30">
+<link rel="stylesheet" href="/static/ss.css?v=37">
 </head>
 <body data-mode="idle">
 
@@ -131,6 +131,7 @@
           <h2 class="t-section">Risk budget</h2>
           <span class="chip" id="budgetChip" style="margin-left:auto">—</span>
         </div>
+        <p class="panel-sub">Three ceilings the engine sizes against. A full bar is not a fault — it means the next setup is refused until something closes.</p>
         <div class="budget-grid" id="budget"></div>
       </div>
 
@@ -147,6 +148,7 @@
           <h2 class="t-section">Open trades</h2>
           <span class="chip" id="posRisk" style="margin-left:auto">—</span>
         </div>
+        <p class="panel-sub">What the paper book is holding right now, and what each position loses if its stop is hit.</p>
         <div id="positions"></div>
       </div>
 
@@ -180,6 +182,7 @@
           <h2 class="t-section">Approaching</h2>
           <span class="chip chip-amber" id="radarCount" style="margin-left:auto">—</span>
         </div>
+        <p class="panel-sub">Price is closing on a zone but has not reached it. Nothing here is tradeable yet — it is a heads-up, not a queue.</p>
         <div id="radar"></div>
       </div>
 
@@ -341,7 +344,8 @@
               <span class="t-label">Leverage
                 <span id="tkLevMax" style="color:var(--fg-3)"></span></span>
               <div class="fld-row">
-                <input id="tkLev" class="t-mono" type="range" min="1" step="1" value="1">
+                <input id="tkLev" class="t-mono" type="range" min="1" step="1" value="1"
+                       aria-label="Leverage for this trade">
                 <span class="t-mono" id="tkLevVal" style="min-width:3.5em;text-align:right"></span>
               </div>
               <div class="t-mono" id="tkLiq" style="color:var(--fg-3);font-size:11px"></div>
@@ -352,7 +356,8 @@
               <span class="t-label">Risk
                 <span id="tkRiskPct" style="color:var(--fg-3)"></span></span>
               <div class="fld-row">
-                <input id="tkRisk" class="t-mono" inputmode="decimal" autocomplete="off">
+                <input id="tkRisk" class="t-mono" inputmode="decimal" autocomplete="off"
+                       aria-label="Dollars at risk on this trade">
                 <button class="btn" id="tkRiskReset" title="back to the engine default" disabled>Default</button>
               </div>
             </div>
@@ -444,9 +449,17 @@
       <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head"><h2 class="t-section">Equity Curve</h2>
           <span class="chip" id="baselineChip" style="margin-left:auto">—</span></div>
+        <p class="panel-sub">One point per closed trade, in dollars, since this forward window opened. Hover a point — or focus the chart and use ← → — for the exact figure.</p>
         <div class="panel-body">
-          <svg id="eqCurve" viewBox="0 0 800 160" preserveAspectRatio="none"
-               style="width:100%;height:160px;display:block"></svg>
+          <!-- viewBox is set in JS to the measured pixel width. It used to be a
+               fixed 0 0 800 160 with preserveAspectRatio="none", which stretches
+               every glyph inside it — the reason this chart could carry no
+               labels at all. tabindex + arrow keys because the exact figure for
+               a settlement is only reachable through the readout, and that must
+               not be mouse-only. -->
+          <svg id="eqCurve" role="img" tabindex="0" aria-describedby="eqHover eqNote"
+               style="width:100%;height:200px;display:block;touch-action:pan-y"></svg>
+          <div class="t-mono eq-hover" id="eqHover" aria-live="polite"></div>
           <div class="t-mono" id="eqNote" style="color:var(--fg-4);margin-top:var(--sm)"></div>
         </div>
       </div>
@@ -476,12 +489,14 @@
       <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head"><h2 class="t-section">Trade Journal</h2>
           <span class="chip" id="jnlCount" style="margin-left:auto">—</span></div>
+        <p class="panel-sub">Every closed trade in this window, newest first: what it did, and what it cost.</p>
         <div id="journal"><div class="empty">no closed trades in this window yet</div></div>
       </div>
 
       <div class="grid cols-2" style="margin-bottom:var(--lg)">
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">By Symbol</h2></div>
+          <p class="panel-sub">The same closed trades as the journal, grouped by what was traded.</p>
           <div id="perfSymbol"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:24px"></div>
           <div class="skel" style="height:24px"></div>
@@ -491,6 +506,7 @@
         </div>
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">By Strategy</h2></div>
+          <p class="panel-sub">The same closed trades again, grouped by which playbook found them.</p>
           <div id="perfStrategy"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:24px"></div>
           <div class="skel" style="height:24px"></div>
@@ -580,7 +596,15 @@
            losses included. playbooks.js owns it and reads /api/playbooks. -->
       <div id="playbookRoot" style="margin-bottom:var(--lg)"></div>
 
-      <div class="grid cols-2">
+      <!-- Two packed columns, not a 2-up grid. As a grid these four panels sat
+           in two rows of equal-height cells, and Credentials is now three venue
+           cards tall — so Risk stretched to match it and left ~800px of empty
+           bordered box beside a 330px panel, then Guardrails left another 420px.
+           Multicolumn packs in DOM order instead: each panel is its natural
+           height, the next one starts immediately under it, and the split
+           re-balances on its own as the content changes. Reading and focus
+           order are still exactly the source order. -->
+      <div class="pack-cols">
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Venue &amp; Credentials</h2>
             <span class="chip" id="credChip" style="margin-left:auto">—</span></div>
@@ -632,14 +656,19 @@
           <div class="panel-body">
             <div id="setFields"></div>
             <div class="tk-warn" id="setWarn" hidden></div>
-            <div class="tk-actions" style="margin-top:var(--md)">
+            <!-- The banner replaces two permanently-disabled buttons sitting
+                 under 10px grey text. Apply and Discard were always visible,
+                 always dead and never explained, so the page gave no signal
+                 that anything had changed — and the one genuinely important
+                 consequence was set BELOW the buttons it describes, in the
+                 smallest type on the surface. It now appears only when there
+                 is something to apply, and the consequence is restated in the
+                 confirm dialog, which is the last thing read before acting. -->
+            <div class="dirty-banner" id="dirtyBanner" hidden role="status" aria-live="polite">
+              <span id="dirtyWhat">You have unsaved rule changes.</span>
+              <span class="spacer"></span>
               <button class="btn" id="setReset" disabled>Discard</button>
               <button class="btn btn-cyan" id="setApply" disabled>Apply</button>
-            </div>
-            <div class="t-mono" style="color:var(--fg-4);margin-top:var(--sm);line-height:1.6">
-              Changing a rule starts a new forward window, because a record that
-              spans two configurations can't tell you which one produced which
-              result. Nothing is deleted.
             </div>
           </div>
         </div>
@@ -662,10 +691,14 @@
     <!-- ─── DIAGNOSTICS ─── -->
     <section class="surface" id="s-diagnostics">
       <div class="surface-head"><h1 class="t-page">Diagnostics</h1><p>Is the machine telling me the truth?</p></div>
-      <div class="grid cols-2" style="margin-bottom:var(--lg)">
+      <!-- packed, not gridded: "Why nothing fired" runs three times the height of
+           "Pipeline", and as a grid cell Pipeline stretched to match it — 836px of
+           empty bordered box. Same reason as the Rules columns. -->
+      <div class="pack-cols" style="margin-bottom:var(--lg)">
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Pipeline</h2>
             <button class="btn" id="btnAudit" style="margin-left:auto">Re-audit</button></div>
+        <p class="panel-sub">Whether the recorded facts still agree with each other. This checks bookkeeping, not whether the trades were any good.</p>
           <div class="panel-body">
             <div class="t-metric" id="dVerdict" style="margin-bottom:var(--sm)">—</div>
             <div class="t-mono" id="dCounts" style="color:var(--fg-3)">—</div>
@@ -674,6 +707,7 @@
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Why nothing fired</h2>
             <button class="btn" id="btnDiagnose" style="margin-left:auto">Diagnose</button></div>
+        <p class="panel-sub">Where today’s candidates died, stage by stage. The biggest bar is the reason your deck is empty.</p>
           <div class="panel-body" id="dFunnel"><span class="skeleton" role="status" aria-label="loading">
         <span class="skel skel-line" style="width:70%"></span>
         <span class="skel skel-line" style="width:55%"></span></span></div>
@@ -684,6 +718,7 @@
       <div class="grid cols-2">
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Open <span class="term" data-t="blocker">Issues</span></h2></div>
+          <p class="panel-sub">Faults the audit found that need a person. Empty is the target, not a missing report.</p>
           <div id="dIssues"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:36px"></div>
           <div class="skel" style="height:36px"></div>
@@ -694,6 +729,7 @@
           <div class="panel-head"><h2 class="t-section">Setup
             <span class="term" data-t="telemetry">Telemetry</span></h2>
             <span class="chip" id="telChip" style="margin-left:auto">—</span></div>
+        <p class="panel-sub">Per-setup counters straight from the engine — developer detail, not a trade record.</p>
           <div id="dTelemetry"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:30px"></div>
           <div class="skel" style="height:30px"></div>
@@ -741,6 +777,7 @@
           <span class="chip" id="consoleState" style="margin-left:auto">idle</span>
           <button class="btn" id="btnFollow" title="follow new output">Following</button>
         </div>
+        <p class="panel-sub">Raw engine output as it happens. Nothing here is a decision — decisions are on Command.</p>
         <pre id="console" class="t-mono">connecting…</pre>
       </div>
     </section>
@@ -749,6 +786,24 @@
     <section class="surface" id="s-learn">
       <div class="surface-head"><h1 class="t-page">Learn</h1>
         <p>What do these words mean, and why do they work?</p></div>
+
+      <!-- A–Z. Every term the app underlines, in one searchable place. The
+           tooltips are a reminder for a word you half-know; they are no use
+           at all if you do not know which word you are looking for, and
+           nothing linked the 67 of them together. -->
+      <div class="panel" style="margin-bottom:var(--lg)">
+        <div class="panel-head">
+          <h2 class="t-section">Glossary</h2>
+          <label class="gl-search">
+            <span class="t-label">Search</span>
+            <input id="glSearch" class="t-mono" type="search" autocomplete="off"
+                   placeholder="type a word…" aria-label="Search the glossary">
+          </label>
+          <span class="chip" id="glCount" style="margin-left:var(--sm)">—</span>
+        </div>
+        <div id="glossaryRoot" class="gl-body"></div>
+      </div>
+
       <div id="learnRoot"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:88px"></div>
           <div class="skel" style="height:88px"></div>
@@ -798,26 +853,26 @@
      its own mount point, so there was never a reason for them to block. -->
 <script defer src="/static/lightweight-charts.js"></script>
 <!-- must load before any consumer: every module reads through it -->
-<script defer src="/static/ssdata.js?v=30"></script>
-<script defer src="/static/ticket-math.js?v=30"></script>
-<script defer src="/static/glossary.js?v=30"></script>
-<script defer src="/static/chart.js?v=30"></script>
+<script defer src="/static/ssdata.js?v=36"></script>
+<script defer src="/static/ticket-math.js?v=36"></script>
+<script defer src="/static/glossary.js?v=36"></script>
+<script defer src="/static/chart.js?v=36"></script>
 <!-- funnel.js FIRST: it owns the plain-language reason dictionary that
      shell.js reads on its very first render. Deferred scripts execute in
      document order, so with shell.js ahead of it the deck and the
      not-taken blocks painted raw engine codes until the next 30s refresh
      happened to land after funnel.js had run. -->
-<script defer src="/static/funnel.js?v=30"></script>
-<script defer src="/static/shell.js?v=30"></script>
+<script defer src="/static/funnel.js?v=36"></script>
+<script defer src="/static/shell.js?v=36"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must
      never blank a surface that another owns. -->
-<script defer src="/static/playbooks.js?v=30"></script>
-<script defer src="/static/weather.js?v=30"></script>
-<script defer src="/static/lessons.js?v=30"></script>
-<script defer src="/static/tracer.js?v=30"></script>
-<script defer src="/static/copilot.js?v=30"></script>
-<script defer src="/static/wizard.js?v=30"></script>
-<script defer src="/static/edgeview.js?v=30"></script>
+<script defer src="/static/playbooks.js?v=36"></script>
+<script defer src="/static/weather.js?v=36"></script>
+<script defer src="/static/lessons.js?v=36"></script>
+<script defer src="/static/tracer.js?v=36"></script>
+<script defer src="/static/copilot.js?v=36"></script>
+<script defer src="/static/wizard.js?v=36"></script>
+<script defer src="/static/edgeview.js?v=36"></script>
 </body>
 </html>

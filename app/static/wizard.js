@@ -32,7 +32,7 @@
     const link = document.createElement('link');
     link.id = 'dx-css';
     link.rel = 'stylesheet';
-    link.href = '/static/diagnostics-ui.css?v=1';
+    link.href = '/static/diagnostics-ui.css?v=2';
     document.head.appendChild(link);
   }
 

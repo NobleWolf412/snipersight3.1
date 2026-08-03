@@ -16,7 +16,7 @@
 /* ══════════════════ layout ══════════════════ */
 
 .lsn{display:grid;grid-template-columns:212px minmax(0,1fr);gap:var(--xl);align-items:start}
-@media(max-width:960px){.lsn{grid-template-columns:1fr;gap:var(--md)}}
+@media(max-width:900px){.lsn{grid-template-columns:1fr;gap:var(--md)}}
 
 /* index rail — sticks to the top of the scrolling stage */
 .lsn-rail{position:sticky;top:calc(var(--xl) * -1);z-index:3;
@@ -33,7 +33,7 @@
 .lsn-rail a.on i{color:var(--cyan)}
 .lsn-rail .lsn-rail-cap{padding:0 10px var(--sm);color:var(--fg-4);
   font-family:var(--f-mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase}
-@media(max-width:960px){
+@media(max-width:900px){
   .lsn-rail{position:static;flex-direction:row;overflow-x:auto;gap:6px;
     padding:0 0 var(--md);border-bottom:1px solid var(--border-soft)}
   .lsn-rail a{flex:none;white-space:nowrap}
@@ -97,7 +97,7 @@
 
 .lsn-mistakes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sm);
   margin-top:var(--sm);max-width:68ch}
-@media(max-width:720px){.lsn-mistakes{grid-template-columns:1fr}}
+@media(max-width:900px){.lsn-mistakes{grid-template-columns:1fr}}
 
 .lsn-flip{position:relative;display:block;width:100%;text-align:left;cursor:pointer;
   border:1px solid rgba(248,113,113,.28);background:rgba(248,113,113,.05);
@@ -179,26 +179,10 @@
   color:var(--fg-4)}
 .orient-head .orient-x{margin-left:auto}
 
-.orient-body{padding:var(--lg);display:grid;
-  grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--md)}
-@media(max-width:1100px){.orient-body{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:620px){.orient-body{grid-template-columns:1fr}}
-
-.orient-step{border:1px solid var(--border-soft);border-radius:var(--r-lg);
-  background:rgba(0,0,0,.35);padding:var(--md)}
-.orient-step .orient-n{font-family:var(--f-mono);font-size:9px;font-weight:600;
-  letter-spacing:.20em;color:var(--fg-4);display:block;margin-bottom:6px}
-.orient-step h3{font-family:var(--f-mono);font-size:11.5px;font-weight:600;letter-spacing:.10em;
-  text-transform:uppercase;color:var(--fg);margin-bottom:6px}
-.orient-step p{font-family:var(--f-body);font-size:13px;line-height:1.6;color:var(--fg-2)}
-.orient-step p+p{margin-top:var(--sm)}
-.orient-step b{color:var(--fg);font-weight:600}
-
-/* step 2 carries the whole point: silence is the filter working. It is the one
-   tile allowed a tint, because "nothing is happening" is exactly the state that
-   currently reads as a fault. Amber is the warning band, not the live band. */
-.orient-step.quiet{border-color:rgba(255,194,102,.32);background:rgba(255,194,102,.055)}
-.orient-step.quiet h3{color:var(--amber)}
+/* The four-column .orient-body / .orient-step wall lived here. It described
+   the app beside the app; the tour below rings the real control instead, and
+   the step prose it used to hold is now the `more` disclosure inside the coach
+   mark. Nothing renders these classes any more. */
 
 .orient-foot{padding:var(--md) var(--lg);border-top:1px solid var(--border-soft);
   display:flex;align-items:center;gap:var(--md);flex-wrap:wrap}
@@ -210,3 +194,35 @@
 /* dismissed state: one line, right-aligned, so it stays reachable without
    spending any of Command's vertical space on it */
 .orient-min{display:flex;justify-content:flex-end;margin-bottom:var(--md)}
+
+/* ─────────── guided tour ───────────
+   The orientation used to be four columns of prose describing the app beside
+   the app. This rings the actual element and says one thing about it. The ring
+   is one fixed div whose 9999px shadow dims everything else — no second
+   overlay, so nothing invisible is sitting on top of the page. */
+#tourRoot{position:fixed;inset:0;z-index:9000;pointer-events:none}
+.tour-ring{position:fixed;border-radius:var(--r-lg);pointer-events:none;
+  border:2px solid var(--accent);
+  box-shadow:0 0 0 9999px rgba(0,0,0,.66), 0 0 18px rgba(0,0,0,.5) inset;
+  transition:left .18s ease, top .18s ease, width .18s ease, height .18s ease}
+.tour-pop{position:fixed;pointer-events:auto;width:min(400px, calc(100vw - 24px));
+  background:var(--card);border:1px solid var(--accent);border-radius:var(--r-xl);
+  padding:14px 16px 12px;box-shadow:0 18px 44px rgba(0,0,0,.6)}
+.tour-pop:focus{outline:none}
+.tour-n{font-family:var(--f-mono);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--accent)}
+.tour-pop h3{font-family:var(--f-display);font-size:16px;letter-spacing:.04em;
+  margin:4px 0 6px;color:var(--fg)}
+.tour-lede{font-family:var(--f-body);font-size:13px;line-height:1.55;color:var(--fg-2);margin:0}
+.tour-closer{font-family:var(--f-body);font-size:12.5px;color:var(--fg-2);margin:8px 0 0}
+.tour-more{margin-top:8px}
+.tour-more summary{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--fg-3);cursor:pointer;width:max-content}
+.tour-more summary:hover{color:var(--fg-2)}
+.tour-more[open] summary{margin-bottom:6px}
+.tour-more p{font-family:var(--f-body);font-size:12.5px;line-height:1.5;
+  color:var(--fg-3);margin:0 0 6px}
+.tour-acts{display:flex;align-items:center;gap:8px;margin-top:12px}
+.tour-acts .spacer{flex:1}
+.tour-skip{color:var(--fg-3)}
+@media(prefers-reduced-motion:reduce){.tour-ring{transition:none}}
