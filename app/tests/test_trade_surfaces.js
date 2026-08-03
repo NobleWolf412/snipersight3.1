@@ -349,4 +349,16 @@ ok('the held row is marked, and wears the same amber as the chart', () => {
   assert.ok(CSS.includes('.btn-amber'), 'Manage trade is an amber action');
 });
 
+
+/* The refusal an operator meets right after closing a position. The deck card
+   outlives the trade, so the same drag that was legal a moment ago is refused
+   — and the bare geometry rule reads as the app contradicting itself. */
+ok('the new-trade stop rule says which mode it is enforcing', () => {
+  const TM = S('ticket-math.js');
+  assert.ok(/planning a NEW trade/.test(TM));
+  assert.ok(/only exists once you are actually in one/.test(TM));
+  assert.ok(/inp\.holding === true \? ''/.test(TM),
+            'a held position must NOT be told it is planning one');
+});
+
 console.log(`  ${passed} passed`);

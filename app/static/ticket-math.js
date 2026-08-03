@@ -68,9 +68,19 @@
     out.riskPerUnit = riskU;
     out.rewardPerUnit = rewU;
 
+    /* NAME THE MODE IN THE REFUSAL. On a new trade the stop IS the risk, so a
+       stop on the profit side is genuinely meaningless and this rule is right.
+       But the operator meets it right after closing a position — the deck card
+       outlives the trade — and "stop must sit above entry" reads as the app
+       refusing the thing it had just allowed. The rule without its mode is a
+       rule that looks arbitrary. */
     if(riskU <= 0)
-      out.errors.push(long ? 'Stop must sit BELOW entry for a long.'
-                           : 'Stop must sit ABOVE entry for a short.');
+      out.errors.push(
+        (long ? 'Stop must sit BELOW entry for a long.'
+              : 'Stop must sit ABOVE entry for a short.') +
+        (inp.holding === true ? ''
+          : ' This ticket is planning a NEW trade, where the stop is what you' +
+            ' risk. A stop in profit only exists once you are actually in one.'));
     if(holding){
       // What the stop guarantees, if it is already past the entry.
       const locked = long ? (sl - entry) / riskU : (entry - sl) / riskU;
