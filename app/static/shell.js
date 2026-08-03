@@ -435,6 +435,28 @@
   const plainReason = c => window.SSFunnel
     ? SSFunnel.plain(c) : String(c).replace(/_/g, ' ').toLowerCase();
 
+  /* Two or three words for a table cell, with the full sentence on hover.
+     The sentences are right for a card that has room to explain; repeated
+     down a column they stop being read at all. */
+  const SHORT_REASON = {
+    NOT_IN_POINT_IN_TIME_UNIVERSE: 'not on watchlist',
+    CONCURRENT_LIMIT: 'slots full',
+    EXPOSURE_LIMIT: 'risk budget',
+    DAILY_LOSS_HALT: 'daily halt',
+    DRAWDOWN_HALT: 'drawdown halt',
+    COOLDOWN: 'cooling off',
+    LEVERAGE_CAP: 'leverage cap',
+    STOP_BEYOND_LIQUIDATION: 'stop past liquidation',
+    BELOW_MIN_NOTIONAL: 'too small',
+    PARTICIPATION_TOO_THIN: 'book too thin',
+    SHORT_UNSUPPORTED_COINBASE_SPOT: 'no shorts on spot',
+    STRATEGY_DISABLED: 'playbook off',
+    OPERATOR_HALT: 'halted',
+    DATA_HEALTH_BLOCKED: 'data blocked',
+  };
+  const shortReason = c => SHORT_REASON[String(c).split('(')[0]] ||
+    String(c).split('(')[0].replace(/_/g, ' ').toLowerCase();
+
   function reasonText(reasons){
     if(!reasons || !reasons.length) return 'no reason given';
     return reasons.map(raw => {
@@ -1391,8 +1413,20 @@
       const more = r.untaken_n
         ? `<div class="t-label" style="margin-top:2px;color:var(--fg-4)">${
             r.untaken_n} more found, not taken</div>` : '';
+      /* SAY IT ONCE, BADGE THE REST. The same 90-character refusal — "the
+         token was not on the traded watchlist when the setup confirmed" —
+         appeared on four rows of one table, which is 360 characters spent
+         saying one thing and a table nobody scans. The block heading above
+         carries the sentence; a row only needs to name WHICH refusal it was,
+         and only when it differs from its neighbours. */
+      const rk = Object.keys(r.reasons || {});
+      const badge = rk.length === 1
+        ? `<span class="chip" title="${esc(plainReason(rk[0]))}">${
+            esc(shortReason(rk[0]))}</span>`
+        : rk.length > 1 ? `<span class="chip">${rk.length} reasons</span>` : '';
       return `<tr>
-        <th scope="row">${esc(fmtKey(r.key ?? '—'))}${more}</th>
+        <th scope="row">${esc(fmtKey(r.key ?? '—'))}${more}${
+          badge ? '<div style="margin-top:3px">' + badge + '</div>' : ''}</th>
         <td>${r.n ?? 0}</td>
         <td>${wr}</td>
         <td><b style="color:${!has ? 'var(--fg-4)' : (good ? 'var(--green)' : 'var(--red-2)')}">${

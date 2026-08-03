@@ -1788,7 +1788,14 @@
   const ORIENT_STEPS = [
     {
       title: 'Pick your market',
-      html: '<p>Crypto, on one venue at a time. The venue is not cosmetic: a <b>spot</b> ' +
+      /* "one venue at a time" contradicted the MULTI-VENUE badge in the header
+         — and the badge is the accurate one. Venue is derived PER SYMBOL at
+         ranking time (BTC-USD spot, BTCUSDT perp, PF_XBTUSD Kraken perp), so
+         the watchlist genuinely spans venues; what is true is that each
+         SYMBOL has exactly one, and that its venue decides what the trade can
+         do. That is the fact this step exists to teach. */
+      html: '<p>Crypto, across several venues — but each symbol trades on ' +
+        'exactly one, and which one is not cosmetic: a <b>spot</b> ' +
         'account is long-only at 1x, so every short the playbook finds is refused before it ' +
         'is sized. A <b>perpetuals</b> account can short and can use leverage, and pays ' +
         t('funding', 'funding') + ' while a position is held.</p>' +
