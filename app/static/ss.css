@@ -493,9 +493,73 @@ body{
    one visible unit instead of flexbox silently crushing whichever child has
    the least intrinsic height. */
 .ticket{overflow:auto}
-.ticket-body{padding:8px var(--lg);display:flex;flex-direction:column;gap:8px;
-  overflow:auto;flex:1 1 auto;min-height:140px}
-.ticket .fld input{padding:7px 10px}
+/* NO INNER SCROLL. The body was a ~250px scrollable box inside a 100vh
+   layout: Leverage, Risk and Trailing stop fell below its fold, the wheel
+   barely moved it, and switching tabs kept the old scroll offset so a pane
+   opened mid-sentence and clipped at both ends. The commit bar lives outside
+   the ticket now, so nothing here has to be pinned against a scroll — the
+   panes simply take the height they need and the ticket column scrolls as one
+   unit on the rare window too short to hold them. */
+/* Tight but not cramped. Every pane has to fit inside the chart row at
+   1227x678 without the panel scrolling; these are the pixels that close it. */
+.ticket-body{padding:6px var(--lg) 8px;display:flex;flex-direction:column;gap:6px;
+  overflow:visible;flex:0 0 auto}
+/* ---------- toasts: every mutating action reports an outcome ----------
+   Bottom-right, above the status bar, out of the way of the controls that
+   produce them. Quiet by house rule — it states what happened and leaves. */
+.toasts{position:fixed;right:var(--shell-x);bottom:calc(var(--statusbar-h) + var(--md));
+  z-index:8000;display:flex;flex-direction:column;gap:var(--sm);pointer-events:none}
+.toast{pointer-events:auto;max-width:44ch;padding:9px 13px;border-radius:var(--r-md);
+  border:1px solid var(--border);background:var(--card);color:var(--fg-2);
+  font-size:11.5px;line-height:1.5;box-shadow:0 8px 30px rgba(0,0,0,.55)}
+.toast-good{border-color:rgba(0,255,170,.4);color:var(--green)}
+.toast-warn{border-color:rgba(255,194,102,.4);color:var(--amber)}
+.toast-bad{border-color:rgba(248,113,113,.4);color:var(--red-2)}
+
+/* Direction sits above the tabs and never scrolls out of reach. */
+.tk-pinned-dir{flex:none;margin:6px var(--lg) 0;width:auto}
+.tk-pinned-dir button{flex:1}
+
+/* Why Arm is off, immediately beside Arm. Amber rather than red: this is a
+   plan that needs changing, not an error that happened. */
+.tk-block{flex:1 1 100%;display:flex;align-items:center;gap:var(--md);
+  flex-wrap:wrap;font-family:var(--f-body);font-size:12.5px;line-height:1.45;
+  color:var(--amber)}
+.tk-block .btn{flex:none;border-color:rgba(255,194,102,.45);color:var(--amber)}
+.tk-block .btn:hover{border-color:var(--amber);color:var(--fg)}
+
+/* ═══════════════ NO LAYOUT SHIFT FROM A LIVE VALUE ═══════════════
+   The price/freshness chip changed text every few seconds, changed WIDTH with
+   it, and slid the Copilot and Analyze buttons ~190px sideways — while also
+   flipping the indicator row between one and two lines, which resized the
+   chart underneath. Every value that ticks now reserves its space.
+
+   Tabular numerals are the half of this that matters most: proportional
+   digits change width as the digits change, so a price ticking 1→8 reflows
+   its own container even at a fixed character count. */
+.chart-top .chip,.statusbar .sb-item,#clock,#cPrice,#cFresh,#cLive,
+.pos-r,.jnl-r,.budget-txt,.tk-out .v,.tk-key .v{
+  font-variant-numeric:tabular-nums}
+/* Fixed slots for the three chips whose text is rewritten on a timer. Width
+   is set from the longest string each can hold, so the row never reflows and
+   the buttons after it never move. */
+#cPrice{min-width:132px;justify-content:flex-start}
+#cFresh{min-width:150px;justify-content:flex-start}
+#cLive{min-width:118px;justify-content:flex-start}
+/* The indicator row toggled between one and two lines as counts appeared,
+   resizing the chart under it on every refresh. */
+/* Reserved height so the row cannot flip between one and two lines and resize
+   the chart under it — but TIGHT, because every pixel this row takes is a
+   pixel the ticket beside the chart does not get, and at 1227x678 the ticket
+   has to hold its tallest pane without scrolling. */
+.chart-top{min-height:60px;align-content:flex-start;gap:6px;row-gap:5px}
+.chart-top .chip{padding:2px 7px}
+.chart-top .btn{padding:6px 11px}
+/* Reserve the message rows in the commit bar so an arrival does not push the
+   buttons down the page. */
+.commit-bar .tk-armed{min-height:1.5em}
+.ticket .fld input{padding:6px 10px}
+.ticket .fld{gap:3px}
 /* Slim head: the tabs directly beneath already say this panel is the ticket,
    so the head row only needs to carry the source chip, not a tall banner.
    The title is narrowed too — at full size "ORDER TICKET" plus the source
@@ -523,15 +587,15 @@ body{
 /* ---------- ticket panes ----------
    One question per pane, so a control is either on screen in full or one
    labelled click away — never half-scrolled with nothing to say it is there. */
-.tk-tabs{display:flex;flex:none;margin:10px var(--lg) 0}
+.tk-tabs{display:flex;flex:none;margin:6px var(--lg) 0}
 .tk-tabs button{flex:1;font-family:var(--f-mono);font-size:9.5px;font-weight:600;
-  letter-spacing:.1em;text-transform:uppercase;padding:8px 4px;cursor:pointer;
+  letter-spacing:.1em;text-transform:uppercase;padding:6px 4px;cursor:pointer;
   background:transparent;color:var(--fg-3);border:0;border-right:1px solid var(--border-soft)}
 .tk-tabs button:last-child{border-right:0}
 .tk-tabs button:hover{color:var(--fg-2);background:rgba(255,255,255,.03)}
 .tk-tabs button.on{background:rgba(var(--accent-rgb),.12);color:var(--accent)}
 .tk-tabs button:focus-visible{outline:1px solid var(--accent);outline-offset:-2px}
-.tk-pane{display:none;flex-direction:column;gap:var(--md)}
+.tk-pane{display:none;flex-direction:column;gap:8px}
 .tk-pane.on{display:flex}
 
 
@@ -595,9 +659,14 @@ body{
 .commit-bar .tk-armed:empty,.commit-bar .tk-lock:empty{display:none;min-height:0}
 
 .tk-out{display:flex;flex-direction:column;gap:1px;padding:0}
+/* Six rows of working, so a pixel of row padding costs twelve on the pane —
+   which is the difference between the Numbers tab fitting at 1227x678 and
+   scrolling. The contrast note on .tk-out .k below keeps it legible. */
 .tk-out div{display:flex;justify-content:space-between;align-items:baseline;gap:var(--sm);
-  font-family:var(--f-mono);font-size:11.5px;padding:3px 0}
-.tk-out .k{color:var(--fg-4);letter-spacing:.1em;text-transform:uppercase;font-size:10px}
+  font-family:var(--f-mono);font-size:11.5px;padding:2px 0}
+.tk-out .k{color:var(--fg-2);letter-spacing:.1em;text-transform:uppercase;font-size:10px;
+  line-height:1.25}
+.tk-out .v{line-height:1.25}
 .tk-out .v{color:var(--fg);font-variant-numeric:tabular-nums}
 .tk-out .v.good{color:var(--green)} .tk-out .v.bad{color:var(--red-2)}
 .tk-out .v.warn{color:var(--amber)}

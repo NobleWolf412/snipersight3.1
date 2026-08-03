@@ -56,7 +56,18 @@
   go(location.hash.slice(1) || 'command');
 
   /* ---------- clock ---------- */
-  setInterval(() => { $('clock').textContent = new Date().toISOString().slice(11, 19) + 'Z'; }, 1000);
+  /* ONE NODE TICKS. This called $('clock') — a document.getElementById — every
+     second, so a 1Hz timer was doing a document-wide lookup forever and any
+     element reference held across it was invalidated on the next frame. The
+     node is resolved once and only its text is written; nothing else in the
+     app is touched by the clock. Writing only on CHANGE also means a
+     background tab with a throttled timer does no work at all. */
+  const clockEl = $('clock');
+  let lastClock = '';
+  setInterval(() => {
+    const t = new Date().toISOString().slice(11, 19) + 'Z';
+    if(t !== lastClock){ lastClock = t; clockEl.textContent = t; }
+  }, 1000);
 
   /* ---------- fetch with visible failure ---------- */
   let degraded = false;
@@ -1778,6 +1789,10 @@
     try{
       await applySettings({halted: halting}, halting ? 'operator halt' : 'operator resume');
       await loadSettings();
+      toast(halting
+        ? 'Halted — no new entries will be sized. Open positions still settle.'
+        : 'Resumed — the scanner may size new entries again.',
+        halting ? 'warn' : 'good');
     }catch(err){ markDegraded(String(err)); }
     b.disabled = false;
   });
@@ -2002,6 +2017,27 @@
   /* Every action reports a RESULT and a TIME. A control that changes nothing
      visible is indistinguishable from one that did not fire, and an operator
      who cannot tell those apart stops trusting the button. */
+  /* ═══════════════ EVERY ACTION REPORTS ═══════════════
+     A mutating action that changes nothing visible is indistinguishable from a
+     click that missed. One toast host, polite to screen readers, auto-clearing
+     but never mid-read. Deliberately quiet per the house rule that nothing
+     celebrates: it states an outcome and leaves. */
+  let toastSeq = 0;
+  function toast(text, kind){
+    const host = $('toasts');
+    if(!host) return;
+    const el = document.createElement('div');
+    el.className = 't-mono toast' + (kind ? ' toast-' + kind : '');
+    el.textContent = text;
+    const id = ++toastSeq;
+    el.dataset.id = String(id);
+    host.appendChild(el);
+    // long enough to read a sentence, short enough not to stack up
+    setTimeout(() => { if(el.parentNode) el.remove(); }, 6000);
+    while(host.children.length > 3) host.firstChild.remove();
+  }
+  window.SSToast = toast;
+
   function scanResult(text, bad){
     const el = $('scanResult');
     if(!el) return;
@@ -2012,7 +2048,7 @@
 
   $('btnScan').addEventListener('click', async e => {
     const b = e.currentTarget;
-    b.disabled = true; b.textContent = 'Scanning…';
+    b.disabled = true; b.textContent = 'Checking…';
     follow = true;
     try{
       const r = await fetch('/api/scan', {method:'POST'});
@@ -2020,17 +2056,19 @@
       if(r.status === 409){
         $('consoleState').textContent = 'already scanning';
         scanResult('a scan was already running', true);
+        toast('Already checking — the scanner was mid-pass', 'warn');
       }
       else if(!r.ok){
         markDegraded(d.detail || ('scan → ' + r.status));
         scanResult(d.detail || ('scan failed → ' + r.status), true);
+        toast('Check failed — ' + (d.detail || r.status), 'bad');
       }
-      else scanResult('scanning…');
+      else { scanResult('checking…'); toast('Checking every watched symbol now'); }
       await pollConsole();
     }catch(err){
       markDegraded(String(err));
       scanResult('could not start a scan', true);
-      b.disabled = false; b.textContent = 'Run Scan';
+      b.disabled = false; b.textContent = 'Check now';
     }
     // the poll loop re-enables the button when the backend reports it finished
   });

@@ -50,6 +50,9 @@ window.SSChart = (() => {
      because it means nothing across venues. */
   let leverage = 1;
   let cfg = null, equity = null;
+  // the last computed ticket maths, so the Arm button can state WHY it is
+  // disabled instead of leaving the reason in footer prose
+  let lastMetrics = null;
   let priceLines = {}, zoneLines = [], handles = {};
   let drawnKind = null;          // 'engine' | 'draft' — see applyLevels()
   let refreshTimer = null, refreshing = false;   // see startAutoRefresh()
@@ -266,7 +269,12 @@ window.SSChart = (() => {
     // "reset" on a plan that has never been committed to anything.
     $('tkReset').textContent = kind === 'position' ? 'Back to live levels'
       : base && base.kind === 'engine' ? 'Reset to engine' : 'Reset';
-    $('tkReset').disabled = !base || !modified;
+    /* Reset is live whenever the form DIFFERS from what it was given — it was
+       gated on `modified`, which only tracks dragged levels, so a ticket with
+       an operator risk override or a moved leverage dial showed a dead Reset
+       beside values that plainly were not the defaults. */
+    $('tkReset').disabled = !base ||
+      !(modified || riskOverride != null || (leverage || 1) > 1);
 
     /* Both early returns skip syncLeverage(), which is the ONLY writer of the
        leverage row, the dial bounds and the liquidation line — so a symbol
@@ -406,7 +414,17 @@ window.SSChart = (() => {
        closed by the exchange before the stop was ever reached, so the plan does
        not describe what would happen. `risk.py` refuses these outright; the
        ticket must not offer to record one. */
-    armable = m.blocks.length === 0;
+    /* Margin above equity BLOCKS. The maths reports it as a note, and a note
+       left Arm enabled and primary while grey footer prose explained that a
+       $32,158 position could not be posted from a $9,646 account — the
+       operator's own money, described in the quietest text on the panel,
+       beside a live button. The risk authority refuses these anyway; offering
+       an action that will be refused is the defect. Kept OUT of ticket-math
+       so no engine rule moves: this is the ticket declining to offer
+       something, not a change to what is permitted. */
+    lastMetrics = m;
+    const overMargin = (m.notes || []).includes('NOTIONAL_EXCEEDS_BUYING_POWER');
+    armable = m.blocks.length === 0 && !overMargin;
     refreshArm();
   }
 
@@ -1075,6 +1093,52 @@ window.SSChart = (() => {
     // a ticket the maths had already called invalid — the server would refuse
     // it, but offering an impossible action is its own defect.
     btn.disabled = holding ? (!modified || !armable) : (!armable || !sym || !!dupe);
+
+    /* The blocking reason, ON the control. Only ever set when Arm is actually
+       off — a standing explanation beside a live button teaches the operator
+       to read neither. */
+    const blockEl = $('tkBlock'), whyEl = $('tkBlockWhy'), fixEl = $('tkBlockFix');
+    if(blockEl && whyEl && fixEl){
+      const m = lastMetrics;
+      const over = m && (m.notes || []).includes('NOTIONAL_EXCEEDS_BUYING_POWER');
+      const hardBlock = m && m.blocks && m.blocks.length;
+      let why = '', fixLabel = '', fixLev = null;
+      if(!holding && over && equity){
+        // The leverage that actually clears it, not merely "raise leverage":
+        // at or above the venue cap there IS no fix and saying so is kinder
+        // than pointing at a dial that cannot help.
+        const need = Math.ceil(m.notional / equity);
+        why = `This posts ${usd(m.margin)} of margin against a ${usd(equity)} ` +
+              `account. A tighter stop sizes a smaller position.`;
+        if(cfg && need <= cfg.max_leverage && (m.leverage || 1) < need){
+          fixLev = need;
+          fixLabel = `Use ${need}x — posts ${usd(m.notional / need)}`;
+        }
+      } else if(!holding && hardBlock){
+        why = 'The plan cannot be placed as drawn — see the warning above.';
+      } else if(!holding && dupe){
+        why = 'One order per side per chart.';
+      }
+      blockEl.hidden = !why;
+      whyEl.textContent = why;
+      fixEl.hidden = !fixLabel;
+      fixEl.textContent = fixLabel;
+      fixEl.dataset.lev = fixLev == null ? '' : String(fixLev);
+
+      /* ONE notice at a time, in priority order. Three of them could be open
+         together — the maths breach, the duplicate-order refusal and the
+         reason Arm is off — saying overlapping things and stacking 198px into
+         a bar that then squeezed the chart above it to 124px. The operator
+         only ever acts on the most binding one; the rest are noise until it
+         is cleared. */
+      const warnEl = $('tkWarn'), dupWarnEl = $('tkDup');
+      if(dupe){
+        if(blockEl) blockEl.hidden = true;
+        if(warnEl) warnEl.hidden = true;
+      } else if(why){
+        if(warnEl) warnEl.hidden = true;
+      }
+    }
     btn.title = holding
       ? (modified ? 'take this trade onto your book with these levels'
                   : 'drag the stop or target to change where this trade ends')
@@ -1141,6 +1205,9 @@ window.SSChart = (() => {
       });
       $('ticket').querySelectorAll('.tk-pane').forEach(p =>
         p.classList.toggle('on', p.dataset.p === b.dataset.p));
+      // A new pane starts at its top. Carrying the previous pane's offset
+      // opened the next one mid-sentence, clipped at both ends.
+      $('ticket').scrollTop = 0;
     });
 
     $('cCopilot').addEventListener('click', () => {
@@ -1148,16 +1215,24 @@ window.SSChart = (() => {
       SSCopilot.open({symbol: sym, tf,
                       setupId: setup ? setup.setup_id : null});
     });
+    /* The BUTTON KEEPS ITS NAME. It used to become its own status line —
+       "ANALYZING…" then "ALREADY CURRENT" — so the control the operator was
+       reaching for changed identity underneath the cursor, and the outcome
+       vanished four seconds later with no record that anything happened.
+       Progress goes to the button's busy state, the outcome goes to a toast
+       that says WHAT was recomputed. */
     $('cAnalyse').addEventListener('click', async () => {
-      const b = $('cAnalyse'), was = b.textContent;
+      const b = $('cAnalyse');
       if(!sym || b.disabled) return;
-      b.disabled = true; b.textContent = 'analyzing…';
+      const t = window.SSToast || (() => {});
+      b.disabled = true; b.setAttribute('aria-busy', 'true');
       try{
         const r = await fetch('/api/analyse?symbol=' + encodeURIComponent(sym),
                               {method: 'POST'});
         const d = await r.json().catch(() => ({}));
-        if(r.status === 404){ b.textContent = 'no price history'; return; }
-        if(!r.ok && r.status !== 207){ b.textContent = 'failed'; return; }
+        if(r.status === 404){ t(`No price history stored for ${sym} yet.`, 'warn'); return; }
+        if(!r.ok && r.status !== 207){
+          t(`Could not analyse ${sym} — ${d.detail || r.status}`, 'bad'); return; }
         // The facts just changed underneath the cache, so a plain reload would
         // redraw the pre-analysis answer for up to 25 seconds.
         for(const p of ['/api/facts', '/api/candles', '/api/draft'])
@@ -1167,14 +1242,24 @@ window.SSChart = (() => {
            analysis wrote. `+412 facts` is a true number about the fact store
            and an unanswerable one about the trade: nobody can tell whether 412
            is a lot, or which of them they are now looking at. */
-        const n = Object.values(d.new_facts || {}).reduce((s, v) => s + v, 0);
-        b.textContent = (d.errors && d.errors.length) ? 'partly updated'
-          : n === 0 ? 'already current'
-          : 'chart updated';
+        /* Names WHAT was recomputed rather than how many rows were written.
+           "Already current" now carries the time it was checked, so a no-op
+           is distinguishable from a click that never landed. */
+        const nf = d.new_facts || {};
+        const changed = Object.entries(nf).filter(([, v]) => v > 0)
+          .map(([k]) => k).sort();
+        const at = new Date().toISOString().slice(11, 16) + 'Z';
+        if(d.errors && d.errors.length)
+          t(`${sym}: partly updated — ${d.errors.length} step(s) failed.`, 'warn');
+        else if(!changed.length)
+          t(`${sym} was already current at ${at} — nothing had changed since ` +
+            `the last pass.`);
+        else
+          t(`${sym} updated: ${changed.join(', ')} recomputed.`, 'good');
       }catch(err){
-        b.textContent = 'unreachable';
+        t(`Could not reach the engine to analyse ${sym}.`, 'bad');
       }finally{
-        setTimeout(() => { b.disabled = false; b.textContent = was; }, 4000);
+        b.disabled = false; b.removeAttribute('aria-busy');
       }
     });
     /* Arm -> the OPERATOR's paper book (`manual-v0.1-draft`), never the
@@ -1188,6 +1273,26 @@ window.SSChart = (() => {
       // Captured at click: the reload below may restore() the ticket, and the
       // receipt must quote the price that was ARMED, not the one drawn after.
       const armedEntry = levels.entry, armedDir = dir;
+
+      /* CONFIRM BEFORE COMMITTING. The ticket's numbers drift with live price
+         between reading them and pressing this, so the dialog restates what is
+         actually about to be recorded — side, symbol, all three levels, the
+         dollars at risk, and that it is PAPER. The last word before an
+         irreversible-feeling action should be the action's own terms, not the
+         label on a button. */
+      if(!enginePos){
+        const lines = [
+          `${String(armedDir).toUpperCase()} ${sym} ${tf}`,
+          `entry ${pf(armedEntry)}`,
+          `stop ${pf(levels.sl)}`,
+          `target ${pf(levels.tp)}`,
+          `risking ${usd(riskUsd)}${cfg && cfg.max_leverage > 1 && leverage > 1
+            ? ` at ${leverage}x` : ''}`,
+          '',
+          'PAPER — this writes to your paper book. No real order is sent.',
+        ];
+        if(!confirm('Arm this trade?\n\n' + lines.join('\n'))) return;
+      }
       btn.disabled = true;
       out.textContent = 'arming…';
       try{
@@ -1263,6 +1368,18 @@ window.SSChart = (() => {
       recompute();
     });
     $('tkReset').addEventListener('click', restore);
+
+    /* The one-click fix. It moves the dial the block named and nothing else,
+       so the operator can see the same numbers recompute rather than being
+       handed a different trade. */
+    $('tkBlockFix').addEventListener('click', e => {
+      const lev = parseInt(e.currentTarget.dataset.lev, 10);
+      if(!isFinite(lev)) return;
+      leverage = lev;
+      const slider = $('tkLev');
+      if(slider) slider.value = String(lev);
+      recompute();
+    });
   }
 
   /* Equity, re-read every time rather than once per page load.

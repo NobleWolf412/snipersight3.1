@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SniperSight</title>
 <link rel="icon" href="/static/assets/snipersight-logo.png">
-<link rel="stylesheet" href="/static/ss.css?v=20">
+<link rel="stylesheet" href="/static/ss.css?v=27">
 </head>
 <body data-mode="idle">
 
@@ -61,6 +61,10 @@
     <a href="#learn"                data-s="learn">Learn</a>
   </nav>
 
+  <!-- Outcome of the last mutating action. aria-live=polite so a screen
+       reader is told what happened without being interrupted mid-sentence. -->
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
   <!-- ══ stage ══ -->
   <main class="stage">
 
@@ -75,7 +79,12 @@
         <div class="panel-head">
           <h2 class="t-section"><span class="term" data-t="scanner">Scanner</span></h2>
           <div class="spacer" style="margin-left:auto"></div>
-          <button class="btn btn-cyan" id="btnScan">Run Scan</button>
+          <!-- "Check now", not "Run Scan". Rules says outright that this does
+               nothing extra — it runs the same pass immediately instead of
+               waiting for the next one — so a label implying a heavier,
+               different action was the brightest button on the home screen
+               promising something it never did. -->
+          <button class="btn btn-cyan" id="btnScan">Check now</button>
           <!-- The reason is ON the control, not hidden in a hover title. A
                disabled button whose explanation you have to discover teaches an
                operator that the app is arbitrary. -->
@@ -283,6 +292,17 @@
                worse than plain buttons. These are pressable buttons that swap
                a pane, and aria-pressed says exactly that, matching how the
                rest of this app marks its segmented controls. -->
+          <!-- DIRECTION IS PINNED, above the tabs and outside every pane.
+               It lived inside the Trade pane, so the single most consequential
+               fact about the order — which way it is pointing — disappeared
+               the moment you opened Size to set leverage, and there was no way
+               to check it without navigating back. Side is not a detail of one
+               tab; it qualifies every number in all four. -->
+          <div class="seg seg-dir tk-pinned-dir" id="tkDir" aria-label="Trade direction">
+            <button data-d="LONG" type="button">Long</button
+            ><button data-d="SHORT" type="button">Short</button>
+          </div>
+
           <div class="seg tk-tabs" id="tkTabs">
             <button data-p="trade" class="on" type="button" aria-pressed="true">Trade</button>
             <button data-p="size" type="button" aria-pressed="false">Size</button>
@@ -292,10 +312,6 @@
 
           <div class="ticket-body">
            <div class="tk-pane on" data-p="trade">
-            <div class="seg seg-dir" id="tkDir">
-              <button data-d="LONG">Long</button><button data-d="SHORT">Short</button>
-            </div>
-
             <label class="fld"><span class="t-label"><span class="term" data-t="entry">Entry</span></span>
               <input id="tkEntry" class="t-mono" inputmode="decimal" autocomplete="off"></label>
             <label class="fld"><span class="t-label"><span class="term" data-t="tp">Take profit</span></span>
@@ -373,6 +389,14 @@
              ran last. The reason sits ON the control rather than in a hover
              title, same rule as the locked Auto button. -->
         <div class="tk-warn" id="tkDup" hidden></div>
+        <!-- Why Arm is off, and the one action that turns it on. This lived in
+             grey footer prose while the button stayed enabled and primary, so
+             the validation and the control the validation was about were in
+             two different places and only one of them looked authoritative. -->
+        <div class="tk-block" id="tkBlock" hidden>
+          <span id="tkBlockWhy"></span>
+          <button class="btn" id="tkBlockFix" type="button" hidden></button>
+        </div>
         <div class="tk-actions">
           <button class="btn" id="tkReset" disabled>Reset to engine</button>
           <!-- The label says PAPER because the button is the last thing read
@@ -386,7 +410,12 @@
              moment it was armed — no line, no P&L, nowhere to watch it. -->
         <div class="t-mono tk-open" id="tkOpen"></div>
         <div class="t-mono tk-armed" id="tkArmed"></div>
-        <div class="t-mono tk-lock" id="tkLock"></div>
+        <!-- The live-execution lock is STANDING context: it never changes
+             between trades and the status bar states it permanently on every
+             surface. In the commit bar it took a full row forever, on the one
+             strip that has to stay compact so the chart above it keeps its
+             height. Kept in the DOM (chart.js writes it) but out of flow. -->
+        <div class="t-mono tk-lock" id="tkLock" hidden></div>
       </div>
     </section>
 
@@ -764,26 +793,26 @@
      its own mount point, so there was never a reason for them to block. -->
 <script defer src="/static/lightweight-charts.js"></script>
 <!-- must load before any consumer: every module reads through it -->
-<script defer src="/static/ssdata.js?v=20"></script>
-<script defer src="/static/ticket-math.js?v=20"></script>
-<script defer src="/static/glossary.js?v=20"></script>
-<script defer src="/static/chart.js?v=20"></script>
+<script defer src="/static/ssdata.js?v=27"></script>
+<script defer src="/static/ticket-math.js?v=27"></script>
+<script defer src="/static/glossary.js?v=27"></script>
+<script defer src="/static/chart.js?v=27"></script>
 <!-- funnel.js FIRST: it owns the plain-language reason dictionary that
      shell.js reads on its very first render. Deferred scripts execute in
      document order, so with shell.js ahead of it the deck and the
      not-taken blocks painted raw engine codes until the next 30s refresh
      happened to land after funnel.js had run. -->
-<script defer src="/static/funnel.js?v=20"></script>
-<script defer src="/static/shell.js?v=20"></script>
+<script defer src="/static/funnel.js?v=27"></script>
+<script defer src="/static/shell.js?v=27"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must
      never blank a surface that another owns. -->
-<script defer src="/static/playbooks.js?v=20"></script>
-<script defer src="/static/weather.js?v=20"></script>
-<script defer src="/static/lessons.js?v=20"></script>
-<script defer src="/static/tracer.js?v=20"></script>
-<script defer src="/static/copilot.js?v=20"></script>
-<script defer src="/static/wizard.js?v=20"></script>
-<script defer src="/static/edgeview.js?v=20"></script>
+<script defer src="/static/playbooks.js?v=27"></script>
+<script defer src="/static/weather.js?v=27"></script>
+<script defer src="/static/lessons.js?v=27"></script>
+<script defer src="/static/tracer.js?v=27"></script>
+<script defer src="/static/copilot.js?v=27"></script>
+<script defer src="/static/wizard.js?v=27"></script>
+<script defer src="/static/edgeview.js?v=27"></script>
 </body>
 </html>
