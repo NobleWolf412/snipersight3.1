@@ -49,6 +49,12 @@
     // The console polls slowly while it is off screen; arriving on it should
     // not mean waiting out that slow tick for the first paint.
     if(name === 'diagnostics' && consoleReady) pollConsole();
+    /* A new surface starts at its top. The stage kept the previous route's
+       offset, so arriving on Learn from halfway down Results dropped the
+       reader into the middle of a chapter with no way to tell they had
+       missed the beginning. */
+    const stage = document.querySelector('.stage');
+    if(stage) stage.scrollTop = 0;
   }
   document.querySelectorAll('.nav a').forEach(a =>
     a.addEventListener('click', e => { e.preventDefault(); go(a.dataset.s); }));

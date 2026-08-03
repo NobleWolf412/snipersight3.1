@@ -424,7 +424,7 @@ def _venue_fee_r(t: dict) -> float:
 def _scenarios(trades: list[dict], resamples: int) -> list[dict]:
     """Expectancy under each fee model, slippage held at what execsim charged."""
     rows = [
-        ("the costs actually charged",
+        ("the costs recorded at the time",
          [t["r_net"] for t in trades],
          "r_multiple exactly as execsim wrote it — fees already netted."),
         ("no fees at all — the best case",
@@ -432,7 +432,7 @@ def _scenarios(trades: list[dict], resamples: int) -> list[dict]:
          "fees added back; market-exit slippage untouched. The ceiling."),
         # Rendered as a row label in the fee table on Results; the module it
         # reads from is provenance, not something the reader chooses between.
-        ("what these venues actually charge",
+        ("today's venue rates, re-priced",
          [t["r_ex_fee"] - _venue_fee_r(t) for t in trades],
          "re-priced at each symbol's own venue maker/taker rate."),
     ]

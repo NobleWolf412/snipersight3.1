@@ -127,9 +127,22 @@ window.GLOSSARY = {
       t.tabIndex = 0;
       t.setAttribute('role', 'button');
       const key = t.dataset.t;
-      t.setAttribute('aria-label',
-        `${t.textContent.trim()} — what this means`);
-      if(window.GLOSSARY[key]) t.setAttribute('title', window.GLOSSARY[key]);
+      /* NO aria-label. An aria-label REPLACES an element's text in the
+         accessibility tree, so labelling each inline term shredded the
+         sentence around it — a screen reader read "The only play in a is a ,
+         and it counts only with at least 1 of: a structural break, a , heavy
+         ." Every term had swallowed its own word.
+
+         The accessible name now comes from the element's own text, which is
+         the word in the sentence, and the DEFINITION is attached as a
+         description instead. The sentence survives; the extra information is
+         still announced. */
+      t.removeAttribute('aria-label');
+      if(window.GLOSSARY[key]){
+        t.setAttribute('title', window.GLOSSARY[key]);
+        // announced after the word, not instead of it
+        t.setAttribute('aria-description', window.GLOSSARY[key]);
+      }
     });
   }
   document.addEventListener('focusin', e => {

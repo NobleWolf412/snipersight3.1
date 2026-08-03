@@ -5,9 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SniperSight</title>
 <link rel="icon" href="/static/assets/snipersight-logo.png">
-<link rel="stylesheet" href="/static/ss.css?v=27">
+<link rel="stylesheet" href="/static/ss.css?v=29">
 </head>
 <body data-mode="idle">
+
+<!-- Tab order reached the glossary terms inside the header before any
+     action. First stop is now the content. -->
+<a class="skip-link" href="#s-command">Skip to content</a>
 
 <div class="shell">
 
@@ -200,7 +204,8 @@
         <h1 class="t-page">Chart</h1><p>Is this setup worth taking?</p>
       </div>
       <div class="chart-top">
-        <select id="cSym" class="btn" style="text-transform:none;letter-spacing:.06em"></select>
+        <select id="cSym" class="btn" aria-label="Symbol to chart"
+                style="text-transform:none;letter-spacing:.06em"></select>
         <!-- The picker defaults to the symbols the engine actually watches.
              All 78 tracked symbols in one list — 47 of them leftovers nothing
              scans — buried the 19 that matter under venue-labelled noise.
@@ -730,7 +735,7 @@
            the surface that asks whether the machine is telling the truth — not
            on the one that asks what to do next. shell.js only polls it while
            this surface is on screen. -->
-      <div class="panel" style="margin-top:var(--lg)">
+      <div class="panel" id="consolePanel" style="margin-top:var(--lg)">
         <div class="panel-head">
           <h2 class="t-section">Backend Console</h2>
           <span class="chip" id="consoleState" style="margin-left:auto">idle</span>
@@ -793,26 +798,26 @@
      its own mount point, so there was never a reason for them to block. -->
 <script defer src="/static/lightweight-charts.js"></script>
 <!-- must load before any consumer: every module reads through it -->
-<script defer src="/static/ssdata.js?v=27"></script>
-<script defer src="/static/ticket-math.js?v=27"></script>
-<script defer src="/static/glossary.js?v=27"></script>
-<script defer src="/static/chart.js?v=27"></script>
+<script defer src="/static/ssdata.js?v=29"></script>
+<script defer src="/static/ticket-math.js?v=29"></script>
+<script defer src="/static/glossary.js?v=29"></script>
+<script defer src="/static/chart.js?v=29"></script>
 <!-- funnel.js FIRST: it owns the plain-language reason dictionary that
      shell.js reads on its very first render. Deferred scripts execute in
      document order, so with shell.js ahead of it the deck and the
      not-taken blocks painted raw engine codes until the next 30s refresh
      happened to land after funnel.js had run. -->
-<script defer src="/static/funnel.js?v=27"></script>
-<script defer src="/static/shell.js?v=27"></script>
+<script defer src="/static/funnel.js?v=29"></script>
+<script defer src="/static/shell.js?v=29"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must
      never blank a surface that another owns. -->
-<script defer src="/static/playbooks.js?v=27"></script>
-<script defer src="/static/weather.js?v=27"></script>
-<script defer src="/static/lessons.js?v=27"></script>
-<script defer src="/static/tracer.js?v=27"></script>
-<script defer src="/static/copilot.js?v=27"></script>
-<script defer src="/static/wizard.js?v=27"></script>
-<script defer src="/static/edgeview.js?v=27"></script>
+<script defer src="/static/playbooks.js?v=29"></script>
+<script defer src="/static/weather.js?v=29"></script>
+<script defer src="/static/lessons.js?v=29"></script>
+<script defer src="/static/tracer.js?v=29"></script>
+<script defer src="/static/copilot.js?v=29"></script>
+<script defer src="/static/wizard.js?v=29"></script>
+<script defer src="/static/edgeview.js?v=29"></script>
 </body>
 </html>

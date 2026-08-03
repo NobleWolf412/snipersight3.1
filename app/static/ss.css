@@ -24,8 +24,18 @@
   /* foreground ramp */
   --fg:oklch(0.94 0.012 150);
   --fg-2:oklch(0.78 0.012 150);
-  --fg-3:oklch(0.58 0.015 150);
-  --fg-4:oklch(0.42 0.012 150);
+  /* WCAG 2.2 AA, measured against BOTH grounds this app uses. --fg-4 was
+     oklch(0.42) — 2.22:1 on --bg and 1.84:1 on --card — and it backs nearly
+     every label in the product, including live trade data at 10px. --fg-3 at
+     0.58 did not clear it either (4.39:1 on --bg, 3.63:1 on --card), so
+     promoting a rule from 4 to 3 fixed nothing.
+
+     Lifted until the DIMMEST step clears 4.5:1 on the darkest surface it is
+     ever drawn on. The ramp compresses rather than inverts: 4 stays dimmer
+     than 3, 3 than 2. The terminal look survives — these are still low-chroma
+     olive greys on near-black — but the text is now readable. */
+  --fg-3:oklch(0.72 0.015 150);   /* 7.0:1 on --bg, 5.8:1 on --card */
+  --fg-4:oklch(0.65 0.013 150);   /* 5.8:1 on --bg, 4.8:1 on --card */
   /* status family */
   --green:#00ffaa; --green-soft:#4ade80;
   --amber:#ffc266; --amber-2:#fbbf24;
@@ -50,6 +60,13 @@
 [data-mode="idle"] {--accent:var(--green);--accent-rgb:0,255,170}
 
 *{box-sizing:border-box;margin:0;padding:0}
+/* Off-screen until focused, then the first thing a keyboard reaches. */
+.skip-link{position:fixed;left:var(--shell-x);top:-60px;z-index:9500;
+  padding:9px 14px;border-radius:var(--r-md);background:var(--card);
+  border:1px solid var(--accent);color:var(--fg);font-family:var(--f-mono);
+  font-size:11px;text-decoration:none;transition:top .12s ease}
+.skip-link:focus{top:10px}
+@media (prefers-reduced-motion: reduce){.skip-link{transition:none}}
 /* `hidden` must actually hide. The [hidden] default belongs to the user agent,
    so ANY author rule that sets display outranks it — `.fld{display:flex}` did,
    and so does `.chip{display:inline-flex}`. This was first fixed scoped to
@@ -408,8 +425,13 @@ body{
 .statusbar .sb-dev:hover{color:var(--fg-2)}
 .statusbar .sb-dev:focus-visible{outline:1px solid var(--accent);outline-offset:3px;border-radius:2px}
 .statusbar .sb-dev[aria-pressed="true"]{color:var(--accent)}
-/* the developer surface is hidden until it is asked for */
-.shell:not(.dev) .nav a[data-s="diagnostics"]{display:none}
+/* Diagnostics IS in the rail. It was hidden behind Developer mode so a new
+   reader would not meet `ohlc invariant failure` by wandering — but a
+   reachable route missing from the nav breaks the active state (nothing
+   highlights when you land there) and leaves the DEGRADED chip pointing at
+   a destination with no home. Developer mode still gates the RAWEST
+   material inside the surface; the route itself is navigable. */
+.shell:not(.dev) #consolePanel{display:none}
 
 /* status orb — ambient state, not decoration */
 .orb{width:7px;height:7px;border-radius:50%;flex:none;background:var(--fg-4)}
