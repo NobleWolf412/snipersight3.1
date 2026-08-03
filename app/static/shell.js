@@ -125,15 +125,135 @@
      already holds — and could disagree with what is on screen. */
   let lastOverview = null;
 
+  /* ═══════════════ ONE DERIVED STATE ═══════════════
+     Four surfaces disagreed about whether a position was open. The trace said
+     ORDER PLACED / FILLED with no terminal exit; Diagnostics said open=1;
+     Command said "0 of 2 slots" and "$0 of $386"; and the Setup Deck still
+     showed that same filled position as a pending card labelled EXPIRING NOW.
+
+     The cause was one predicate. The deck filtered on `!f.result`, but
+     `result` is the EXEC OUTCOME — it is null for a setup that has been armed
+     and filled and simply has not closed yet. So "not finished" was being read
+     as "not started".
+
+     A setup has a lifecycle, and exactly one place computes it:
+
+         PENDING  — validated, nothing committed
+         ARMED    — an order is resting (portfolio.pending_orders)
+         FILLED   — money is in the market (portfolio.active_positions)
+         CLOSED   — an exec fact recorded an outcome
+
+     Both payloads key on setup_id, so this is a client-side join and touches
+     no engine math. Every surface reads the SAME object; none of them may
+     re-derive membership from a payload of its own. */
+  const SSState = {
+    overview: null,
+    portfolio: null,
+
+    put(which, payload){ this[which] = payload; },
+
+    /* setup_id -> the live order/position record, whichever stage it is at.
+       Built fresh each call: a stale map here is the bug this replaces. */
+    engaged(){
+      const p = this.portfolio || {};
+      const m = new Map();
+      for(const t of (p.pending_orders || []))   m.set(t.setup_id, {stage: 'ARMED',  t});
+      for(const t of (p.active_positions || [])) m.set(t.setup_id, {stage: 'FILLED', t});
+      return m;
+    },
+
+    lifecycleOf(f, eng){
+      if(f.result) return 'CLOSED';
+      const hit = (eng || this.engaged()).get(f.setup_id);
+      return hit ? hit.stage : 'PENDING';
+    },
+
+    /* The deck is PENDING setups only. A filled position is not an
+       opportunity, and counting down its expiry is describing a decision that
+       has already been made. */
+    deck(){
+      const o = this.overview;
+      if(!o || !o.feed) return [];
+      const eng = this.engaged();
+      return o.feed.filter(f =>
+        f.state === 'VALIDATED' && this.lifecycleOf(f, eng) === 'PENDING');
+    },
+
+    /* ── ONE SYMBOL VOCABULARY ──
+       Five counts were on screen under four different names. These are the
+       only words the app uses for a set of symbols, and each is a strict
+       subset of the one above it except SHADOW, which is deliberately outside
+       the chain: it is warmed and never sizeable.
+
+       Only tiers the ENGINE can actually distinguish are defined here. There
+       is no separate WATCHED tier because the engine does not emit one, and
+       inventing a denominator it cannot back is how the five-count problem
+       started. */
+    symbolSets(){
+      const o = this.overview || {};
+      const uc = o.universe_counts || {};
+      return {
+        stored:    (o.symbols || []).length,      // every symbol with candles
+        admitted:  uc.admitted ?? 0,              // in the tradeable universe
+        tradeable: uc.admitted ?? 0,              // admitted and not warming
+        warming:   uc.warming ?? 0,               // admitted, not yet sizeable
+        shadow:    uc.shadow ?? 0,                // warmed, never sizeable
+      };
+    },
+  };
+  // exposed so tests and other modules read the same derivation, never a copy
+  window.SSStateView = SSState;
+
   /* Three missed minutes is behind rather than merely late: a 60s cycle that
      has not reported in three of them is not going to catch up on its own. */
   const STALE_AFTER_S = 180;
+
+  /* ═══════════════ ONE CLOCK ═══════════════
+     Four components each wrote their own staleness grammar: the header said
+     "last checked just now", the scanner banner showed a raw timestamp ten
+     minutes old, the footer said "a minute ago", and the chart flipped between
+     "JUST NOW" and "UPDATED 30S AGO" — four vocabularies for one fact, two of
+     them contradicting each other on screen at the same moment.
+
+     One function, one grammar, exported so chart.js uses it too. The buckets
+     are deliberately coarse and never show seconds: a value that changes every
+     second is a value that reflows a layout every second, which is the other
+     half of this bug (see the fixed-width rule in ss.css). */
   const agoText = s =>
     s == null   ? 'a while ago' :
     s < 45      ? 'just now' :
     s < 90      ? 'a minute ago' :
     s < 3600    ? Math.round(s / 60) + ' minutes ago' :
                   Math.round(s / 3600) + ' hours ago';
+  window.SSClock = {
+    ago: agoText,
+    STALE_AFTER_S,
+    /* Age in seconds from an epoch-seconds stamp, floored at zero — a clock
+       skew between server and browser must never render as "in 3 seconds". */
+    ageOf: ts => ts == null ? null : Math.max(0, Date.now() / 1000 - ts),
+  };
+
+  /* ═══════════════ ONE ROUNDING POLICY PER UNIT ═══════════════
+     Risk-per-trade appeared as $193, $195, 194.68 and $194 on four surfaces —
+     the same number, formatted four ways, which reads as four numbers. One
+     rule per unit, defined here and used everywhere:
+
+         money  0dp        R  2dp        percent  1dp
+         price  by magnitude (px, below — stands in for venue tick size)
+         units  4sf        (stands in for venue lot size)
+
+     px and money already live at module scope; these complete the set. R is
+     2dp because the engine quantises r_multiple to 2dp and a third digit
+     would be inventing precision the fact store does not carry. */
+  const rr = v => v == null || isNaN(+v) ? '—'
+    : (+v >= 0 ? '+' : '') + (+v).toFixed(2) + 'R';
+  const pct = v => v == null || isNaN(+v) ? '—' : (+v).toFixed(1) + '%';
+  /* Units are a venue lot size the browser does not know, so this uses
+     significant figures rather than pretending to a tick: "908.979 units" was
+     a raw float dump, and neither 908.979 nor 909 is knowably right. */
+  const units = v => v == null || isNaN(+v) ? '—'
+    : (+v).toLocaleString(undefined, {maximumSignificantDigits: 4});
+  window.SSFormat = {money, signedMoney, px, rr, pct, units};
 
   async function loadOverview(){
     const o = await api('/api/overview');
@@ -148,15 +268,21 @@
        75 also made "no setups right now" read as a malfunction: 19 symbols
        producing nothing is the ordinary case, 75 producing nothing is not. */
     const uc = o.universe_counts || {};
-    $('mUniverse').textContent = uc.admitted ?? '—';
-    const sub = [];
-    if (uc.shadow) sub.push(`${uc.shadow} shadow`);
-    if (uc.warming) sub.push(`${uc.warming} warming`);
-    $('mUniverseSub').textContent = sub.length
-      ? sub.join(' · ') + ' — never sized'
-      : '';
+    SSState.put('overview', o);
+    /* Every count names the SET it belongs to. "15 symbols" on its own was
+       unanswerable: fifteen out of what, and fifteen that can do what? */
+    const sets = SSState.symbolSets();
+    $('mUniverse').textContent = sets.tradeable;
+    const sub = [`of ${sets.stored} stored`];
+    if (sets.warming) sub.push(`${sets.warming} warming`);
+    if (sets.shadow)  sub.push(`${sets.shadow} shadow — never sized`);
+    $('mUniverseSub').textContent = sub.join(' · ');
 
-    const active = o.feed.filter(f => f.state === 'VALIDATED' && !f.result);
+    /* The deck comes from the shared selector, so a filled position leaves it
+       the moment the portfolio says the money is in the market — rather than
+       sitting here counting down an expiry that no longer applies. */
+    SSState.put('overview', o);
+    const active = SSState.deck();
     $('mSetups').textContent = active.length;
     $('nCommand').textContent = active.length || '';
 
@@ -175,7 +301,8 @@
     const tone  = !sc.alive ? 'bad' : fresh ? 'good' : 'warn';
     $('scanOrb').className = 'orb ' + tone;
     $('scanTxt').textContent = sc.alive
-      ? (uc.admitted ? `WATCHING ${uc.admitted} SYMBOLS` : 'WATCHING')
+      // names the SET, so the number is answerable without opening a tooltip
+      ? (sets.tradeable ? `WATCHING ${sets.tradeable} TRADEABLE` : 'WATCHING')
       : 'NOT WATCHING';
     $('scanChip').title = !sc.alive
       ? 'The engine has stopped watching. No new setups will appear until it restarts.'
@@ -189,8 +316,9 @@
     $('sbOrb').className = 'orb ' + tone;
     $('sbLive').textContent = !sc.alive ? 'Not watching'
       : fresh ? 'Watching the market' : 'Catching up';
-    $('sbWatch').textContent = sc.alive && uc.admitted
-      ? `${uc.admitted} symbols · checked ${agoText(sc.age_s)}`
+    // names the set, like every other count on screen
+    $('sbWatch').textContent = sc.alive && sets.tradeable
+      ? `${sets.tradeable} tradeable · checked ${agoText(sc.age_s)}`
       : '';
 
     if(o.baseline){
@@ -345,8 +473,14 @@
     const expiry = s => s.expires_at_ts || Infinity;   // no expiry -> sorts last
     const best = new Map();            // symbol -> the one expiring soonest
     for(const s of setups){
-      const cur = best.get(s.symbol);
-      if(!cur || expiry(s) < expiry(cur)) best.set(s.symbol, s);
+      /* Keyed by TOKEN, not by symbol. The header promises "One per token"
+         and the deck was showing PF_UNIUSD and UNIUSDT — the same coin on two
+         venues — as two near-identical cards, because a venue prefix or a
+         quote suffix made them different keys. The surviving card names its
+         venue, so the split is stated rather than duplicated. */
+      const key = tokenOf(s.symbol);
+      const cur = best.get(key);
+      if(!cur || expiry(s) < expiry(cur)) best.set(key, s);
     }
     const now = Date.now() / 1000;
     const ordered = [...best.values()].sort((a, b) => expiry(a) - expiry(b));
@@ -455,7 +589,20 @@
     });
   }
 
-  const deckRows = new Map();          // symbol -> {el, html, cls}
+  const deckRows = new Map();          // token -> {el, html, cls}
+
+  /* The COIN behind a venue's symbol. `PF_UNIUSD` (Kraken perp), `UNIUSDT`
+     (Phemex perp) and `UNI-USD` (Coinbase spot) are three listings of one
+     token, and the deck promises one card per token. Venue prefix, quote
+     suffix and separator all come off; what is left is the thing being
+     traded. Deliberately narrow — it strips only the forms this app actually
+     admits, so an unfamiliar symbol keeps its own identity rather than being
+     silently merged with something else. */
+  const tokenOf = sym => String(sym || '')
+    .replace(/^PF_/, '')                 // Kraken perp prefix
+    .replace(/[-_/]/g, '')               // separators
+    .replace(/(USDT|USDC|USD)$/, '')     // quote currency
+    || String(sym || '');
 
   /* WHAT THE OPERATOR IS ALREADY IN, indexed for the deck.
 
@@ -530,7 +677,7 @@
       const r = d.r_at_close == null ? null : Number(d.r_at_close);
       const usd = d.usd_at_close == null ? null : Number(d.usd_at_close);
       return '<div class="deck-held done">you closed this' +
-        (r == null ? '' : ` — ${r >= 0 ? '+' : ''}${r.toFixed(2)}R`) +
+        (r == null ? '' : ' — ' + rr(r)) +
         (usd == null ? '' : ` (${signedMoney(usd)})`) +
         (d.exit_price ? ` at ${esc(d.exit_price)}` : '') + '</div>';
     }
@@ -820,7 +967,7 @@
           </div>
         </div>
         <div class="pos-r ${tone}">${
-          r == null ? '—' : (r >= 0 ? '+' : '') + r.toFixed(1) + 'R'}
+          rr(r)}
           <span class="t-sub">${money(t.risk_usd)} at risk</span>
           <button class="btn pos-close" data-close-sid="${esc(t.setup_id || '')}"
             title="close this on YOUR book at the last closed price — the engine keeps simulating its own plan, so the two outcomes can be compared">Close</button></div>
@@ -992,7 +1139,7 @@
           <div class="t-sub">${[when, heldText(j.holding_hours),
             'risked ' + money(j.risk_usd)].filter(Boolean).join(' · ')}</div>
         </div>
-        <div class="jnl-r">${(j.r_multiple >= 0 ? '+' : '') + j.r_multiple.toFixed(2)}R
+        <div class="jnl-r">${rr(j.r_multiple)}
           <span class="t-sub">${signedMoney(j.pnl_usd)}</span></div>
       </div>`;
     }).join('');
@@ -1020,13 +1167,18 @@
     if(losses) part.push(losses + (losses === 1 ? ' loss' : ' losses'));
     const netR = rows.reduce((s, j) => s + j.r_multiple, 0);
     sub.textContent = part.join(' · ') +
-      ` · ${netR >= 0 ? '+' : ''}${netR.toFixed(1)}R net`;
+      ' · ' + rr(netR) + ' net';
   }
 
   /* ---------- RESULTS ---------- */
   async function loadPortfolio(){
     const p = await api('/api/portfolio');
     const d = p.decisions || {};
+    /* Feeds the shared selector BEFORE anything renders. The deck's membership
+       depends on this payload, so a render that runs between the two fetches
+       would show a filled position as a pending card — the exact disagreement
+       the selector exists to remove. */
+    SSState.put('portfolio', p);
 
     /* THE EMPTY-WINDOW RULE, site 1 of 4.
        A count of ZERO OBSERVATIONS must never share a treatment with a count
@@ -1227,7 +1379,7 @@
         <td>${r.n ?? 0}</td>
         <td>${wr}</td>
         <td><b style="color:${!has ? 'var(--fg-4)' : (good ? 'var(--green)' : 'var(--red-2)')}">${
-          has ? `${good ? '+' : ''}${pnl.toFixed(2)}R` : 'n/a'}</b></td>
+          has ? rr(pnl) : 'n/a'}</b></td>
       </tr>`;
     }).join('');
     /* "net" on a taken table is money the account made or lost. On an untaken
@@ -1922,10 +2074,16 @@
 
   /* ---------- refresh loop ---------- */
   async function refresh(){
-    const jobs = [loadOverview(), loadPortfolio(), loadHealth(),
+    /* The portfolio lands FIRST and alone. The deck's membership is a join
+       against it, so running the two concurrently meant a first paint that
+       rendered a filled position as a pending card whenever the overview won
+       the race. Ordering costs one round trip and removes a whole class of
+       "the screens disagree" bug. */
+    const first = await Promise.allSettled([loadPortfolio()]);
+    const jobs = [loadOverview(), loadHealth(),
                   loadRisk(), loadSettings(), loadCredentials(), loadPerformance(),
                   loadTelemetry()];
-    const results = await Promise.allSettled(jobs);
+    const results = first.concat(await Promise.allSettled(jobs));
     const failed = results.filter(r => r.status === 'rejected');
     if(failed.length) markDegraded(failed.map(f => f.reason).join('; '), failed.length);
     else {

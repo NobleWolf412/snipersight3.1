@@ -734,9 +734,13 @@ window.SSChart = (() => {
     if(!el) return;
     if(!loadedAt){ el.textContent = '—'; el.className = 'chip'; return; }
     const s = Math.round((Date.now() - loadedAt) / 1000);
-    el.textContent = s < 5 ? 'just now'
-      : s < 90 ? `updated ${s}s ago`
-      : `updated ${Math.round(s / 60)}m ago`;
+    /* ONE grammar, shared with the shell — this said "UPDATED 30S AGO" while
+       the footer said "a minute ago" about the same moment. The per-second
+       text was also the widest reflow source on the surface: it changed width
+       every second and slid the buttons beside it sideways. */
+    el.textContent = window.SSClock
+      ? 'updated ' + SSClock.ago(s)
+      : (s < 45 ? 'updated just now' : `updated ${Math.round(s / 60)}m ago`);
     el.className = 'chip' + (s > 120 ? ' chip-amber' : '');
     el.title = s > 120
       ? 'a refresh has been missed — these numbers may not be what the engine holds'
