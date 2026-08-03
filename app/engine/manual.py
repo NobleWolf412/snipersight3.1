@@ -170,6 +170,31 @@ def risk_per_unit(direction: str, entry: Decimal, sl: Decimal) -> Decimal:
     return (entry - sl) if direction == "LONG" else (sl - entry)
 
 
+def _same_side_open(con, symbol: str, tf: str, direction: str):
+    """An unresolved intent on the same market and side, or None.
+
+    ONE ARM PER SIDE PER CHART. Nothing stopped a second identical order: the
+    ticket stayed on "New trade" with Arm live after an order was already
+    resting, so a double-click — or simply not noticing the first one — armed
+    the same trade twice. Both would fill on the same touch and the book would
+    carry double the risk the budget was told about.
+
+    Deliberately keyed on DIRECTION, not on the prices: two shorts at different
+    entries is the same mistake wearing a different number, and a rule that
+    only caught byte-identical levels would miss every case that matters. The
+    opposite side is left alone — that is a hedge, a different argument, and
+    refusing it here would be this function inventing a position policy.
+
+    Server-side because it is the authority. The ticket disables Arm for the
+    same reason it shows the stop: so the operator is not offered an action
+    that will be refused. That is courtesy; THIS is the guard.
+    """
+    for p in unresolved(con).get((symbol, tf), []):
+        if str(p.get("direction", "")).upper() == str(direction).upper():
+            return p
+    return None
+
+
 def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
                   created_at: int, risk_usd=None, size_units=None,
                   note: str = "", leverage=1, trail_r=None) -> dict:
@@ -206,6 +231,13 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
                 f"trail distance must be at least 0.1R, got {trail_r} — a "
                 f"tighter trail than that is stopped by the same bar that "
                 f"moves it")
+    dup = _same_side_open(con, symbol, tf, direction)
+    if dup is not None:
+        raise IntentRejected(
+            f"you already have an unresolved {direction} on {symbol} {tf} — "
+            f"entry {dup['entry']}, stop {dup['sl']}. Arming again would open a "
+            f"second position on the same side, doubling the risk the budget "
+            f"thinks you took. Let it resolve, or close it first.")
     meta = validate(symbol, direction, entry, tp, sl, leverage)
     per_unit = risk_per_unit(direction, entry, sl)
     if size_units is None and risk_usd is not None:

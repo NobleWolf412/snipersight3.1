@@ -1037,10 +1037,31 @@ window.SSChart = (() => {
     // Say which job this ticket is doing, in the heading, where a heading is
     // read. `managing` recolours the whole panel so the two modes are never
     // mistaken at a glance.
+    /* ONE ARM PER SIDE PER CHART. Arm stayed live under a "New trade"
+       heading while an order was already resting, so pressing it again — or
+       simply not noticing the first one — armed the same trade twice. Both
+       fill on the same touch and the book carries double the risk the budget
+       was told about. engine/manual.py refuses it; this stops the ticket
+       offering an action that will be refused. The opposite side stays
+       armable: a hedge is a different argument. */
+    const dupe = !holding && openPos.find(p =>
+      String(p.direction || '').toUpperCase() === String(dir).toUpperCase());
+    const dupEl = $('tkDup');
+    if(dupEl){
+      dupEl.hidden = !dupe;
+      // textContent, not innerHTML: chart.js has no esc() and this line is
+      // assembled from server strings. Text needs no escaping and cannot grow
+      // an injection later.
+      if(dupe) dupEl.textContent =
+        `You already have a ${dupe.state === 'PENDING' ? 'resting' : 'live'} ` +
+        `${dupe.direction} on this chart at ${pf(+dupe.entry)}. Arming again ` +
+        `would open a second one on the same side and double the risk. ` +
+        `Let it resolve, close it, or arm the other way.`;
+    }
     const mode = $('tkMode');
     if(mode) mode.textContent = holding
       ? (modified ? 'Managing trade — unsaved' : 'Managing open trade')
-      : 'New trade';
+      : dupe ? 'Already armed' : 'New trade';
     $('ticket').classList.toggle('managing', holding);
     // Holding a position: the only honest commit is changing where it ends,
     // and only once a level has actually moved.
@@ -1049,10 +1070,11 @@ window.SSChart = (() => {
     // checked, so dragging a short's stop below its entry left Update live on
     // a ticket the maths had already called invalid — the server would refuse
     // it, but offering an impossible action is its own defect.
-    btn.disabled = holding ? (!modified || !armable) : (!armable || !sym);
+    btn.disabled = holding ? (!modified || !armable) : (!armable || !sym || !!dupe);
     btn.title = holding
       ? (modified ? 'take this trade onto your book with these levels'
                   : 'drag the stop or target to change where this trade ends')
+      : dupe ? 'one order per side per chart — see the reason above'
       : '';
     $('tkLock').textContent = (cfg && cfg.live_enabled)
       ? ''

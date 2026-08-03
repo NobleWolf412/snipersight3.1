@@ -23,6 +23,7 @@ from engine import manual, store, execsim, setups
 TF = 3600
 SPOT = "BTC-USD"        # coinbase-spot — cannot short
 PERP = "BTCUSDT"        # phemex-perp   — can short
+PERP2 = "ETHUSDT"       # a second perp, for tests that need two live orders at once
 
 
 class ManualCase(unittest.TestCase):
@@ -217,22 +218,83 @@ class ManualCase(unittest.TestCase):
         stopped meaning 2%.
         """
         bars = self.flat(6) + [(100, 104, 99, 103)] + self.flat(5)
+        # Two perps carrying IDENTICAL candles, because one chart may now hold
+        # only one unresolved order per side — the double-arm guard. The
+        # invariant is unchanged and if anything stated more strongly: same
+        # prices, same bars, different leverage, one outcome.
         self.load(bars, symbol=PERP)
+        self.load(bars, symbol=PERP2)
         a = manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
                                  sl=98, created_at=0, risk_usd=200, leverage=1)
-        b = manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
-                                 sl=98, created_at=TF, risk_usd=200, leverage=10)
+        b = manual.create_intent(self.con, PERP2, "1H", "LONG", entry=100, tp=104,
+                                 sl=98, created_at=0, risk_usd=200, leverage=10)
         self.assertEqual(a["size_units"], b["size_units"], "size must not move")
         # margin is what moves: notional / leverage
         self.assertEqual(Decimal(a["margin_usd"]) / 10, Decimal(b["margin_usd"]))
         self.assertIsNone(a["liquidation"], "1x cannot be liquidated by price")
         self.assertEqual(Decimal(b["liquidation"]), Decimal("90.500"))
         self.run_engine(symbol=PERP)
-        rs = {r["intent_id"]: r for r in self.execs(symbol=PERP)}
+        self.run_engine(symbol=PERP2)
+        rs = {r["intent_id"]: r
+              for r in self.execs(symbol=PERP) + self.execs(symbol=PERP2)}
         self.assertEqual(len(rs), 2)
         vals = {r["r_multiple"] for r in rs.values()}
         self.assertEqual(len(vals), 1,
                          f"leverage changed the outcome: {vals}")
+
+    def test_arming_the_same_side_twice_is_refused(self):
+        """The ticket stayed on "New trade" with Arm live after an order was
+        already resting, so a double-click armed the same trade twice. Both
+        fill on the same touch and the book carries double the risk the budget
+        was told about.
+        """
+        self.load(self.flat(6), symbol=PERP)
+        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+                             sl=98, created_at=0, risk_usd=200)
+        with self.assertRaises(manual.IntentRejected) as cm:
+            manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+                                 sl=98, created_at=TF, risk_usd=200)
+        self.assertIn("already have an unresolved LONG", str(cm.exception))
+
+    def test_the_guard_is_on_the_SIDE_not_the_prices(self):
+        """Two shorts at different entries is the same mistake wearing a
+        different number. A rule that only caught identical levels would miss
+        every case worth catching."""
+        self.load(self.flat(6), symbol=PERP)
+        manual.create_intent(self.con, PERP, "1H", "SHORT", entry=100, tp=96,
+                             sl=102, created_at=0, risk_usd=200)
+        with self.assertRaises(manual.IntentRejected):
+            manual.create_intent(self.con, PERP, "1H", "SHORT", entry=101,
+                                 tp=95, sl=103, created_at=TF, risk_usd=200)
+
+    def test_the_opposite_side_is_left_alone(self):
+        """A hedge is a different argument. Refusing it here would be this
+        function inventing a position policy it was never asked for."""
+        self.load(self.flat(6), symbol=PERP)
+        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+                             sl=98, created_at=0, risk_usd=200)
+        manual.create_intent(self.con, PERP, "1H", "SHORT", entry=100, tp=96,
+                             sl=102, created_at=TF, risk_usd=200)
+
+    def test_a_resolved_order_stops_blocking_the_next_one(self):
+        """The guard reads UNRESOLVED intents. Once a trade settles, the same
+        side must be armable again or the chart is permanently spent."""
+        bars = self.flat(2) + [(100, 105, 99, 104)] + self.flat(3)
+        self.load(bars, symbol=PERP)
+        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+                             sl=98, created_at=0, risk_usd=200)
+        self.run_engine(symbol=PERP)
+        self.assertTrue(self.execs(symbol=PERP), "fixture did not settle")
+        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+                             sl=98, created_at=TF * 5, risk_usd=200)
+
+    def test_another_timeframe_on_the_same_symbol_is_its_own_chart(self):
+        self.load(self.flat(6), symbol=PERP)
+        self.load(self.flat(6), symbol=PERP, tf="4H")
+        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+                             sl=98, created_at=0, risk_usd=200)
+        manual.create_intent(self.con, PERP, "4H", "LONG", entry=100, tp=104,
+                             sl=98, created_at=0, risk_usd=200)
 
     def test_a_stop_beyond_liquidation_is_refused_by_the_api_not_just_the_ui(self):
         """The ticket blocks this, but the ticket is a client. An endpoint that

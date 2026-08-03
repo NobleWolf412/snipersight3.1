@@ -390,4 +390,25 @@ ok('a finished setup never offers Manage trade', () => {
             'the symbol fallback must not resurrect a closed trade');
 });
 
+
+/* ONE ARM PER SIDE PER CHART. Arm stayed live under a "New trade" heading with
+   an order already resting, so a second press armed the same trade twice. */
+console.log('arm: no double order');
+ok('the ticket will not offer an arm the server would refuse', () => {
+  assert.ok(/const dupe = !holding && openPos\.find\(/.test(CHART));
+  assert.ok(/!armable \|\| !sym \|\| !!dupe/.test(CHART), 'Arm must be disabled');
+  assert.ok(/dupe \? 'Already armed' : 'New trade'/.test(CHART),
+            'the heading must stop claiming this is a new trade');
+});
+ok('the reason is ON the control, not in a hover title', () => {
+  assert.ok(HTML.includes('id="tkDup"'), 'the reason needs its own slot');
+  assert.ok(/dupEl\.textContent =/.test(CHART), 'and must actually be written');
+  // Sharing #tkWarn with the ticket maths means last-writer-wins.
+  assert.ok(!/tkWarn'\)\.textContent =[\s\S]{0,80}already have/.test(CHART));
+});
+ok('the guard is per SIDE, so a hedge is still armable', () => {
+  assert.ok(/String\(p\.direction \|\| ''\)\.toUpperCase\(\) === String\(dir\)\.toUpperCase\(\)/
+            .test(CHART), 'only the same side blocks');
+});
+
 console.log(`  ${passed} passed`);

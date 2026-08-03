@@ -367,6 +367,12 @@
       <div class="commit-bar">
         <div class="tk-key" id="tkKey"></div>
         <div class="tk-warn" id="tkWarn" hidden></div>
+        <!-- Owned solely by refreshArm(), NOT by the ticket maths: an order
+             already resting is not an arithmetic error, and sharing #tkWarn
+             would mean the two writers overwrite each other depending on which
+             ran last. The reason sits ON the control rather than in a hover
+             title, same rule as the locked Auto button. -->
+        <div class="tk-warn" id="tkDup" hidden></div>
         <div class="tk-actions">
           <button class="btn" id="tkReset" disabled>Reset to engine</button>
           <!-- The label says PAPER because the button is the last thing read
