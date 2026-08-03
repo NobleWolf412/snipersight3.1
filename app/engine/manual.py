@@ -471,6 +471,82 @@ def unresolved(con) -> dict:
     return out
 
 
+def cancel_intent(con, intent_id: str, at: int | None = None) -> dict:
+    """Withdraw an armed intent that has not filled.
+
+    Recorded as a terminal fact, never a delete: this store is append-only and
+    an intent that vanished would leave the operator unable to answer "what
+    happened to that order?". CANCELLED carries r_multiple 0 and is excluded
+    from `n`/`wins`/`win_rate` for the same reason MISSED is — declining to
+    take a trade is not a trade, and letting it count would let anyone improve
+    their record by cancelling the ones that look like losers.
+
+    Refuses once the intent has FILLED. A filled position is closed, not
+    cancelled, and quietly resolving one at zero R would erase a real result.
+    """
+    import time
+    open_here = unresolved(con)
+    for (symbol, tf), plans in open_here.items():
+        for p in plans:
+            if p["intent_id"] != intent_id:
+                continue
+            tf_seconds = _tf_seconds_of(tf)
+            candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
+            if candles:
+                w = _walk(p, candles, [c["open_ts"] for c in candles], tf_seconds)
+                if w["phase"] == "OPEN":
+                    raise IntentRejected(
+                        f"{symbol} {tf} has already filled at {p['entry']} — "
+                        f"that is an open position, not a resting order. Close "
+                        f"it from the chart instead.")
+            written = store.insert_fact(
+                con, symbol=symbol, tf=tf, kind=EXEC_KIND,
+                market_time=p["armed_at"], confirmed_at=int(at or time.time()),
+                algo_version=MANUAL_VERSION,
+                payload={"intent_id": intent_id, "source": "OPERATOR",
+                         "direction": p["direction"], "outcome": "CANCELLED",
+                         "entry": str(p["entry"]), "exit_price": None,
+                         "r_multiple": "0", "r_gross": "0",
+                         "bars_held": 0, "fill_ts": None,
+                         "ambiguous_bar": False,
+                         "cost_manifest_hash": p.get("cost_manifest_hash")})
+            con.commit()
+            return {"intent_id": intent_id, "symbol": symbol, "tf": tf,
+                    "written": bool(written)}
+    raise IntentRejected(
+        f"no unresolved intent {intent_id} — it has already settled, or was "
+        f"never armed")
+
+
+def live(con) -> list[dict]:
+    """Every open intent across every market, resolved and ready to render.
+
+    `status()` answers for ONE chart because that is all the chart needed. The
+    operator's book is not a per-chart thing: three orders armed on three
+    markets were invisible on all but the one symbol/timeframe that happened to
+    be loaded, and an order that expires while you are looking at another chart
+    expires silently. This walks the whole work list.
+
+    Resolves before it reports, exactly as `/api/manual/open` does — an intent
+    whose window closed two bars ago must not be described as waiting.
+    """
+    out = []
+    for (symbol, tf) in sorted(unresolved(con)):
+        tf_seconds = _tf_seconds_of(tf)
+        try:
+            run(con, symbol, tf, tf_seconds)
+        except Exception:
+            # One unreadable market must not blank the whole panel. The rows
+            # that CAN be resolved are still worth showing.
+            continue
+        for row in status(con, symbol, tf, tf_seconds):
+            out.append({"symbol": symbol, "tf": tf,
+                        "tf_seconds": tf_seconds, **row})
+    # Newest first: the order you just placed is the one you are looking for.
+    out.sort(key=lambda r: r.get("armed_at") or 0, reverse=True)
+    return out
+
+
 def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
     """Non-terminal state of each open intent: PENDING, OPEN, or EXPIRING.
 

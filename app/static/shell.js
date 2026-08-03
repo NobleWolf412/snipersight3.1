@@ -1001,7 +1001,7 @@
         tabindex="0" role="button"
         title="click for why this trade was taken — the zone, the confirmation, every gate">
         <div>
-          <div class="pos-sym">${esc(String(t.symbol).replace('-USD', ''))}</div>
+          <div class="pos-sym">${esc(tokenOf(t.symbol))}</div>
           <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
             esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
         </div>
@@ -1042,7 +1042,7 @@
         tabindex="0" role="button"
         title="click for why this trade was taken — the zone, the confirmation, every gate">
         <div>
-          <div class="pos-sym">${esc(String(t.symbol).replace('-USD', ''))}</div>
+          <div class="pos-sym">${esc(tokenOf(t.symbol))}</div>
           <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
             esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
         </div>
@@ -1061,6 +1061,188 @@
           <span class="t-sub">${money(t.risk_usd)} if it fills</span></div>
       </div>`;
     }).join('');
+  }
+
+  /* ---------- YOUR book ----------
+     The operator's own orders, which reached no surface. `/api/manual/live`
+     resolves every one of them across every market before reporting — the
+     stored state is `ARMED` forever, because the resolver only writes facts at
+     terminal outcomes, so reading the raw book would describe an order that
+     expired yesterday as still waiting.
+
+     Deliberately NOT merged into "Open trades": that panel is the engine's
+     book, and the whole point of the manual store is that hand-picked trades
+     never enter the record that grades the strategy. Same visual language,
+     separate panel, labelled on the header. */
+  let MINE = {open: [], pending_risk_usd: '0', open_risk_usd: '0'};
+
+  /* Bars left, said in time. "4 bars" is the engine's unit and means nothing
+     to someone deciding whether to sit and watch: on 15m it is an hour, on 4H
+     it is most of a day. */
+  function windowLeft(bars, tfSeconds){
+    if(bars == null || !tfSeconds) return '';
+    const s = bars * tfSeconds;
+    if(s < 5400) return `${Math.round(s / 60)} min left`;
+    if(s < 172800) return `${Math.round(s / 3600)}h left`;
+    return `${Math.round(s / 86400)}d left`;
+  }
+
+  async function renderMine(){
+    const panel = $('minePanel'), box = $('mine');
+    let d;
+    try { d = await api('/api/manual/live'); }
+    catch(err){
+      // A book that cannot be read is not an empty book, and must not render
+      // as one — this panel exists because invisible orders are the bug.
+      panel.style.display = '';
+      $('mineRisk').textContent = 'unavailable';
+      box.innerHTML = `<div class="empty">Could not read your book — ${
+        esc(err.message || 'the server did not answer')}. Any orders you armed
+        are still there; this panel just cannot show them right now.</div>`;
+      return;
+    }
+    MINE = d || MINE;
+    const rows = (d && d.open) || [];
+    if(!rows.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
+    panel.style.display = '';
+
+    const risk = (+d.open_risk_usd || 0) + (+d.pending_risk_usd || 0);
+    $('mineRisk').textContent =
+      `${money(risk)} committed · ${d.n_open} open, ${d.n_pending} waiting`;
+
+    const prices = await Promise.all(rows.map(t =>
+      api(`/api/candles?symbol=${encodeURIComponent(t.symbol)}&tf=${
+            encodeURIComponent(t.tf)}&limit=1`)
+        .then(a => { const r = Array.isArray(a) ? a[a.length - 1] : null;
+                     return r ? +r.close : null; })
+        .catch(() => null)));
+
+    box.innerHTML = rows.map((t, i) => {
+      const long = t.direction === 'LONG';
+      const entry = +t.entry, sl = +(t.current_stop || t.sl), tp = +t.tp;
+      const now = prices[i];
+      const sym = tokenOf(t.symbol);
+      const head = `<div>
+          <div class="pos-sym">${esc(sym)}</div>
+          <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
+            esc(t.tf)} · yours${+t.leverage > 1 ? ' · ' + esc(t.leverage) + 'x' : ''}</div>
+        </div>`;
+      const cancel = `<button class="btn mine-cancel" data-cancel="${esc(t.intent_id)}"
+            title="withdraw this resting order — nothing has been risked yet">Cancel</button>`;
+
+      if(t.state === 'PENDING'){
+        const bars = t.bars_left;
+        const soon = bars != null && bars <= 1;
+        const away = (now == null || !now) ? null : Math.abs(now - entry) / now * 100;
+        return `<div class="pos-row pending mine">
+          ${head}
+          <div>
+            <div class="pos-wait">Waiting for price to reach <b>${px(entry)}</b>${
+              away == null ? '' : ` — ${away.toFixed(1)}% away`}.
+              Nothing is at stake until it fills${
+                bars == null ? '' : `, and it expires in ${bars} bar${bars === 1 ? '' : 's'}`}.</div>
+            <div class="pos-ends">
+              <span>stop ${px(sl)}</span>
+              <span class="now">${now == null ? 'price unavailable' : 'now ' + px(now)}</span>
+              <span>target ${px(tp)}</span>
+            </div>
+          </div>
+          <div class="pos-r">
+            <span class="chip ${soon ? 'chip-red' : 'chip-amber'}">${
+              soon ? 'expiring' : 'waiting'}</span>
+            <span class="t-sub">${money(t.risk_usd)} if it fills · ${
+              esc(windowLeft(bars, t.tf_seconds))}</span>
+            ${cancel}</div>
+        </div>`;
+      }
+
+      // OPEN — filled, and worth something right now. The R comes from the
+      // server, which marks it against the last CLOSED bar with the same walk
+      // that will settle the trade; recomputing it here would be a second
+      // authority that drifts from the one that pays out.
+      const r = t.unrealized_r == null ? null : +t.unrealized_r;
+      const tone = r == null ? '' : r >= 0 ? 'up' : 'down';
+      const span = Math.abs(tp - sl);
+      const at = (now == null || !span) ? null
+        : Math.max(2, Math.min(98, ((long ? now - sl : sl - now) / span) * 100));
+      const entAt = span ? Math.max(2, Math.min(98,
+        ((long ? entry - sl : sl - entry) / span) * 100)) : null;
+      const a = (at == null || entAt == null) ? null : Math.min(entAt, at);
+      const b = (at == null || entAt == null) ? null : Math.max(entAt, at);
+      return `<div class="pos-row mine">
+        ${head}
+        <div>
+          <div class="pos-track"><span class="end-sl"></span><span class="end-tp"></span>${
+            a == null ? '' :
+            `<span class="pos-prog ${tone}" style="left:${a.toFixed(1)}%;width:${(b - a).toFixed(1)}%"></span>
+             <span class="pos-entry" style="left:${entAt.toFixed(1)}%" title="entry ${px(entry)}"></span>
+             <span class="pos-mark" style="left:${at.toFixed(1)}%"></span>`}</div>
+          <div class="pos-ends">
+            <span>${t.trailed ? 'stop (trailed)' : 'stop'} ${px(sl)}</span>
+            <span class="now">${now == null ? 'price unavailable' : 'now ' + px(now)}</span>
+            <span>target ${px(tp)}</span>
+          </div>
+        </div>
+        <div class="pos-r ${tone}">${rr(r)}
+          <span class="t-sub">${
+            t.unrealized_usd == null ? money(t.risk_usd) + ' at risk'
+              : signedMoney(t.unrealized_usd) + ' · ' + money(t.risk_usd) + ' at risk'}</span>
+          <span class="t-sub">${
+            t.bars_held == null ? '' : 'held ' + t.bars_held + ' bar' + (t.bars_held === 1 ? '' : 's')}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  /* Cancel is a real mutation on the operator's book, so it confirms first and
+     says what it will and will not do. A cancelled order is recorded, never
+     deleted — the store is append-only, and "what happened to that order?" has
+     to stay answerable. */
+  document.addEventListener('click', async ev => {
+    const btn = ev.target.closest && ev.target.closest('[data-cancel]');
+    if(!btn) return;
+    const id = btn.getAttribute('data-cancel');
+    const row = (MINE.open || []).find(r => r.intent_id === id);
+    const what = row ? `${tokenOf(row.symbol)} ${row.tf} ${row.direction.toLowerCase()} at ${px(+row.entry)}` : 'this order';
+    if(!confirm(`Cancel ${what}?\n\nIt has not filled, so nothing has been ` +
+                `risked and nothing is recorded as a loss. The cancellation ` +
+                `itself is kept, so your book still says what happened to it.`)) return;
+    btn.disabled = true;
+    try{
+      const r = await fetch('/api/manual/cancel', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({intent_id: id})});
+      const d = await r.json().catch(() => ({}));
+      if(!r.ok){ toast(d.detail || `could not cancel — HTTP ${r.status}`, 'bad'); btn.disabled = false; return; }
+      toast(`cancelled ${what}`, 'ok');
+      window.SSData.invalidate('/api/manual/live');
+      window.SSData.invalidate('/api/manual/open');
+      await renderMine();
+    }catch(err){
+      toast('could not reach the server — nothing was cancelled', 'bad');
+      btn.disabled = false;
+    }
+  });
+
+  /* The exposure the three meters above do NOT include. `manual.arm` does not
+     consult the risk authority — hand-picked trades are structurally outside
+     the engine's budget, by the same design that keeps them out of the record —
+     so the bars can read "room for another trade" while $579 of your own orders
+     are already committed. Stating it is a disclosure, not a rule change:
+     nothing here alters what the engine will or will not size. */
+  function renderMineAside(){
+    const el = $('budgetAside');
+    if(!el) return;
+    const pend = +MINE.pending_risk_usd || 0, open = +MINE.open_risk_usd || 0;
+    const total = pend + open;
+    if(total <= 0){ el.hidden = true; el.textContent = ''; return; }
+    el.hidden = false;
+    const parts = [];
+    if(open > 0) parts.push(`${money(open)} in your open trades`);
+    if(pend > 0) parts.push(`${money(pend)} in orders you armed that have not filled`);
+    el.innerHTML = `Outside these limits: <b>${money(total)}</b> — ${parts.join(' and ')}.
+      Hand-picked trades are not sized by the risk authority, so these bars do
+      not count them.`;
   }
 
   /* ---------- risk budget ----------
@@ -1121,6 +1303,8 @@
            lossCap <= 0 ? 'no halt configured'
              : lost > 0 ? `${money(lost)} of ${money(lossCap)} before trading halts`
              : `nothing lost today · halts at ${money(lossCap)}`);
+
+    renderMineAside();
 
     // The binding constraint, named. Order matters: the hardest stop first.
     const chip = $('budgetChip');
@@ -1302,6 +1486,9 @@
     indexHeld(p);
     renderRiskBudget(p);
     renderPositions(p).catch(() => {});
+    // Your own book, on its own request — it resolves intents server-side and
+    // must not hold up the engine numbers above it.
+    renderMine().then(() => renderMineAside()).catch(() => {});
 
     if(!ruled){
       // Em-dash, never 0% and never —%. The sub-line carries the denominator.
@@ -2341,7 +2528,14 @@
       // The backend owns the truth about whether a scan is running, so a page
       // reload mid-scan shows the same button state as the tab that started it.
       b.disabled = !!s.running;
-      b.textContent = s.running ? 'Scanning…' : 'Run Scan';
+      /* The idle label is read from the DOM, not restated here. This line said
+         'Run Scan' literally, so the rename to "Check now" — the whole point of
+         which was that this button does nothing extra, it just runs the same
+         pass immediately — survived exactly one console poll before being
+         written back. A label that lives in two places is a label that has
+         already diverged. */
+      if(!b.dataset.idleLabel) b.dataset.idleLabel = b.textContent.trim();
+      b.textContent = s.running ? 'Scanning…' : b.dataset.idleLabel;
       if(scanning && !s.running){
         // A finished scan changes what every one of these paths says. Drop the
         // cached copies so funnel.js and the chart repaint from the new pass

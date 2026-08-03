@@ -1323,6 +1323,9 @@ window.SSChart = (() => {
         // receipt is written AFTER the reload because a clean reload runs
         // restore(), which clears the receipt line.
         window.SSData.invalidate('/api/manual/open');
+        // ...and the whole-book view Command reads, or the order you just armed
+        // would be missing from "Your trades" until the cache aged out.
+        window.SSData.invalidate('/api/manual/live');
         await load({keepTicket: true});
         out.textContent =
           `armed on paper · ${armedDir} ${sym} ${tf} · entry ${pf(armedEntry)} · ` +

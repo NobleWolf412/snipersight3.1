@@ -2167,6 +2167,64 @@ def copilot_chat(payload: dict):
     return out
 
 
+@app.get("/api/manual/live")
+def manual_live():
+    """Every open operator order, across every market, with its live state.
+
+    `/api/manual/book` reports STORED state — `ARMED` on all of them, forever,
+    because the resolver only writes at terminal outcomes. `/api/manual/open`
+    resolves properly but answers for one chart. Neither could answer "what
+    orders do I have out?", which is why three armed trades sat invisible on
+    every surface: Command reads the ENGINE's book, and hand-picked trades are
+    deliberately not in it.
+
+    Also reports the risk those orders have already spoken for. That figure is
+    NOT part of the engine's budget and this endpoint does not make it one —
+    `manual.arm` does not consult the risk authority and nothing here changes
+    that. It is reported so the operator can see the exposure the budget panel
+    does not know about, rather than discovering it at a fill.
+    """
+    from engine import manual
+    con = store.connect()
+    try:
+        rows = manual.live(con)
+        pending_risk = sum((Decimal(str(r["risk_usd"])) for r in rows
+                            if r["state"] == "PENDING" and r.get("risk_usd")),
+                           Decimal(0))
+        open_risk = sum((Decimal(str(r["risk_usd"])) for r in rows
+                         if r["state"] == "OPEN" and r.get("risk_usd")),
+                        Decimal(0))
+        return {"version": manual.MANUAL_VERSION, "open": rows,
+                "n_pending": sum(1 for r in rows if r["state"] == "PENDING"),
+                "n_open": sum(1 for r in rows if r["state"] == "OPEN"),
+                "pending_risk_usd": str(pending_risk),
+                "open_risk_usd": str(open_risk),
+                "measured_at": int(time.time())}
+    finally:
+        con.close()
+
+
+@app.post("/api/manual/cancel")
+def manual_cancel(payload: dict):
+    """Withdraw a resting operator order that has not filled."""
+    from engine import manual
+    intent_id = str(payload.get("intent_id") or "")
+    if not intent_id:
+        raise HTTPException(400, "intent_id required")
+    con = store.connect()
+    try:
+        try:
+            res = manual.cancel_intent(con, intent_id)
+        except manual.IntentRejected as exc:
+            raise HTTPException(400, str(exc))
+        from engine.runlog import get_logger
+        get_logger().info(
+            f"MANUAL CANCEL {res['symbol']} {res['tf']} {intent_id} (paper)")
+        return {"ok": True, **res}
+    finally:
+        con.close()
+
+
 @app.get("/api/manual/book")
 def manual_book():
     """The operator's paper record — separate curve, separate everything."""

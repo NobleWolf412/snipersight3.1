@@ -658,6 +658,102 @@ class ManualCase(unittest.TestCase):
         self.assertEqual(len(b["curve"]), 1)
         self.assertTrue(all(t["source"] == "OPERATOR" for t in b["trades"]))
 
+    # ---------- the whole book, live: the bug that hid three orders ----------
+
+    def test_live_reports_open_intents_across_every_market(self):
+        """`status()` answers for one chart; three orders lived on three.
+
+        This is the defect the panel exists to close: `/api/manual/book` reports
+        the STORED state, which is `ARMED` forever because the resolver only
+        writes at terminal outcomes, and `/api/manual/open` resolves properly
+        but only for the symbol AND timeframe currently on screen. Neither could
+        answer "what orders do I have out?", so armed trades were invisible on
+        every surface — Command reads the engine's book, which by design they
+        are not in.
+        """
+        # Armed at bar 8 of 10, so only two bars have closed since — inside the
+        # 4-bar entry window, and price never reaches either entry. These are
+        # resting orders, which is the state that was invisible.
+        self.load(self.flat(10), symbol=PERP, tf="1H")
+        self.load(self.flat(10), symbol=PERP2, tf="1H")
+        manual.create_intent(self.con, PERP, "1H", "LONG",
+                             entry=90, tp=94, sl=88, created_at=8 * TF, risk_usd=100)
+        manual.create_intent(self.con, PERP2, "1H", "SHORT",
+                             entry=110, tp=106, sl=112, created_at=8 * TF, risk_usd=50)
+        rows = manual.live(self.con)
+        self.assertEqual({r["symbol"] for r in rows}, {PERP, PERP2},
+                         "live() must sweep every market with open work, not one chart")
+        for r in rows:
+            self.assertEqual(r["state"], "PENDING")
+            self.assertEqual(r["tf"], "1H")
+            self.assertTrue(r["bars_left"] > 0, "an order with no window left is not waiting")
+            self.assertTrue(r["tf_seconds"] > 0, "the UI cannot say '1h left' without this")
+
+    def test_live_reports_nothing_when_the_book_is_empty(self):
+        """Zero orders is a fact, not a failure — and must not raise."""
+        self.assertEqual(manual.live(self.con), [])
+
+    # ---------- cancelling a resting order ----------
+
+    def test_cancel_resolves_the_intent_without_recording_a_trade(self):
+        """A withdrawn order is kept, never deleted, and never counted.
+
+        Append-only: "what happened to that order?" has to stay answerable. But
+        declining to take a trade is not a trade — if a cancellation counted,
+        anyone could improve their record by cancelling the ones that looked
+        like losers.
+        """
+        self.load(self.flat(4), symbol=PERP, tf="1H")
+        intent = manual.create_intent(self.con, PERP, "1H", "LONG",
+                                      entry=90, tp=94, sl=88, created_at=2 * TF,
+                                      risk_usd=100)
+        self.assertEqual([r["state"] for r in manual.live(self.con)], ["PENDING"],
+                         "precondition: a resting order, not one already missed")
+        res = manual.cancel_intent(self.con, intent["intent_id"], at=4 * TF)
+        self.assertTrue(res["written"])
+        self.assertEqual(manual.live(self.con), [], "a cancelled order is not open")
+        self.assertEqual(manual.unresolved(self.con), {})
+        b = manual.book(self.con)
+        self.assertEqual(b["open_intents"], [], "it must leave the open list")
+        self.assertEqual(b["n"], 0, "a cancellation is not a settled trade")
+        self.assertEqual(b["wins"], 0)
+        self.assertEqual(b["total_r"], "0.00", "cancelling must not move the curve")
+        outcomes = [e["outcome"] for e in self.execs(symbol=PERP, tf="1H")]
+        self.assertEqual(outcomes, ["CANCELLED"], "the fact must survive")
+
+    def test_cancel_refuses_a_position_that_already_filled(self):
+        """A filled trade is closed, not cancelled.
+
+        Resolving one at zero R would erase a real result — the exact move that
+        would let a losing trade be quietly un-taken.
+        """
+        # bar 1 trades through the entry, so the intent is OPEN, not resting
+        self.load([(100, 101, 99, 100), (100, 101, 89, 95)] + self.flat(2),
+                  symbol=PERP, tf="1H")
+        intent = manual.create_intent(self.con, PERP, "1H", "LONG",
+                                      entry=90, tp=120, sl=88, created_at=0,
+                                      risk_usd=100)
+        live = manual.live(self.con)
+        self.assertEqual([r["state"] for r in live], ["OPEN"], "precondition")
+        with self.assertRaises(manual.IntentRejected):
+            manual.cancel_intent(self.con, intent["intent_id"])
+
+    def test_cancel_refuses_an_unknown_intent(self):
+        with self.assertRaises(manual.IntentRejected):
+            manual.cancel_intent(self.con, "NOPE|1H|MANUAL|0")
+
+    def test_a_cancelled_intent_stays_invisible_to_every_strategy_query(self):
+        """The isolation rule holds for the new fact kind too."""
+        self.load(self.flat(4), symbol=PERP, tf="1H")
+        intent = manual.create_intent(self.con, PERP, "1H", "LONG",
+                                      entry=90, tp=94, sl=88, created_at=2 * TF)
+        manual.cancel_intent(self.con, intent["intent_id"], at=4 * TF)
+        for version in (setups.SETUP_VERSION, execsim.EXEC_VERSION):
+            for kind in ("setup", "exec", "order", "setup_rejection"):
+                self.assertEqual(
+                    store.get_facts(self.con, PERP, "1H", kind, version), [],
+                    f"a cancelled manual order surfaced under {kind}/{version}")
+
 
 if __name__ == "__main__":
     unittest.main()

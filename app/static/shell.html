@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SniperSight</title>
 <link rel="icon" href="/static/assets/snipersight-logo.png">
-<link rel="stylesheet" href="/static/ss.css?v=37">
+<link rel="stylesheet" href="/static/ss.css?v=36">
 </head>
 <body data-mode="idle">
 
@@ -133,6 +133,34 @@
         </div>
         <p class="panel-sub">Three ceilings the engine sizes against. A full bar is not a fault — it means the next setup is refused until something closes.</p>
         <div class="budget-grid" id="budget"></div>
+        <!-- What these three bars do NOT count. `manual.arm` never consults the
+             risk authority, so armed hand-picked orders are outside the budget
+             by design — and the meters could read "room for another trade"
+             while several hundred dollars of your own orders were committed. -->
+        <p class="budget-aside" id="budgetAside" hidden></p>
+      </div>
+
+      <!-- YOUR trades — the operator's own book, which had no surface at all.
+           `Arm` writes to /api/manual/book; Command, the risk budget, the
+           journal and every figure on Results read /api/portfolio, which is the
+           ENGINE's book. The separation is deliberate and stays: a hand-picked
+           trade must never be counted as engine edge. What was wrong is that
+           one of the two books was invisible — three armed orders sat waiting
+           on three markets and the only place either could be seen was the
+           Chart tab, for the one symbol AND timeframe currently loaded. An
+           order that expires while you are looking at another chart expired
+           silently. -->
+      <div class="panel" id="minePanel" style="margin-bottom:var(--lg);display:none">
+        <div class="panel-head">
+          <h2 class="t-section">Your trades</h2>
+          <span class="chip" style="margin-left:auto">hand-picked · not engine record</span>
+          <span class="chip" id="mineRisk">—</span>
+        </div>
+        <p class="panel-sub">Orders you armed yourself. A resting order is not a
+          position — it fills only if price reaches your entry before its window
+          closes, and then it expires. None of this counts toward the strategy's
+          record on Results.</p>
+        <div id="mine"></div>
       </div>
 
       <!-- Open trades. `active_positions` has been in the portfolio payload the
