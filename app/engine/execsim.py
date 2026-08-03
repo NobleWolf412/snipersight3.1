@@ -120,6 +120,91 @@ Q2 = Decimal("0.01")
 # setups.py (single source of truth — the setup gate uses the same numbers).
 
 
+# ------------------------------------------------------------- the one walk
+#
+# Extracted from run()'s inline loop so the 2x2 harness can stop keeping a
+# second copy. `abtest.py` opens by naming the risk of its own simulation core
+# ("a second one risks the two disagreeing") and defends it with a runtime
+# calibration pass. The drift happened anyway, in the two ways drift always
+# happens — a convention differed (its exit fees were charged on the nominal
+# price, not the slipped one) and a later fix never arrived (funding, added
+# here in v0.12 precisely because "an unmodelled cost that only ever flatters
+# is the kind that survives review", was never charged there at all).
+#
+# The session that produced this refactor paid the same tuition externally
+# first: a bar-replay of the prior project's book validated at 47.7% against
+# its own recorded exits, because the replay modelled a bracket the executor
+# didn't run. The lesson is structural — the code that settles must BE the
+# code that replays, so agreement is a property rather than a calibration
+# result. These two functions are that property. run() calls them for the
+# record; abtest calls them for the counterfactual; the pin test in
+# test_one_walk.py holds the extraction to the pre-refactor settlements to
+# the digit.
+
+def walk_exit(candles, i, sl, tp, long, max_bars=MAX_BARS):
+    """Walk forward from the fill bar to a terminal outcome.
+
+    Returns (outcome, exit_price, j, ambiguous) — j the exit bar's index — or
+    None while the position is still OPEN at the end of data. OPEN is never a
+    result: counting it as one would dilute expectancy with rows where nothing
+    happened. A bar that reaches BOTH levels settles as the STOP, flagged
+    ambiguous — sub-bar sequencing needs LTF data we do not have, and
+    flattering an ambiguous bar is how a backtest lies.
+    """
+    for j in range(i, min(i + max_bars, len(candles))):
+        c = candles[j]
+        hi, lo = Decimal(c["high"]), Decimal(c["low"])
+        hit_sl = lo <= sl if long else hi >= sl
+        hit_tp = hi >= tp if long else lo <= tp
+        if hit_sl or hit_tp:
+            return ("SL" if hit_sl else "TP",
+                    sl if hit_sl else tp, j, hit_sl and hit_tp)
+    if i + max_bars <= len(candles):        # full window elapsed unresolved
+        j = i + max_bars - 1
+        return "TIMEOUT", Decimal(candles[j]["close"]), j, False
+    return None                             # not enough data yet — OPEN
+
+
+def settle(profile, symbol, entry, exit_price, risk, long, outcome,
+           bars_held, tf_seconds, atr_exit, *, entry_role):
+    """Price one closed leg: slippage, fees, funding, and the R they leave.
+
+    THE costing of a settlement — the record and every replay must charge a
+    trade through this function or they are measuring different worlds. The
+    conventions it encodes, each once load-bearing enough to get a version
+    bump: market exits (SL, TIMEOUT) pay taker plus slippage and the exit fee
+    is charged on the SLIPPED price; TP is a resting limit and pays maker;
+    funding accrues per settlement over the hold, keyed on the venue so spot
+    is inert by construction; a missing ATR at the exit degrades LOUDLY via
+    `slip_missing` rather than silently flattering the fill.
+    """
+    slip = Decimal(0)
+    slip_missing = False
+    if outcome in ("SL", "TIMEOUT"):
+        if atr_exit is not None:
+            slip = profile.market_slippage_atr * atr_exit
+        else:
+            slip_missing = True
+    holding_hours = Decimal(bars_held * tf_seconds) / Decimal(3600)
+    funding_rate = venues.funding_cost_rate(
+        symbol, FUNDING_RATE_PER_SETTLEMENT, holding_hours)
+    funding = funding_rate * entry           # price units, on notional
+    eff_exit = (exit_price - slip) if long else (exit_price + slip)
+    exit_rate = (profile.maker_rate if outcome == "TP" else profile.taker_rate)
+    entry_rate = (profile.taker_rate if entry_role == "TAKER"
+                  else profile.maker_rate)
+    fees = entry_rate * entry + exit_rate * eff_exit
+    gross = (exit_price - entry) if long else (entry - exit_price)
+    net = (((eff_exit - entry) if long else (entry - eff_exit))
+           - fees - funding)
+    return {
+        "slip": slip, "slip_missing": slip_missing, "eff_exit": eff_exit,
+        "fees": fees, "funding": funding, "holding_hours": holding_hours,
+        "r_gross": (gross / risk).quantize(Q2) if risk > 0 else Decimal(0),
+        "r_mult": (net / risk).quantize(Q2) if risk > 0 else Decimal(0),
+    }
+
+
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
     with RunRecorder(con, "execsim", EXEC_VERSION, symbol, tf) as rec:
         # Venue-derived: spot fees on a perp are a 14x over-charge, and
@@ -335,59 +420,27 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                                        "fill_price": str(entry),
                                        "entry_fee_role": entry_role,
                                        "bars_to_fill": i - order_i})
-            outcome = exit_price = exit_ts = None
-            ambiguous = False
-            for j in range(i, min(i + MAX_BARS, len(candles))):
-                c = candles[j]
-                hi, lo = Decimal(c["high"]), Decimal(c["low"])
-                hit_sl = lo <= sl if long else hi >= sl
-                hit_tp = hi >= tp if long else lo <= tp
-                if hit_sl or hit_tp:
-                    ambiguous = hit_sl and hit_tp
-                    outcome = "SL" if hit_sl else "TP"
-                    exit_price = sl if hit_sl else tp
-                    exit_ts = c["open_ts"] + tf_seconds
-                    break
-            else:
-                if i + MAX_BARS <= len(candles):   # full window elapsed unresolved
-                    j = i + MAX_BARS - 1
-                    outcome = "TIMEOUT"
-                    exit_price = Decimal(candles[j]["close"])
-                    exit_ts = candles[j]["open_ts"] + tf_seconds
-            if outcome is None:                    # not enough data yet
+            w = walk_exit(candles, i, sl, tp, long)
+            if w is None:                          # not enough data yet
                 counts["OPEN"] += 1
                 continue
-            slip = Decimal(0)
-            if outcome in ("SL", "TIMEOUT"):
-                if atr[j] is not None:
-                    slip = COST_PROFILE.market_slippage_atr * atr[j]
-                else:
-                    # loud-fallback rule: degrading (no slippage modeled) must be audible
-                    from .runlog import get_logger
-                    get_logger().warning(
-                        f"execsim {symbol} {tf}: no ATR at exit bar for {sid} — "
-                        f"market-exit slippage NOT applied (results slightly flattering)")
-            # Funding accrues over the HOLD, on notional, per settlement.
-            holding_hours = Decimal((j - i) * tf_seconds) / Decimal(3600)
-            funding_rate = venues.funding_cost_rate(
-                symbol, FUNDING_RATE_PER_SETTLEMENT, holding_hours)
-            funding_cost = funding_rate * entry      # price units, on notional
-            eff_exit = (exit_price - slip) if long else (exit_price + slip)
-            exit_rate = (COST_PROFILE.maker_rate if outcome == "TP"
-                         else COST_PROFILE.taker_rate)
-            entry_rate = (COST_PROFILE.taker_rate if entry_role == "TAKER"
-                          else COST_PROFILE.maker_rate)
-            # `fees_price_units` means EXCHANGE FEES. Funding was being folded in
-            # here while also reported as `funding_price_units`, so any consumer
-            # adding the two double-counted the funding leg. Net P&L is
-            # unchanged — both are still deducted below — only the labelling is
-            # now honest about which cost is which.
-            fees = entry_rate * entry + exit_rate * eff_exit
-            gross = (exit_price - entry) if long else (entry - exit_price)
-            net = (((eff_exit - entry) if long else (entry - eff_exit))
-                   - fees - funding_cost)
-            r_gross = (gross / risk).quantize(Q2) if risk > 0 else Decimal(0)
-            r_mult = (net / risk).quantize(Q2) if risk > 0 else Decimal(0)
+            outcome, exit_price, j, ambiguous = w
+            exit_ts = candles[j]["open_ts"] + tf_seconds
+            # `fees_price_units` means EXCHANGE FEES; funding is reported
+            # separately (a consumer summing the two must not double-count).
+            # Both are still deducted from net — see settle().
+            st = settle(COST_PROFILE, symbol, entry, exit_price, risk, long,
+                        outcome, j - i, tf_seconds, atr[j],
+                        entry_role=entry_role)
+            if st["slip_missing"]:
+                # loud-fallback rule: degrading (no slippage modeled) must be audible
+                from .runlog import get_logger
+                get_logger().warning(
+                    f"execsim {symbol} {tf}: no ATR at exit bar for {sid} — "
+                    f"market-exit slippage NOT applied (results slightly flattering)")
+            eff_exit, fees = st["eff_exit"], st["fees"]
+            funding_cost, holding_hours = st["funding"], st["holding_hours"]
+            r_gross, r_mult = st["r_gross"], st["r_mult"]
             held = candles[i:j + 1]
             if long:
                 mfe = max(Decimal(c["high"]) - entry for c in held)

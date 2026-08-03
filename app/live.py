@@ -80,7 +80,9 @@ _last_universe_refresh = 0.0
 # forever when its venue has less history than the engines need, so without this
 # it is announced on every refresh and every restart. See refresh_universe().
 _announced_warming: set[str] = set()
-ALL_TFS = ("15m", "1H", "4H", "1D", "1W")
+# One tuple, owned by the pipeline beside the loop that walks it. This was a
+# second copy, and a second copy of a tuple is a roster waiting to drift.
+ALL_TFS = pipeline.ALL_TFS
 # The roster lives in `engine/pipeline.py` and is imported by all three runners
 # (live, ingest, backfill). It used to be maintained here and copied there, and
 # the copies drifted — `cooldowns` was in none of them, so the re-entry lockout
@@ -371,31 +373,21 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
         _beat(f"aggregate {sym} ({i}/{len(tracked)})")
         for tf in ("4H", "1W"):
             aggregator.aggregate(con, sym, tf)
-    # The import loop above guards each symbol because "one symbol's transient
-    # error must not abort the scan". This loop did not, and
-    # `quality.assert_market_ready` RAISES — so a single BLOCKED symbol skipped
-    # every remaining symbol's engines, `risk.run(con)` AND `quality.audit(...)`
-    # for that poll. Measured in data/engine.log: 364 aborted cycles against 584
-    # completed (38%), all of them EUL-USD: SEQUENCE_GAPS.
-    #
-    # A blocked symbol must still be SKIPPED — that is the gate doing its job,
-    # and it stays loud. It just cannot take the other 74 symbols and the risk
-    # authority down with it.
+    # The engine loop lives in `pipeline.run_symbol` — ONE loop, shared with
+    # `ingest.run_engines`, exactly as the roster already is. This block used
+    # to carry its own copy with two behaviours the other loop lacked (the
+    # per-engine guard and the per-symbol quality gate), which is the same
+    # silent-drift disease the shared roster was built to end. What stays HERE
+    # is policy: a blocked symbol must still be skipped — that is the audit
+    # gate doing its job, and it stays loud — it just cannot take the other 74
+    # symbols and the risk authority down with it, as it did for 364 of 948
+    # cycles (EUL-USD: SEQUENCE_GAPS).
     blocked_syms = []
     for i, sym in enumerate(scan, 1):
         _beat(f"engines {sym} ({i}/{len(scan)})")
-        try:
-            quality.assert_market_ready(con, sym, now)
-        except Exception as exc:
-            blocked_syms.append(f"{sym} ({type(exc).__name__}: {exc})")
-            continue
-        for mod in ENGINES:
-            for tf in ALL_TFS:
-                try:
-                    mod.run(con, sym, tf, importer.TF_SECONDS[tf])
-                except Exception as exc:
-                    log.warning(f"engine {mod.__name__} failed on {sym} {tf}: "
-                                f"{type(exc).__name__} {exc}")
+        r = pipeline.run_symbol(con, sym, now=now, log=log)
+        if r["blocked"]:
+            blocked_syms.append(f"{sym} ({r['blocked']})")
     if blocked_syms:
         log.warning(f"market-data quality blocked {len(blocked_syms)}/{len(scan)} "
                     f"symbols this cycle (engines skipped, rest of the scan "

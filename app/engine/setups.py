@@ -107,6 +107,17 @@ SETUP_VERSION = "setup-v0.15-draft"
 # reachable distances.
 FORMING_TFS = ("4H", "1D", "1W")
 PROX_ATR = Decimal(1)
+# The closed rejection vocabulary — every word `reject()` may write. It exists
+# because these strings are the funnel's raw material: funnel.js keeps a plain
+# sentence for each one, and a reason minted here without a sentence there
+# reaches the operator as a bare enum. `reject()` warns (loudly, not fatally)
+# on any word missing from this set, and the cross-boundary test holds
+# funnel.js to covering it. Grow the vocabulary in one commit: here, the
+# sentence, the test.
+REJECTION_REASONS = frozenset({
+    "NO_ELIGIBLE_PLAYBOOK", "RR_BELOW_MINIMUM", "UNECONOMIC_AFTER_COSTS",
+    "ATR_UNAVAILABLE", "NO_CAUSAL_TARGET", "INVALID_BRACKET", "VETOED",
+})
 MIN_RR = Decimal("1.5")
 GOOD_RR = Decimal("2.5")
 SL_ATR = Decimal("0.25")            # v0.6 zone-offset stop; kept for FORMING previews
@@ -670,6 +681,19 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
         def reject(zone_id, touched, reason, details=None):
             nonlocal n_rejected
+            # The drift guard (ported in shape from the prior project's
+            # _KNOWN_REASONS). Every reason written here is a word the funnel
+            # must have a sentence for; a NEW reason that skips the canonical
+            # set reaches the operator as a raw enum with no explanation, and
+            # nobody files a bug against a word they assume is theirs to not
+            # understand. Loud, not fatal: the rejection itself is a fact and
+            # must be recorded — it is the LABEL that is late, not the event.
+            if reason.split("(")[0] not in REJECTION_REASONS:
+                from .runlog import get_logger
+                get_logger().warning(
+                    f"setups {symbol} {tf}: rejection reason {reason!r} is not "
+                    f"in setups.REJECTION_REASONS — add it there and give it a "
+                    f"sentence in funnel.js, or the funnel shows a raw enum")
             payload = {"event": "REJECTED", "zone_id": zone_id,
                        "reason": reason, "details": details or {},
                        "manifest_hash": manifest_hash}

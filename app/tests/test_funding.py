@@ -40,10 +40,15 @@ class ChargedInSimulation(unittest.TestCase):
         with zero callers; a test that only checks the arithmetic would have
         passed the entire time it was doing nothing."""
         import inspect
-        src = inspect.getsource(execsim.run)
-        self.assertIn("funding_cost_rate", src,
+        # The charge moved into execsim.settle when the walk was extracted, so
+        # the 2x2 harness charges it too — it never had. The property under
+        # guard is unchanged; it just decomposed: settle charges it, and run()
+        # must settle through THE costing function. Both hops asserted.
+        self.assertIn("funding_cost_rate", inspect.getsource(execsim.settle),
                       "execsim must charge funding, not merely be able to")
-        self.assertIn("holding_hours", src)
+        self.assertIn("holding_hours", inspect.getsource(execsim.settle))
+        self.assertIn("settle(", inspect.getsource(execsim.run),
+                      "run() must settle through THE costing function")
 
     def test_funding_is_deducted_from_net_not_merely_recorded(self):
         """If it were recorded but not subtracted, the fact would look right and
@@ -106,10 +111,10 @@ class ChargedInSimulation(unittest.TestCase):
         `funding_price_units` reports it again is a double-count waiting for a
         consumer to sum them."""
         import inspect
-        src = inspect.getsource(execsim.run)
-        self.assertNotRegex(src, r"fees\s*=[^\n]*\+\s*funding_cost",
+        src = inspect.getsource(execsim.settle)      # the costing moved here
+        self.assertNotRegex(src, r"fees\s*=[^\n]*\+\s*funding",
                             "funding must not be folded into the fee field")
-        self.assertRegex(src, r"-\s*fees\s*-\s*funding_cost",
+        self.assertRegex(src, r"-\s*fees\s*-\s*funding",
                          "net must still deduct both")
 
     def test_the_modelled_rate_is_declared_as_a_model(self):

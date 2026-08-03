@@ -32,7 +32,7 @@
     const link = document.createElement('link');
     link.id = 'dx-css';
     link.rel = 'stylesheet';
-    link.href = '/static/diagnostics-ui.css?v=2';
+    link.href = '/static/diagnostics-ui.css?v=3';
     document.head.appendChild(link);
   }
 
@@ -411,7 +411,42 @@
     for (const r of rows) if (r.drop > 0 && (!bottleneck || r.drop > bottleneck.drop)) bottleneck = r;
 
     return { counts, rows, reasons, exact, bottleneck, inSample,
-             ovErr, baseline: tel.baseline, total: counts.candidates };
+             ovErr, baseline: tel.baseline, total: counts.candidates,
+             gates: tel.data_gates || [],
+             unlabelled: tel.unlabelled_rejections || [] };
+  }
+
+  /* The stage before the first stage. The funnel begins at "candidates" —
+     zones price actually reached — so a symbol whose DATA never arrived
+     produces no candidates and used to be absent from this panel entirely,
+     which is a hole exactly where "why is nothing firing" needs its answer.
+     One closed vocabulary, shared with engine/pipeline.GATES; the roster test
+     holds the two sides together. */
+  const GATE_LABELS = {
+    NO_DATA: 'no candles stored for this timeframe — the engines were not run',
+    SHORT_HISTORY: 'history starts later than its floor — engines run, but on ' +
+                   'less past than they were designed to see',
+    QUALITY_BLOCKED: 'the market-data audit failed — engines skipped until it clears'
+  };
+
+  function renderGates(m) {
+    if (!m.gates.length) return '';
+    const since = ts => new Date(ts * 1000)
+      .toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return `<div class="dx-gates">
+      <div class="dx-detail-head"><span>Before any candidate existed</span></div>
+      ${m.gates.map(g => `<div class="dx-gate${GATE_LABELS[g.gate] ? '' : ' dx-drift'}">
+        <span class="dx-gate-sym">${esc(String(g.symbol).replace('-USD', ''))}
+          <i>${esc(g.tf === '*' ? 'all TFs' : g.tf)}</i></span>
+        <span class="dx-gate-what">${esc(GATE_LABELS[g.gate] ||
+          g.gate + ' — a gate this panel has no sentence for (vocabulary drift)')}
+        </span>
+        <span class="dx-gate-since">since ${since(g.since)}</span>
+      </div>`).join('')}
+      <div class="dx-sample-note">These symbols produced no candidates for the
+        stages below — not because a gate refused their trades, but because the
+        data to look for one never arrived.</div>
+    </div>`;
   }
 
   /* ---------- render ---------- */
@@ -528,10 +563,18 @@
       } else {
         html += rows.map(([code, n]) => {
           const meta = lookup(code);
-          return `<div class="dx-reason">
+          /* An unlabelled reason is VOCABULARY DRIFT, and it must look like
+             drift, not like content. The lowercased fallback reads exactly
+             like a written sentence — which trained everyone, including the
+             person who minted the new reason, to assume someone else labelled
+             it. Ported lesson: the prior project's _KNOWN_REASONS guard,
+             surfaced at the pane where a human actually looks. */
+          return `<div class="dx-reason${meta ? '' : ' dx-drift'}">
             <span class="dx-reason-code">${esc(code)}</span>
             <span class="dx-reason-n">${fmt(n)}</span>
-            <span class="dx-reason-plain">${esc(meta ? meta.means : plainOf(code))}</span>
+            <span class="dx-reason-plain">${esc(meta ? meta.means : plainOf(code))}${
+              meta ? '' : ' <i class="dx-drift-tag">unlabelled — this reason has no' +
+                          ' written sentence yet</i>'}</span>
           </div>`;
         }).join('');
         const sum = rows.reduce((s, [, n]) => s + n, 0);
@@ -564,7 +607,7 @@
   function render(m) {
     model = m;
     ROOT.innerHTML = '<div class="dx-funnel">' +
-      renderPill(m) + renderStages(m) + renderDetail(m) + '</div>';
+      renderPill(m) + renderGates(m) + renderStages(m) + renderDetail(m) + '</div>';
     // Only now is the flat list in #dFunnel superseded. If this module had
     // thrown, the shell's original list would still be on screen.
     document.body.classList.add('dx-funnel-live');

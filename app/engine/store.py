@@ -78,6 +78,23 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     applied_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- The data gates that tripped BEFORE any engine ran, one row per currently-
+-- tripped (symbol, tf, gate). This table is CURRENT STATE, not history: a
+-- gate that clears is deleted, and `measured_at` is preserved across re-trips
+-- so it reads "since when". It exists because absence was invisible —
+-- PF_XLMUSD ran 24 cycles with both intraday timeframes at zero candles and
+-- nothing anywhere said so. The funnel starts at "candidates"; a symbol whose
+-- data never arrived produces no candidates, so its absence needs a stage of
+-- its own or "why is nothing firing" has a hole exactly where the answer is.
+CREATE TABLE IF NOT EXISTS pipeline_gates (
+    symbol      TEXT NOT NULL,
+    tf          TEXT NOT NULL,      -- '*' for symbol-wide gates
+    gate        TEXT NOT NULL,
+    detail      TEXT NOT NULL DEFAULT '',
+    measured_at INTEGER NOT NULL,   -- first seen, preserved across re-trips
+    PRIMARY KEY (symbol, tf, gate)
+);
+
 CREATE TABLE IF NOT EXISTS quality_runs (
     id          INTEGER PRIMARY KEY,
     observed_at INTEGER NOT NULL,

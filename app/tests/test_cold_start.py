@@ -233,7 +233,11 @@ class OnboardingPathIsCallable(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         con = store.connect(Path(tmp.name) / "e.db")
         self.addCleanup(con.close)
-        with mock.patch.object(ingest.quality, "assert_market_ready",
+        # Patched on `engine.quality` itself: the engine loop moved into
+        # `pipeline.run_symbol`, which imports quality lazily, so ingest no
+        # longer re-exports it. The property under test is unchanged.
+        from engine import quality
+        with mock.patch.object(quality, "assert_market_ready",
                                lambda *a, **k: None):
             try:
                 ingest.run_engines(con, "PF_AAAUSD")

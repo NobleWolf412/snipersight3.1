@@ -34,7 +34,8 @@ class SimulatorConventions(unittest.TestCase):
         atr = [Decimal(30)] * 3
         out = abtest._simulate(c, atr, 0, Decimal(100), Decimal(90),
                                Decimal(120), True, "1D", PROFILE,
-                               managed=False, taker_in=True)
+                               managed=False, taker_in=True,
+                               symbol="BTC-USD", tf_seconds=86400)
         self.assertEqual(out["outcome"], "SL")
         self.assertTrue(out["same_bar"])
 
@@ -47,7 +48,8 @@ class SimulatorConventions(unittest.TestCase):
         atr = [Decimal(10)] * 4
         out = abtest._simulate(c, atr, 0, Decimal(100), Decimal(90),
                                Decimal(200), True, "1D", PROFILE,
-                               managed=True, taker_in=True)
+                               managed=True, taker_in=True,
+                               symbol="BTC-USD", tf_seconds=86400)
         self.assertEqual(out["partials"], [],
                          "an ambiguous bar must not manufacture a booked profit")
 
@@ -57,7 +59,8 @@ class SimulatorConventions(unittest.TestCase):
         atr = [Decimal(10)] * 4
         out = abtest._simulate(c, atr, 0, Decimal(100), Decimal(90),
                                Decimal(200), True, "1D", PROFILE,
-                               managed=True, taker_in=True)
+                               managed=True, taker_in=True,
+                               symbol="BTC-USD", tf_seconds=86400)
         self.assertEqual(len(out["partials"]), 1)
 
     def test_unresolved_position_is_open_not_a_zero(self):
@@ -67,7 +70,8 @@ class SimulatorConventions(unittest.TestCase):
         atr = [Decimal(1)] * 3
         out = abtest._simulate(c, atr, 0, Decimal(100), Decimal(90),
                                Decimal(200), True, "1D", PROFILE,
-                               managed=False, taker_in=True)
+                               managed=False, taker_in=True,
+                               symbol="BTC-USD", tf_seconds=86400)
         self.assertIsNone(out)
 
     def test_short_side_mirrors_the_long_side(self):
@@ -75,7 +79,8 @@ class SimulatorConventions(unittest.TestCase):
         atr = [Decimal(30)] * 3
         out = abtest._simulate(c, atr, 0, Decimal(100), Decimal(110),
                                Decimal(80), False, "1D", PROFILE,
-                               managed=False, taker_in=True)
+                               managed=False, taker_in=True,
+                               symbol="BTC-USD", tf_seconds=86400)
         self.assertEqual(out["outcome"], "SL")
 
 
@@ -134,7 +139,8 @@ class Determinism(unittest.TestCase):
         atr = [Decimal(10)] * 4
         runs = [abtest._simulate(c, atr, 0, Decimal(100), Decimal(90),
                                  Decimal(140), True, "1D", PROFILE,
-                                 managed=True, taker_in=True) for _ in range(3)]
+                                 managed=True, taker_in=True,
+                               symbol="BTC-USD", tf_seconds=86400) for _ in range(3)]
         self.assertEqual(runs[0], runs[1])
         self.assertEqual(runs[1], runs[2])
 

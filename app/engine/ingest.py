@@ -6,7 +6,7 @@ newly-admitted universe entrant). Deterministic given the candle store.
 import time
 from datetime import datetime, timezone
 
-from . import store, importer, aggregator, quality, pipeline, scalein
+from . import importer, aggregator, pipeline
 
 DAILY_SINCE = "2022-01-01"
 HOURS_DAYS = 180
@@ -166,14 +166,17 @@ def backfill_history(con, symbol: str) -> dict:
 
 
 def run_engines(con, symbol: str) -> None:
-    """Run every per-symbol fact engine across all timeframes."""
-    quality.assert_market_ready(con, symbol)
-    for mod in PER_SYMBOL_ENGINES:
-        if mod is scalein:
-            scalein.run(con, symbol)
-            continue
-        for tf in ("15m", "1H", "4H", "1D", "1W"):
-            mod.run(con, symbol, tf, importer.TF_SECONDS[tf])
+    """Run every per-symbol fact engine across all timeframes.
+
+    The loop itself lives in `pipeline.run_symbol`, shared with `live.cycle` —
+    one roster AND one loop, so a guard grown by either runner exists in both.
+    What stays here is this runner's POLICY: onboarding a symbol whose market
+    data fails the audit should fail the onboard, so a blocked symbol RAISES
+    here where the live loop merely skips it and carries on.
+    """
+    r = pipeline.run_symbol(con, symbol)
+    if r["blocked"]:
+        raise RuntimeError(f"market data not ready for {symbol}: {r['blocked']}")
 
 
 def onboard(con, symbol: str) -> dict:

@@ -223,6 +223,28 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
                 continue
             rejected_candidates[json.loads(raw).get("reason", "UNKNOWN")] += 1
 
+        # The stage BEFORE the funnel's first stage. The funnel starts at
+        # "candidates" — zones price actually reached — so a symbol whose DATA
+        # never arrived produces no candidates and simply isn't in the picture.
+        # PF_XLMUSD spent 24 cycles that way, invisible precisely where "why is
+        # nothing firing" needed the answer. `pipeline_gates` is current state,
+        # written by the one engine loop; a tf filter must keep the '*' rows,
+        # because a symbol-wide gate applies to every timeframe asked about.
+        data_gates = [
+            {"symbol": s, "tf": t, "gate": g, "detail": d, "since": m}
+            for s, t, g, d, m in con.execute(
+                "SELECT symbol, tf, gate, detail, measured_at FROM pipeline_gates "
+                "ORDER BY measured_at, symbol, tf")
+            if (not symbol or s == symbol) and (not tf or t in (tf, "*"))]
+
+        # Vocabulary drift, marked where it becomes visible. A reason string
+        # in the store that `setups.REJECTION_REASONS` does not contain means
+        # an engine grew a word the funnel has no sentence for — the exact
+        # silent decay the prior project guarded with _KNOWN_REASONS.
+        unlabelled = sorted(
+            r for r in rejected_candidates
+            if r.split("(")[0] not in setups.REJECTION_REASONS)
+
         cohorts = {}
         for r in records:
             c = cohorts.setdefault(r.get("strategy") or "UNKNOWN",
@@ -262,6 +284,8 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
             "stages": dict(stages),
             "failure_points": dict(failures.most_common()),
             "candidate_rejections": dict(rejected_candidates.most_common()),
+            "data_gates": data_gates,
+            "unlabelled_rejections": unlabelled,
             "cohorts": cohorts,
             "records": records[:limit],
         }

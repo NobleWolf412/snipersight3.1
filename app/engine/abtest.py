@@ -32,12 +32,16 @@ no network. Decimal throughout for prices.
 import json
 from decimal import Decimal
 
-from . import costs, store
+from . import costs, execsim, store
+from .importer import TF_SECONDS
 from .swings import compute_atr
 
 ABTEST_VERSION = "abtest-v0.1"
 
-MAX_HOLD_BARS = 100          # matches execsim.MAX_BARS
+# The engine's own window, not a copy that "matches" it. A comment claiming
+# equality is the roster disease — the number it describes drifts and the
+# comment stays.
+MAX_HOLD_BARS = execsim.MAX_BARS
 Q2 = Decimal("0.01")
 Q4 = Decimal("0.0001")
 
@@ -82,17 +86,33 @@ class _Pos:
         return move / self.risk
 
 
-def _cost_r(profile, entry, risk, exit_price, taker_in, taker_out, atr):
-    """Round-trip cost in R for one leg pair. Slippage only on market exits."""
-    in_rate = profile.taker_rate if taker_in else profile.maker_rate
-    out_rate = profile.taker_rate if taker_out else profile.maker_rate
-    slip = profile.market_slippage_atr * atr if (taker_out and atr) else Decimal(0)
-    fees = in_rate * entry + out_rate * exit_price
-    return (fees + slip) / risk if risk > 0 else Decimal(0)
+def _leg_r(profile, symbol, entry, px, risk, long, taker_in, taker_out,
+           atr_exit, bars_held, tf_seconds):
+    """NET R of one closed leg, priced by execsim.settle — THE costing.
+
+    This replaces a local `_cost_r` that had already drifted from the engine in
+    the two ways copies drift: its exit fee was charged on the nominal price
+    where the engine charges the slipped one, and it never charged funding —
+    the cost execsim v0.12 added precisely because an unmodelled cost that only
+    ever flatters is the kind that survives review. Every cell of the 2x2 was
+    flattered by the funding its holds accrued; the managed cells, which hold
+    longest, were flattered most, and the harness's whole job is comparing them.
+
+    Per-leg funding is correct by distribution: settle charges funding on the
+    FULL notional to this leg's close, and the caller multiplies the leg by its
+    fraction — fraction x full == funding on the fraction. The entry fee sums
+    the same way across legs to exactly one entry's fee.
+    """
+    st = execsim.settle(profile, symbol, entry, px, risk, long,
+                        "SL" if taker_out else "TP",
+                        bars_held, tf_seconds, atr_exit,
+                        entry_role="TAKER" if taker_in else "MAKER")
+    return st["r_mult"]
 
 
 def _simulate(candles, atr, i_fill, entry, sl, tp, long, tf, profile, managed,
-              taker_in, *, partials=None, trail=None, timestop=None):
+              taker_in, *, symbol, tf_seconds, partials=None, trail=None,
+              timestop=None):
     """Walk bars from the fill and return one outcome dict, or None if the data
     runs out before the position resolves (OPEN — never counted as a result).
 
@@ -110,6 +130,34 @@ def _simulate(candles, atr, i_fill, entry, sl, tp, long, tf, profile, managed,
     risk = (entry - sl) if long else (sl - entry)
     if risk <= 0:
         return None
+
+    if not (use_partials or use_trail or use_timestop):
+        # The hold cell IS the engine. No re-implementation, however faithful:
+        # the walk that settles the record walks the counterfactual, so the
+        # baseline cell of every 2x2 agrees with execsim by construction —
+        # which is what the calibrate() pass used to have to establish
+        # empirically, and what the drift it tolerated used to erode.
+        w = execsim.walk_exit(candles, i_fill, sl, tp, long,
+                              max_bars=MAX_HOLD_BARS)
+        if w is None:
+            return None                       # OPEN — never counted as a result
+        outcome, px, j, _ambiguous = w
+        st = execsim.settle(profile, symbol, entry, px, risk, long, outcome,
+                            j - i_fill, tf_seconds, atr[j],
+                            entry_role="TAKER" if taker_in else "MAKER")
+        held = candles[i_fill:j + 1]
+        if long:
+            mfe = max(Decimal(c["high"]) - entry for c in held) / risk
+            mae = max(entry - Decimal(c["low"]) for c in held) / risk
+        else:
+            mfe = max(entry - Decimal(c["low"]) for c in held) / risk
+            mae = max(Decimal(c["high"]) - entry for c in held) / risk
+        return {"outcome": outcome, "r": st["r_mult"],
+                "bars_held": j - i_fill,
+                "same_bar": j == i_fill and outcome in ("SL", "TP"),
+                "mfe_r": max(mfe, Decimal(0)), "mae_r": max(mae, Decimal(0)),
+                "partials": [], "r_if_held": None}
+
     pos = _Pos(entry, sl, tp, long, risk)
     max_hold = HOLD_BARS_BY_TF.get(tf, 12) if use_timestop else MAX_HOLD_BARS
     limit = min(i_fill + MAX_HOLD_BARS, len(candles))
@@ -148,8 +196,9 @@ def _simulate(candles, atr, i_fill, entry, sl, tp, long, tf, profile, managed,
             be_touched_same_bar = (lo < entry) if long else (hi > entry)
             if hit_tp1 and not hit_sl_now and not be_touched_same_bar \
                     and not pos.partials:
-                booked = PARTIAL_FRACTION * (TP1_R - _cost_r(
-                    profile, entry, risk, tp1, taker_in, False, None))
+                booked = PARTIAL_FRACTION * _leg_r(
+                    profile, symbol, entry, tp1, risk, long, taker_in, False,
+                    None, bars_held, tf_seconds)
                 pos.realised_r += booked
                 pos.qty -= PARTIAL_FRACTION
                 pos.partials.append({"r": str(TP1_R.quantize(Q2)),
@@ -184,8 +233,8 @@ def _simulate(candles, atr, i_fill, entry, sl, tp, long, tf, profile, managed,
             outcome = "SL" if hit_sl else "TP"
             px = pos.sl if hit_sl else pos.tp
             taker_out = hit_sl
-            leg_r = pos.r_at(px) - _cost_r(profile, entry, risk, px, taker_in,
-                                           taker_out, atr[j])
+            leg_r = _leg_r(profile, symbol, entry, px, risk, long, taker_in,
+                           taker_out, atr[j], bars_held, tf_seconds)
             total = pos.realised_r + pos.qty * leg_r
             return {"outcome": outcome, "r": total, "bars_held": bars_held,
                     "same_bar": same_bar, "mfe_r": mfe, "mae_r": mae,
@@ -199,8 +248,8 @@ def _simulate(candles, atr, i_fill, entry, sl, tp, long, tf, profile, managed,
             px = Decimal(c["close"])
             if pos.r_at(px) <= -STAGNATION_FLOOR_RATIO:
                 continue
-            leg_r = pos.r_at(px) - _cost_r(profile, entry, risk, px, taker_in,
-                                           True, atr[j])
+            leg_r = _leg_r(profile, symbol, entry, px, risk, long, taker_in,
+                           True, atr[j], bars_held, tf_seconds)
             total = pos.realised_r + pos.qty * leg_r
             return {"outcome": "TIME", "r": total, "bars_held": bars_held,
                     "same_bar": False, "mfe_r": mfe, "mae_r": mae,
@@ -210,7 +259,8 @@ def _simulate(candles, atr, i_fill, entry, sl, tp, long, tf, profile, managed,
         j = i_fill + MAX_HOLD_BARS - 1
         c = candles[j]
         px = Decimal(c["close"])
-        leg_r = pos.r_at(px) - _cost_r(profile, entry, risk, px, taker_in, True, atr[j])
+        leg_r = _leg_r(profile, symbol, entry, px, risk, long, taker_in, True,
+                       atr[j], j - i_fill, tf_seconds)
         return {"outcome": "TIMEOUT", "r": pos.realised_r + pos.qty * leg_r,
                 "bars_held": MAX_HOLD_BARS - 1, "same_bar": False,
                 "mfe_r": mfe, "mae_r": mae, "partials": [], "r_if_held": None}
@@ -339,12 +389,13 @@ def run_variant(con, symbols, tfs, setup_version, *, managed, entry_model,
                     # a MISS is a real outcome — 90 of 232 in the recorded book.
                     order_i = _bisect_fill(times, s["confirmed_at"])
                     i_fill = None
-                    for k in range(order_i, min(order_i + 4, len(candles))):
+                    entry_end = min(order_i + execsim.MAX_ENTRY_BARS, len(candles))
+                    for k in range(order_i, entry_end):
                         if Decimal(candles[k]["low"]) <= entry <= Decimal(candles[k]["high"]):
                             i_fill = k
                             break
                     if i_fill is None:
-                        if order_i + 4 <= len(candles):
+                        if order_i + execsim.MAX_ENTRY_BARS <= len(candles):
                             results.append({"setup_id": sid, "symbol": symbol,
                                             "tf": tf, "outcome": "MISSED",
                                             "r": Decimal(0), "same_bar": False,
@@ -353,6 +404,7 @@ def run_variant(con, symbols, tfs, setup_version, *, managed, entry_model,
                     taker_in = False
                 out = _simulate(candles, atr, i_fill, entry, sl, tp, long, tf,
                                 profile, managed, taker_in,
+                                symbol=symbol, tf_seconds=TF_SECONDS[tf],
                                 partials=partials, trail=trail,
                                 timestop=timestop)
                 if out is None:

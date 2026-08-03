@@ -78,3 +78,146 @@ def names() -> list[str]:
         seen[n] = seen.get(n, 0) + 1
         out.append(n if seen[n] == 1 else f"{n}{seen[n]}")
     return out
+
+
+# ---------------------------------------------------------------- the one loop
+#
+# The roster was unified above; the LOOP that walks it was still written twice.
+# `live.cycle` had per-engine exception guards and a per-symbol quality gate;
+# `ingest.run_engines` had neither and raised on the first blocked symbol. Two
+# loops over one roster is the same disease as two rosters — whichever one
+# grows a check, the other silently lacks it.
+#
+# The loop also now names WHY it did not run, before it spends anything.
+# Ported in shape from the prior project's staged rejection funnel
+# (`orchestrator._process_symbol`), where `no_data` / `missing_critical_tf`
+# are buckets checked before any compute. What made that design earn its port
+# is a failure this repo already had: `cooldowns` sat outside every runner's
+# roster and "has never fired once" — and nothing showed a zero where its
+# work should have been. A gate with a named bucket cannot fail silently,
+# because its absence of rejections is itself a visible number.
+#
+# The vocabulary is closed ON PURPOSE (see GATES). The prior project guarded
+# its buckets with a _KNOWN_REASONS set after new reason strings drifted in
+# unlabelled; here an unknown gate name is a programming error, loud at write.
+
+ALL_TFS = ("15m", "1H", "4H", "1D", "1W")
+
+# The closed gate vocabulary. Adding a gate means adding it HERE, to the
+# funnel's label map, and to the tests — in one commit. An unknown name
+# raises rather than warns because, unlike setup rejection reasons (which
+# strategy code mints at arm's length), gates are minted three lines below
+# their declaration; drift here is not vocabulary growth, it is a typo.
+GATES = frozenset({"NO_DATA", "SHORT_HISTORY", "QUALITY_BLOCKED"})
+
+
+def _record_gate(con, symbol: str, tf: str, gate: str, detail: str,
+                 now: int) -> None:
+    if gate not in GATES:
+        raise ValueError(f"unknown pipeline gate {gate!r} — add it to "
+                         f"pipeline.GATES, the funnel labels, and the tests")
+    # Preserve first-seen on re-trip: "NO_DATA since 26 Jul" is the useful
+    # sentence, and a timestamp that resets every cycle can never say it.
+    con.execute(
+        "INSERT INTO pipeline_gates (symbol, tf, gate, detail, measured_at) "
+        "VALUES (?,?,?,?,?) ON CONFLICT(symbol, tf, gate) "
+        "DO UPDATE SET detail=excluded.detail",
+        (symbol, tf, gate, detail[:300], now))
+
+
+def run_symbol(con, symbol: str, now: int | None = None, log=None) -> dict:
+    """Run every per-symbol engine, gates first. THE loop — both runners call it.
+
+    Returns {"blocked": str | None, "gates": {(tf, gate): detail}} so the
+    caller keeps its own policy: `live.cycle` aggregates blocked symbols into
+    one warning and carries on; `ingest.run_engines` raises, because onboarding
+    a symbol whose market data fails audit should fail the onboard.
+
+    What each gate DOES is deliberately unequal, and the asymmetry is the
+    design:
+
+      QUALITY_BLOCKED  skips the symbol's engines (existing behaviour — the
+                       audit gate doing its job, now counted where it can be
+                       seen instead of only in a log line).
+      NO_DATA          skips that timeframe's engines. Zero candles in, zero
+                       facts out — every engine walks the candle list and
+                       writes nothing on empty input, so the skip changes no
+                       record; it only names the absence and saves the walk.
+      SHORT_HISTORY    is OBSERVED AND NOT ENFORCED. Engines still run. A
+                       series that starts later than its floor produces facts
+                       from the history it has, and those facts are already in
+                       the recorded book — blocking them now would change what
+                       the book contains under the same algo versions, which
+                       is the rewrite the versioning rule exists to forbid.
+                       The gate makes the condition visible; whether it should
+                       ever gate is a question for measurement, not a default.
+    """
+    import time as _time
+    from . import importer, ingest, quality   # lazy: ingest imports this module
+
+    now = int(_time.time()) if now is None else now
+    tripped: dict = {}
+
+    def trip(tf, gate, detail):
+        tripped[(tf, gate)] = detail
+        _record_gate(con, symbol, tf, gate, detail, now)
+
+    blocked = None
+    try:
+        quality.assert_market_ready(con, symbol, now)
+    except Exception as exc:
+        blocked = f"{type(exc).__name__}: {exc}"
+        trip("*", "QUALITY_BLOCKED", blocked)
+
+    if blocked is None:
+        # Observed, not enforced — see the docstring. `missing_history` is the
+        # PF_XLMUSD detector: the series starts later than its floor and no
+        # productive import ever closed the window, so this is a HOLE, not
+        # merely a venue whose history starts where it starts.
+        try:
+            for tf in ingest.missing_history(con, symbol, now):
+                trip(tf, "SHORT_HISTORY",
+                     "stored history starts later than its floor and no "
+                     "productive import has closed the window")
+        except Exception as exc:            # the detector must never block the loop
+            if log:
+                log.warning(f"short-history check skipped {symbol}: "
+                            f"{type(exc).__name__} {exc}")
+
+        counts = {tf: n for tf, n in con.execute(
+            "SELECT tf, COUNT(*) FROM candles WHERE symbol=? GROUP BY tf",
+            (symbol,))}
+        live_tfs = []
+        for tf in ALL_TFS:
+            if counts.get(tf):
+                live_tfs.append(tf)
+            else:
+                trip(tf, "NO_DATA", "no candles stored for this timeframe")
+        # MODULE-outer, timeframe-inner, exactly as both runners always were —
+        # and it is load-bearing, not style: `scalein`'s 1H pass reads the HTF
+        # positions `execsim` writes on 4H/1D. Timeframe-outer would run
+        # scalein before this cycle's HTF execsim passes exist, landing every
+        # add one cycle late — a silent lag, which is the drift disease this
+        # function exists to end.
+        for mod in PER_SYMBOL:
+            for tf in live_tfs:
+                try:
+                    mod.run(con, symbol, tf, importer.TF_SECONDS[tf])
+                except Exception as exc:
+                    # One engine's failure is a fault to surface, not a
+                    # rejection reason to count — an exception that becomes a
+                    # funnel statistic is an exception nobody fixes.
+                    if log:
+                        log.warning(f"engine {mod.__name__} failed on "
+                                    f"{symbol} {tf}: {type(exc).__name__} {exc}")
+
+    # A gate that no longer trips is DELETED: this table is current state, and
+    # a stale row would keep reporting a hole the last cycle already closed.
+    stale = [(s_tf, s_gate) for (s_sym, s_tf, s_gate) in con.execute(
+        "SELECT symbol, tf, gate FROM pipeline_gates WHERE symbol=?", (symbol,))
+        if (s_tf, s_gate) not in tripped]
+    for s_tf, s_gate in stale:
+        con.execute("DELETE FROM pipeline_gates WHERE symbol=? AND tf=? AND gate=?",
+                    (symbol, s_tf, s_gate))
+    con.commit()
+    return {"blocked": blocked, "gates": tripped}
