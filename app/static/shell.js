@@ -381,8 +381,10 @@
       const key = s.symbol;
       seen.add(key);
       const held = heldSids.has(s.setup_id || '') || pendSids.has(s.setup_id || '');
+      const done = doneSids.has(s.setup_id || '');
       const cls = 'deck-row' + (s.risk && s.risk.decision === 'REJECTED' ? ' dead' : '')
-                + (held ? ' held' : heldSyms.has(s.symbol) ? ' held-sym' : '');
+                + (held ? ' held' : done ? ' done'
+                   : heldSyms.has(s.symbol) ? ' held-sym' : '');
       const html = deckRowInner(s, now);
       let rec = deckRows.get(key);
       if(!rec){
@@ -473,10 +475,19 @@
   let heldSids = new Set();            // setup_id -> filled position
   let pendSids = new Set();            // setup_id -> order placed, not filled
   let heldSyms = new Map();            // symbol -> {direction, tf, kind}
+  let doneSids = new Map();            // setup_id -> the operator's own exit
   let lastDeckArgs = null;             // so a change in the book can repaint
 
   function indexHeld(p){
     const sids = new Set(), pend = new Set(), syms = new Map();
+    /* Setups the operator has already finished with. `operator_closed` has
+       been in this payload all along and reached no surface: a trade you took
+       and closed leaves its card sitting in the deck looking exactly like one
+       you never touched, so the deck's answer to "should I take this" omitted
+       the fact that you already did — and what it paid. */
+    const done = new Map();
+    for(const o of (p.operator_closed || []))
+      if(o.setup_id) done.set(o.setup_id, o);
     for(const t of (p.active_positions || [])){
       if(t.setup_id) sids.add(t.setup_id);
       syms.set(t.symbol, {direction: t.direction, tf: t.tf, kind: 'open'});
@@ -489,10 +500,10 @@
         syms.set(t.symbol, {direction: t.direction, tf: t.tf, kind: 'pending'});
     }
     const sig = JSON.stringify([[...sids].sort(), [...pend].sort(),
-                                [...syms.keys()].sort()]);
+                                [...syms.keys()].sort(), [...done.keys()].sort()]);
     if(sig === indexHeld.sig) return;
     indexHeld.sig = sig;
-    heldSids = sids; pendSids = pend; heldSyms = syms;
+    heldSids = sids; pendSids = pend; heldSyms = syms; doneSids = done;
     /* The deck and the portfolio arrive on separate payloads, so whichever
        lands second would otherwise paint a deck that disagrees with the book
        until the next poll — a full cycle of "you are not in this" on a trade
@@ -507,6 +518,22 @@
       return '<div class="deck-held">in this trade — you are holding it now</div>';
     if(pendSids.has(sid))
       return '<div class="deck-held pend">order resting on this — not filled yet</div>';
+    const d = doneSids.get(sid);
+    if(d){
+      if(d.event === 'ADOPTED')
+        return '<div class="deck-held done">you took custody of this — your exit, ' +
+               'not the engine’s</div>';
+      // What it paid, on the card. "You closed this" without the number sends
+      // the operator to Results to answer the obvious next question.
+      // signedMoney/money are the ONE currency formatter on this surface; a
+      // second one here is how two panels come to disagree about a minus sign.
+      const r = d.r_at_close == null ? null : Number(d.r_at_close);
+      const usd = d.usd_at_close == null ? null : Number(d.usd_at_close);
+      return '<div class="deck-held done">you closed this' +
+        (r == null ? '' : ` — ${r >= 0 ? '+' : ''}${r.toFixed(2)}R`) +
+        (usd == null ? '' : ` (${signedMoney(usd)})`) +
+        (d.exit_price ? ` at ${esc(d.exit_price)}` : '') + '</div>';
+    }
     const h = heldSyms.get(s.symbol);
     if(h)
       return `<div class="deck-held other">already ${h.kind === 'open' ? 'in' : 'bidding'} ${
@@ -589,7 +616,8 @@
          /api/manual/open returns `engine` from active_positions alone. A
          resting order must not promise "Manage trade" and then hand back a
          planning ticket. */
-      const mine = (heldSyms.get(s.symbol) || {}).kind === 'open';
+      const mine = (heldSyms.get(s.symbol) || {}).kind === 'open'
+                && !doneSids.has(s.setup_id || '');
       /* Delegates to the shared formatter rather than re-implementing it, so a
          negative can never render one way here and another way on Results.
          The null case stays local: an unsized setup must read "—", and the

@@ -911,3 +911,11 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .deck-held.pend{color:var(--amber);opacity:.85}
 .deck-held.other{color:var(--fg-3);letter-spacing:.06em;text-transform:none;
   font-size:10px}
+
+/* A setup the operator already took and closed. Not an opportunity and not
+   exposure — it is history with a number attached, so it reads as neither
+   amber (your money is on this) nor red (refused). */
+.deck-row.done{opacity:.72;box-shadow:inset 3px 0 0 var(--fg-4)}
+.deck-held.done{color:var(--fg-3);letter-spacing:.06em;text-transform:none;
+  font-size:10px}
+.deck-held.done::before{background:var(--fg-4);box-shadow:none}

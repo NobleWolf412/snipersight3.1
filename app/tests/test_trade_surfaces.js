@@ -289,12 +289,28 @@ ok('live levels are gold, distinct from engine plan and draft', () => {
   assert.ok(m, 'applyLevels not found');
   assert.ok(m[0].includes("'LIVE · IN AT'"), 'a filled entry is not an ENTRY');
   assert.ok(m[0].includes('#fbbf24'), 'live levels use the armed amber');
-  assert.ok(m[0].includes("'ENTRY · DRAFT'") && m[0].includes("t: 'ENTRY'"),
+  assert.ok(m[0].includes("'PLAN · ENTRY'") && m[0].includes("'ENGINE · ENTRY'"),
             'draft and engine styles must both survive');
 });
 ok('a kind change forces a redraw so live styling cannot go stale', () => {
   assert.ok(/want = live \? \('live' \+ \(modified \? '-edited' : ''\)\)/.test(CHART),
             'drawnKind must distinguish live and edited-live');
+});
+ok('every level label says WHOSE it is — no bare "DRAFT"', () => {
+  // An operator asked what DRAFT meant. Fair: it is the app's word. The four
+  // states now read PLAN / ENGINE / YOURS / LIVE without needing a legend.
+  // Label STRINGS, not prose — the comments still explain why DRAFT went.
+  assert.ok(!/t: *'[^']*DRAFT/.test(CHART), 'no level is still labelled DRAFT');
+  for(const t of ['PLAN · ENTRY', 'ENGINE · ENTRY', 'YOURS · ENTRY', 'LIVE · IN AT'])
+    assert.ok(CHART.includes(t), 'missing label: ' + t);
+});
+ok('an armed order is not labelled twice', () => {
+  // Arming drew the order's gold lines while the ticket kept drawing the same
+  // levels underneath: six labels stacked on three prices.
+  assert.ok(/function positionPrices\(\)/.test(CHART));
+  assert.ok(/const taken = positionPrices\(\)/.test(CHART));
+  assert.ok(/taken\.some\(v => same\(v, p\)\)/.test(CHART),
+            'the ticket must yield to the armed order where they agree');
 });
 ok('reset names what it reverts to', () => {
   assert.ok(CHART.includes("'Back to live levels'"));
@@ -359,6 +375,19 @@ ok('the new-trade stop rule says which mode it is enforcing', () => {
   assert.ok(/only exists once you are actually in one/.test(TM));
   assert.ok(/inp\.holding === true \? ''/.test(TM),
             'a held position must NOT be told it is planning one');
+});
+
+
+ok('a setup you already closed says so, and says what it paid', () => {
+  assert.ok(/operator_closed/.test(JS), 'the payload had this all along');
+  assert.ok(/you closed this/.test(JS));
+  assert.ok(/signedMoney\(usd\)/.test(JS), 'one currency formatter, not two');
+  assert.ok(/you took custody of this/.test(JS), 'ADOPTED is a different exit');
+  assert.ok(CSS.includes('.deck-row.done'), 'history is neither opportunity nor exposure');
+});
+ok('a finished setup never offers Manage trade', () => {
+  assert.ok(/&& !doneSids\.has\(s\.setup_id \|\| ''\)/.test(JS),
+            'the symbol fallback must not resurrect a closed trade');
 });
 
 console.log(`  ${passed} passed`);

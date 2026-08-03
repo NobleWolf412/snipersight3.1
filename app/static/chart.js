@@ -186,13 +186,18 @@ window.SSChart = (() => {
       tp:    {c: '#fbbf24', s: 2, t: modified ? 'YOUR TARGET' : 'LIVE · TARGET'},
       sl:    {c: '#fbbf24', s: 2, t: modified ? 'YOUR STOP' : 'LIVE · STOP'},
     } : draft ? {
-      entry: {c: 'rgba(34,211,238,.40)',  s: 1, t: 'ENTRY · DRAFT'},
-      tp:    {c: 'rgba(74,222,128,.40)',  s: 1, t: 'TP · DRAFT'},
-      sl:    {c: 'rgba(248,113,113,.40)', s: 1, t: 'SL · DRAFT'},
+      /* "DRAFT" was jargon and an operator asked what it meant, fairly: it is
+         the app's word, not the market's. Every label now reads WHOSE · WHICH,
+         so the four states on this chart answer "what am I looking at" without
+         a legend — PLAN (yours, unarmed), ENGINE (its plan, unarmed), YOURS
+         (armed and resting on the book), LIVE (filled, money at stake). */
+      entry: {c: 'rgba(34,211,238,.40)',  s: 1, t: 'PLAN · ENTRY'},
+      tp:    {c: 'rgba(74,222,128,.40)',  s: 1, t: 'PLAN · TP'},
+      sl:    {c: 'rgba(248,113,113,.40)', s: 1, t: 'PLAN · SL'},
     } : {
-      entry: {c: '#22d3ee', s: 0, t: 'ENTRY'},
-      tp:    {c: '#4ade80', s: 2, t: 'TP'},
-      sl:    {c: '#f87171', s: 2, t: 'SL'},
+      entry: {c: '#22d3ee', s: 0, t: 'ENGINE · ENTRY'},
+      tp:    {c: '#4ade80', s: 2, t: 'ENGINE · TP'},
+      sl:    {c: '#f87171', s: 2, t: 'ENGINE · SL'},
     };
     // Price lines only take `price` on update, so a kind change has to redraw
     // them — otherwise dragging an engine plan would keep its solid styling and
@@ -206,8 +211,21 @@ window.SSChart = (() => {
       }
       drawnKind = want;
     }
+    /* SIX LABELS FOR THREE PRICES. Arming a plan draws the order's own gold
+       lines while the ticket keeps drawing the identical levels underneath, so
+       the chart stacked "PLAN · TP" and "YOURS · TP" on the same pixel — and
+       the operator read it as the app having done something twice. The armed
+       order is the authority wherever the two agree; drag a level and the plan
+       line reappears, because then it is saying something different. */
+    const taken = positionPrices();
+    const same = (a, b) => Math.abs(a - b) <= Math.abs(a) * 1e-9;
+
     for(const k of ['entry', 'tp', 'sl']){
       const p = levels[k];
+      if(p != null && taken.some(v => same(v, p))){
+        if(priceLines[k]){ series.removePriceLine(priceLines[k]); delete priceLines[k]; }
+        continue;
+      }
       if(p == null){
         if(priceLines[k]){ series.removePriceLine(priceLines[k]); delete priceLines[k]; }
         continue;
@@ -239,7 +257,7 @@ window.SSChart = (() => {
       ? (modified ? 'your exit — unsaved' : 'open position')
       : kind === 'engine'
       ? (modified ? 'edited' : 'engine')
-      : kind === 'draft' ? (modified ? 'edited' : 'draft')
+      : kind === 'draft' ? (modified ? 'edited' : 'your plan')
       : kind === 'seeded' ? 'manual' : 'no setup';
     $('tkSrc').className = 'chip ' +
       (kind === 'engine' && !modified ? 'chip-accent' : 'chip-amber');
@@ -658,6 +676,15 @@ window.SSChart = (() => {
      resolver will settle them whether or not anyone is watching. The readout
      marks to the LAST CLOSED bar and says so; a fresher number here than
      everywhere else would read as precision and be inconsistency. */
+  /* The prices the operator's own armed order is already drawing, so the
+     ticket does not label them a second time. Empty when nothing is armed. */
+  function positionPrices(){
+    if(!openPos.length) return [];
+    const p = openPos[0];
+    return [p.fill_price || p.entry, p.tp, p.current_stop || p.sl]
+      .map(v => parseFloat(v)).filter(v => isFinite(v));
+  }
+
   function drawPosition(){
     for(const l of posLines){ try{ series.removePriceLine(l); }catch(e){} }
     posLines = [];
