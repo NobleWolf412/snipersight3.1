@@ -119,7 +119,10 @@ CREATE TABLE IF NOT EXISTS quality_runs (
     observed_at INTEGER NOT NULL,
     status      TEXT NOT NULL,
     evaluation_allowed INTEGER NOT NULL,
-    summary     TEXT NOT NULL
+    summary     TEXT NOT NULL,
+    -- the whole report, so every surface can read the verdict the trading
+    -- engine acted on instead of computing its own (migration 7)
+    report      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS quality_checks (
@@ -248,6 +251,21 @@ def _migrate(con: sqlite3.Connection) -> None:
         con.execute(
             "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
             (6, "quality_checks_rung"))
+    if 7 not in applied:
+        # THE FULL VERDICT, not just its counts. `summary` held four numbers,
+        # so any surface wanting the issue list had to re-run the audit — and
+        # the API server, running it at an arbitrary moment in its own
+        # process, produced verdicts the scanner never recorded. Persisting
+        # the whole report lets every surface read the one the trading engine
+        # actually acted on. Nullable: rows written before this are still
+        # valid summaries.
+        columns = {r[1] for r in con.execute(
+            "PRAGMA table_info(quality_runs)").fetchall()}
+        if "report" not in columns:
+            con.execute("ALTER TABLE quality_runs ADD COLUMN report TEXT")
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (7, "quality_runs_full_report"))
     con.commit()
 
 

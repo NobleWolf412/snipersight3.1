@@ -178,6 +178,44 @@ def _default_db_key() -> str:
         return "unresolvable-default"
 
 
+def last_persisted(con):
+    """The most recent audit THE SCANNER RECORDED, or None before the first.
+
+    ONE VERDICT, AND IT IS THIS ONE. `cached_audit` keeps its report in module
+    state, so the api-server and the scanner each hold their own — two
+    processes, two caches, no reason for them to agree. `risk.py` runs inside
+    the scanner and gates trading on that process's verdict; the UI read the
+    api-server's, which audits at whatever moment a request happens to arrive.
+
+    Measured 4 Aug 2026: the server audited at 11:44:58 and caught 23 symbols
+    whose 15m bar closed at 11:45 — legitimately open, flagged DEVELOPING_
+    CANDLES, which is a HALT-rung code, so it published BLOCKED. The scanner
+    audited the same store at 11:45:06, eight seconds later, and recorded
+    DEGRADED with trading allowed. Because `cached_audit` serves its last
+    report until a background refresh replaces it, the server was still
+    serving that BLOCKED snapshot four minutes later, under a chip reading
+    "the engine is refusing to size new entries". It was not.
+
+    A read-only surface must never publish a verdict the engine never acted
+    on. This returns the recorded one, with its age, so a scanner that has
+    stopped is visible as staleness rather than hidden behind a fresh-looking
+    audit nobody used.
+    """
+    row = con.execute(
+        "SELECT observed_at, report FROM quality_runs "
+        "WHERE report IS NOT NULL ORDER BY observed_at DESC LIMIT 1").fetchone()
+    if row is None:
+        return None
+    try:
+        report = json.loads(row[1])
+    except (ValueError, TypeError):
+        return None
+    report["observed_at"] = row[0]
+    report["age_s"] = max(0, int(time.time()) - row[0])
+    report["source"] = "scanner"
+    return report
+
+
 def cached_audit(con, force: bool = False):
     """The one verdict every surface reads, for THIS store.
 
@@ -486,12 +524,18 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
               "warnings": [c for c in checks if c["status"] == "DEGRADED"]}
     if persist:
         cur = con.execute(
-            "INSERT INTO quality_runs(observed_at,status,evaluation_allowed,summary) "
-            "VALUES (?,?,?,?)", (now, status, int(result["evaluation_allowed"]),
+            "INSERT INTO quality_runs"
+            "(observed_at,status,evaluation_allowed,summary,report) "
+            "VALUES (?,?,?,?,?)", (now, status, int(result["evaluation_allowed"]),
                                   json.dumps({"blockers": len(result["blockers"]),
                                               "warnings": len(result["warnings"]),
                                               "worst_rung": worst_rung,
-                                              "rung_counts": rung_counts})))
+                                              "rung_counts": rung_counts}),
+                                  # THE WHOLE VERDICT. ~40 KB per row, written
+                                  # every few minutes by the scanner, so that
+                                  # read-only surfaces never have to re-derive
+                                  # it — see `last_persisted` for why.
+                                  json.dumps(result)))
         run_id = cur.lastrowid
         con.executemany(
             "INSERT INTO quality_checks(quality_run_id,stage,status,code,rung,symbol,tf,details) "
