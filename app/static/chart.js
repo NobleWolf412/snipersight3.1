@@ -53,6 +53,7 @@ window.SSChart = (() => {
   // the last computed ticket maths, so the Arm button can state WHY it is
   // disabled instead of leaving the reason in footer prose
   let lastMetrics = null;
+  let volSeries = null;                       // the volume histogram pane
   let priceLines = {}, zoneLines = [], handles = {};
   // what the grab tags say and whether they go gold — applyLevels owns these
   let lvlSpec = null, lvlLive = false;
@@ -118,6 +119,26 @@ window.SSChart = (() => {
       upColor: 'rgba(74,222,128,.75)', downColor: 'rgba(248,113,113,.75)',
       borderUpColor: '#4ade80', borderDownColor: '#f87171',
       wickUpColor: '#4ade80', wickDownColor: '#f87171'});
+
+    /* VOLUME, on a chart whose engine computes 231,946 volume facts and whose
+       operator could not see a single bar of it. Its own price scale, pinned
+       to the bottom fifth: an overlay scale means the candles and the
+       histogram share a range and the price series collapses to a hairline.
+       No axis labels — the QUESTION volume answers is "more or less than the
+       bars around it", which is shape, not magnitude. */
+    volSeries = chart.addHistogramSeries({
+      priceScaleId: 'vol', priceFormat: {type: 'volume'},
+      color: 'rgba(148,163,184,.35)'});
+    chart.priceScale('vol').applyOptions({
+      scaleMargins: {top: 0.86, bottom: 0}, visible: false});
+
+    /* OHLC READOUT. Hovering a candle told the operator nothing — the single
+       most basic thing a chart does. Reads from the crosshair, falls back to
+       the last bar when the pointer leaves, so the strip is never blank. */
+    chart.subscribeCrosshairMove(param => {
+      const bar = param && param.seriesData && param.seriesData.get(series);
+      paintOHLC(bar || (candles.length ? candles[candles.length - 1] : null));
+    });
 
     // contentRect only — see rule 1 at the top of this file
     new ResizeObserver(es => {
@@ -477,9 +498,31 @@ window.SSChart = (() => {
     // "· phemex-perp allows up to 10x" wrapped the label to two lines in the
     // 268px column; the venue is already named on the chart's venue chip.
     $('tkLevMax').textContent = `· up to ${max}x`;
-    $('tkLiq').textContent = (m && m.liquidation != null)
+    /* Liquidation AND the cost of holding, on the same line, because they are
+       the two things leverage changes that the R figures deliberately do not
+       reflect. Funding has always been charged by the simulator and was shown
+       nowhere: a perp held over a weekend pays every settlement, and on a
+       tight target that can exceed the edge (UX audit, 4 Aug 2026).
+
+       Stated per DAY rather than per settlement — "0.03%/day" is a number an
+       operator can weigh against a target; "0.01% every 8 hours" is homework.
+       Modelled, and labelled as modelled: this is the constant the cost model
+       charges, not a live quote from the venue. */
+    const liq = (m && m.liquidation != null)
       ? `liquidation ${pf(m.liquidation)} · ${pf(m.liqDistance)} away`
       : 'no liquidation at 1x';
+    const perDay = cfg && cfg.cost && cfg.cost.funding_per_day
+      ? cfg.cost.funding_rate * cfg.cost.funding_per_day * 100 : 0;
+    $('tkLiq').textContent = perDay
+      ? `${liq} · funding ≈${perDay.toFixed(3)}%/day to hold`
+      : liq;
+    $('tkLiq').title = perDay
+      ? `Perps charge funding every ${(24 / cfg.cost.funding_per_day).toFixed(0)}` +
+        ` hours while the position is open. This is the modelled rate the cost` +
+        ` engine charges, not a live quote — a multi-day hold pays it` +
+        ` repeatedly, and on a tight target that can cost more than the trade` +
+        ` makes.`
+      : 'Spot positions pay no funding — you own the asset outright.';
   }
 
   /* ---------- the context ladder ----------
@@ -555,6 +598,21 @@ window.SSChart = (() => {
       const el = $('cLiveIn');
       if(el) el.hidden = true;                 // a failed tick shows nothing
     }
+  }
+
+  /* The four numbers a candle is, plus its volume. Fixed-width and
+     tabular so hovering across bars does not make the strip twitch. */
+  function paintOHLC(bar){
+    const el = $('cOHLC'); if(!el) return;
+    if(!bar){ el.textContent = ''; return; }
+    const up = bar.close >= bar.open;
+    const v = bar.volume == null ? '' :
+      `  V ${bar.volume >= 1e6 ? (bar.volume / 1e6).toFixed(1) + 'M'
+           : bar.volume >= 1e3 ? (bar.volume / 1e3).toFixed(1) + 'K'
+           : Math.round(bar.volume)}`;
+    el.textContent = `O ${pf(bar.open)}  H ${pf(bar.high)}  ` +
+                     `L ${pf(bar.low)}  C ${pf(bar.close)}${v}`;
+    el.className = 't-mono c-ohlc ' + (up ? 'up' : 'down');
   }
 
   function startTicker(){
@@ -723,6 +781,12 @@ window.SSChart = (() => {
       precision: digits(candles[candles.length - 1].close),
       minMove: Math.pow(10, -digits(candles[candles.length - 1].close))}});
     series.setData(candles);
+    /* Volume coloured by the bar it belongs to, so a spike reads as buying or
+       selling at a glance instead of as a bare quantity. */
+    if(volSeries) volSeries.setData(candles.map(c => ({
+      time: c.time, value: c.volume || 0,
+      color: c.close >= c.open ? 'rgba(74,222,128,.30)' : 'rgba(248,113,113,.30)'})));
+    paintOHLC(candles[candles.length - 1]);
     // NOT fitContent(): 1500 bars squeezed into one screen is an unreadable
     // hairline. Open on a working window of recent bars — the operator can
     // still scroll back through the full history.

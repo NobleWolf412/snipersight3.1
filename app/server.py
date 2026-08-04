@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from engine import registry, store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
 from engine import momentum, volatility, volume, ma, fvg, volprofile, ranges
+from engine import costs
 
 KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "structure": structure.STRUCTURE_VERSION,
@@ -1890,7 +1891,17 @@ def trade_config(symbol: str | None = None):
         "cost": {"version": v.cost_profile, "venue": v.key,
                  "maker_rate": float(v.maker_rate),
                  "taker_rate": float(v.taker_rate),
-                 "slippage_atr": float(v.slippage_atr)},
+                 "slippage_atr": float(v.slippage_atr),
+                 # FUNDING, which the simulator has always charged and no
+                 # surface ever showed. A perp held over a weekend pays every
+                 # settlement, and on a tight target that can exceed the edge
+                 # — so the cost of HOLDING belongs on screen before the trade
+                 # is taken, not only in the settled result (UX audit,
+                 # 4 Aug 2026). Modelled, not polled: this is the same
+                 # constant `costs.round_trip_cost` charges, and the ticket
+                 # says so rather than implying a live venue quote.
+                 "funding_rate": float(costs.DEFAULT_FUNDING_RATE),
+                 "funding_per_day": v.funding_settlements_per_day},
         # Live order submission is locked until the forward record earns it.
         # The UI reads this rather than deciding for itself.
         "live_enabled": False,

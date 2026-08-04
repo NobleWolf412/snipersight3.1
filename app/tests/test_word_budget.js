@@ -25,14 +25,51 @@ function ok(name, fn) {
 
 console.log('word budget');
 
+/* The first-run card is measured SEPARATELY, not exempted.
+
+   This budget exists to stop the surfaces a RETURNING operator reads from
+   silently regrowing into the Learn tab. A card shown once per browser and
+   dismissed forever is not that text: it is read once, by someone who has
+   never seen the app, and the audit found there was no such thing anywhere —
+   79 buttons and not one entry point.
+
+   Exempting it outright would be a loophole big enough to drive the whole
+   deleted Learn surface through, so it carries its own ceiling below. The
+   ratchet still applies; it just applies to the right number. */
+/* Bounded by the two things either side of it, not by exact whitespace: the
+   card's own id, and the Scanner panel that always follows it. */
+function firstRunSpan(html) {
+  const at = html.indexOf('id="firstRun"');
+  if (at < 0) return null;
+  const open = html.lastIndexOf('<div', at);
+  const end = html.indexOf('panel panel-accent', at);
+  if (end < 0) return null;
+  return [html.lastIndexOf('<div', end), open];   // [endOfCard, startOfCard]
+}
+
+function stripFirstRun(html) {
+  const span = firstRunSpan(html);
+  return span ? html.slice(0, span[1]) + html.slice(span[0]) : html;
+}
+
 function surfaceText(id) {
   const at = HTML.indexOf(`id="s-${id}"`);
   assert(at > 0, `surface ${id} missing`);
   const end = HTML.indexOf('</section>', at);
-  return HTML.slice(at, end)
+  return stripFirstRun(HTML.slice(at, end))
     .replace(/<!--[\s\S]*?-->/g, ' ')       // comments are for developers
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ').trim();
+}
+
+function firstRunWords() {
+  const span = firstRunSpan(HTML);
+  if (!span) return 0;
+  return HTML.slice(span[1], span[0])
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ').trim()
+    .split(' ').filter(Boolean).length;
 }
 const words = id => surfaceText(id).split(' ').filter(Boolean).length;
 
@@ -66,6 +103,16 @@ for (const [id, cap] of Object.entries(CEILINGS)) {
       `move the explanation into a hover term or delete it`);
   });
 }
+
+ok('the first-run card is an invitation, not a chapter', () => {
+  const n = firstRunWords();
+  assert(n > 0, 'the entry point for a first-time reader is gone — the audit ' +
+    'counted 79 buttons and not one of them was a place to start');
+  assert(n <= 130, `the intro card carries ${n} words against a 130 ceiling. ` +
+    `It is read once by someone who has never seen a trading app; four ` +
+    `sentences and three steps is the whole budget. This is where the Learn ` +
+    `tab would grow back.`);
+});
 
 ok('the era band is a line, not an essay', () => {
   const SHELL = S('shell.js');

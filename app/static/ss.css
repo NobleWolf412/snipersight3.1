@@ -1185,6 +1185,30 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   .layers-pop button.loading::before{animation:none}
 }
 
+/* Start here — shown once, then never again. Accented so it reads as an
+   invitation rather than a warning, and short enough that dismissing it is
+   not the only sane response. */
+.firstrun{margin-bottom:var(--lg);border-color:var(--accent);
+  background:linear-gradient(180deg,rgba(var(--accent-rgb),.05),transparent)}
+.firstrun .t-body{max-width:64ch;margin:var(--sm) 0 var(--md)}
+.fr-steps{margin:0 0 var(--md);padding-left:1.15rem;max-width:64ch;
+  color:var(--fg-2);font-size:13px;line-height:1.6}
+.fr-steps li{margin-bottom:5px}
+.fr-steps b{color:var(--fg)}
+.fr-acts{display:flex;gap:var(--sm);flex-wrap:wrap}
+
+/* The OHLC readout. Tabular numerals and a fixed slot: hovering across bars
+   must not make the strip twitch, which is the whole reason the scanner chip
+   above it got a fixed width too. Hidden below 1100px — it is the first thing
+   worth losing, because the price chip already carries the close. */
+.c-ohlc{position:absolute;top:6px;left:10px;z-index:2;pointer-events:none;
+  font-size:10px;color:var(--fg-3);font-variant-numeric:tabular-nums;
+  white-space:nowrap;letter-spacing:.02em;
+  /* over candles, so it needs its own ground to stay readable */
+  background:rgba(7,11,16,.72);padding:2px 6px;border-radius:var(--r-sm)}
+.c-ohlc.up{color:var(--green)} .c-ohlc.down{color:var(--red-2)}
+@media (max-width:640px){.c-ohlc{display:none}}
+
 /* "Looked at, not taken" — the line between what you can act on and what the
    engine merely examined. Without it, a refused four-day-old setup sat in the
    slot where advice goes and read as advice. */

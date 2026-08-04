@@ -74,6 +74,32 @@
         <p>What should I do right now?</p>
       </div>
 
+      <!-- START HERE. The audit counted 79 buttons across the app and found
+           not one of them was an entry point for someone who had just opened
+           it: no first-run path, no statement of what this is. Shown once,
+           dismissed forever, and deliberately four sentences — a wall of
+           onboarding text on a trading app is the Learn tab all over again. -->
+      <div class="panel firstrun" id="firstRun" hidden>
+        <div class="panel-body">
+          <h2 class="t-section">Start here</h2>
+          <p class="t-body">This watches a list of crypto markets and tells you when one
+            matches a rule it has been taught. Everything is
+            <span class="term" data-t="paper">paper</span> — no real order can be
+            sent, and the switch for that is locked until the record earns it.</p>
+          <ol class="fr-steps">
+            <li><b>Setup Deck</b>, below — what the engine found, and why. Empty is
+              normal and it explains itself.</li>
+            <li><b>Chart</b> — open any market, drag the levels, see the risk in
+              dollars before you commit.</li>
+            <li><b>Settings → Going live</b> — the four things that have to be true
+              before this trades real money.</li>
+          </ol>
+          <div class="fr-acts">
+            <button class="btn btn-cyan" id="frGo">Got it</button>
+            <button class="btn" id="frDiag">Something looks wrong</button>
+          </div>
+        </div>
+      </div>
       <div class="panel panel-accent bracket" style="margin-bottom:var(--lg)">
         <div class="panel-head">
           <h2 class="t-section"><span class="term" data-t="scanner">Scanner</span></h2>
@@ -277,6 +303,12 @@
       <div class="chart-main">
         <div class="panel chart-pane" id="chartPane">
           <div id="chartBox"></div>
+          <!-- What the bar under the cursor actually is. Hovering a candle
+               told the operator nothing — the most basic thing a chart does.
+               Overlaid on the chart rather than added to the control strip:
+               in the strip it wrapped Analyse onto a second row, and this is
+               chart context, so it belongs over the chart. -->
+          <div class="t-mono c-ohlc" id="cOHLC"></div>
           <div id="chartHandles"></div>
           <div class="chart-empty" id="chartEmpty">select a symbol</div>
         </div>
@@ -473,7 +505,11 @@
       <p class="t-body" id="rSample" style="margin:0 0 var(--lg);color:var(--fg-4);font-size:11px"></p>
       <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head"><h2 class="t-section">Trade Journal</h2>
-          <span class="chip" id="jnlCount" style="margin-left:auto">—</span></div>
+          <span class="chip" id="jnlCount" style="margin-left:auto">—</span>
+          <!-- The book was readable and not extractable. Anyone who wants to
+               check this record in a spreadsheet had to retype it. -->
+          <button class="btn" id="btnExport" style="margin-left:var(--sm)"
+                  title="download these trades as CSV">Export</button></div>
         <div id="journal"><div class="empty">no closed trades in this window yet</div></div>
       </div>
       <div class="panel" style="margin-bottom:var(--lg)">

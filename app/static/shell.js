@@ -83,6 +83,57 @@
   addEventListener('hashchange', () => go(location.hash.slice(1) || 'command'));
   go(location.hash.slice(1) || 'command');
 
+  /* ---------- keyboard ----------
+     There were no shortcuts of any kind. Five surfaces on the number keys and
+     one letter for the copilot — the whole nav, reachable without the mouse.
+
+     Deliberately NOT bound: anything that arms, halts or cancels. A hotkey
+     that sizes a trade is one fat finger away from a position nobody meant to
+     take, and this app's own rule is that irreversible-feeling actions get a
+     confirm dialog, not an accelerator. */
+  /* First run. Shown once per browser, and the dismissal is remembered even
+     if storage throws — a card that reappears every load is worse than no
+     card. "Something looks wrong" goes to the wizard, because the honest
+     first question a newcomer has about an empty deck is whether it is
+     broken, and that is precisely what the eight checks answer. */
+  const FR_KEY = 'ss.seen-intro';
+  const frEl = document.getElementById('firstRun');
+  if(frEl){
+    let seen = true;
+    try{ seen = localStorage.getItem(FR_KEY) === '1'; }catch(e){ seen = true; }
+    frEl.hidden = seen;
+    const dismiss = () => {
+      frEl.hidden = true;
+      try{ localStorage.setItem(FR_KEY, '1'); }catch(e){}
+    };
+    document.getElementById('frGo').addEventListener('click', dismiss);
+    document.getElementById('frDiag').addEventListener('click', () => {
+      dismiss();
+      if(window.SSWizard) SSWizard.open();
+    });
+  }
+
+  const expBtn = document.getElementById('btnExport');
+  if(expBtn) expBtn.addEventListener('click', () => exportJournal(lastJournal));
+
+  const KEYS = {'1': 'command', '2': 'chart', '3': 'results',
+                '4': 'settings', '5': 'diagnostics'};
+  addEventListener('keydown', e => {
+    // never steal a keystroke from a field, and never from a chord the OS or
+    // the browser owns
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+    // e.target is document/window for a keystroke with nothing focused, and
+    // those have no .matches — guard on the method, not on truthiness.
+    const t = e.target;
+    if(t && typeof t.matches === 'function' &&
+       (t.matches('input, textarea, select') || t.isContentEditable)) return;
+    if(KEYS[e.key]){ e.preventDefault(); go(KEYS[e.key]); return; }
+    if(e.key === 'c' && window.SSCopilot){ e.preventDefault(); SSCopilot.toggle(); }
+    if(e.key === '?'){ e.preventDefault(); toast(
+      'Keys: 1–5 switch surfaces · c toggles the copilot · Esc closes ' +
+      'popovers. Arming is deliberately not on a key.', 'good'); }
+  });
+
   /* ---------- clock ---------- */
   /* ONE NODE TICKS. This called $('clock') — a document.getElementById — every
      second, so a 1Hz timer was doing a document-wide lookup forever and any
@@ -721,6 +772,7 @@
   let pendSids = new Set();            // setup_id -> order placed, not filled
   let heldSyms = new Map();            // symbol -> {direction, tf, kind}
   let doneSids = new Map();            // setup_id -> the operator's own exit
+  let lastJournal = [];                // the closed book, for Export
   let lastDeckArgs = null;             // so a change in the book can repaint
 
   function indexHeld(p){
@@ -1563,6 +1615,7 @@
     }
     $('rHalt').textContent = p.kill_switch_days ?? 0;
     renderScoreboard(p.journal || []);
+    lastJournal = p.journal || [];
     if(p.config) $('mRisk').textContent = money(p.config.next_risk_usd);
     drawCurve(p.curve, p.start_equity);
 
@@ -2218,6 +2271,37 @@
       ? 'new entries are blocked — click to resume'
       : 'stop sizing new entries (open positions still settle)';
     document.body.classList.toggle('is-halted', halted);
+  }
+
+  /* ---------- export ----------
+     The book was readable and not extractable: anyone wanting to check this
+     record in a spreadsheet had to retype it. Client-side on the journal
+     already fetched — no endpoint, no second authority for what a trade was.
+     Every field the journal row shows, plus the identifiers needed to trace
+     a row back to the fact store. */
+  const CSV_COLS = ['ts', 'symbol', 'tf', 'strategy', 'direction', 'regime',
+                    'entry', 'exit_price', 'outcome', 'r_multiple', 'r_gross',
+                    'costs_r', 'pnl_usd', 'risk_usd', 'holding_hours',
+                    'setup_id', 'why'];
+  function exportJournal(journal){
+    if(!journal || !journal.length){ toast('No closed trades to export.', 'warn'); return; }
+    // RFC 4180 quoting: `why` carries commas and the odd quote, and a CSV that
+    // breaks on its own reason column is worse than no export.
+    const cell = v => {
+      const s = v == null ? '' : String(v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const rows = [CSV_COLS.join(',')].concat(journal.map(t => CSV_COLS.map(c =>
+      cell(c === 'ts' && t.ts ? new Date(t.ts * 1000).toISOString() : t[c])
+    ).join(',')));
+    const blob = new Blob([rows.join('\r\n')], {type: 'text/csv;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `snipersight-journal-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(`Exported ${journal.length} trade${journal.length === 1 ? '' : 's'}.`, 'good');
   }
 
   /* ---------- the scoreboard ----------
