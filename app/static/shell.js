@@ -1213,10 +1213,16 @@
       const entry = +t.entry, sl = +(t.current_stop || t.sl), tp = +t.tp;
       const now = prices[i];
       const sym = tokenOf(t.symbol);
+      /* A planned rung belongs on a RESTING order too. It is part of the plan
+         that will run without anyone watching, and an order that will take
+         half off at a level reads as an ordinary one until it does. */
+      const plan = (t.partials_planned || []).map(
+        r => `${Math.round(+r.fraction * 100)}% off at ${px(+r.price)}`).join(' · ');
       const head = `<div>
           <div class="pos-sym">${esc(sym)}</div>
           <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
             esc(t.tf)} · yours${+t.leverage > 1 ? ' · ' + esc(t.leverage) + 'x' : ''}</div>
+          ${plan ? `<div class="t-sub">${esc(plan)}</div>` : ''}
         </div>`;
       const cancel = `<button class="btn mine-cancel" data-cancel="${esc(t.intent_id)}"
             title="withdraw this resting order — nothing has been risked yet">Cancel</button>`;
@@ -1252,7 +1258,17 @@
       // that will settle the trade; recomputing it here would be a second
       // authority that drifts from the one that pays out.
       const r = t.unrealized_r == null ? null : +t.unrealized_r;
-      const tone = r == null ? '' : r >= 0 ? 'up' : 'down';
+      /* PARTLY CLOSED IS NOT OPEN, and this row said it was. A position with
+         half taken off rendered exactly like an untouched one: the full stake
+         under "at risk", and `unrealized_r` — which is the per-unit R of what
+         is STILL on — read as the whole trade's result. Both numbers were
+         wrong in the flattering direction on a winner.
+         `blended_r` is the trade: banked plus open. It equals `unrealized_r`
+         when nothing has been scaled out, so an ordinary row is unchanged. */
+      const closed = +t.closed_fraction || 0;
+      const openFrac = t.open_fraction == null ? 1 : +t.open_fraction;
+      const blended = t.blended_r == null ? r : +t.blended_r;
+      const tone = blended == null ? '' : blended >= 0 ? 'up' : 'down';
       const span = Math.abs(tp - sl);
       const at = (now == null || !span) ? null
         : Math.max(2, Math.min(98, ((long ? now - sl : sl - now) / span) * 100));
@@ -1260,6 +1276,15 @@
         ((long ? entry - sl : sl - entry) / span) * 100)) : null;
       const a = (at == null || entAt == null) ? null : Math.min(entAt, at);
       const b = (at == null || entAt == null) ? null : Math.max(entAt, at);
+      /* Only the REMAINING size is still exposed. Quoting the original stake
+         beside a half-closed position overstates what a stop would now cost —
+         the money the operator is deciding with. */
+      const stillAtRisk = t.risk_usd == null ? null : +t.risk_usd * openFrac;
+      const scaled = closed > 0
+        ? `<span class="t-sub">${Math.round(closed * 100)}% off · ${
+             rr(+t.realized_r)} banked${
+             openFrac > 0 ? ' · ' + rr(r) + ' on the rest' : ''}</span>`
+        : '';
       return `<div class="pos-row mine">
         ${head}
         <div>
@@ -1274,10 +1299,11 @@
             <span>target ${px(tp)}</span>
           </div>
         </div>
-        <div class="pos-r ${tone}">${rr(r)}
+        <div class="pos-r ${tone}">${rr(blended)}
           <span class="t-sub">${
-            t.unrealized_usd == null ? money(t.risk_usd) + ' at risk'
-              : signedMoney(t.unrealized_usd) + ' · ' + money(t.risk_usd) + ' at risk'}</span>
+            t.unrealized_usd == null ? money(stillAtRisk) + ' at risk'
+              : signedMoney(t.unrealized_usd) + ' · ' + money(stillAtRisk) + ' at risk'}</span>
+          ${scaled}
           <span class="t-sub">${
             t.bars_held == null ? '' : 'held ' + t.bars_held + ' bar' + (t.bars_held === 1 ? '' : 's')}</span>
         </div>

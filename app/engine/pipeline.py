@@ -53,9 +53,11 @@ TRADING = (setups, execsim, scalein, execsim, cooldowns)
 OBSERVATIONAL = (cycles,)
 
 # The OPERATOR's own paper book, and deliberately NOT part of TRADING. It
-# resolves trades the operator armed by hand, under `manual-v0.1-draft` — a tag
-# no strategy consumer queries, so a discretionary trade cannot reach the record
-# `edgestats`/`factorstats` grade. It is in this roster for the reason given
+# resolves trades the operator armed by hand, under `manual-*` — a namespace no
+# strategy consumer queries, so a discretionary trade cannot reach the record
+# `edgestats`/`factorstats` grade. Named as a namespace rather than a version
+# because the book reads every tag it has ever written (manual.MANUAL_VERSIONS)
+# so that a bump cannot strand an order still open under the old one. It is in this roster for the reason given
 # above for `cooldowns`: an engine that is built, tested and never run resolves
 # nothing, and an unresolved intent is a trade the operator placed and can never
 # see the outcome of.

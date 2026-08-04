@@ -1,6 +1,6 @@
 """Manual (operator) paper book — trades the operator arms by hand.
 
-algo manual-v0.1-draft.
+algo manual-v0.2-draft.
 
 WHY THIS IS A SEPARATE BOOK, which is the whole design and not a filing
 preference. The forward paper record on `setup-*`/`exec-*` is the evidence that
@@ -40,6 +40,36 @@ WHAT THIS IS NOT: a live order router. No order-placement code exists anywhere
 in this system (`execsim` line 3: "No live orders exist anywhere"), and this
 module adds none. It simulates. `live_enabled` in `/api/trade-config` stays
 false and is not reachable from here.
+
+PARTIAL EXITS (v0.2), and why they cost a version where trailing did not. A
+trailed stop is still ONE settlement: the position closes at one price, on one
+bar, for one R. A scale-out splits the position into two or more settlements at
+different prices on different bars, so `r_multiple` stops being a quotient and
+becomes a BLEND — and every consumer of the exit fact that assumed one exit
+price, one holding period and one fee pair is now reading a summary of several.
+That is a change in what the fact MEANS, which is exactly what a version tag
+exists to mark. `trail_r` could ride v0.1 because a v0.1 reader was still right;
+a v0.1 reader of a scaled exit is wrong about the trade.
+
+The blend is defined ONCE, by `blend_r`, over the legs that get written to the
+fact. Settle code IS replay code: `run` computes `r_multiple` by calling
+`blend_r` on the very dicts it then records, so anyone re-deriving the number
+from the stored legs runs the same function over the same inputs and agreement
+is a property rather than a calibration result. That is the lesson
+`test_one_walk.py` opens with, applied before the drift can happen instead of
+after.
+
+MIGRATION, because the bump is the dangerous part. The resolver finds work by
+querying `algo_version`, so moving the constant would strand every intent still
+open under v0.1 — armed, unresolvable, invisible on every surface — and would
+blank the settled book with it. So the read set and the write set are different
+things and are named separately: `MANUAL_VERSIONS` is everything this book has
+ever written and is what every query filters on; `MANUAL_VERSION` is what new
+facts carry. A v0.1 intent therefore settles into a v0.2 exec fact, and that is
+the honest record: the version on a fact names the code that PRODUCED it, and
+v0.2 is what settled it. It cannot change the answer — a v0.1 intent carries no
+partials, so its walk is byte-identical and `blend_r` over its single leg is the
+same quotient v0.1 wrote — but it is stated rather than assumed.
 """
 import json
 from bisect import bisect_left
@@ -52,8 +82,23 @@ from .runlog import RunRecorder
 # with it — that is the point of the two books differing only in the plan.
 from .execsim import MAX_BARS, MAX_ENTRY_BARS, FUNDING_RATE_PER_SETTLEMENT
 
-MANUAL_VERSION = "manual-v0.1-draft"
+MANUAL_VERSION = "manual-v0.2-draft"
+#: Every version this book has EVER written, oldest first. Reads filter on this
+#: tuple; writes only ever carry `MANUAL_VERSION`. The distinction is the whole
+#: migration: a bump that moved both would strand every intent still open under
+#: the old tag, because `unresolved` — the resolver's work list — finds work by
+#: version and would simply stop seeing them. See the module docstring.
+MANUAL_VERSIONS = ("manual-v0.1-draft", MANUAL_VERSION)
 Q2 = Decimal("0.01")
+
+#: Scale-out bounds. The cap is not a capacity limit — it is a statement about
+#: what this book is for. A hand-managed trade with more rungs than this is a
+#: laddered algorithm, and an algorithm belongs in the graded book where it can
+#: be measured, not in the record of what the operator decided on the day.
+MAX_PARTIALS = 4
+#: Below 1% of the position a "scale-out" cannot change the blend by more than
+#: the fees it pays to exist. It is not a decision, it is a typo.
+MIN_PARTIAL_FRACTION = Decimal("0.01")
 
 #: Kinds. Kept distinct from `setup`/`order`/`exec` so that even a query which
 #: forgets to filter on algo_version cannot pick these up by accident.
@@ -80,6 +125,34 @@ VALID_DIRECTIONS = ("LONG", "SHORT")
 
 class IntentRejected(ValueError):
     """An intent that must not be recorded. Raised before anything is written."""
+
+
+def _facts(con, kind: str, symbol: str | None = None, tf: str | None = None):
+    """Every fact of `kind` this book has written, under ANY of its versions.
+
+    The one read path, so that a version bump cannot orphan half the book by
+    being missed at one query. `store.get_facts` takes a single version by
+    design — every strategy engine wants exactly that, because reading two
+    generations at once is the S37 defect — but this book is the one place
+    where old facts must stay legible, since an operator's open order is a
+    position, not a recomputable derivation.
+
+    Ordering matches `store.get_facts`: market_time, then confirmed_at, then id,
+    so lifecycle facts that share a market_time stay causally ordered.
+    """
+    import sqlite3
+    con.row_factory = sqlite3.Row
+    marks = ",".join("?" * len(MANUAL_VERSIONS))
+    q = f"SELECT * FROM facts WHERE kind=? AND algo_version IN ({marks})"
+    args: list = [kind, *MANUAL_VERSIONS]
+    if symbol is not None:
+        q += " AND symbol=?"
+        args.append(symbol)
+    if tf is not None:
+        q += " AND tf=?"
+        args.append(tf)
+    q += " ORDER BY market_time, confirmed_at, id"
+    return con.execute(q, args).fetchall()
 
 
 def validate(symbol: str, direction: str, entry: Decimal, tp: Decimal,
@@ -170,6 +243,78 @@ def risk_per_unit(direction: str, entry: Decimal, sl: Decimal) -> Decimal:
     return (entry - sl) if direction == "LONG" else (sl - entry)
 
 
+def validate_partials(direction: str, entry: Decimal, sl: Decimal, tp: Decimal,
+                      partials) -> list | None:
+    """The scale-out ladder, checked before a single fact is written.
+
+    Returns the plan as `[{"fraction": "0.5", "price": "104"}, ...]`, ordered
+    NEAREST THE ENTRY FIRST — the order price must reach them, whichever way it
+    goes — or None when there is no ladder. Ordering here rather than in the
+    walk means the recorded plan reads in the sequence it will execute.
+
+    Two rules carry an argument worth stating.
+
+    A rung must sit STRICTLY BETWEEN the stop and the target. Outside that
+    interval it is not a scale-out, it is an instruction that can never run:
+    the trade is alive only while price is inside its own bracket, so a rung
+    beyond either end is reached — if ever — only after a terminal exit has
+    already settled the whole position. Refusing it is refusing a dead
+    instruction, not refusing a strategy. Note this deliberately admits rungs
+    on the LOSS side of the entry: taking half off to cut risk is a real thing
+    traders do, the R arithmetic is identical, and refusing it would be this
+    function inventing a position policy it was never asked for.
+
+    The fractions must leave a REMAINDER. A ladder summing to the whole
+    position closes the trade on its last rung, which would mean a settlement
+    with no terminal exit rule — nothing to grade `TRAIL` against `HOLD` with,
+    and an outcome taxonomy where the last rung is a target wearing another
+    name. The operator who wants a full ladder already has the field for it:
+    make the last rung the TARGET. That is the same trade, expressed in the
+    fields that already exist, and it keeps every settled trade owning exactly
+    one terminal outcome.
+    """
+    if partials is None:
+        return None
+    if isinstance(partials, dict):
+        partials = [partials]
+    rows = list(partials)
+    if not rows:
+        return None
+    if len(rows) > MAX_PARTIALS:
+        raise IntentRejected(
+            f"at most {MAX_PARTIALS} partial exits per trade, asked {len(rows)}")
+    lo, hi = (sl, tp) if sl < tp else (tp, sl)
+    out, total = [], Decimal(0)
+    for row in rows:
+        try:
+            fraction = Decimal(str(row["fraction"]))
+            price = Decimal(str(row["price"]))
+        except (KeyError, TypeError, ArithmeticError, ValueError):
+            raise IntentRejected(
+                "each partial exit needs a `fraction` and a `price`")
+        if fraction < MIN_PARTIAL_FRACTION:
+            raise IntentRejected(
+                f"a partial exit of {fraction} is below the {MIN_PARTIAL_FRACTION} "
+                f"minimum — a slice that small pays more in fees than it can "
+                f"move the result")
+        if not (lo < price < hi):
+            raise IntentRejected(
+                f"a partial exit at {price} sits outside the stop ({sl}) and "
+                f"target ({tp}) — the trade would already have settled at one "
+                f"end or the other before price ever got there, so this level "
+                f"could never fill")
+        total += fraction
+        out.append({"fraction": str(fraction), "price": str(price)})
+    if total >= 1:
+        raise IntentRejected(
+            f"partial exits add up to {total} of the position, leaving nothing "
+            f"to settle at the stop or target. A trade that closes on its last "
+            f"rung has no exit rule to record — set that rung as the TARGET "
+            f"instead, and scale out of what comes before it.")
+    out.sort(key=lambda r: (abs(Decimal(r["price"]) - entry), Decimal(r["price"])))
+    return out
+
+
 def _same_side_open(con, symbol: str, tf: str, direction: str):
     """An unresolved intent on the same market and side, or None.
 
@@ -197,7 +342,8 @@ def _same_side_open(con, symbol: str, tf: str, direction: str):
 
 def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
                   created_at: int, risk_usd=None, size_units=None,
-                  note: str = "", leverage=1, trail_r=None) -> dict:
+                  note: str = "", leverage=1, trail_r=None,
+                  partials=None) -> dict:
     """Record one operator intent. Validated first; nothing is written on reject.
 
     `created_at` is the causal boundary and is stored as `confirmed_at` — the
@@ -216,9 +362,16 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
     grade trailing against holding — the engine's own managed exits measured
     WORSE than holding (S44), and this feature does not get to skip the same
     exam just because it feels prudent. None means hold to SL/TP, exactly as
-    before; this field is ADDITIVE, and every previously-recorded intent
-    resolves byte-identically, which is why MANUAL_VERSION does not bump — a
-    bump would strand every open v0.1 intent the resolver queries by version.
+    before.
+
+    `partials` — the scale-out ladder, `[{"fraction": .., "price": ..}, ..]`,
+    and the operator's choice in the same way. Each rung closes that fraction
+    of the position when price touches it; whatever is left settles normally at
+    the stop, the target, the trail or the timeout. The exit fact records every
+    leg and `r_multiple` is their blend, so scaling out submits to the same
+    exam trailing does — and it needs to, for the same reason: taking half off
+    at 1R feels like risk management, and is also, arithmetically, a cap on the
+    winners that pay for the losers. `validate_partials` states the geometry.
     """
     entry, tp, sl = Decimal(str(entry)), Decimal(str(tp)), Decimal(str(sl))
     leverage = Decimal(str(leverage or 1))
@@ -239,6 +392,7 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
             f"second position on the same side, doubling the risk the budget "
             f"thinks you took. Let it resolve, or close it first.")
     meta = validate(symbol, direction, entry, tp, sl, leverage)
+    partials = validate_partials(direction, entry, sl, tp, partials)
     per_unit = risk_per_unit(direction, entry, sl)
     if size_units is None and risk_usd is not None:
         size_units = (Decimal(str(risk_usd)) / per_unit) if per_unit > 0 else Decimal(0)
@@ -267,6 +421,10 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
         "max_entry_bars": MAX_ENTRY_BARS,
         "max_holding_bars": MAX_BARS,
         "trail_r": None if trail_r is None else str(trail_r),
+        # The ladder as PLANNED. The exit fact records which rungs actually
+        # filled; keeping the plan here means an unfilled rung stays visible as
+        # a decision that was made, not an absence.
+        "partials": partials,
         "armed_at": created_at,
         "note": note[:280],
         "cost_manifest_hash": costs.record(con, profile),
@@ -280,12 +438,8 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
 
 def overridden_setups(con) -> dict:
     """setup_id -> the operator's early close, for the portfolio view."""
-    import sqlite3
-    con.row_factory = sqlite3.Row
     out = {}
-    for r in con.execute(
-            "SELECT confirmed_at, payload FROM facts WHERE kind=? AND algo_version=?",
-            (OVERRIDE_KIND, MANUAL_VERSION)):
+    for r in _facts(con, OVERRIDE_KIND):
         p = json.loads(r["payload"])
         out[p["setup_id"]] = {**p, "closed_at": r["confirmed_at"]}
     return out
@@ -294,7 +448,7 @@ def overridden_setups(con) -> dict:
 def adopt_position(con, setup_id: str, symbol: str, tf: str, direction: str,
                    entry, sl, tp, fill_ts: int, adopted_at: int,
                    risk_usd=None, trail_r=None, note: str = "",
-                   original_sl=None) -> dict:
+                   original_sl=None, partials=None) -> dict:
     """Take custody of an engine position with the operator's own levels.
 
     The engine entered this trade; the operator is changing where it ends. Two
@@ -307,13 +461,19 @@ def adopt_position(con, setup_id: str, symbol: str, tf: str, direction: str,
         the entry already happened and must not hunt for one.
 
     From here it is an ordinary manual trade: it settles on the operator's
-    book, it can trail, and the engine's simulation keeps running its own
-    plan. That pairing is the point — the operator's exit and the rule's exit
-    both get recorded, so which one was better stops being a matter of opinion.
+    book, it can trail, it can scale out, and the engine's simulation keeps
+    running its own plan. That pairing is the point — the operator's exit and
+    the rule's exit both get recorded, so which one was better stops being a
+    matter of opinion.
+
+    A ladder set here applies from `adopted_at`, like the stop and target do,
+    for the same reason: a rung judged against bars that closed before custody
+    began would book a scale-out that never happened.
     """
     entry = Decimal(str(entry))
     sl, tp = Decimal(str(sl)), Decimal(str(tp))
     validate_position(symbol, direction, entry, tp, sl)
+    partials = validate_partials(direction, entry, sl, tp, partials)
     if trail_r is not None:
         trail_r = Decimal(str(trail_r))
         if trail_r < Decimal("0.1"):
@@ -340,6 +500,7 @@ def adopt_position(con, setup_id: str, symbol: str, tf: str, direction: str,
         "risk_usd": None if risk_usd is None else str(risk_usd),
         "size_units": None if size_units is None else str(size_units),
         "trail_r": None if trail_r is None else str(trail_r),
+        "partials": partials,
         "armed_at": adopted_at,
         # The entry already happened. This is what tells the resolver to hold
         # rather than hunt for a fill it would never find.
@@ -452,18 +613,23 @@ def unresolved(con) -> dict:
     time — and then sat ARMED forever: the trade the operator placed could
     never report a result. `live.cycle` now asks this function where manual
     work exists instead of assuming it lives inside the watchlist.
+
+    Reads EVERY version this book has written, and that is the migration in one
+    line. An armed order is a POSITION, not a derivation that can be recomputed
+    later under a new tag, so a bump that dropped v0.1 intents out of this list
+    would leave them armed forever with no surface able to see them and no pass
+    able to settle them.
     """
-    import sqlite3
-    con.row_factory = sqlite3.Row
     intents: dict = {}
-    for r in con.execute(
-            "SELECT symbol, tf, payload FROM facts WHERE kind=? AND algo_version=?",
-            (INTENT_KIND, MANUAL_VERSION)):
+    for r in _facts(con, INTENT_KIND):
         p = json.loads(r["payload"])
         intents[p["intent_id"]] = (r["symbol"], r["tf"], p)
-    done = {json.loads(r[0])["intent_id"] for r in con.execute(
-        "SELECT payload FROM facts WHERE kind=? AND algo_version=?",
-        (EXEC_KIND, MANUAL_VERSION))}
+    # Terminal facts are read across versions for the same reason, and one more:
+    # a v0.1 intent settles into a v0.2 exec fact, so a `done` set filtered on
+    # the current version alone would forget every trade the old book closed and
+    # settle each of them a second time.
+    done = {json.loads(r["payload"])["intent_id"]
+            for r in _facts(con, EXEC_KIND)}
     out: dict = {}
     for iid, (sym, tf, p) in intents.items():
         if iid not in done:
@@ -561,6 +727,16 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
     candle is the only price this system trusts anywhere else; quoting a live
     tick here would make this one number fresher than every other number on
     the screen, which reads as precision and is actually inconsistency.
+
+    A partly-closed position reports BOTH halves of itself, because reporting
+    either one alone is a lie the operator would act on: `unrealized_r` keeps
+    its old meaning — what the position is worth PER UNIT right now, so a trade
+    with no ladder is unchanged to the digit — and `realized_r` carries what the
+    filled rungs already banked, weighted by the fraction each one took, so it
+    is on the whole-trade scale. `blended_r` adds them and is the number that
+    answers "what is this trade worth". Every one of them is a MARK, before
+    costs, exactly as `unrealized_r` has always been; the settled fact is the
+    only place net R exists, and it comes from `blend_r` over recorded legs.
     """
     open_here = unresolved(con).get((symbol, tf), [])
     if not open_here:
@@ -584,6 +760,9 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
         row = {"intent_id": p["intent_id"], "direction": direction,
                "entry": str(entry), "sl": str(sl), "tp": p["tp"],
                "trail_r": p.get("trail_r"),
+               # The ladder as planned, on every row: a resting order's rungs
+               # are levels the chart has to draw before anything has filled.
+               "partials_planned": p.get("partials") or [],
                "risk_usd": p.get("risk_usd"), "leverage": p.get("leverage"),
                "liquidation": p.get("liquidation"),
                "last_close": str(last_close), "armed_at": p["armed_at"]}
@@ -596,7 +775,16 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
             # before it asks, so by the time we are here they are facts.
             continue
         move = (last_close - entry) if long else (entry - last_close)
-        r_unreal = (move / risk).quantize(Q2) if risk > 0 else Decimal(0)
+        # Kept unquantized for the blend below and rounded only on the way out,
+        # so `blended_r` is not the sum of two separately-rounded numbers.
+        r_open = (move / risk) if risk > 0 else Decimal(0)
+        filled = w.get("partials") or []
+        closed_frac = sum((f["fraction"] for f in filled), Decimal(0))
+        open_frac = Decimal(1) - closed_frac
+        realized = sum(
+            (f["fraction"] * (((f["price"] - entry) if long else (entry - f["price"]))
+                              / risk) for f in filled), Decimal(0))
+        blended = realized + open_frac * r_open
         usd = p.get("risk_usd")
         row.update(state="OPEN",
                    bars_held=len(candles) - 1 - w["fill_i"],
@@ -606,9 +794,22 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
                    # stop on a trailed trade would misstate where it dies.
                    current_stop=str(w["current_stop"]),
                    trailed=w["trailed"],
-                   unrealized_r=str(r_unreal),
+                   unrealized_r=str(r_open.quantize(Q2)),
+                   realized_r=str(realized.quantize(Q2)),
+                   blended_r=str(blended.quantize(Q2)),
+                   closed_fraction=str(closed_frac),
+                   open_fraction=str(open_frac),
+                   partials_filled=[
+                       {"price": str(f["price"]), "fraction": str(f["fraction"]),
+                        "r_gross": str(((((f["price"] - entry) if long
+                                          else (entry - f["price"])) / risk)
+                                        ).quantize(Q2))}
+                       for f in filled],
+                   # The whole trade in dollars — banked plus open. Identical to
+                   # the old figure when nothing has been scaled out, because
+                   # then `realized` is 0 and `open_frac` is 1.
                    unrealized_usd=(None if usd is None
-                                   else str((r_unreal * Decimal(str(usd)))
+                                   else str((blended * Decimal(str(usd)))
                                             .quantize(Q2))))
         out.append(row)
     return out
@@ -675,6 +876,11 @@ def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
     · OPEN (filled, no exit yet) · EXIT (outcome TP / SL / TRAIL_STOP / TIMEOUT).
     TRAIL_STOP is a distinct outcome, not an SL flavour, so the book can grade
     the trailing rule against holding without parsing free text.
+
+    Every phase that can have SEEN a bar also carries `partials` — the ladder
+    rungs that filled, in the order they filled. `outcome` still names one
+    terminal rule, because the remainder still settles by exactly one; the
+    partials are what happened to the rest of the size on the way there.
     """
     direction = p["direction"]
     long = direction == "LONG"
@@ -703,7 +909,7 @@ def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
         if start >= len(candles):
             return {"phase": "OPEN", "fill_i": fi, "order_i": fi,
                     "current_stop": Decimal(p["sl"]), "best": entry,
-                    "trailed": False}
+                    "trailed": False, "partials": []}
         return _exit_walk(p, candles, start, fi, fi)
 
     order_i = _first_eligible_bar(candle_times, tf_seconds, p["armed_at"])
@@ -725,12 +931,43 @@ def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
     return _exit_walk(p, candles, fill_i, fill_i, order_i)
 
 
+def _ladder(p: dict) -> list:
+    """The intent's scale-out plan, parsed, still in nearest-first order.
+
+    `validate_partials` already sorted it at write time; this only re-reads it
+    so the walk never has to know how the plan was stored.
+    """
+    return [{"fraction": Decimal(str(r["fraction"])),
+             "price": Decimal(str(r["price"]))}
+            for r in (p.get("partials") or [])]
+
+
 def _exit_walk(p: dict, candles: list, start_i: int, fill_i: int,
                order_i: int) -> dict:
-    """The hold: stop, target, trail and timeout, from the fill bar onward.
+    """The hold: stop, target, scale-outs, trail and timeout, from the fill on.
 
     Shared by the ordinary path and the adopted one so a position taken over
     from the engine is held to exactly the rules a hand-armed trade is.
+
+    SCALE-OUTS, at bar granularity, under the same two rules everything else
+    here obeys:
+
+      · A rung fills on the bar whose range CONTAINS it — BAR_TOUCH_FULL_FILL,
+        the same test the entry uses, so a level inside the bar is a fill and a
+        level outside it is not.
+      · THE STOP TAKES THE WHOLE BAR. A bar that reaches the stop settles the
+        entire remaining position at the stop, and no rung fills on it, even a
+        rung the bar's range also covered. OHLC cannot say which came first,
+        and the house rule for that ambiguity is already written down: the stop
+        wins. Extending it costs the operator the flattering reading — a scale-
+        out banked at a profit just before the loss — which is exactly why it
+        is the reading to take. Such a bar is flagged `ambiguous`, as an
+        ambiguous stop/target bar always was.
+
+    Rungs are otherwise tested BEFORE the target, because price must pass
+    through a nearer level to reach a further one — a bar that covers both took
+    the scale-out on its way to the target, and recording only the target would
+    quietly overstate the size that got the best price.
     """
     direction = p["direction"]
     long = direction == "LONG"
@@ -738,21 +975,27 @@ def _exit_walk(p: dict, candles: list, start_i: int, fill_i: int,
     trail = p.get("trail_r")
     trail = Decimal(str(trail)) if trail else None
     risk = _risk_of(p, direction, entry, sl)
+    pending = _ladder(p)
+    taken: list = []
     stop, best, trailed = sl, entry, False
     for j in range(start_i, min(fill_i + MAX_BARS, len(candles))):
         hi, lo = Decimal(candles[j]["high"]), Decimal(candles[j]["low"])
         hit_stop = lo <= stop if long else hi >= stop
         hit_tp = hi >= tp if long else lo <= tp
+        touched = [r for r in pending if lo <= r["price"] <= hi]
         if hit_stop:                          # stop wins ties, house rule
             return {"phase": "EXIT",
                     "outcome": "TRAIL_STOP" if trailed else "SL",
                     "exit_price": stop, "exit_i": j, "fill_i": fill_i,
-                    "order_i": order_i,
-                    "ambiguous": hit_stop and hit_tp, "final_stop": stop}
+                    "order_i": order_i, "partials": taken,
+                    "ambiguous": bool(hit_tp or touched), "final_stop": stop}
+        for r in touched:
+            taken.append({**r, "exit_i": j})
+            pending.remove(r)
         if hit_tp:
             return {"phase": "EXIT", "outcome": "TP", "exit_price": tp,
                     "exit_i": j, "fill_i": fill_i, "order_i": order_i,
-                    "ambiguous": False, "final_stop": stop}
+                    "partials": taken, "ambiguous": False, "final_stop": stop}
         if trail is not None:
             best = max(best, hi) if long else min(best, lo)
             cand = (best - trail * risk) if long else (best + trail * risk)
@@ -760,12 +1003,103 @@ def _exit_walk(p: dict, candles: list, start_i: int, fill_i: int,
                 stop, trailed = cand, True
     if fill_i + MAX_BARS <= len(candles):
         j = fill_i + MAX_BARS - 1
+        # The timeout bar is the last bar of the window and the loop has already
+        # walked it, so any rung it covered is in `taken` — the remainder is what
+        # closes at the window's close, and nothing here re-tests that bar.
         return {"phase": "EXIT", "outcome": "TIMEOUT",
                 "exit_price": Decimal(candles[j]["close"]), "exit_i": j,
-                "fill_i": fill_i, "order_i": order_i,
+                "fill_i": fill_i, "order_i": order_i, "partials": taken,
                 "ambiguous": False, "final_stop": stop}
     return {"phase": "OPEN", "fill_i": fill_i, "order_i": order_i,
-            "current_stop": stop, "best": best, "trailed": trailed}
+            "current_stop": stop, "best": best, "trailed": trailed,
+            "partials": taken}
+
+
+def settle_leg(profile, symbol: str, entry: Decimal, exit_price: Decimal,
+               risk: Decimal, long: bool, fraction: Decimal, kind: str,
+               outcome: str, order_type: str, atr_at_exit, bars_held: int,
+               tf_seconds: int, exit_ts: int) -> dict:
+    """One settlement of one slice of the position, priced in full.
+
+    This is the arithmetic `run` has always done for a single exit, lifted out
+    so that every leg of a scaled trade is charged by the SAME code — there is
+    no cheaper path for a partial and no separate one for the remainder.
+
+      · A LIMIT exit is a resting order the operator placed at a level, so it
+        earns maker and pays no slippage. Every scale-out rung is one, as the
+        take-profit already was.
+      · A MARKET exit — every stop, trailed or not, and the timeout — pays
+        taker and slippage, because it crosses the book when it fires.
+      · The entry fee is charged on EVERY leg, weighted by that leg's fraction
+        when it is blended. The entry was one fill of the whole size; charging
+        it once against the remainder alone would let a scaled trade enter more
+        cheaply than a held one.
+      · Funding is per LEG, over that leg's own holding hours. A rung taken at
+        bar 3 pays for three bars. Charging the trade's full holding period on
+        size that was closed early would be a cost the operator never carried.
+
+    Returns strings, and that is deliberate: these dicts are written to the
+    fact verbatim and then fed back to `blend_r`, so the numbers that get
+    recorded are exactly the numbers that produced the result.
+    """
+    slip = Decimal(0)
+    if order_type == "MARKET" and atr_at_exit is not None:
+        slip = profile.market_slippage_atr * atr_at_exit
+    eff_exit = (exit_price - slip) if long else (exit_price + slip)
+    exit_rate = profile.maker_rate if order_type == "LIMIT" else profile.taker_rate
+    fees = profile.maker_rate * entry + exit_rate * eff_exit
+    holding_hours = Decimal(bars_held * tf_seconds) / Decimal(3600)
+    funding = venues.funding_cost_rate(
+        symbol, FUNDING_RATE_PER_SETTLEMENT, holding_hours) * entry
+    gross = (exit_price - entry) if long else (entry - exit_price)
+    net = (((eff_exit - entry) if long else (entry - eff_exit)) - fees - funding)
+    return {"kind": kind, "outcome": outcome, "order_type": order_type,
+            "fraction": str(fraction),
+            "exit_price": str(exit_price),
+            "effective_exit_price": str(eff_exit),
+            "slippage_price_units": str(slip),
+            "fees_price_units": str(fees),
+            "funding_price_units": str(funding),
+            "r_gross": str(gross / risk), "r_net": str(net / risk),
+            "bars_held": bars_held, "exit_ts": exit_ts}
+
+
+def blend_r(legs: list, field: str = "r_net") -> Decimal:
+    """The trade's R, blended from its legs. THE definition, used by both sides.
+
+    `run` calls this on the leg dicts it is about to write, so the recorded
+    `r_multiple` is a function of the recorded `legs` — not merely consistent
+    with them, DERIVED from them, by this function. Anyone replaying a scaled
+    trade calls the same function on the same stored strings and gets the same
+    answer, which is the property `test_one_walk.py` opens by arguing for: the
+    code that settles must BE the code that replays, or agreement is something
+    you calibrate instead of something you have.
+
+    Each leg's R is stored unrounded — the exact quotient the settlement
+    produced — and rounding happens ONCE, here, on the weighted sum. Storing
+    2dp legs and summing those would round twice and make the fact's own
+    arithmetic fail to reproduce the fact's own headline number.
+
+    The weights are the recorded fractions, which sum to exactly 1 by
+    construction: the ladder is validated to leave a remainder, and the
+    remainder's fraction is `1 - sum(rungs)`.
+    """
+    return _weighted(legs, field).quantize(Q2)
+
+
+def _weighted(legs: list, field: str) -> Decimal:
+    """One leg field, summed across the position by the size each leg carried.
+
+    The whole of the blend except the rounding, which is why `blend_r` is a
+    one-liner over it. Used unrounded for the cost fields at the top of the
+    exit fact, so `fees_price_units` and its two neighbours keep meaning what
+    they meant when a trade had one exit — the cost the WHOLE position carried,
+    per unit — rather than silently becoming the last leg's share of it.
+    """
+    total = Decimal(0)
+    for leg in legs:
+        total += Decimal(str(leg["fraction"])) * Decimal(str(leg[field]))
+    return total
 
 
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
@@ -773,6 +1107,12 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
     Append-only and idempotent: an intent that cannot resolve yet simply emits
     nothing and is retried on the next pass, exactly as `execsim` treats OPEN.
+
+    Resolves intents from EVERY version this book has written and writes the
+    result under the CURRENT one, which is the migration's live half. A v0.1
+    intent carries no ladder, so its walk and its blend are the same numbers
+    v0.1 would have produced; the version on the exit fact names the code that
+    settled it, which after the bump is honestly v0.2.
     """
     with RunRecorder(con, "manual", MANUAL_VERSION, symbol, tf) as rec:
         candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
@@ -782,21 +1122,26 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         cost_manifest_hash = costs.record(con, profile)
 
         intents = {}
-        for r in store.get_facts(con, symbol, tf, INTENT_KIND, MANUAL_VERSION):
+        for r in _facts(con, INTENT_KIND, symbol, tf):
             p = json.loads(r["payload"])
             intents[p["intent_id"]] = {**p, "confirmed_at": r["confirmed_at"],
                                        "market_time": r["market_time"]}
         # Already-resolved intents are skipped rather than re-emitted. The
         # content hash would dedupe a byte-identical repeat anyway, but a
         # re-run after more candles arrive could otherwise resolve the SAME
-        # intent a second way (OPEN -> TP) and write both.
+        # intent a second way (OPEN -> TP) and write both. Read across versions
+        # too: a trade the v0.1 book closed is closed, and a `done` set that
+        # could not see it would settle it a second time under the new tag.
         done = set()
-        for r in store.get_facts(con, symbol, tf, EXEC_KIND, MANUAL_VERSION):
+        for r in _facts(con, EXEC_KIND, symbol, tf):
             done.add(json.loads(r["payload"])["intent_id"])
         rec.n_inputs = len(intents)
 
+        # SCALED is not an outcome — it counts trades that took a rung off on
+        # the way to one, so the run log says when the ladder actually fired
+        # rather than leaving it to be inferred from a payload.
         counts = {"TP": 0, "SL": 0, "TRAIL_STOP": 0, "TIMEOUT": 0,
-                  "OPEN": 0, "MISSED": 0}
+                  "OPEN": 0, "MISSED": 0, "SCALED": 0}
         n_out = 0
         for iid, s in intents.items():
             if iid in done:
@@ -842,24 +1187,36 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             ambiguous = w["ambiguous"]
             exit_ts = candles[j]["open_ts"] + tf_seconds
 
-            slip = Decimal(0)
-            # Every stop is a market order when it fires — the initial one and
-            # the trailed one alike — so both pay taker and slippage below.
-            if outcome in ("SL", "TRAIL_STOP", "TIMEOUT") and atr[j] is not None:
-                slip = profile.market_slippage_atr * atr[j]
-            holding_hours = Decimal((j - i) * tf_seconds) / Decimal(3600)
-            funding_cost = venues.funding_cost_rate(
-                symbol, FUNDING_RATE_PER_SETTLEMENT, holding_hours) * entry
-            eff_exit = (exit_price - slip) if long else (exit_price + slip)
-            # The operator's entry is a resting limit they chose, so it earns
-            # maker. The exit follows execsim: a target is passive, a stop is a
-            # market order and pays taker plus slippage.
-            exit_rate = profile.maker_rate if outcome == "TP" else profile.taker_rate
-            fees = profile.maker_rate * entry + exit_rate * eff_exit
-            gross = (exit_price - entry) if long else (entry - exit_price)
-            net = (((eff_exit - entry) if long else (entry - eff_exit))
-                   - fees - funding_cost)
+            # EVERY settled trade is a list of legs, a one-item list when
+            # nothing was scaled out. One shape means one costing path and one
+            # blend, so the ordinary trade is not a special case that could
+            # drift from the scaled one — it IS the scaled one, with an empty
+            # ladder. `blend_r` over a single leg of fraction 1 is that leg's
+            # own quotient, so a trade with no partials settles to exactly the
+            # figure the pre-v0.2 resolver wrote.
+            filled = w.get("partials") or []
+            legs = [settle_leg(
+                profile, symbol, entry, f["price"], risk, long,
+                fraction=f["fraction"], kind="PARTIAL", outcome="PARTIAL",
+                # A rung is a resting order at a price the operator chose. It
+                # earns maker and pays no slippage, exactly as the target does.
+                order_type="LIMIT", atr_at_exit=None,
+                bars_held=f["exit_i"] - i, tf_seconds=tf_seconds,
+                exit_ts=candles[f["exit_i"]]["open_ts"] + tf_seconds)
+                for f in filled]
+            remainder = Decimal(1) - sum((f["fraction"] for f in filled),
+                                         Decimal(0))
+            legs.append(settle_leg(
+                profile, symbol, entry, exit_price, risk, long,
+                fraction=remainder, kind="REMAINDER", outcome=outcome,
+                # Every stop is a market order when it fires — the initial one
+                # and the trailed one alike — and so is the timeout.
+                order_type="LIMIT" if outcome == "TP" else "MARKET",
+                atr_at_exit=atr[j], bars_held=j - i, tf_seconds=tf_seconds,
+                exit_ts=exit_ts))
             counts[outcome] += 1
+            if filled:
+                counts["SCALED"] += 1
             if store.insert_fact(
                     con, symbol=symbol, tf=tf, kind=EXEC_KIND,
                     market_time=s["market_time"], confirmed_at=exit_ts,
@@ -867,12 +1224,35 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                     payload={"intent_id": iid, "source": "OPERATOR",
                              "direction": direction, "outcome": outcome,
                              "entry": str(entry), "exit_price": str(exit_price),
-                             "effective_exit_price": str(eff_exit),
-                             "r_multiple": str((net / risk).quantize(Q2)),
-                             "r_gross": str((gross / risk).quantize(Q2)),
-                             "fees_price_units": str(fees),
-                             "funding_price_units": str(funding_cost),
-                             "slippage_price_units": str(slip),
+                             "effective_exit_price":
+                                 legs[-1]["effective_exit_price"],
+                             # DERIVED from `legs` below, by the same function
+                             # any replay would call. See blend_r.
+                             "r_multiple": str(blend_r(legs, "r_net")),
+                             "r_gross": str(blend_r(legs, "r_gross")),
+                             # Every leg, with its own price, costs and holding
+                             # period. This is what makes the blend checkable
+                             # from the fact alone rather than on trust.
+                             "legs": legs,
+                             "scaled_out": bool(filled),
+                             "n_partials": len(filled),
+                             # What was PLANNED, beside what filled: a rung the
+                             # market never reached is a decision that was made,
+                             # and its absence from `legs` should not read as if
+                             # it was never intended.
+                             "partials_planned": s.get("partials") or [],
+                             # Size-weighted across the legs, so these keep
+                             # meaning the cost the WHOLE position carried per
+                             # unit — identical to the single exit's own costs
+                             # when nothing was scaled out.
+                             "fees_price_units":
+                                 str(_weighted(legs, "fees_price_units")),
+                             "funding_price_units":
+                                 str(_weighted(legs, "funding_price_units")),
+                             "slippage_price_units":
+                                 str(_weighted(legs, "slippage_price_units")),
+                             # The REMAINDER's hold: the trade is not over until
+                             # the last of it is out.
                              "bars_held": j - i,
                              "bars_to_fill": i - w["order_i"],
                              "fill_ts": candles[i]["open_ts"] + tf_seconds,
@@ -880,6 +1260,10 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                              # Which exit RULE settled this — recorded so the
                              # book can grade trailing against holding, which
                              # is the only way this feature earns permanence.
+                             # `scaled_out` is its own axis for the same
+                             # reason: scaling out has to be gradable against
+                             # not scaling out, and folding it into this string
+                             # would make that a text-parsing job.
                              "exit_rule": ("TRAIL" if s.get("trail_r")
                                            else "HOLD"),
                              "trail_r": s.get("trail_r"),
@@ -901,14 +1285,15 @@ def book(con, limit: int = 200) -> dict:
 
     Reads ONLY manual facts. It cannot accidentally report a strategy trade,
     because it never queries a strategy version.
+
+    It reads every MANUAL version, though, and must: the operator's record is
+    the operator's record across a version bump. A book that showed only what
+    the current code wrote would appear to reset itself the day the tag moved —
+    losing the settled history whose whole purpose is to be long enough to mean
+    something.
     """
-    import sqlite3
-    con.row_factory = sqlite3.Row      # `get_facts` sets this too; do not rely on it
     rows = []
-    for r in con.execute(
-            "SELECT symbol, tf, market_time, confirmed_at, payload FROM facts "
-            "WHERE kind=? AND algo_version=? ORDER BY confirmed_at",
-            (EXEC_KIND, MANUAL_VERSION)):
+    for r in sorted(_facts(con, EXEC_KIND), key=lambda x: x["confirmed_at"]):
         p = json.loads(r["payload"])
         rows.append({"symbol": r["symbol"], "tf": r["tf"],
                      "resolved_at": r["confirmed_at"], **p})
@@ -918,10 +1303,8 @@ def book(con, limit: int = 200) -> dict:
         curve.append({"ts": row["resolved_at"], "r": str(cum)})
     open_intents = []
     resolved = {row["intent_id"] for row in rows}
-    for r in con.execute(
-            "SELECT symbol, tf, confirmed_at, payload FROM facts "
-            "WHERE kind=? AND algo_version=? ORDER BY confirmed_at DESC",
-            (INTENT_KIND, MANUAL_VERSION)):
+    for r in sorted(_facts(con, INTENT_KIND),
+                    key=lambda x: x["confirmed_at"], reverse=True):
         p = json.loads(r["payload"])
         if p["intent_id"] not in resolved:
             open_intents.append({"symbol": r["symbol"], "tf": r["tf"], **p})

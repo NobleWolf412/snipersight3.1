@@ -188,6 +188,149 @@ ok('an empty book hides the panel rather than showing an empty box', () => {
     'no orders is the normal state and needs no furniture');
 });
 
+/* ─────────────── partial exits: a position that is half gone ───────────────
+
+   The panel rendered a partly-closed position exactly like an untouched one.
+   Two numbers were wrong at once, both in the flattering direction on a
+   winner: the full original stake showed under "at risk" when only what is
+   left can still be lost, and `unrealized_r` — the per-unit R of the REMAINING
+   size — read as the whole trade's result while half of it had already been
+   banked at a different price. */
+
+ok('the row headlines the blended R, not the open remainder alone', () => {
+  const fn = SHELL.slice(SHELL.indexOf('async function renderMine'),
+                         SHELL.indexOf('/* Cancel is a real mutation'));
+  assert(/const blended = t\.blended_r == null \? r : \+t\.blended_r/.test(fn),
+    'blended_r is banked plus open — the trade. It equals unrealized_r when ' +
+    'nothing was scaled out, so an ordinary row must be untouched by this');
+  assert(/\$\{rr\(blended\)\}/.test(fn), 'the headline still quotes the open half only');
+});
+
+ok('only the size still on is described as at risk', () => {
+  const fn = SHELL.slice(SHELL.indexOf('async function renderMine'),
+                         SHELL.indexOf('/* Cancel is a real mutation'));
+  assert(/const stillAtRisk = t\.risk_usd == null \? null : \+t\.risk_usd \* openFrac/.test(fn),
+    'quoting the original stake on a half-closed position overstates what a ' +
+    'stop would now cost — the money the operator is deciding with');
+  assert(!/money\(t\.risk_usd\) \+ ' at risk'/.test(fn),
+    'the full-stake wording survived somewhere in the open row');
+});
+
+ok('what was taken off is stated, with what it banked', () => {
+  const fn = SHELL.slice(SHELL.indexOf('async function renderMine'),
+                         SHELL.indexOf('/* Cancel is a real mutation'));
+  assert(/% off · \$\{\s*rr\(\+t\.realized_r\)\} banked/.test(fn),
+    'a closed fraction with no R beside it is a percentage nobody can act on');
+  assert(/closed > 0/.test(fn), 'nothing distinguishes a scaled row from a whole one');
+});
+
+ok('a resting order shows the ladder it will run without you', () => {
+  const fn = SHELL.slice(SHELL.indexOf('async function renderMine'),
+                         SHELL.indexOf('/* Cancel is a real mutation'));
+  assert(/t\.partials_planned \|\| \[\]/.test(fn),
+    'an order that will take half off at a level reads as an ordinary one until it does');
+});
+
+ok('the server owns every one of those figures', () => {
+  // Same rule the unrealized R already lives under: one authority, which is
+  // the walk that settles the trade.
+  assert(/"realized_r"|realized_r=str/.test(ENGINE), 'the engine does not compute it');
+  assert(/blended_r=str/.test(ENGINE), 'the blend is not computed server-side');
+  assert(/closed_fraction=str/.test(ENGINE), 'nothing reports how much is gone');
+  const fn = SHELL.slice(SHELL.indexOf('async function renderMine'),
+                         SHELL.indexOf('/* Cancel is a real mutation'));
+  assert(!/realized[A-Za-z]*\s*=\s*[^t].*\*\s*\+t\.(entry|sl|tp)/.test(fn),
+    'the browser must not re-derive a banked R from prices');
+});
+
+/* ───────────── partial exits: setting one on the ticket ───────────── */
+
+ok('the ticket has a way to take part off, and it is off by default', () => {
+  assert(/id="tkScale"/.test(HTML), 'no scale-out control');
+  assert(/id="tkScalePct"/.test(HTML) && /id="tkScaleR"/.test(HTML),
+    'a scale-out needs both how much and how far');
+  assert(/id="tkScaleRow" hidden/.test(HTML),
+    'taking half off is a choice with a cost, not a prudence the app assumes');
+});
+
+ok('the rung is typed in R and armed as a price', () => {
+  assert(/function partialPrice/.test(S('static/ticket-math.js')),
+    'the R-to-price conversion belongs in the tested arithmetic file');
+  assert(/partials: scalePlan/.test(CHART), 'the rung never reaches the server');
+  assert(/\{fraction: scalePlan\.fraction, price: scalePlan\.price\}/.test(CHART),
+    'the engine records a PRICE — sending R would make it re-derive one from ' +
+    'a risk figure it had to trust the browser for');
+});
+
+ok('the price it lands on is shown, not just the R', () => {
+  assert(/id="tkScaleAt"/.test(HTML), 'nowhere to state where the rung lands');
+  assert(/takes \$\{Math\.round\(p\.fraction \* 100\)\}% off at \$\{pf\(p\.price\)\}/.test(CHART),
+    'R is what you type; the price is what the trade turns on');
+});
+
+ok('a rung the engine would refuse disables Arm rather than being sent', () => {
+  assert(/const badScale = \$\('tkScale'\) && \$\('tkScale'\)\.checked && !scalePlan/.test(CHART),
+    'nothing detects an unplaceable rung');
+  assert(/btn\.disabled = badScale \? true/.test(CHART),
+    'a rung that silently failed validation while the rest armed would give ' +
+    'the operator a trade they did not ask for');
+  assert(/SCALE_BLOCK/.test(CHART), 'the refusal has no wording');
+});
+
+ok('the confirm restates the rung before it commits', () => {
+  assert(/taking \$\{Math\.round\(scalePlan\.fraction \* 100\)\}% off at/.test(CHART),
+    'the last word before an irreversible-feeling action should be its own terms');
+});
+
+ok('the scale-out does not survive onto the next chart', () => {
+  const fn = CHART.slice(CHART.indexOf('function restore()'),
+                         CHART.indexOf('function setDir('));
+  assert(/\$\('tkScale'\)\.checked = false/.test(fn),
+    'carrying "half off at 1R" to another market arms a plan never decided for it');
+});
+
+ok('the chart draws the rung, filled and unfilled differently', () => {
+  assert(/PLAN · \$\{Math\.round\(scalePlan\.fraction \* 100\)\}% OFF/.test(CHART),
+    'the planned rung is invisible on the chart');
+  assert(/YOURS · \$\{Math\.round\(\+r\.fraction \* 100\)\}% \$\{filled \? 'OFF' : 'AT'\}/.test(CHART),
+    'a rung already taken and one still waiting must not draw identically — ' +
+    '"what have I got left on" should be answerable by looking');
+});
+
+/* ──────────────── partial exits: the accounting ──────────────── */
+
+ok('the blend is derived from the recorded legs, by the replay function', () => {
+  assert(/def blend_r\(legs/.test(ENGINE), 'no single definition of the blend');
+  assert(/"r_multiple": str\(blend_r\(legs, "r_net"\)\)/.test(ENGINE),
+    'settle code must BE replay code — a separately-computed headline number ' +
+    'is one the record cannot vouch for');
+  assert(/"legs": legs/.test(ENGINE),
+    'without the legs on the fact the blend is unreproducible');
+});
+
+ok('every leg is costed by one function, with no cheaper path for a partial', () => {
+  assert(/def settle_leg\(/.test(ENGINE), 'no shared costing');
+  const run = ENGINE.slice(ENGINE.indexOf('def run(con, symbol'));
+  assert((run.match(/settle_leg\(/g) || []).length === 2,
+    'the rungs and the remainder must both go through settle_leg');
+});
+
+ok('the stop still takes the whole bar', () => {
+  const fn = ENGINE.slice(ENGINE.indexOf('def _exit_walk'), ENGINE.indexOf('def run(con'));
+  assert(fn.indexOf('if hit_stop:') < fn.indexOf('for r in touched:'),
+    'a rung filling on the stop\'s own bar would bank a profit moments before ' +
+    'the loss — plausible, flattering, and unprovable from OHLC');
+});
+
+ok('the version moved, and the old one is still read', () => {
+  assert(/MANUAL_VERSION = "manual-v0\.2-draft"/.test(ENGINE),
+    'a scale-out changes what r_multiple MEANS — a v0.1 reader is wrong about the trade');
+  assert(/MANUAL_VERSIONS = \("manual-v0\.1-draft", MANUAL_VERSION\)/.test(ENGINE),
+    'without a wider read set the bump strands every order still open under v0.1');
+  assert(/algo_version IN \(\{marks\}\)/.test(ENGINE),
+    'the read path must filter on the tuple, not on one version');
+});
+
 /* ───────────────── the label that was written twice ───────────────── */
 
 ok('the scan button label lives in one place', () => {

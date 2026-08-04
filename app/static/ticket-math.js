@@ -30,11 +30,36 @@
     return long ? entry * (1 - move) : entry * (1 + move);
   }
 
-  /* input:  {dir, entry, tp, sl, equity, cfg, riskUsdOverride, leverage}
+  /* Where a scale-out rung sits, in price, given how far in R the operator
+     wants to take it off.
+
+     R is the unit the decision is made in — "half off at 1R" is the thing
+     traders say — and PRICE is the unit the engine records and the chart
+     draws, because every other level in this system is a price. Converting
+     here rather than in the browser's event handler keeps the one arithmetic
+     the ticket owns in the one file that gets tested without a DOM.
+
+     `riskPerUnit` is the risk actually TAKEN, so on a held position this
+     measures R from the original stop and a rung at 1R means the same thing it
+     meant when the trade was opened. */
+  function partialPrice(entry, riskPerUnit, atR, long){
+    if(!(riskPerUnit > 0) || typeof atR !== 'number' || !isFinite(atR)) return null;
+    const p = long ? entry + atR * riskPerUnit : entry - atR * riskPerUnit;
+    /* Trimmed to 10 significant figures, because this number is RECORDED.
+       191.8 + 1 * 41.8 is 233.60000000000002 in IEEE754, and that is what the
+       fact would carry — a price the operator never chose, in a book whose
+       entire value is being a truthful account of what they decided. Ten
+       figures is far past any real tick size (a sub-cent token still resolves
+       to 0.000041234568) and comfortably inside the noise. */
+    return p === 0 ? 0 : Number(p.toPrecision(10));
+  }
+
+  /* input:  {dir, entry, tp, sl, equity, cfg, riskUsdOverride, leverage,
+              partial: {fraction, atR}}
      output: {ok, errors[], notes[], blocks[], riskPerUnit, rewardPerUnit,
               rrGross, rrNet, riskUsd, size, notional, fees, netUsd,
               riskPctEffective, riskSource, leverage, margin, liquidation,
-              liqDistance} */
+              liqDistance, partial} */
   function ticketMath(inp){
     const {dir, entry, tp, sl, equity, cfg, riskUsdOverride, leverage} = inp;
     const long = dir === 'LONG';
@@ -180,9 +205,42 @@
     if(out.margin > equity)
       out.notes.push('NOTIONAL_EXCEEDS_BUYING_POWER');
 
+    scaleOut(inp, out, long, entry, tp, sl, riskU);
     return out;
   }
 
-  if(typeof module !== 'undefined' && module.exports) module.exports = {ticketMath};
-  else root.SSTicketMath = {ticketMath};
+  /* The scale-out rung: where it lands, what it takes off, and whether the
+     server will accept it.
+
+     The geometry rule is the ENGINE's (manual.validate_partials: strictly
+     between the stop and the target, leaving a remainder) and is restated here
+     for exactly one purpose — so the ticket does not offer an action that will
+     be refused. The server still checks; this is the courtesy, that is the
+     guard. Mirroring a rule is a duplication and duplications drift, so the
+     failures are returned as CODES and the wording lives with the UI, the same
+     split `notes` and `blocks` already use.
+
+     `blocked` is the ticket's own verdict and does not touch `out.blocks`,
+     which is reserved for the liquidation gate — a rung the operator has not
+     finished typing must not read as a plan that cannot be placed at all. */
+  function scaleOut(inp, out, long, entry, tp, sl, riskU){
+    const p = inp.partial;
+    if(!p) return;
+    const frac = Number(p.fraction), atR = Number(p.atR);
+    const res = {fraction: frac, atR: atR, price: null, blocked: null};
+    out.partial = res;
+    if(!isFinite(frac) || frac <= 0 || frac >= 1){ res.blocked = 'FRACTION_RANGE'; return; }
+    // The engine's own floor: below 1% a slice pays more in fees than it can
+    // move the blended result.
+    if(frac < 0.01){ res.blocked = 'FRACTION_TOO_SMALL'; return; }
+    const price = partialPrice(entry, riskU, atR, long);
+    if(price == null || !(price > 0)){ res.blocked = 'NO_PRICE'; return; }
+    res.price = price;
+    const lo = Math.min(sl, tp), hi = Math.max(sl, tp);
+    if(!(price > lo && price < hi)) res.blocked = 'OUTSIDE_BRACKET';
+  }
+
+  if(typeof module !== 'undefined' && module.exports)
+    module.exports = {ticketMath, partialPrice};
+  else root.SSTicketMath = {ticketMath, partialPrice};
 })(typeof globalThis !== 'undefined' ? globalThis : this);

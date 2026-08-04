@@ -300,4 +300,120 @@ t('leverage is clamped to the venue maximum, and junk never escapes', () => {
   }
 });
 
+/* ---------------------- the scale-out rung ----------------------
+   R is what the operator types; PRICE is what gets armed, recorded and drawn.
+   The conversion is the whole reason this lives in ticket-math rather than in
+   an event handler — a browser that shipped the wrong price would arm a trade
+   nobody planned, and the server would accept it because it IS a valid rung.
+*/
+
+t('a rung at N R lands N stop-widths from the entry', () => {
+  const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90,
+                        equity: EQ, cfg: CFG, partial: {fraction: 0.5, atR: 1}});
+  assert.ok(near(m.partial.price, 110), '1R above a 10-wide stop is 110');
+  assert.strictEqual(m.partial.blocked, null);
+  const two = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90,
+                          equity: EQ, cfg: CFG, partial: {fraction: 0.5, atR: 2}});
+  assert.ok(near(two.partial.price, 120));
+});
+
+t('the rung price carries no float noise into the record', () => {
+  // 191.8 + 1 * 41.8 is 233.60000000000002 in IEEE754. The engine records
+  // whatever the browser sends, so the fact would carry a price the operator
+  // never chose — in a book whose whole value is being a truthful account of
+  // what they decided.
+  const m = ticketMath({dir: 'LONG', entry: 191.8, tp: 250, sl: 150,
+                        equity: EQ, cfg: CFG, partial: {fraction: 0.5, atR: 1}});
+  assert.strictEqual(m.partial.price, 233.6);
+  assert.strictEqual(String(m.partial.price), '233.6');
+  // ...and a sub-cent token keeps every digit that matters
+  const tiny = ticketMath({dir: 'LONG', entry: 0.00004, tp: 0.00009, sl: 0.00003,
+                           equity: EQ, cfg: CFG, partial: {fraction: 0.5, atR: 2}});
+  assert.ok(near(tiny.partial.price, 0.00006, 1e-12),
+            'trimming must not round a sub-cent level away');
+});
+
+t('a short rung goes DOWN from the entry', () => {
+  const m = ticketMath({dir: 'SHORT', entry: 100, tp: 70, sl: 110,
+                        equity: EQ, cfg: CFG, partial: {fraction: 0.5, atR: 1}});
+  assert.ok(near(m.partial.price, 90),
+            'a short in profit at 1R is 10 BELOW entry, not above');
+  assert.strictEqual(m.partial.blocked, null);
+});
+
+t('a rung measures R from the risk actually TAKEN on a held position', () => {
+  // stop dragged into profit; R must still mean the entry risk of 10
+  const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 105, holding: true,
+                        originalRisk: 10, equity: EQ, cfg: CFG,
+                        partial: {fraction: 0.5, atR: 2}});
+  assert.ok(near(m.partial.price, 120),
+            'R must not be re-derived from a stop the operator has moved');
+});
+
+t('a rung outside the bracket is blocked, not silently sent', () => {
+  // 4R above a 10-wide stop is 140, past the 130 target
+  const past = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90,
+                           equity: EQ, cfg: CFG, partial: {fraction: 0.5, atR: 4}});
+  assert.strictEqual(past.partial.blocked, 'OUTSIDE_BRACKET',
+    'the engine refuses this rung — offering it spends a click to be told no');
+  // and on the loss side, past the stop
+  const under = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90,
+                            equity: EQ, cfg: CFG, partial: {fraction: 0.5, atR: -2}});
+  assert.strictEqual(under.partial.blocked, 'OUTSIDE_BRACKET');
+});
+
+t('a rung ON the target or the stop is blocked too', () => {
+  for(const atR of [3, -1]){          // exactly 130 and exactly 90
+    const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90,
+                          equity: EQ, cfg: CFG, partial: {fraction: 0.5, atR}});
+    assert.strictEqual(m.partial.blocked, 'OUTSIDE_BRACKET',
+      'a rung at the bracket edge settles with the whole position, never before it');
+  }
+});
+
+t('a rung on the LOSS side of entry is allowed', () => {
+  // de-risking: half off at -0.5R, still inside the stop
+  const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90,
+                        equity: EQ, cfg: CFG, partial: {fraction: 0.5, atR: -0.5}});
+  assert.ok(near(m.partial.price, 95));
+  assert.strictEqual(m.partial.blocked, null,
+    'cutting size on the way down is a real decision, not a mistake to refuse');
+});
+
+t('a fraction that would close the whole position is blocked', () => {
+  for(const fraction of [1, 1.5, 0, -0.5, NaN]){
+    const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90,
+                          equity: EQ, cfg: CFG, partial: {fraction, atR: 1}});
+    assert.strictEqual(m.partial.blocked, 'FRACTION_RANGE',
+      'nothing would be left to settle at the stop or target: ' + String(fraction));
+  }
+  const dust = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90,
+                           equity: EQ, cfg: CFG,
+                           partial: {fraction: 0.001, atR: 1}});
+  assert.strictEqual(dust.partial.blocked, 'FRACTION_TOO_SMALL');
+});
+
+t('a half-typed rung blocks rather than guessing a price', () => {
+  const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90,
+                        equity: EQ, cfg: CFG, partial: {fraction: 0.5, atR: NaN}});
+  assert.strictEqual(m.partial.blocked, 'NO_PRICE');
+  assert.strictEqual(m.partial.price, null);
+});
+
+t('no rung asked for means no rung reported', () => {
+  const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90,
+                        equity: EQ, cfg: CFG});
+  assert.strictEqual(m.partial, undefined,
+    'an absent scale-out must not materialise as a blocked one');
+});
+
+t('a bad rung does not block the trade itself', () => {
+  const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90,
+                        equity: EQ, cfg: CFG, partial: {fraction: 0.5, atR: 9}});
+  assert.ok(m.ok, 'the bracket is still valid');
+  assert.strictEqual(m.blocks.length, 0,
+    'blocks is the liquidation gate — a mistyped rung is not a plan that ' +
+    'cannot be placed at all');
+});
+
 console.log(`\n${pass} passed`);

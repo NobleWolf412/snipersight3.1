@@ -36,6 +36,12 @@ window.SSChart = (() => {
   let riskOverride = null;
   let levels = {entry: null, tp: null, sl: null};
   let dir = 'LONG';
+  /* The scale-out rung the ticket currently describes, or null. Read from the
+     form by recompute() and kept here so drawScale(), the Arm payload and the
+     block reason all quote ONE answer — three readers parsing the same two
+     inputs is three chances to disagree about where the rung sits. */
+  let scalePlan = null;                       // {fraction, atR, price, blocked}
+  let scaleLine = null;                       // its dashed line on the chart
   /* Whether the ticket currently on screen is a plan that could be armed on
      PAPER. Deliberately separate from the live gate: "is this plan valid" and
      "may this system send real orders" are different questions, and folding
@@ -338,6 +344,10 @@ window.SSChart = (() => {
       try{ syncLeverage(null); }catch(err){ /* row may not exist yet */ }
       $('tkRiskPct').textContent = '';
       $('tkRisk').value = '';
+      // A rung is priced off the entry and the stop. With no valid levels there
+      // is no price to state, and leaving the last one on screen would put a
+      // stale number beside a ticket that has none.
+      paintScale(null);
     };
 
     if(e == null || tp == null || sl == null){
@@ -356,7 +366,8 @@ window.SSChart = (() => {
        // stop can be dragged past entry to lock in a winner.
        holding: !!enginePos,
        originalRisk: enginePos
-         ? Math.abs(+enginePos.entry - +enginePos.sl) : null});
+         ? Math.abs(+enginePos.entry - +enginePos.sl) : null,
+       partial: readScale()});
 
     if(!m.ok){
       out.innerHTML = key.innerHTML =
@@ -476,9 +487,67 @@ window.SSChart = (() => {
        so no engine rule moves: this is the ticket declining to offer
        something, not a change to what is permitted. */
     lastMetrics = m;
+    paintScale(m.partial || null);
     const overMargin = (m.notes || []).includes('NOTIONAL_EXCEEDS_BUYING_POWER');
     armable = m.blocks.length === 0 && !overMargin;
     refreshArm();
+  }
+
+  /* ---------- the scale-out rung ---------- */
+
+  /* What the two inputs currently say, or null when the toggle is off.
+     Percent in the form, fraction on the wire — the engine records fractions
+     and a UI that shipped "50" as a fraction would take fifty times the
+     position off. */
+  function readScale(){
+    if(!$('tkScale') || !$('tkScale').checked) return null;
+    const pct = parseFloat(String($('tkScalePct').value).replace(/[%,]/g, ''));
+    const atR = parseFloat(String($('tkScaleR').value).replace(/[R,]/gi, ''));
+    return {fraction: isFinite(pct) ? pct / 100 : NaN,
+            atR: isFinite(atR) ? atR : NaN};
+  }
+
+  /* State where the rung lands, in price, and draw it.
+
+     R is what the operator types; PRICE is what gets recorded, what the
+     resolver tests against a bar, and what the chart can show. Printing only
+     the R would leave the one number the trade actually turns on unstated —
+     the same reason the liquidation line prints a price beside the leverage
+     dial rather than a multiple. */
+  const SCALE_BLOCK = {
+    FRACTION_RANGE: 'Take off between 1% and 99% — 100% is a target, not a ' +
+      'scale-out, and the trade needs something left to settle at the stop.',
+    FRACTION_TOO_SMALL: 'A slice under 1% pays more in fees than it can change ' +
+      'the result.',
+    NO_PRICE: 'Set how far in R to take it off.',
+    OUTSIDE_BRACKET: 'That lands outside your stop and target, so the trade ' +
+      'would already have ended before price got there. Move it inside, or ' +
+      'move the target.',
+  };
+
+  function paintScale(p){
+    scalePlan = (p && p.blocked == null) ? p : null;
+    const note = $('tkScaleAt');
+    if(note){
+      note.textContent = !p ? ''
+        : p.blocked ? (SCALE_BLOCK[p.blocked] || p.blocked)
+        : `takes ${Math.round(p.fraction * 100)}% off at ${pf(p.price)} · ` +
+          `${(1 - p.fraction) * 100 < 1 ? '' : Math.round((1 - p.fraction) * 100) + '% '}` +
+          'rides to the target or the stop';
+      note.className = 't-mono' + (p && p.blocked ? ' bad' : '');
+    }
+    drawScale();
+  }
+
+  function drawScale(){
+    if(scaleLine){ try{ series.removePriceLine(scaleLine); }catch(e){} scaleLine = null; }
+    if(!series || !scalePlan || !isFinite(scalePlan.price)) return;
+    // Dashed and dim like every other unarmed plan level — this is a rung the
+    // operator is drawing, not a level anything is resting at yet.
+    scaleLine = series.createPriceLine({
+      price: scalePlan.price, color: 'rgba(34,211,238,.40)', lineWidth: 1,
+      lineStyle: 1, axisLabelVisible: false,
+      title: `PLAN · ${Math.round(scalePlan.fraction * 100)}% OFF`});
   }
 
   /* Keep the dial, its ceiling and the liquidation line in step with the venue.
@@ -836,6 +905,10 @@ window.SSChart = (() => {
     if(!openPos.length) return [];
     const p = openPos[0];
     return [p.fill_price || p.entry, p.tp, p.current_stop || p.sl]
+      // The armed order's rungs count too: the ticket's dashed "PLAN · 50% OFF"
+      // line sitting on the same pixel as the order's own gold one is the
+      // six-labels-for-three-prices defect with a fourth price added.
+      .concat((p.partials_planned || []).map(r => r.price))
       .map(v => parseFloat(v)).filter(v => isFinite(v));
   }
 
@@ -857,6 +930,20 @@ window.SSChart = (() => {
         price: v, color: '#fbbf24', lineWidth: 1, lineStyle: k === 'entry' ? 0 : 3,
         axisLabelVisible: true, title: label}));
     }
+    /* The ladder, on the chart. A rung already taken is drawn as a fact — the
+       size behind it is gone — and one still waiting as a dotted intention, so
+       "what have I got left on" is answered by looking rather than by counting
+       back from a percentage in a panel. */
+    const done = (p.partials_filled || []).map(r => String(r.price));
+    for(const r of (p.partials_planned || [])){
+      const v = parseFloat(r.price);
+      if(!isFinite(v)) continue;
+      const filled = done.includes(String(r.price));
+      posLines.push(series.createPriceLine({
+        price: v, color: filled ? 'rgba(251,191,36,.55)' : '#fbbf24',
+        lineWidth: 1, lineStyle: filled ? 3 : 2, axisLabelVisible: true,
+        title: `YOURS · ${Math.round(+r.fraction * 100)}% ${filled ? 'OFF' : 'AT'}`}));
+    }
     const more = openPos.length > 1 ? ` · +${openPos.length - 1} more` : '';
     if(p.state === 'PENDING'){
       el.innerHTML = `PENDING ${p.direction} · limit ${pf(+p.entry)} · ` +
@@ -864,14 +951,21 @@ window.SSChart = (() => {
         `else missed${more}`;
       return;
     }
-    const r = parseFloat(p.unrealized_r);
+    /* The BLENDED figure headlines, because it is what the trade is worth: the
+       rungs already banked plus what is still on. `unrealized_r` alone would
+       quote the open remainder's per-unit R as if the whole position were
+       still riding it — the same overstatement the Your-trades panel made. */
+    const r = parseFloat(p.blended_r != null ? p.blended_r : p.unrealized_r);
     const cls = r >= 0 ? 'good' : 'bad';
     const usd = p.unrealized_usd != null
       ? ` (<span class="${cls}">${(r >= 0 ? '+' : '-')}$${Math.abs(+p.unrealized_usd).toFixed(0)}</span>)` : '';
+    const off = Math.round((+p.closed_fraction || 0) * 100);
     el.innerHTML =
       `OPEN ${p.direction} · in at ${pf(+p.fill_price)} · ` +
       `<span class="${cls}">${r >= 0 ? '+' : ''}${r.toFixed(2)}R</span>${usd} ` +
-      `at last close · held ${p.bars_held} bar${p.bars_held === 1 ? '' : 's'}${more}`;
+      `at last close · held ${p.bars_held} bar${p.bars_held === 1 ? '' : 's'}` +
+      (off > 0 ? ` · ${off}% taken off (${(+p.realized_r).toFixed(2)}R banked)` : '') +
+      more;
   }
 
   /* State the age of what is on screen, and keep stating it.
@@ -1318,6 +1412,14 @@ window.SSChart = (() => {
     else levels = {entry: base.entry, tp: base.tp, sl: base.sl};
     modified = false;
     riskOverride = null;              // an override belongs to one trade only
+    // ...and so does a scale-out. Carrying "half off at 1R" silently onto the
+    // next chart would arm a plan on a market it was never decided for, which
+    // is the same defect the risk override is reset for one line above.
+    if($('tkScale')){
+      $('tkScale').checked = false;
+      $('tkScaleRow').hidden = true;
+      paintScale(null);
+    }
     // The arm confirmation belongs to the trade that was armed. Left in place
     // it would sit under the NEXT symbol's ticket reading "armed on paper ·
     // LONG BTCUSDT ..." while the chart shows ETHUSDT — a stale receipt
@@ -1382,11 +1484,18 @@ window.SSChart = (() => {
     // Holding a position: the only honest commit is changing where it ends,
     // and only once a level has actually moved.
     btn.textContent = holding ? 'Update trade' : 'Arm (paper)';
+    /* A half-typed or impossible rung disables the commit in BOTH modes. The
+       engine refuses it (manual.validate_partials) and nothing is armed, so
+       leaving the button live would spend a click to be told no — and worse,
+       a rung that silently failed validation while the rest of the plan armed
+       would give the operator a trade they did not ask for. */
+    const badScale = $('tkScale') && $('tkScale').checked && !scalePlan;
     // Holding: BOTH a moved level and valid geometry. `armable` alone was not
     // checked, so dragging a short's stop below its entry left Update live on
     // a ticket the maths had already called invalid — the server would refuse
     // it, but offering an impossible action is its own defect.
-    btn.disabled = holding ? (!modified || !armable) : (!armable || !sym || !!dupe);
+    btn.disabled = badScale ? true
+      : holding ? (!modified || !armable) : (!armable || !sym || !!dupe);
 
     /* The blocking reason, ON the control. Only ever set when Arm is actually
        off — a standing explanation beside a live button teaches the operator
@@ -1412,6 +1521,11 @@ window.SSChart = (() => {
         why = 'The plan cannot be placed as drawn — see the warning above.';
       } else if(!holding && dupe){
         why = 'One order per side per chart.';
+      } else if(badScale){
+        // The engine refuses this rung (manual.validate_partials), so the
+        // ticket must not offer to send it. The reason is already spelled out
+        // under the field; here it only has to say what is blocking Arm.
+        why = 'That scale-out cannot be placed — see the note under it.';
       }
       blockEl.hidden = !why;
       whyEl.textContent = why;
@@ -1641,9 +1755,16 @@ window.SSChart = (() => {
           `target ${pf(levels.tp)}`,
           `risking ${usd(riskUsd)}${cfg && cfg.max_leverage > 1 && leverage > 1
             ? ` at ${leverage}x` : ''}`,
-          '',
-          'PAPER — this writes to your paper book. No real order is sent.',
         ];
+        // The rung belongs in the restatement for the same reason the levels
+        // do: it changes what the trade settles for, and the last word before
+        // committing should be the action's own terms.
+        if(scalePlan)
+          lines.push(`taking ${Math.round(scalePlan.fraction * 100)}% off at ` +
+                     `${pf(scalePlan.price)} (+${scalePlan.atR}R)`);
+        lines.push(
+          '',
+          'PAPER — this writes to your paper book. No real order is sent.');
         if(!confirm('Arm this trade?\n\n' + lines.join('\n'))) return;
       }
       btn.disabled = true;
@@ -1663,6 +1784,13 @@ window.SSChart = (() => {
               const v = parseFloat($('tkTrailR').value);
               return isFinite(v) && v > 0 ? v : null;
             })(),
+            // The rung as a PRICE, because that is what the resolver tests
+            // against a bar and what the fact records. The R the operator typed
+            // was only ever the way in — sending it would make the engine
+            // re-derive a price from a risk figure it would have to trust the
+            // browser for.
+            partials: scalePlan
+              ? [{fraction: scalePlan.fraction, price: scalePlan.price}] : null,
             risk_usd: isFinite(riskUsd) && riskUsd > 0 ? riskUsd : null})});
         const d = await r.json().catch(() => ({}));
         if(!r.ok){
@@ -1723,6 +1851,16 @@ window.SSChart = (() => {
       modified = true;
       recompute();
     });
+    $('tkScale').addEventListener('change', e => {
+      $('tkScaleRow').hidden = !e.target.checked;
+      modified = true;
+      recompute();
+    });
+    // `input`, not `change`: the rung's price is the answer to what is being
+    // typed, and a line that only moved on blur would leave the chart showing
+    // a level the form no longer describes.
+    for(const id of ['tkScalePct', 'tkScaleR'])
+      $(id).addEventListener('input', () => { modified = true; recompute(); });
     $('tkReset').addEventListener('click', restore);
 
     /* The one-click fix. It moves the dial the block named and nothing else,

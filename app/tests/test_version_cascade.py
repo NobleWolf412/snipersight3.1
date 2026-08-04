@@ -60,6 +60,14 @@ LOCKED = {
     "manual": manual.MANUAL_VERSION,
 }
 
+#: Superseded manual versions the resolver still READS. They are not in LOCKED
+#: because they are not the current generation of anything — but they are not
+#: dead either, and this file is where a version that still has live meaning
+#: has to be written down. Every one of them must stay outside every strategy
+#: tag, for the reason `manual` is locked at all.
+RETIRED_MANUAL = tuple(v for v in manual.MANUAL_VERSIONS
+                       if v != manual.MANUAL_VERSION)
+
 EXPECTED = {
     # S53 cascade — the widest this file has recorded, and the reason it exists.
     # swing-v0.9 stopped the promotion payload accruing per bar: v0.8 embedded
@@ -129,7 +137,18 @@ EXPECTED = {
     "breakout": "breakout-v0.4-draft",
     "venues": "venues-v0.2-draft",
     "cycles": "cycles-v0.2-draft",
-    "manual": "manual-v0.1-draft",
+    # manual-v0.2: partial exits. The one bump on this line with NO cascade, and
+    # the reason is the same reason `manual` has no CONSUMERS entry — nothing
+    # downstream reads it, by design. It still had to move: a scale-out splits
+    # one position into several settlements, so `r_multiple` becomes a blend of
+    # legs and a v0.1 reader of that fact is wrong about the trade. `trail_r`
+    # rode v0.1 precisely because a v0.1 reader stayed right.
+    #
+    # The migration is inside the engine rather than here: `MANUAL_VERSIONS`
+    # keeps the read set wider than the write set, so every intent still open
+    # under v0.1 resolves normally and the settled book does not blank itself
+    # the day the tag moved. See engine/manual.py.
+    "manual": "manual-v0.2-draft",
 }
 
 # Who reads whose facts. Bumping a key REQUIRES considering every value.
@@ -224,6 +243,25 @@ class VersionLockfile(unittest.TestCase):
                 self.assertIn("from .ma import", inspect.getsource(mod),
                               f"{name} is listed as consuming ma but does not "
                               f"import it — the map has gone stale")
+
+    def test_a_retired_manual_version_is_still_read_and_still_isolated(self):
+        """The migration, held in place.
+
+        `manual` is the one engine whose old facts must stay legible: an armed
+        order is a position, not a derivation that can be recomputed under a new
+        tag, so the resolver reads every version it has ever written. That makes
+        the retired tags LIVE strings, and a live string that ever collided with
+        a strategy version would put discretionary trades into the graded book —
+        the exact thing the current tag is locked here to prevent.
+        """
+        self.assertIn(manual.MANUAL_VERSION, manual.MANUAL_VERSIONS,
+                      "the resolver must read what it writes")
+        for old in RETIRED_MANUAL:
+            with self.subTest(version=old):
+                self.assertNotIn(old, LOCKED.values(),
+                                 "a retired manual tag has been reused by an engine")
+                self.assertTrue(old.startswith("manual-v"),
+                                "a non-manual version is being read as one")
 
     def test_no_two_engines_share_a_version_string(self):
         """Two engines under one label is the collision itself, in its purest

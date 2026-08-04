@@ -471,6 +471,500 @@ class ManualCase(unittest.TestCase):
         self.assertEqual(b["n"], 1)
         self.assertEqual(b["wins"], 1, "TRAIL_STOP at +4R gross is a win")
 
+    # ---------- partial exits: the blend, pinned to hand arithmetic ----------
+    #
+    # Every expected figure below is computed IN THE COMMENT from the fixture's
+    # own prices and the venue's own published rates, the way test_one_walk.py
+    # pins execsim: a number this file can point at, not one it read back from
+    # the engine and enshrined. SPOT is used deliberately — coinbase-spot pays
+    # no funding, so each leg's cost is two fee terms and nothing else, and an
+    # arithmetic error cannot hide inside a funding accrual.
+    #
+    # coinbase-spot: maker 0.0040, taker 0.0060, slippage 0.05 ATR.
+
+    def scale_bars(self):
+        """Fill at 100, rung at 104 on bar 1, target 110 on bar 2."""
+        return [(100, 100.5, 99.5, 100),      # fills at 100
+                (100, 104.5, 99.8, 104),      # covers 104 — the rung fills
+                (104, 110.5, 103, 110)]       # covers 110 — the remainder TPs
+
+    def test_half_off_at_a_level_blends_two_settlements(self):
+        """The headline case: half off at +2R, the rest rides to the target.
+
+        Hand arithmetic, risk = 100 - 98 = 2:
+
+          rung  50% at 104, a LIMIT order -> maker both ends, no slippage
+                gross  (104 - 100) / 2                        = 2.0000 R
+                fees   0.0040*100 + 0.0040*104 = 0.4 + 0.416   = 0.816
+                net    (4 - 0.816) / 2                         = 1.5920 R
+          rest  50% at 110, the target -> maker both ends
+                gross  (110 - 100) / 2                        = 5.0000 R
+                fees   0.0040*100 + 0.0040*110 = 0.4 + 0.44    = 0.840
+                net    (10 - 0.840) / 2                        = 4.5800 R
+
+          blended net    0.5*1.5920 + 0.5*4.5800 = 3.086 -> 3.09
+          blended gross  0.5*2      + 0.5*5      = 3.50
+        """
+        self.load(self.scale_bars())
+        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+                             sl=98, created_at=0, risk_usd=200,
+                             partials=[{"fraction": "0.5", "price": "104"}])
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertEqual(row["outcome"], "TP", "the REMAINDER's exit rule names "
+                         "the trade — a scale-out is not an outcome")
+        self.assertEqual(row["r_multiple"], "3.09")
+        self.assertEqual(row["r_gross"], "3.50")
+        self.assertTrue(row["scaled_out"])
+        self.assertEqual(row["n_partials"], 1)
+        legs = row["legs"]
+        self.assertEqual([l["kind"] for l in legs], ["PARTIAL", "REMAINDER"])
+        self.assertEqual([l["fraction"] for l in legs], ["0.5", "0.5"])
+        self.assertEqual(Decimal(legs[0]["r_net"]), Decimal("1.592"))
+        self.assertEqual(Decimal(legs[1]["r_net"]), Decimal("4.58"))
+        self.assertEqual(Decimal(legs[0]["fees_price_units"]), Decimal("0.816"))
+        self.assertEqual(Decimal(legs[1]["fees_price_units"]), Decimal("0.840"))
+
+    def test_the_blend_is_reproducible_from_the_recorded_legs_alone(self):
+        """The house rule, as a property rather than a promise.
+
+        `blend_r` is the function `run` used to produce `r_multiple`; feeding
+        it the legs the fact carries must return the figure the fact carries.
+        If these ever disagree, the settled number stopped being derivable from
+        the record and became something only the engine could vouch for — the
+        exact drift test_one_walk.py was written after paying for twice.
+        """
+        self.load(self.scale_bars())
+        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+                             sl=98, created_at=0, risk_usd=200,
+                             partials=[{"fraction": "0.25", "price": "102"},
+                                       {"fraction": "0.25", "price": "104"}])
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertEqual(str(manual.blend_r(row["legs"], "r_net")),
+                         row["r_multiple"], "the recorded legs do not reproduce "
+                         "the recorded result")
+        self.assertEqual(str(manual.blend_r(row["legs"], "r_gross")),
+                         row["r_gross"])
+        # ...and the weights are a whole position, no more and no less
+        self.assertEqual(sum(Decimal(l["fraction"]) for l in row["legs"]),
+                         Decimal(1))
+
+    def test_every_settled_trade_in_the_book_reproduces_its_own_headline(self):
+        """The same property, swept over a book of mixed shapes.
+
+        One passing example is a passing example; the claim is that it holds
+        for every settlement this engine writes — scaled and unscaled, target
+        and stop, spot and perp. Anything that starts computing `r_multiple`
+        by a second route shows up here rather than in a report months later.
+        """
+        cases = [
+            # (symbol, bars, kwargs) — TP scaled, TP held, SL, and a trail
+            (SPOT, self.scale_bars(),
+             dict(tp=110, partials=[{"fraction": "0.5", "price": "104"}])),
+            (PERP, self.scale_bars(), dict(tp=110)),
+            (PERP2, [(100, 100.5, 99.5, 100), (100, 104.5, 97, 98)],
+             dict(tp=110, partials=[{"fraction": "0.4", "price": "102"}])),
+            ("SOLUSDT", [(100, 100.5, 99.5, 100), (100, 110, 99.8, 109),
+                         (109, 109.5, 103, 104)],
+             dict(tp=200, trail_r=1.0,
+                  partials=[{"fraction": "0.3", "price": "104"}])),
+        ]
+        for symbol, bars, kw in cases:
+            self.load(bars, symbol=symbol)
+            manual.create_intent(self.con, symbol, "1H", "LONG", entry=100,
+                                 sl=98, created_at=0, **kw)
+            self.run_engine(symbol=symbol)
+        settled = manual.book(self.con)["trades"]
+        self.assertEqual(len(settled), len(cases), "fixture did not settle")
+        # The sweep is only worth running if it sweeps. These four fixtures
+        # settle as SL, TP scaled, TP held and TRAIL_STOP scaled — assert that,
+        # so the day one of them degenerates the test says so instead of
+        # passing four times over the same trade.
+        self.assertEqual({r["outcome"] for r in settled},
+                         {"SL", "TP", "TRAIL_STOP"})
+        self.assertEqual(sorted(len(r["legs"]) for r in settled), [1, 1, 2, 2])
+        for row in settled:
+            with self.subTest(intent=row["intent_id"], outcome=row["outcome"]):
+                self.assertEqual(str(manual.blend_r(row["legs"], "r_net")),
+                                 row["r_multiple"])
+                self.assertEqual(str(manual.blend_r(row["legs"], "r_gross")),
+                                 row["r_gross"])
+                self.assertEqual(sum(Decimal(l["fraction"]) for l in row["legs"]),
+                                 Decimal(1), "the legs are not a whole position")
+                # exactly one leg settles by a terminal rule, always the last
+                self.assertEqual([l["kind"] for l in row["legs"]].count("REMAINDER"), 1)
+                self.assertEqual(row["legs"][-1]["outcome"], row["outcome"])
+
+    def test_scaling_out_costs_R_when_the_trade_runs(self):
+        """The comparison this feature exists to make possible, on one fixture.
+
+        Identical bars, identical bracket, one with a rung at +2R and one
+        without. Taking half off at 104 blends 3.09R where holding settles
+        4.58R. That is not an argument against scaling out — it is the number
+        that has to be recorded for the argument to ever be settled, the same
+        way the trailing rule has to be gradable against holding.
+        """
+        bars = self.scale_bars()
+        self.load(bars, symbol=PERP)
+        self.load(bars, symbol=PERP2)
+        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=110,
+                             sl=98, created_at=0,
+                             partials=[{"fraction": "0.5", "price": "104"}])
+        manual.create_intent(self.con, PERP2, "1H", "LONG", entry=100, tp=110,
+                             sl=98, created_at=0)
+        self.run_engine(symbol=PERP)
+        self.run_engine(symbol=PERP2)
+        scaled = self.execs(symbol=PERP)[0]
+        held = self.execs(symbol=PERP2)[0]
+        self.assertEqual(scaled["outcome"], held["outcome"], "same fixture")
+        self.assertLess(Decimal(scaled["r_multiple"]), Decimal(held["r_multiple"]))
+        self.assertFalse(held["scaled_out"])
+
+    def test_a_stop_bar_takes_the_whole_remainder_and_fills_no_rung(self):
+        """STOP_FIRST, extended to the ladder, and the flattering reading refused.
+
+        Bar 1 covers BOTH the rung at 104 and the stop at 98. OHLC cannot say
+        which came first, and the house rule for that ambiguity is already
+        written down. Booking the scale-out anyway would hand the operator a
+        profit banked moments before the loss — plausible, flattering, and
+        unprovable, which is the whole class of error this book is built to
+        avoid.
+        """
+        self.load([(100, 100.5, 99.5, 100),
+                   (100, 105, 97, 98)])        # covers the rung AND the stop
+        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+                             sl=98, created_at=0,
+                             partials=[{"fraction": "0.5", "price": "104"}])
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertEqual(row["outcome"], "SL")
+        self.assertFalse(row["scaled_out"], "a rung filled on the stop's own bar")
+        self.assertEqual([l["fraction"] for l in row["legs"]], ["1"],
+                         "the stop takes the whole position")
+        self.assertTrue(row["ambiguous_bar"],
+                        "a bar that reached both must be flagged, as a "
+                        "stop/target bar always was")
+
+    def test_a_rung_price_never_reached_leaves_one_leg(self):
+        """A plan is not an event. The trade goes the other way and stops out
+        without ever reaching 104, so the whole position settles at the stop —
+        but the ladder stays on the record, because an unfilled rung is a
+        decision that was made and its absence from `legs` must not read as if
+        it was never intended."""
+        self.load([(100, 100.5, 99.5, 100),
+                   (100, 101, 97, 98)])        # nowhere near the rung at 104
+        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+                             sl=98, created_at=0,
+                             partials=[{"fraction": "0.5", "price": "104"}])
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertEqual(row["outcome"], "SL")
+        self.assertFalse(row["scaled_out"])
+        self.assertEqual(len(row["legs"]), 1)
+        self.assertFalse(row["ambiguous_bar"], "the bar reached only the stop")
+        self.assertEqual(row["partials_planned"],
+                         [{"fraction": "0.5", "price": "104"}],
+                         "the rung that never filled must still be on the record")
+
+    def test_a_bar_that_reaches_the_target_fills_the_rung_on_its_way(self):
+        """Price cannot arrive at 110 without passing 104. Settling only the
+        target would book the WHOLE position at the best price of the trade —
+        flattering, and not what the plan said would happen."""
+        self.load([(100, 100.5, 99.5, 100),
+                   (100, 110.5, 99.8, 110)])   # one bar covering rung and target
+        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+                             sl=98, created_at=0,
+                             partials=[{"fraction": "0.5", "price": "104"}])
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertEqual(row["outcome"], "TP")
+        self.assertTrue(row["scaled_out"], "the rung the bar covered was skipped")
+        self.assertEqual([l["exit_price"] for l in row["legs"]], ["104", "110"])
+
+    def test_a_trade_with_no_ladder_settles_exactly_as_it_did_before(self):
+        """The migration's load-bearing claim, asserted rather than trusted.
+
+        One leg of fraction 1 must blend to that leg's own quotient, so every
+        v0.1 intent settles to the figure the pre-partials resolver would have
+        written. Hand arithmetic, risk 2, target 104, maker both ends:
+            fees  0.0040*100 + 0.0040*104 = 0.816
+            net   (4 - 0.816) / 2         = 1.592 -> 1.59
+        """
+        self.load(self.flat(2) + [(100, 104.5, 99, 104)])
+        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=104,
+                             sl=98, created_at=0)
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertEqual(row["r_multiple"], "1.59")
+        self.assertEqual(row["r_gross"], "2.00")
+        self.assertEqual(len(row["legs"]), 1)
+        self.assertEqual(row["legs"][0]["fraction"], "1")
+        self.assertEqual(row["legs"][0]["kind"], "REMAINDER")
+        # the top-line costs still describe the whole position, unweighted by
+        # anything, because there is only one leg to weigh
+        self.assertEqual(Decimal(row["fees_price_units"]), Decimal("0.816"))
+
+    def test_each_leg_pays_funding_for_its_own_holding_period(self):
+        """A rung taken at bar 1 did not hold the position to bar 2.
+
+        Charging the trade's full holding period on size that was closed early
+        is a cost the operator never carried — the mirror image of the S45
+        defect where funding was defined and never charged at all.
+        """
+        self.load(self.scale_bars(), symbol=PERP)     # phemex-perp: funding is real
+        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=110,
+                             sl=98, created_at=0,
+                             partials=[{"fraction": "0.5", "price": "104"}])
+        self.run_engine(symbol=PERP)
+        rung, rest = self.execs(symbol=PERP)[0]["legs"]
+        self.assertEqual(rung["bars_held"], 1)
+        self.assertEqual(rest["bars_held"], 2)
+        self.assertGreater(Decimal(rung["funding_price_units"]), 0,
+                           "a perp leg held a bar pays funding for it")
+        self.assertLess(Decimal(rung["funding_price_units"]),
+                        Decimal(rest["funding_price_units"]),
+                        "the leg closed first must pay less to hold")
+
+    def test_rungs_fill_in_the_order_price_reaches_them(self):
+        self.load([(100, 100.5, 99.5, 100),
+                   (100, 102.5, 99.8, 102),    # covers 102 only
+                   (102, 106, 101, 105)])      # covers 104
+        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+                             sl=98, created_at=0,
+                             partials=[{"fraction": "0.2", "price": "104"},
+                                       {"fraction": "0.3", "price": "102"}])
+        st = manual.status(self.con, SPOT, "1H", TF)
+        self.assertEqual([f["price"] for f in st[0]["partials_filled"]],
+                         ["102", "104"], "the nearer rung must fill first")
+
+    def test_a_rung_outside_the_bracket_is_refused_before_anything_is_written(self):
+        """Outside the stop and target it is not a scale-out, it is an
+        instruction that can never run — the trade settles at one end or the
+        other before price gets there."""
+        self.load(self.flat(4))
+        for price in (112, 97, 110, 98):     # beyond tp, beyond sl, AT each
+            with self.subTest(price=price):
+                with self.assertRaises(manual.IntentRejected):
+                    manual.create_intent(
+                        self.con, SPOT, "1H", "LONG", entry=100, tp=110, sl=98,
+                        created_at=0,
+                        partials=[{"fraction": "0.5", "price": str(price)}])
+        self.assertEqual(
+            store.get_facts(self.con, SPOT, "1H", manual.INTENT_KIND,
+                            manual.MANUAL_VERSION), [])
+
+    def test_a_rung_below_the_entry_is_allowed(self):
+        """De-risking is a real thing traders do and the R arithmetic is
+        identical. Refusing it would be this book inventing a position policy
+        it was never asked for — the same mistake `validate_position` exists to
+        undo for profit-side stops."""
+        self.load(self.flat(4))
+        out = manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100,
+                                   tp=110, sl=98, created_at=0,
+                                   partials=[{"fraction": "0.5", "price": "99"}])
+        self.assertEqual(out["partials"], [{"fraction": "0.5", "price": "99"}])
+
+    def test_a_ladder_that_closes_the_whole_position_is_refused(self):
+        """A trade whose last rung closes it has no terminal exit rule to
+        record — nothing to grade TRAIL against HOLD with, and a last rung that
+        is a target under another name. The refusal says so, and says what to
+        do instead."""
+        self.load(self.flat(4))
+        with self.assertRaises(manual.IntentRejected) as cm:
+            manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100,
+                                 tp=110, sl=98, created_at=0,
+                                 partials=[{"fraction": "0.5", "price": "102"},
+                                           {"fraction": "0.5", "price": "104"}])
+        self.assertIn("TARGET", str(cm.exception))
+
+    def test_a_dust_sized_rung_is_refused(self):
+        self.load(self.flat(4))
+        with self.assertRaises(manual.IntentRejected):
+            manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100,
+                                 tp=110, sl=98, created_at=0,
+                                 partials=[{"fraction": "0.0001", "price": "104"}])
+
+    def test_more_rungs_than_the_cap_is_refused(self):
+        self.load(self.flat(4))
+        with self.assertRaises(manual.IntentRejected):
+            manual.create_intent(
+                self.con, SPOT, "1H", "LONG", entry=100, tp=110, sl=98,
+                created_at=0,
+                partials=[{"fraction": "0.1", "price": str(101 + i)}
+                          for i in range(manual.MAX_PARTIALS + 1)])
+
+    def test_status_reports_a_partly_closed_position_as_partly_closed(self):
+        """The panel bug this closes: a position with half taken off rendered
+        as fully open, so the operator read the whole size as still at risk.
+
+        Marks, before costs, exactly as `unrealized_r` always has been:
+          rung     50% banked at 104 -> 0.5 * (4/2)     = +1.00 R
+          open     50% at the last close 106 -> (6/2)   = +3.00 R per unit
+          blended  1.00 + 0.5 * 3.00                    = +2.50 R
+        """
+        self.load([(100, 100.5, 99.5, 100),
+                   (100, 104.5, 99.8, 104),
+                   (104, 107, 103, 106)])
+        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=120,
+                             sl=98, created_at=0, risk_usd=200,
+                             partials=[{"fraction": "0.5", "price": "104"}])
+        st = manual.status(self.con, SPOT, "1H", TF)[0]
+        self.assertEqual(st["state"], "OPEN")
+        self.assertEqual(st["closed_fraction"], "0.5")
+        self.assertEqual(st["open_fraction"], "0.5")
+        self.assertEqual(st["realized_r"], "1.00")
+        self.assertEqual(st["unrealized_r"], "3.00", "per unit of what is STILL on")
+        self.assertEqual(st["blended_r"], "2.50")
+        # the dollars follow the blend, not the open half alone
+        self.assertEqual(st["unrealized_usd"], "500.00")
+        self.assertEqual(st["partials_filled"],
+                         [{"price": "104", "fraction": "0.5", "r_gross": "2.00"}])
+
+    def test_an_untouched_position_reports_the_same_numbers_it_always_did(self):
+        """The new fields must not move the old ones. With nothing scaled out,
+        `blended_r` IS `unrealized_r` and the dollars are unchanged."""
+        self.load([(120, 121, 99, 101), (101, 108, 100, 106)])
+        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=125,
+                             sl=96, created_at=0, risk_usd=100)
+        st = manual.status(self.con, SPOT, "1H", TF)[0]
+        self.assertEqual(st["unrealized_r"], "1.50")
+        self.assertEqual(st["blended_r"], "1.50")
+        self.assertEqual(st["realized_r"], "0.00")
+        self.assertEqual(st["open_fraction"], "1")
+        self.assertEqual(st["unrealized_usd"], "150.00")
+
+    def test_an_adopted_position_can_scale_out(self):
+        """Custody means the operator's exit rules apply — the ladder with the
+        rest of them."""
+        self.load([(100, 100.5, 99.5, 100),
+                   (100, 104.5, 99.8, 104),
+                   (104, 110.5, 103, 110)])
+        manual.adopt_position(self.con, "ENG|SCALE", SPOT, "1H", "LONG",
+                              entry=100, sl=98, tp=110, fill_ts=0, adopted_at=0,
+                              partials=[{"fraction": "0.5", "price": "104"}])
+        self.run_engine()
+        row = self.execs()[0]
+        self.assertTrue(row["scaled_out"])
+        self.assertEqual(row["r_multiple"], "3.09")   # same hand arithmetic
+
+    # ---------- the version bump, and the intents it must not strand ----------
+
+    def write_v01(self, kind, payload, symbol=PERP, tf="1H", at=0):
+        """A fact under the RETIRED tag, written the way the old code wrote it.
+
+        The migration cannot be tested against facts the current code produces,
+        because the current code produces the current tag. These are stand-ins
+        for what is already in the operator's store.
+        """
+        store.insert_fact(self.con, symbol=symbol, tf=tf, kind=kind,
+                          market_time=at, confirmed_at=at,
+                          algo_version="manual-v0.1-draft", payload=payload)
+        self.con.commit()
+
+    def v01_intent(self, iid="OLD|1", **kw):
+        p = {"intent_id": iid, "source": "OPERATOR", "state": "ARMED",
+             "direction": "LONG", "entry": "100", "tp": "104", "sl": "98",
+             "risk_per_unit": "2", "risk_usd": "200", "armed_at": 0}
+        p.update(kw)
+        return p
+
+    def test_the_retired_tag_is_read_and_never_written(self):
+        self.assertEqual(manual.MANUAL_VERSION, "manual-v0.2-draft")
+        self.assertIn("manual-v0.1-draft", manual.MANUAL_VERSIONS)
+        self.assertIn(manual.MANUAL_VERSION, manual.MANUAL_VERSIONS)
+
+    def test_an_intent_still_open_under_the_old_tag_is_not_stranded(self):
+        """The defect the bump would otherwise have shipped.
+
+        The resolver finds work by querying `algo_version`. Moving the constant
+        without widening the read set would leave every v0.1 order armed
+        forever: never settled, never expired, and absent from every surface —
+        an order the operator placed that the app quietly stopped believing in.
+        """
+        self.load(self.flat(2) + [(100, 104.5, 99, 104)], symbol=PERP)
+        self.write_v01(manual.INTENT_KIND, self.v01_intent())
+        self.assertIn((PERP, "1H"), manual.unresolved(self.con),
+                      "a v0.1 order fell off the resolver's work list")
+        self.assertEqual([r["intent_id"] for r in manual.live(self.con)], [],
+                         "and it settles rather than sitting open")
+        rows = self.execs(symbol=PERP)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["outcome"], "TP")
+
+    def test_an_old_intent_settles_under_the_version_that_settled_it(self):
+        """The exit fact names the code that PRODUCED it, which after the bump
+        is v0.2. The intent keeps its own tag; the pair is joined by intent_id,
+        which is what a join has always used."""
+        self.load(self.flat(2) + [(100, 104.5, 99, 104)], symbol=PERP)
+        self.write_v01(manual.INTENT_KIND, self.v01_intent())
+        self.run_engine(symbol=PERP)
+        new = store.get_facts(self.con, PERP, "1H", manual.EXEC_KIND,
+                              manual.MANUAL_VERSION)
+        self.assertEqual(len(new), 1, "the settlement must carry the new tag")
+        # and the number is the one v0.1 would have written: one leg, no ladder
+        p = __import__("json").loads(new[0]["payload"])
+        self.assertEqual(len(p["legs"]), 1)
+        self.assertEqual(str(manual.blend_r(p["legs"])), p["r_multiple"])
+
+    def test_an_old_trade_that_already_settled_is_not_settled_again(self):
+        """`done` reads across versions too. Without that, every trade the v0.1
+        book closed would be re-resolved under the new tag — a second terminal
+        fact for one trade, and the curve counting it twice."""
+        self.load(self.flat(2) + [(100, 104.5, 99, 104)], symbol=PERP)
+        self.write_v01(manual.INTENT_KIND, self.v01_intent())
+        self.write_v01(manual.EXEC_KIND,
+                       {"intent_id": "OLD|1", "source": "OPERATOR",
+                        "direction": "LONG", "outcome": "TP", "entry": "100",
+                        "exit_price": "104", "r_multiple": "1.59",
+                        "r_gross": "2.00", "bars_held": 2}, at=3 * TF)
+        r = self.run_engine(symbol=PERP)
+        self.assertEqual(r["TP"], 0, "an already-settled trade was re-resolved")
+        self.assertEqual(self.execs(symbol=PERP), [],
+                         "a second terminal fact was written under the new tag")
+        self.assertEqual(manual.book(self.con)["n"], 1,
+                         "and the curve must count the trade once")
+
+    def test_the_settled_book_does_not_blank_itself_when_the_tag_moves(self):
+        """An operator's record is their record across a version bump. A book
+        that reported only what the current code wrote would appear to reset on
+        the day of the change — losing the history whose entire value is being
+        long enough to mean something."""
+        self.write_v01(manual.EXEC_KIND,
+                       {"intent_id": "OLD|2", "source": "OPERATOR",
+                        "direction": "LONG", "outcome": "TP", "entry": "100",
+                        "exit_price": "104", "r_multiple": "1.59",
+                        "r_gross": "2.00", "bars_held": 2}, at=3 * TF)
+        b = manual.book(self.con)
+        self.assertEqual(b["n"], 1, "the old book vanished")
+        self.assertEqual(b["wins"], 1)
+        self.assertEqual(b["total_r"], "1.59")
+        self.assertEqual(b["version"], manual.MANUAL_VERSION)
+
+    def test_an_old_open_order_can_still_be_cancelled(self):
+        self.load(self.flat(2), symbol=PERP)
+        self.write_v01(manual.INTENT_KIND,
+                       self.v01_intent(iid="OLD|3", entry="90", tp="94",
+                                       sl="88", armed_at=TF))
+        res = manual.cancel_intent(self.con, "OLD|3", at=2 * TF)
+        self.assertTrue(res["written"])
+        self.assertEqual(manual.unresolved(self.con), {})
+
+    def test_the_old_tag_is_isolated_from_every_strategy_query_too(self):
+        """The isolation rule is what the separate book is FOR, and it has to
+        hold for the retired tag as much as the current one."""
+        for version in manual.MANUAL_VERSIONS:
+            self.assertNotIn(version, (setups.SETUP_VERSION,
+                                       execsim.EXEC_VERSION))
+        self.load(self.flat(2) + [(100, 104.5, 99, 104)], symbol=PERP)
+        self.write_v01(manual.INTENT_KIND, self.v01_intent())
+        self.run_engine(symbol=PERP)
+        for version in (setups.SETUP_VERSION, execsim.EXEC_VERSION):
+            for kind in ("setup", "exec", "order", "setup_rejection"):
+                self.assertEqual(
+                    store.get_facts(self.con, PERP, "1H", kind, version), [],
+                    f"a migrated manual trade surfaced under {kind}/{version}")
+
     # ---------- operator override of an ENGINE position ----------
 
     def test_closing_an_engine_position_never_touches_the_strategy_record(self):

@@ -407,6 +407,25 @@
             <label class="fld fld-inline" id="tkTrailRow" hidden>
               <span class="t-label">Trail distance (R)</span>
               <input id="tkTrailR" class="t-mono" value="1.0" inputmode="decimal"></label>
+
+            <!-- SCALE OUT. Set in R because that is the unit the decision is
+                 made in ("half off at 1R"); the PRICE it lands on is shown
+                 underneath, because that is what gets recorded and what the
+                 chart draws. Off by default: taking half off is a choice with
+                 a cost, not a prudence the app should assume. -->
+            <label class="row-toggle"><input type="checkbox" id="tkScale">
+              <span class="t-label"><span class="term" data-t="scaleout">Take part off</span></span></label>
+            <div class="fld" id="tkScaleRow" hidden>
+              <div class="fld-row">
+                <input id="tkScalePct" class="t-mono" value="50" inputmode="decimal"
+                       aria-label="Percent of the position to close at the rung">
+                <span class="t-label">% at</span>
+                <input id="tkScaleR" class="t-mono" value="1.0" inputmode="decimal"
+                       aria-label="How far in R to take that part off">
+                <span class="t-label">R</span>
+              </div>
+              <div class="t-mono" id="tkScaleAt" style="color:var(--fg-3);font-size:11px"></div>
+            </div>
            </div>
 
            <!-- the full cost breakdown; the three that decide it are pinned below -->

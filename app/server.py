@@ -1984,10 +1984,15 @@ def manual_arm(payload: dict):
 
     This places no live order and cannot: no order-placement code exists in
     this system, so `live_enabled` is not consulted here — there is nothing for
-    it to gate. The intent is recorded under `manual-v0.1-draft`, a tag no
-    strategy consumer queries, so it cannot reach the record that
+    it to gate. The intent is recorded under the manual book's own version, a
+    tag no strategy consumer queries, so it cannot reach the record that
     `edgestats`/`factorstats` grade. See `engine/manual.py` for why that
     separation is structural rather than a filter someone has to remember.
+
+    `partials` is the scale-out ladder and is passed through unexamined: the
+    geometry rules live in `manual.validate_partials`, which is where the stop
+    and target it has to sit between are already known. Re-checking it here
+    would be a second authority on the same rule.
     """
     import time
     from engine import manual
@@ -2009,6 +2014,7 @@ def manual_arm(payload: dict):
                 risk_usd=payload.get("risk_usd"),
                 leverage=payload.get("leverage") or 1,
                 trail_r=payload.get("trail_r"),
+                partials=payload.get("partials"),
                 note=str(payload.get("note") or ""))
         except manual.IntentRejected as exc:
             # A refused plan is a 400 carrying the REASON. The operator needs to
@@ -2021,9 +2027,12 @@ def manual_arm(payload: dict):
         # bar exists yet — which is the correct causal answer, not a failure.
         manual.run(con, symbol, tf, importer.TF_SECONDS[tf])
         from engine.runlog import get_logger
+        rungs = intent.get("partials") or []
         get_logger().info(
             f"MANUAL ARM {symbol} {tf} {intent['direction']} "
-            f"entry={intent['entry']} tp={intent['tp']} sl={intent['sl']} (paper)")
+            f"entry={intent['entry']} tp={intent['tp']} sl={intent['sl']}"
+            + ("".join(f" scale={r['fraction']}@{r['price']}" for r in rungs))
+            + " (paper)")
         return {"ok": True, "intent": intent, "book": manual.book(con)}
     finally:
         con.close()
@@ -2190,6 +2199,7 @@ def adopt_position(payload: dict):
                 original_sl=pos["sl"],
                 fill_ts=row[0], adopted_at=int(time.time()),
                 risk_usd=pos.get("risk_usd"), trail_r=payload.get("trail_r"),
+                partials=payload.get("partials"),
                 note=str(payload.get("note") or ""))
         except manual.IntentRejected as exc:
             raise HTTPException(400, str(exc))
@@ -2200,6 +2210,8 @@ def adopt_position(payload: dict):
             f"OPERATOR ADOPTED {pos['symbol']} {pos['tf']} — sl {out['sl']} "
             f"tp {out['tp']}"
             + (f" trail {out['trail_r']}R" if out.get('trail_r') else "")
+            + ("".join(f" scale={r['fraction']}@{r['price']}"
+                       for r in (out.get("partials") or [])))
             + f"; engine simulation of {sid} continues on its own plan")
         return {"ok": True, "adopted": out}
     finally:
@@ -2322,7 +2334,14 @@ def manual_live():
         pending_risk = sum((Decimal(str(r["risk_usd"])) for r in rows
                             if r["state"] == "PENDING" and r.get("risk_usd")),
                            Decimal(0))
-        open_risk = sum((Decimal(str(r["risk_usd"])) for r in rows
+        # Only the size still ON is still exposed. A position with half taken
+        # off can lose half of what it was armed for, and quoting the original
+        # stake here would overstate the very figure this endpoint exists to
+        # disclose. `open_fraction` is 1 on a trade that has not been scaled,
+        # so an ordinary book reports exactly what it always did.
+        open_risk = sum((Decimal(str(r["risk_usd"]))
+                         * Decimal(str(r.get("open_fraction") or 1))
+                         for r in rows
                          if r["state"] == "OPEN" and r.get("risk_usd")),
                         Decimal(0))
         return {"version": manual.MANUAL_VERSION, "open": rows,

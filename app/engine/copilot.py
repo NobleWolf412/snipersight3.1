@@ -172,11 +172,20 @@ def build_pack(con, symbol: str, tf: str, setup_id: str | None = None) -> str:
         open_pos = manual.status(con, symbol, tf, TF_SECONDS[tf])
         if open_pos:
             p0 = open_pos[0]
+            # A partly-closed position must not be described as a whole one.
+            # `unrealized_r` is the per-unit R of what is STILL on; quoting it
+            # alone on a trade with half taken off would have the copilot
+            # reasoning about a position size that no longer exists.
+            closed = Decimal(str(p0.get("closed_fraction") or 0))
+            scaled = ("" if closed <= 0 else
+                      f" scaled_out={closed * 100:g}% "
+                      f"banked={p0.get('realized_r', '—')}R "
+                      f"blended={p0.get('blended_r', '—')}R")
             parts += ["", f"OPERATOR'S OPEN TRADE HERE: {p0['direction']} "
                           f"state={p0['state']} entry={p0.get('fill_price', p0['entry'])} "
                           f"sl={p0.get('current_stop', p0['sl'])} tp={p0['tp']} "
-                          f"unrealized={p0.get('unrealized_r', '—')}R "
-                          f"(marked to last CLOSED bar)"]
+                          f"unrealized={p0.get('unrealized_r', '—')}R"
+                          f"{scaled} (marked to last CLOSED bar)"]
     except Exception:
         pass
     b = manual.book(con)

@@ -32,6 +32,7 @@ window.GLOSSARY = {
   rMultiple:  "Result measured in units of what you risked. +2R means you made twice what you had at risk; −1R means you lost exactly your planned risk.",
   expectancy: "What one trade is worth on average, in units of what you risked. Add up every result in R and divide by the number of trades — positive means the edge pays, and the honest question is whether it sits far enough from zero to be told apart from luck.",
   trailing:   "A stop that follows price as the trade moves your way, locking in gains instead of sitting still.",
+  scaleout:   "Closing part of a position at a level and letting the rest run — 'half off at 1R'. It banks a certain gain and reduces what is still at risk, and it also caps the trade: the half you took off cannot ride to the target. Your result becomes a blend of the two exits, and your book records both so the choice can be judged against simply holding.",
   setup:      "A trade opportunity the scanner found: a direction, an entry, a target, a stop, and the reasoning behind it.",
   shadow:     "A symbol the scanner watches, scores and simulates but NEVER sizes a real position on — usually because its venue is not one this system trades yet. Its record is evidence about whether to admit that venue, not part of your own record. Market Weather counts shadow symbols separately from tradeable ones for that reason.",
   /* Added after the UX audit walked the primary surface as a first-time
