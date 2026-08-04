@@ -40,7 +40,12 @@ window.GLOSSARY = {
      up. "1D agrees" was the costliest omission: it is the higher-timeframe
      confirmation that makes the trade, and it was unexplained on the card
      asking you to take it. */
-  liquidity:  "Prices where a lot of stop orders are probably resting — under an obvious low, above an obvious high. Price is drawn to them, because triggering stops creates the volume a large order needs to fill. This is INFERRED from the shape of the chart, never measured: no exchange publishes where stops sit.",
+  /* `liquidity` is NOT redefined here. It already exists above, and a second
+     definition silently won — JS keeps the last key — replacing a longer entry
+     that carried the part an operator most needs ("No playbook trades them, so
+     treat a marked pool as context, not a target"). The audit that added this
+     scanned data-t attributes present in the DOM rather than GLOSSARY itself,
+     so it reported a defined term as missing. See the duplicate-key test. */
   sized:      "Turned into an actual position with a dollar amount at risk. A setup can be found, scored and recorded without ever being sized — sizing is the moment the risk authority approves it and decides how much. Shadow and warming symbols are scanned and scored but never sized.",
   halt:       "A limit that stops NEW entries when the day or the account goes badly enough. Open positions still run to their own stop or target — a halt is not a liquidation. The daily one triggers on losses in a single day; the drawdown one on the fall from your account's high-water mark.",
   htfAgrees:  "The higher timeframe is pointing the same way as the trade. A 4H short with '1D agrees' means the daily structure is also falling, so the trade runs with the larger trend rather than against it. When they disagree, the smaller timeframe is fighting the bigger one — which is the trade most likely to be stopped out by ordinary noise.",

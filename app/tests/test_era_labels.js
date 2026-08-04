@@ -96,4 +96,22 @@ ok('the band is readable prose, not a label', () => {
          'the reconciliation is set in the dimmest greys the palette has');
 });
 
+/* A duplicate key is invisible: JS keeps the last one and the earlier
+   definition simply stops existing. It happened on 4 Aug 2026 — an audit
+   scanned the data-t attributes present in the DOM rather than GLOSSARY
+   itself, reported `liquidity` as undefined, and the "fix" overwrote a
+   longer entry that carried the part an operator most needs. Nothing failed,
+   nothing warned, and the term still explained itself on hover — with less
+   in it than before. */
+ok('no term is defined twice', () => {
+  const body = GLOSS.slice(GLOSS.indexOf('window.GLOSSARY'));
+  const keys = [...body.matchAll(/^\s{2}([a-zA-Z][a-zA-Z0-9]*):\s*"/gm)]
+    .map(m => m[1]);
+  assert(keys.length > 30, 'the key scan found almost nothing — check the shape');
+  const dupes = keys.filter((k, i) => keys.indexOf(k) !== i);
+  assert(dupes.length === 0,
+    `defined more than once: ${[...new Set(dupes)].join(', ')} — the later ` +
+    `definition silently replaces the earlier one`);
+});
+
 console.log('\n' + passed + ' passed');
