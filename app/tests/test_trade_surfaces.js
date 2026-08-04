@@ -480,4 +480,48 @@ ok('the band does not rebuild on every mousemove of a drag', () => {
   assert.ok(/if\(el\.dataset\.h === html\) return/.test(f));
 });
 
+
+/* THE TRACE DRAWER. It opened onto nine stages, each with its rule, its detail
+   and up to eight fact chips — three thousand characters to answer "where did
+   I fill and why". The ladder is the record and it stays; it is just no longer
+   the first thing read. */
+console.log('trace drawer: the answer before the audit');
+ok('the drawer leads with fill, reason and levels', () => {
+  assert.ok(/function summary\(t, verdictChip, life\)/.test(TRACER));
+  assert.ok(/filled at/.test(TRACER) && /not filled/.test(TRACER)
+            && /never entered/.test(TRACER), 'all three order outcomes');
+  assert.ok(/entry \$\{esc\(entry\)\}/.test(TRACER) && /R if it works/.test(TRACER)
+            && /at risk/.test(TRACER), 'the levels line');
+});
+ok('facts are found by key, not by stage label', () => {
+  // Labels are prose the server may reword; a summary that silently empties
+  // when a label changes is worse than no summary.
+  assert.ok(/function factOf\(t, key\)/.test(TRACER));
+  assert.ok(/factOf\(t, 'entry'\)/.test(TRACER));
+});
+ok('the full ladder is collapsed, never removed', () => {
+  assert.ok(/<details class="dx-all">/.test(TRACER));
+  assert.ok(/Every check \(\$\{all\.length\}\)/.test(TRACER));
+  assert.ok(/\$\{stages \|\| '<div class="dx-empty">no stages recorded<\/div>'\}/.test(TRACER),
+            'every rung still renders inside it');
+});
+ok('a failed or warned check stays outside the fold', () => {
+  assert.ok(/const notable = all\.filter\(s => s\.status === 'fail' \|\| s\.status === 'warn'\)/
+            .test(TRACER));
+  assert.ok(/checks need reading/.test(TRACER));
+  // and shows the finding, not its eight audit chips
+  assert.ok(/stageHtml\(x, true\)/.test(TRACER));
+  assert.ok(/\$\{compact \? '' : factRow\(s\.facts\)\}/.test(TRACER));
+});
+ok('the engine sentence does not repeat the levels line', () => {
+  assert.ok(/\/\^\(TP\|SL\|R:R\)/.test(TRACER), 'TP and R:R are dropped from why');
+});
+ok('no control character survives where a regex escape was meant', () => {
+  // /^(TP|SL|R:R)/ and humanProse's epoch bounds each held a literal 0x08
+  // backspace instead of backslash-b, so neither could ever match. Two of the
+  // three predated this change and had silently disabled epoch formatting.
+  assert.ok(!/[ --]/.test(TRACER),
+            'a stray control byte is an unmatchable regex, and invisible');
+});
+
 console.log(`  ${passed} passed`);

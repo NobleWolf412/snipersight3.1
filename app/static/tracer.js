@@ -57,7 +57,7 @@
   // prose with long decimals or epochs embedded in it
   const humanProse = s => String(s)
     .replace(/-?\d+\.\d{5,}/g, m => fmtNum(m))
-    .replace(/1[5-9]\d{8}/g, m => fmtEpoch(m));
+    .replace(/\b1[5-9]\d{8}\b/g, m => fmtEpoch(m));
 
   // Pass / fail / warn / pending / skip, straight from the API. `skip` is
   // deliberately an em-dash and not a cross: a stage with no fact means the
@@ -174,7 +174,7 @@
        what the numbers line below prints. Two copies of a price on a panel
        being cut for length is the easiest one to drop. */
     const why = String(t.why || '').split(' · ')
-      .filter(part => !/^(TP|SL|R:R)/i.test(part.trim())).join(' · ');
+      .filter(part => !/^(TP|SL|R:R)\b/i.test(part.trim())).join(' · ');
 
     const nums = [
       entry ? `entry ${esc(entry)}` : null,
