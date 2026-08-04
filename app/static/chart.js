@@ -24,7 +24,7 @@ window.SSChart = (() => {
   let base = null;                            // {entry,tp,sl,dir,kind}
   let symMeta = {};                           // symbol -> /api/overview row (venue, state)
   let allSymbols = [];                        // the full overview list, cached for the picker
-  let pickerScope = 'scanned';                // 'scanned' | 'all' — see renderPicker()
+  // scope state died with the scope toggle: the picker lists everything, grouped
   let draftPlan = null;                       // engine/draft.py bracket, or null
   let openPos = [];                           // open manual trades on this chart
   let enginePos = null;                       // the ENGINE's open trade here, if any
@@ -467,21 +467,25 @@ window.SSChart = (() => {
     TRANSITION: 'lx-trans', RANGE: 'lx-range',
   };
   async function loadContext(){
-    const el = $('cLadder');
+    /* The per-timeframe ladder read as a second timeframe picker — same
+       shape, adjacent position, different meaning, hover-only explanation.
+       The same facts now live on the regime chip's hover: context, priced
+       at exactly the attention it deserves. */
+    const el = $('cRegime');
     if(!el || !sym) return;
     try{
       const c = await api('/api/context?symbol=' + encodeURIComponent(sym));
-      el.innerHTML = (c.timeframes || []).map(t => {
+      el.title = 'regime by timeframe' + String.fromCharCode(10) + (c.timeframes || []).map(t => {
         const label = t.regime ? t.regime.replace('_', ' ').toLowerCase() : 'no reading';
-        const extra = (t.active_zones ? ` · ${t.active_zones} active zone${t.active_zones === 1 ? '' : 's'}` : '')
-                    + (t.ready ? ` · ${t.ready} setup${t.ready === 1 ? '' : 's'} ready` : '');
-        return `<span class="lx ${LADDER_TONE[t.regime] || 'lx-none'}${t.tf === tf ? ' on' : ''}"
-          title="${t.tf}: ${label}${extra}">${t.tf}</span>`;
-      }).join('');
+        const extra = (t.active_zones ? ` · ${t.active_zones} zones` : '')
+                    + (t.ready ? ` · ${t.ready} ready` : '');
+        return `${t.tf === tf ? '▸' : ' '} ${t.tf}: ${label}${extra}`;
+      }).join(String.fromCharCode(10));
     }catch(e){
-      el.innerHTML = '';               // absent context beats stale context
+      el.title = '';                   // absent context beats stale context
     }
   }
+
 
   /* ---------- live price ----------
      /api/ticker has existed since S-whenever with this docstring: "this exists
@@ -507,21 +511,16 @@ window.SSChart = (() => {
       // one number on screen whose entire value is being current
       const all = await window.SSData.get('/api/ticker', 4000);
       const t = all && all[sym];
-      const el = $('cLive');
+      const el = $('cLiveIn');
       if(!el) return;
       if(!t || t.price == null || t.status !== 'OK'){
         el.hidden = true;                      // never show a stale or absent tick
         return;
       }
       el.hidden = false;
-      el.textContent = 'LIVE ' + pf(t.price);
-      // The spec-section pointer belongs in the source comment above, not in
-      // rendered copy — it was the only § anywhere in the UI.
-      el.title = 'live exchange price, shown for the eye only — every setup, '
-               + 'level and decision in this app is computed on closed candles, '
-               + 'so nothing here acts on this number';
+      el.textContent = ' · live ' + pf(t.price);
     }catch(e){
-      const el = $('cLive');
+      const el = $('cLiveIn');
       if(el) el.hidden = true;                 // a failed tick shows nothing
     }
   }
@@ -533,7 +532,7 @@ window.SSChart = (() => {
   }
   function stopTicker(){
     if(tickTimer){ clearInterval(tickTimer); tickTimer = null; }
-    const el = $('cLive');
+    const el = $('cLiveIn');
     if(el) el.hidden = true;
   }
 
@@ -561,12 +560,11 @@ window.SSChart = (() => {
     try{ applyLevels(); }catch(e){ /* chart may not be built yet */ }
     try{ series.setData([]); }catch(e){ /* chart may not be built yet */ }
     try{ drawOverlays(); }catch(e){ /* overlays follow the now-empty facts */ }
-    $('cPrice').textContent = '—';
-    $('cPrice').className = 'chip';
-    $('cRegime').textContent = '—';
+    $('cPx').textContent = '—'; $('cChg').textContent = '';
+    $('cLiveIn').hidden = true; $('cPrice').className = 'chip';
+    $('cRegime').textContent = '—'; $('cRegime').title = '';
     // market-specific like everything else here — a ladder for the WRONG
     // symbol is worse than none (see the rule at the top of clearChart)
-    if($('cLadder')) $('cLadder').innerHTML = '';
     // A cleared chart describes no market, so there is no plan to arm.
     armable = false; refreshArm();
     /* The TICKET is market-specific too, and it was the one thing clearChart
@@ -595,7 +593,12 @@ window.SSChart = (() => {
     // Before the fetch, not after: which instrument this is stays true even
     // when the candles fail to arrive, and it is the thing that says whether
     // the empty chart in front of you is a failure or simply unscanned.
-    showVenue();
+    paintSymBtn();
+    // The live suffix is per-symbol and the ticker only corrects it every 5s —
+    // long enough for BTC's tick to sit beside LINK's closed price, which is
+    // the wrong-market-under-the-right-name failure with a $55k tell. Hide it
+    // now; the next tick repaints it for the RIGHT symbol.
+    if($('cLiveIn')) $('cLiveIn').hidden = true;
     const seq = ++loadSeq;
     const q = k => api(`/api/facts?kind=${k}&symbol=${sym}&tf=${tf}`);
     let res;
@@ -672,9 +675,10 @@ window.SSChart = (() => {
     const last = candles[candles.length - 1].close;
     const prev = candles.length > 1 ? candles[candles.length - 2].close : last;
     const chg = ((last - prev) / prev) * 100;
-    $('cPrice').textContent = pf(last) + '  ' + (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+    $('cPx').textContent = pf(last);
+    $('cChg').textContent = ' ' + (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
     $('cPrice').className = 'chip ' + (chg >= 0 ? 'chip-green' : 'chip-red');
-    $('cPrice').title = 'last CLOSED candle on this timeframe — what the engines see';
+    $('cPrice').title = 'last CLOSED candle — what the engines see. The live suffix is for the eye only; the dot is data freshness.';
     startTicker();
     loadContext();
     const reg = regime.length ? regime[regime.length - 1].regime : null;
@@ -748,22 +752,20 @@ window.SSChart = (() => {
      Past two minutes it says so: a refresh has been missed and the numbers are
      not what the engine currently holds. */
   function showFreshness(){
-    const el = $('cFresh');
+    /* The dot on the price chip. The chip-sized "updated 30s ago" label was
+       the widest reflow source on the surface and one more thing to read;
+       a dot that goes amber past two minutes says the same thing in zero
+       words, with the sentence on hover. */
+    const el = $('cDot');
     if(!el) return;
-    if(!loadedAt){ el.textContent = '—'; el.className = 'chip'; return; }
+    if(!loadedAt){ el.className = 'dot'; return; }
     const s = Math.round((Date.now() - loadedAt) / 1000);
-    /* ONE grammar, shared with the shell — this said "UPDATED 30S AGO" while
-       the footer said "a minute ago" about the same moment. The per-second
-       text was also the widest reflow source on the surface: it changed width
-       every second and slid the buttons beside it sideways. */
-    el.textContent = window.SSClock
-      ? 'updated ' + SSClock.ago(s)
-      : (s < 45 ? 'updated just now' : `updated ${Math.round(s / 60)}m ago`);
-    el.className = 'chip' + (s > 120 ? ' chip-amber' : '');
+    el.className = 'dot ' + (s > 120 ? 'stale' : 'ok');
     el.title = s > 120
       ? 'a refresh has been missed — these numbers may not be what the engine holds'
-      : 'age of the data on screen; the chart refreshes every 60s while visible';
+      : 'data fresh (' + (window.SSClock ? SSClock.ago(s) : s + 's') + ') — refreshes every 60s while visible';
   }
+
 
   /* Build every overlay and report how many objects each one actually drew.
      A toggle that silently draws nothing is indistinguishable from a broken
@@ -892,15 +894,23 @@ window.SSChart = (() => {
     labelOverlays(n);
   }
 
+  function paintLayersBtn(){
+    const on = Object.values(overlays).filter(Boolean).length;
+    $('cLayersBtn').textContent = `Layers ${on}/${Object.keys(overlays).length}`;
+  }
+
   /* the count is the honesty: 0 means "no facts on this timeframe", not "off" */
   function labelOverlays(n){
-    document.querySelectorAll('#cOverlays button').forEach(b => {
+    document.querySelectorAll('#cLayersPop button').forEach(b => {
       const k = b.dataset.o, c = n[k];
       /* Name only. "Swings 42" put a fact-store row count on a toggle whose
          only question is on/off — 42 of what, and is 42 good? The count keeps
          living in the tooltip for whoever wants it. */
       b.textContent = b.dataset.label;
       b.classList.toggle('empty', !c);
+      // in the menu, absence is said in words — a struck-through control
+      // reads as broken every time
+      if(!c) b.textContent = b.dataset.label + ' — no data';
       /* Composed, not replaced. Overwriting the title destroyed the authored
          notes on Liquidity and Cycle — the only place the chart says those
          overlays are INFERRED rather than measured — leaving a bare count in
@@ -909,6 +919,7 @@ window.SSChart = (() => {
                       : `nothing recorded for ${k} on ${sym} ${tf}`;
       b.title = [b.dataset.note, count].filter(Boolean).join(' — ');
     });
+    paintLayersBtn();
   }
 
   /* ---------- the setup this chart is about ---------- */
@@ -1154,14 +1165,41 @@ window.SSChart = (() => {
 
   /* ---------- wiring ---------- */
   function wire(){
-    $('cSym').addEventListener('change', e => {
-      sym = e.target.value;
+    $('cSymBtn').addEventListener('click', () =>
+      $('cSymPop').hidden ? openPicker() : closePicker());
+    $('cSymSearch').addEventListener('input',
+      e => renderSymList(e.target.value));
+    $('cSymList').addEventListener('click', e => {
+      const b = e.target.closest('[data-sym]'); if(!b) return;
       // Leverage means nothing across instruments — 10x on a perp is not a
       // setting that survives a hop to spot. Back to the safe end on every
       // symbol change rather than silently carrying a dial the new venue may
       // not even permit.
       leverage = 1;
-      load();
+      pickSym(b.dataset.sym);
+    });
+    $('cSymPop').addEventListener('keydown', e => {
+      const rows = [...$('cSymList').querySelectorAll('[data-sym]')];
+      if(e.key === 'Escape'){ closePicker(); $('cSymBtn').focus(); return; }
+      if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+        e.preventDefault();
+        pickIdx = Math.max(0, Math.min(rows.length - 1,
+          pickIdx + (e.key === 'ArrowDown' ? 1 : -1)));
+        rows.forEach((r, k) => r.classList.toggle('hl', k === pickIdx));
+        if(rows[pickIdx]) rows[pickIdx].scrollIntoView({block: 'nearest'});
+      }
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        const r = rows[pickIdx >= 0 ? pickIdx : 0];
+        if(r){ leverage = 1; pickSym(r.dataset.sym); }
+      }
+    });
+    document.addEventListener('click', e => {
+      if(!$('cSymPop').hidden && !e.target.closest('.sym-wrap')) closePicker();
+      if(!$('cLayersPop').hidden && !e.target.closest('.layers-wrap')){
+        $('cLayersPop').hidden = true;
+        $('cLayersBtn').setAttribute('aria-expanded', 'false');
+      }
     });
     $('cTfs').addEventListener('click', e => {
       const b = e.target.closest('button'); if(!b) return;
@@ -1169,10 +1207,16 @@ window.SSChart = (() => {
       document.querySelectorAll('#cTfs button').forEach(x => x.classList.toggle('on', x === b));
       load();
     });
-    $('cOverlays').addEventListener('click', e => {
+    $('cLayersBtn').addEventListener('click', () => {
+      const pop = $('cLayersPop');
+      pop.hidden = !pop.hidden;
+      $('cLayersBtn').setAttribute('aria-expanded', String(!pop.hidden));
+    });
+    $('cLayersPop').addEventListener('click', e => {
       const b = e.target.closest('button'); if(!b) return;
       overlays[b.dataset.o] = !overlays[b.dataset.o];
       b.classList.toggle('on', overlays[b.dataset.o]);
+      paintLayersBtn();
       if(candles.length) drawOverlays();
     });
     $('tkDir').addEventListener('click', e => {
@@ -1189,10 +1233,6 @@ window.SSChart = (() => {
        data the engine has already described inserts nothing. That outcome now
        says so in words, because a number the operator must interpret as
        reassurance is not reassurance. */
-    $('cScope').addEventListener('click', () => {
-      pickerScope = pickerScope === 'scanned' ? 'all' : 'scanned';
-      renderPicker();
-    });
     /* Ticket panes. Grouping only helps if the group you are in is obvious, so
        the tab carries the state and the pane merely follows it. */
     $('tkTabs').addEventListener('click', e => {
@@ -1210,7 +1250,7 @@ window.SSChart = (() => {
       $('ticket').scrollTop = 0;
     });
 
-    $('cCopilot').addEventListener('click', () => {
+    $('btnCopilot').addEventListener('click', () => {
       if(!sym || !window.SSCopilot) return;
       SSCopilot.open({symbol: sym, tf,
                       setupId: setup ? setup.setup_id : null});
@@ -1461,106 +1501,88 @@ window.SSChart = (() => {
     allSymbols = o.symbols.filter(s => s.state !== 'WARMING');
     symMeta = {};
     for(const s of allSymbols) symMeta[s.symbol] = s;
-    ensureInScope();          // a deck-opened symbol may sit outside 'scanned'
-    renderPicker();
     if(!sym) sym = allSymbols.length ? allSymbols[0].symbol : null;
-    if(sym){ $('cSym').value = sym; await load(); }
+    if(sym){ paintSymBtn(); await load(); }
   }
 
-  /* Two scopes, because one flat list of 78 was measured to be mostly noise:
-     47 entries are former universe members nothing scans, and they buried the
-     19 the engine actually watches. Default is the watchlist; "all pairs" is
-     one click away and keeps every stored symbol reachable — a symbol the
-     picker hides entirely is one the operator cannot inspect to find out why
-     it was dropped. Grouping survives in the full view: whether the engine is
-     even LOOKING at a symbol is the first thing to know about it. */
-  function renderPicker(){
-    const scoped = pickerScope === 'scanned'
-      ? allSymbols.filter(s => s.state === 'ADMITTED')
-      : allSymbols;
-    const GROUPS = [
-      ['ADMITTED', 'Scanned — the engine watches these'],
-      ['SHADOW',   'Shadow — measured, never sized'],
-      ['UNTRACKED', 'Not scanned — history only, no engine opinion'],
-    ];
-    const seen = new Set();
-    let html = '';
-    for(const [state, label] of GROUPS){
-      const rows = scoped.filter(s => s.state === state);
-      if(!rows.length) continue;
-      rows.forEach(s => seen.add(s.symbol));
-      html += `<optgroup label="${label} (${rows.length})">` +
-        rows.map(s => `<option value="${s.symbol}">${optLabel(s)}</option>`).join('') +
-        '</optgroup>';
-    }
-    const rest = scoped.filter(s => !seen.has(s.symbol));
-    if(rest.length)
-      html += `<optgroup label="Other (${rest.length})">` +
-        rest.map(s => `<option value="${s.symbol}">${optLabel(s)}</option>`).join('') +
-        '</optgroup>';
-    // Narrowing the scope must never orphan the chart on screen. A <select>
-    // whose value is not among its options silently displays the first entry
-    // while `sym` says otherwise — the wrong-market-under-the-right-name
-    // failure again. The current symbol rides along as its own group instead.
-    if(sym && symMeta[sym] && !scoped.some(s => s.symbol === sym))
-      html += '<optgroup label="Current — not on the watchlist">' +
-        `<option value="${sym}">${optLabel(symMeta[sym])}</option></optgroup>`;
-    $('cSym').innerHTML = html;
-    if(sym && symMeta[sym]) $('cSym').value = sym;
-    const btn = $('cScope');
-    if(btn){
-      btn.textContent = pickerScope === 'scanned'
-        ? `all pairs (${allSymbols.length})`
-        : 'watchlist only';
-      btn.title = pickerScope === 'scanned'
-        ? 'show every stored symbol, including shadow and unscanned ones'
-        : 'back to just the symbols the engine scans';
-    }
-  }
+  /* One searchable list replaces the <select> + scope toggle. The OS-native
+     dropdown was the one element on this surface no stylesheet could reach —
+     a white panel in a dark app — and the scope button existed only because a
+     flat unsearchable list buried the 19 scanned symbols under 47 leftovers.
+     Grouping plus search solves what the scope toggle solved, one control
+     cheaper: scanned first, shadow next, unscanned last, and typing filters
+     all of them. */
+  const PICK_GROUPS = [
+    ['ADMITTED', 'scanned'],
+    ['SHADOW', 'shadow — never sized'],
+    ['UNTRACKED', 'not scanned'],
+  ];
+  let pickIdx = -1;                    // keyboard highlight, -1 = none
 
-  /* A symbol outside the current scope must widen the scope, not vanish.
-     The deck's "Open chart", a shadow pair, or a hand-typed URL can land on a
-     symbol the scanned view does not contain; a <select> whose value is not
-     among its options silently shows the first entry while `sym` says
-     otherwise — the wrong-market-under-the-right-name failure again. */
-  function ensureInScope(){
-    if(pickerScope === 'scanned' && sym && symMeta[sym]
-       && symMeta[sym].state !== 'ADMITTED'){
-      pickerScope = 'all';
-      renderPicker();
-    }
-  }
-
-  /* The full symbol, never prettified. `.replace('-USD','')` rendered BTC-USD
-     as "BTC" while BTCUSDT stayed "BTCUSDT" — so the one string that tells you
-     spot from perp was stripped from exactly the symbols where it mattered. */
-  function optLabel(s){
-    const v = s.venue;
-    return v ? `${s.symbol}  ·  ${venueName(v)}` : s.symbol;
-  }
   function venueName(v){
     const house = (v.key || '').split('-')[0];
     return `${house.charAt(0).toUpperCase()}${house.slice(1)} ${v.kind}`;
   }
 
-  /* The header chip. Presentation only — every fact in it was decided by
-     `venues.py` and served over /api/overview; nothing here re-derives a venue
-     from a symbol string. */
-  function showVenue(){
-    const el = $('cVenue'), m = symMeta[sym];
-    if(!m || !m.venue){ el.textContent = '—'; el.className = 'chip'; return; }
-    const v = m.venue;
-    const lev = v.max_leverage > 1 ? ` · up to ${v.max_leverage}x` : ' · 1x';
-    el.textContent = venueName(v) + lev + (v.allow_shorts ? '' : ' · long only');
-    el.className = 'chip ' + (m.state === 'ADMITTED' ? 'chip-accent' : 'chip-amber');
-    el.title = (m.state === 'ADMITTED'
-      ? 'the exchange these candles came from — the engine scans this symbol'
-      : `the exchange these candles came from — state ${m.state}, the engine is `
-        + 'not scanning this symbol, so it will have no setups')
-      + (v.max_leverage > 1
-         ? '. Leverage is set per trade on the Size tab of the order ticket.'
-         : '');
+  function paintSymBtn(){
+    const m = symMeta[sym];
+    $('cSymTok').textContent = sym || '—';
+    const v = m && m.venue;
+    $('cSymVenue').textContent = !v ? '' :
+      `${venueName(v)}${v.max_leverage > 1 ? ' · ' + v.max_leverage + 'x' : ''}${
+        v.allow_shorts ? '' : ' · long only'}`;
+    $('cSymBtn').classList.toggle('shadow', !!m && m.state !== 'ADMITTED');
+    $('cSymBtn').title = !m ? 'choose a symbol' : (m.state === 'ADMITTED'
+      ? 'the engine scans this symbol'
+      : `state ${m.state} — the engine is not scanning this, so it will have no setups`);
   }
+
+  function renderSymList(filter){
+    const q = (filter || '').trim().toUpperCase();
+    const hit = s => !q || s.symbol.toUpperCase().includes(q);
+    let html = '', n = 0;
+    for(const [state, label] of PICK_GROUPS){
+      const rows = allSymbols.filter(s => s.state === state && hit(s));
+      if(!rows.length) continue;
+      html += `<div class="sym-group">${label} (${rows.length})</div>` +
+        rows.map(s => { n++; return `<button class="sym-row${s.symbol === sym ? ' on' : ''}"
+          role="option" data-sym="${s.symbol}">
+          <b>${s.symbol}</b><i>${s.venue ? venueName(s.venue) : ''}</i></button>`; }).join('');
+    }
+    const known = new Set(PICK_GROUPS.map(g => g[0]));
+    const rest = allSymbols.filter(s => !known.has(s.state) && hit(s));
+    if(rest.length)
+      html += `<div class="sym-group">other (${rest.length})</div>` +
+        rest.map(s => `<button class="sym-row" role="option" data-sym="${s.symbol}">
+          <b>${s.symbol}</b><i>${s.venue ? venueName(s.venue) : ''}</i></button>`).join('');
+    $('cSymList').innerHTML = html ||
+      '<div class="sym-group">nothing matches</div>';
+    pickIdx = -1;
+  }
+
+  function openPicker(){
+    $('cSymPop').hidden = false;
+    $('cSymBtn').setAttribute('aria-expanded', 'true');
+    const inp = $('cSymSearch');
+    inp.value = '';
+    renderSymList('');
+    inp.focus();
+  }
+  function closePicker(){
+    $('cSymPop').hidden = true;
+    $('cSymBtn').setAttribute('aria-expanded', 'false');
+  }
+  async function pickSym(next){
+    closePicker();
+    if(!next || next === sym) return;
+    sym = next;
+    paintSymBtn();
+    await load();
+  }
+
+  /* Venue facts now live ON the symbol button — the chip repeated what the
+     picker already had to say. `venues.py` still decides everything. */
+
 
   /* open(symbol, timeframe) — the deck's "Open chart" entry point */
   async function open(s, t){
@@ -1568,8 +1590,8 @@ window.SSChart = (() => {
     boot();
     document.querySelectorAll('#cTfs button').forEach(b =>
       b.classList.toggle('on', b.dataset.tf === tf));
-    if(!$('cSym').options.length) await populate();   // handles scope + load itself
-    else{ ensureInScope(); $('cSym').value = sym; await load(); }
+    if(!allSymbols.length) await populate();          // handles load itself
+    else{ paintSymBtn(); await load(); }
   }
 
   wire();

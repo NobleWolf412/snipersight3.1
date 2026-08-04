@@ -57,16 +57,17 @@ ok('the risk justification is one line plus a disclosure', () => {
   assert(/\.fine-print summary\{/.test(CSS), 'the disclosure has no styling');
 });
 
-ok('the context ladder is wired to the chart', () => {
-  assert(/id="cLadder"/.test(HTML), 'no ladder element');
-  assert(/api\/context\?symbol=/.test(CHART), '/api/context has zero callers again');
-  assert(/loadContext\(\)/.test(CHART), 'the fetch exists but nothing calls it');
-  // cleared with the rest of the market-specific chrome — a ladder for the
-  // WRONG symbol is worse than none
-  const i = CHART.indexOf('function clearChart');
-  assert(/cLadder/.test(CHART.slice(i, i + 1600)),
-         'clearChart leaves the previous symbol\'s ladder on screen');
-  assert(/\.ctx-ladder\b/.test(CSS), 'the ladder has no styling');
+ok('the per-timeframe context still reaches the chart', () => {
+  // The ladder ELEMENT died in the header consolidation (it read as a second
+  // timeframe picker). The FACT it carried — regime per timeframe from
+  // /api/context — survives on the regime chip's hover, and this pin follows
+  // the fact, not the furniture.
+  const i = CHART.indexOf('async function loadContext');
+  assert(i > 0, 'loadContext is gone — the wiring audit regressed');
+  const fn = CHART.slice(i, i + 1200);
+  assert(/\/api\/context/.test(fn), 'loadContext no longer calls /api/context');
+  assert(/cRegime/.test(fn),
+    'the context no longer lands anywhere the operator can find it');
 });
 
 ok('the superseded routes are gone, with the reasoning recorded', () => {
