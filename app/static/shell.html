@@ -600,6 +600,21 @@
             <div class="tk-out" id="guardRows"></div>
           </div>
         </div>
+        <!-- The lock that had no key. "Forward paper evidence has not yet
+             earned live execution" was printed on two surfaces and defined
+             nowhere; engine/livegate.py now measures what "earned" means and
+             this shows the record against it. -->
+        <div class="panel">
+          <div class="panel-head"><h2 class="t-section">Going live</h2>
+            <span class="chip" id="gateChip" style="margin-left:auto">—</span></div>
+          <div class="panel-body">
+            <div id="gateRoot"><div class="skeleton" role="status" aria-label="loading">
+              <div class="skel" style="height:22px"></div>
+              <div class="skel" style="height:22px"></div>
+              <div class="skel" style="height:22px"></div>
+            </div></div>
+          </div>
+        </div>
       </div>
     </section>
 

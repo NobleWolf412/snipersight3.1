@@ -1894,9 +1894,41 @@ def trade_config(symbol: str | None = None):
         # Live order submission is locked until the forward record earns it.
         # The UI reads this rather than deciding for itself.
         "live_enabled": False,
+        # WHAT "earned" MEANS. This sentence used to be the whole answer, and
+        # nothing in the system defined the condition it named — see
+        # engine/livegate.py. The criteria are measurable and live at
+        # /api/live-gate; the reason now points at them instead of gesturing.
         "live_locked_reason": "Forward paper evidence has not yet earned live "
-                              "execution. Rails exist; the switch is off.",
+                              "execution — see Settings for the four criteria "
+                              "and where the record stands against them.",
     }
+
+
+@app.get("/api/live-gate")
+def live_gate():
+    """The four criteria that stand between the paper book and real money.
+
+    Read-only, and deliberately assembled from authorities that already exist:
+    the forward journal and drawdown come from `/api/portfolio` (§8: never
+    re-derive equity), the confidence interval from `edgestats`' own bootstrap,
+    the audit status from the last `quality_runs` row. Nothing here computes a
+    second opinion about a number another surface is already showing.
+    """
+    from engine import livegate
+    con = store.connect()
+    try:
+        pf = portfolio()
+        q = con.execute("SELECT status FROM quality_runs "
+                        "ORDER BY observed_at DESC LIMIT 1").fetchone()
+        return livegate.evaluate(
+            con,
+            journal=pf.get("journal") or [],
+            max_drawdown_pct=pf.get("max_drawdown_pct") or 0.0,
+            quality_status=q[0] if q else None,
+            baseline=pf.get("baseline"),
+            strategy_version=setups.SETUP_VERSION)
+    finally:
+        con.close()
 
 
 @app.get("/api/credentials")

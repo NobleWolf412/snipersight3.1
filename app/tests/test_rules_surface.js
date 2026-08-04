@@ -15,6 +15,7 @@ const assert = require('assert');
 const S = f => fs.readFileSync(path.join(__dirname, '..', 'static', f), 'utf8');
 const HTML = S('shell.html');
 const SHELL = S('shell.js');
+const CSS = S('ss.css');
 
 let passed = 0;
 function ok(name, fn) {
@@ -84,6 +85,36 @@ ok('the dirty banner still guards Apply', () => {
   assert(/id="dirtyBanner"/.test(HTML), 'unsaved changes have no banner');
   assert(/id="setApply"/.test(HTML) && /id="setReset"/.test(HTML),
     'Apply/Discard are gone');
+});
+
+/* The lock that had no key. "live execution LOCKED" was printed here and the
+   condition it named was defined nowhere in the system, so the app's stated
+   purpose sat behind a door with no handle (UX audit, 4 Aug 2026). */
+ok('going live states its criteria on the surface that locks it', () => {
+  assert(/id="gateRoot"/.test(HTML), 'the criteria have nowhere to render');
+  assert(/Going live/.test(HTML), 'the panel lost its heading');
+  assert(/renderLiveGate/.test(SHELL), 'nothing paints the criteria');
+  assert(/\/api\/live-gate/.test(SHELL), 'the criteria are not read from the engine');
+});
+
+ok('LOCKED points at where the condition is written down', () => {
+  assert(/LOCKED — see Going live/.test(SHELL),
+    'the guardrail row says LOCKED and nothing else again — a lock whose ' +
+    'condition is stated nowhere is an unfinished thought, not caution');
+});
+
+ok('every criterion renders a bar that can move', () => {
+  assert(/gate-bar/.test(SHELL) && /gate-bar/.test(CSS),
+    'progress has no bar — "how close am I" is the only question worth ' +
+    'asking of a lock');
+  assert(/c\.progress/.test(SHELL), 'the bar is not driven by measured progress');
+});
+
+ok('the build gate is stated apart from the evidence gate', () => {
+  assert(/build_note/.test(SHELL),
+    'the order-router caveat is dropped — a passing evidence bar would read ' +
+    'as permission to trade, which is how Arm stayed dead for months');
+  assert(/gate-foot/.test(CSS), 'the build note has no styling of its own');
 });
 
 console.log('\n  ' + passed + ' passed');

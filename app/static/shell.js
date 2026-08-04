@@ -2149,9 +2149,14 @@
          setValues.halt_on_data_blocked ? 'good' : 'warn') +
       gr('max concurrent', rc.max_concurrent != null ? rc.max_concurrent : 2) +
       gr('total open risk', (rc.max_total_risk_pct != null ? rc.max_total_risk_pct : 4) + '%') +
-      gr('live execution', 'LOCKED', 'warn');
+      // "LOCKED" alone was the whole answer for months. It now names where
+      // the condition is written down, and the panel below shows the record
+      // against it.
+      gr('live execution', 'LOCKED — see Going live', 'warn');
     $('guardChip').textContent = setValues.halted ? 'halted' : 'armed';
     $('guardChip').className = 'chip ' + (setValues.halted ? 'chip-red' : 'chip-green');
+
+    renderLiveGate();
 
     const halted = !!setValues.halted;
     $('btnHalt').textContent = halted ? 'HALTED' : 'HALT';
@@ -2160,6 +2165,57 @@
       ? 'new entries are blocked — click to resume'
       : 'stop sizing new entries (open positions still settle)';
     document.body.classList.toggle('is-halted', halted);
+  }
+
+  /* ---------- going live: the criteria, and where the record stands ----------
+
+     The audit found the app's whole purpose behind a lock with no key —
+     "Auto: Off", "live execution LOCKED", and no definition anywhere of what
+     would unlock it. engine/livegate.py measures four criteria; this shows
+     them as bars that move, because "how close am I" is the question a dead
+     end cannot answer.
+
+     Two verdicts, never merged: the EVIDENCE bar is what the operator moves
+     by trading the paper book; the ORDER ROUTER is a build task nobody earns
+     by trading well. Collapsing them is how the Arm button stayed dead for
+     months. */
+  let gateShown = null;
+  async function renderLiveGate(){
+    const root = $('gateRoot'); if(!root) return;
+    let g;
+    try{ g = await api('/api/live-gate'); }
+    catch(err){
+      root.innerHTML = '<div class="empty">could not read the criteria</div>';
+      $('gateChip').textContent = '—';
+      return;
+    }
+    // Cheap identity check: this is polled with the rest of Settings and the
+    // criteria move slowly, so skip the DOM write when nothing changed.
+    const stamp = JSON.stringify(g.criteria.map(c => [c.pass, c.have]));
+    if(stamp === gateShown) return;
+    gateShown = stamp;
+
+    $('gateChip').textContent = g.ready ? 'evidence met' : `${g.met}/${g.total} met`;
+    $('gateChip').className = 'chip ' + (g.ready ? 'chip-green' : 'chip-amber');
+
+    root.innerHTML = g.criteria.map(c => {
+      const pct = Math.round((c.progress || 0) * 100);
+      const have = c.have == null ? 'not yet measurable'
+        : c.key === 'sample' ? `${fmt(c.have)} of ${fmt(c.need)}`
+        : c.key === 'edge' ? `${c.have > 0 ? '+' : ''}${c.have}R lower bound`
+        : c.key === 'drawdown' ? `${c.have}% of ${c.need}%`
+        : String(c.have);
+      return `<div class="gate-row${c.pass ? ' ok' : ''}">
+        <div class="gate-head">
+          <span class="gate-mark">${c.pass ? '✓' : '·'}</span>
+          <span class="gate-label">${esc(c.label)}</span>
+          <span class="gate-have">${esc(have)}</span>
+        </div>
+        <div class="gate-bar"><i style="width:${pct}%"></i></div>
+        <div class="gate-note">${esc(c.note)}</div>
+      </div>`;
+    }).join('') +
+      `<div class="gate-foot">${esc(g.build_note)}</div>`;
   }
 
   /* `input`, not `change`: the dirty flag should follow typing, not wait for
