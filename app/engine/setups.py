@@ -29,7 +29,15 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.15-draft"
+SETUP_VERSION = "setup-v0.16-draft"
+# v0.16: WHY text writes prices with magnitude-scaled decimals (`_fp`, chart.js
+# `digits()` exactly) instead of a flat .2f, which rendered every sub-dollar
+# zone as a degenerate range — ENA's journal read "supply zone 0.09-0.09", and
+# its TP was the same two digits. No strategy rule changed, but the WHY lives
+# inside the content-hashed fact: re-derived under v0.15 the new bytes would
+# append a near-duplicate of every recorded candidate (the S53 shape).
+# Different facts, so a different version; the recorded v0.15 book stays as
+# written.
 # v0.15: cascade from zone-v0.13 / liq-v0.11 / structure-v0.12 / regime-v0.12 —
 # the S53 consumer collapse keyed pivots on market_time alone and a same-bar
 # HIGH+LOW pair shadowed one twin out of zones, pools and labels. Five supply
@@ -126,6 +134,17 @@ Q2 = Decimal("0.01")
 # Armed-order window: number of bars a limit stays live before it MISSES.
 # MUST equal execsim.MAX_ENTRY_BARS — Phase G will collapse to one source.
 ENTRY_MAX_BARS = 4
+
+
+def _fp(p) -> str:
+    """Price for WHY text, decimals scaled to magnitude — chart.js `digits()`
+    exactly, so the journal writes a number the way the chart draws it. At a
+    flat .2f every sub-dollar zone was a degenerate range: ENA's journal read
+    "supply zone 0.09-0.09"."""
+    p = float(p)
+    a = abs(p)
+    d = 2 if a >= 1000 else 3 if a >= 10 else 4 if a >= 1 else 5 if a >= 0.01 else 8
+    return f"{p:,.{d}f}"
 
 # --- confirmation (v0.7) ---
 # Bars after the touch in which a confirming close may appear. Three is a
@@ -783,7 +802,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                                "entry": str(entry_f), "sl": str(sl_f), "tp": str(tp_f),
                                "rr": str(rr_f), "rank": 0,
                                "why": (f"price {dist_atr} ATR from {created['zone_type']} zone "
-                                       f"{float(bottom):,.2f}-{float(top):,.2f} in {reg_f} · "
+                                       f"{_fp(bottom)}-{_fp(top)} in {reg_f} · "
                                        f"prospective {strat_f} would pass all gates · watching"),
                                "zone_id": zone_id, "regime": reg_f, "state": "FORMING",
                                "distance_atr": str(dist_atr),
@@ -878,7 +897,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                           "entry": None, "sl": None, "tp": None,
                           "rr": None, "rank": 0,
                           "why": (f"price reached the {created['zone_type']} zone "
-                                  f"{float(bottom):,.2f}-{float(top):,.2f} in {reg} · "
+                                  f"{_fp(bottom)}-{_fp(top)} in {reg} · "
                                   f"waiting for a close that proves it held "
                                   f"({CONFIRM_MAX_BARS} bars)"),
                           "confirm_deadline_ts": (touched["confirmed_at"]
@@ -1005,12 +1024,12 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             verb = "pullback into" if strategy == "PULLBACK" else "reversal off"
             side_word = "above" if direction == "LONG" else "below"
             why = (f"{reg} regime · {verb} {created['zone_type']} zone "
-                   f"{float(bottom):,.2f}-{float(top):,.2f}"
+                   f"{_fp(bottom)}-{_fp(top)}"
                    + (" · liquidity sweep nearby" if swept else "")
                    + f" · confirmed by a close back {side_word} the zone"
                    + (f" on {vr}x volume" if vol_hot else "")
                    + (f" · {htf} agrees" if conf.get("htf_regime_aligned") else "")
-                   + f" · TP {float(tp):,.2f} · R:R {rr}")
+                   + f" · TP {_fp(tp)} · R:R {rr}")
             # Where the passive leg rests. Recorded on the fact so execsim
             # never re-derives it — one authority per number.
             maker_limit = ((entry - MAKER_OFFSET_R * risk) if direction == "LONG"

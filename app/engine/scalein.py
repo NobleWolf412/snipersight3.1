@@ -23,12 +23,15 @@ from decimal import Decimal
 from . import store
 from .swings import compute_atr
 from .structure import STRUCTURE_VERSION
-from .setups import SETUP_VERSION, MIN_RISK_COST_MULT, Q2
+from .setups import SETUP_VERSION, MIN_RISK_COST_MULT, Q2, _fp
 from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.13-draft"
+SCALE_VERSION = "scale-v0.14-draft"
+# v0.14: cascade from setup-v0.16 / exec-v0.20 (magnitude-scaled WHY prices
+# upstream) — and the add's own WHY takes the same fix: the BOS price printed
+# at a flat .2f, which on a sub-dollar symbol reads "BOS at 0.09".
 # v0.13: cascade from setup-v0.15 / exec-v0.19 / structure-v0.12 (the same-bar
 # pivot-pair fix upstream).
 # v0.12: cascade from setup-v0.14 / exec-v0.18 / structure-v0.11 (swing-v0.9 at
@@ -134,7 +137,7 @@ def run(con, symbol: str, tf: str = TRIGGER_TF, tf_seconds: int = 3600) -> dict:
                                "entry": str(px), "sl": str(entry), "tp": str(tp),
                                "rr": str(rr), "rank": 50,
                                "why": (f"add #{adds} on 1H {b['direction']} BOS at "
-                                       f"{float(px):,.2f} inside active {tf} "
+                                       f"{_fp(px)} inside active {tf} "
                                        f"{parent['strategy']} · stop at parent entry "
                                        f"(breakeven) · shared TP · R:R {rr}"),
                                "zone_id": parent.get("zone_id"), "regime": parent.get("regime"),

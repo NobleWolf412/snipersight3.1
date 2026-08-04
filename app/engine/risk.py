@@ -23,7 +23,9 @@ from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.18-draft"
+RISK_VERSION = "risk-v0.19-draft"
+# v0.19: cascade from setup-v0.16 / exec-v0.20 / cooldown-v0.8
+# (magnitude-scaled WHY prices upstream).
 # v0.18: cascade from setup-v0.15 / exec-v0.19 / cooldown-v0.7 (the same-bar
 # pivot-pair fix upstream).
 # v0.17: cascade from setup-v0.14 / exec-v0.18 / cooldown-v0.6 (swing-v0.9 at

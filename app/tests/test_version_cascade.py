@@ -98,7 +98,13 @@ EXPECTED = {
     "momentum": "momentum-v0.2-draft",
     "volatility": "volatility-v0.1-draft",
     "volume": "volume-v0.1-draft",
-    "setup": "setup-v0.15-draft",
+    # setup-v0.16: WHY prices scale decimals to magnitude — a flat .2f wrote
+    # every sub-dollar zone as a degenerate range ("supply zone 0.09-0.09").
+    # No strategy rule changed, but the WHY sits inside the content-hashed
+    # fact, so the same candidates re-derived under v0.15 would have appended
+    # near-duplicates. setup_id is version-scoped, and the trading tail
+    # (exec / risk / scale / cooldown) reads the new book, so all four move.
+    "setup": "setup-v0.16-draft",
     # S50 cascade. exec-v0.13 -> v0.14 corrected the MAKER_THEN_MARKET crossing
     # leg, which booked a market fill at the PLAN's price — two bars stale, and
     # outside the fill bar's own [low, high] on 78 of 95 crossed orders, never
@@ -116,10 +122,10 @@ EXPECTED = {
     # are derived purely from recorded exits. All four move together.
     # scale ALSO changed on its own account — its economics gate now prices the
     # add on the add's own venue instead of the process-wide Coinbase default.
-    "exec": "exec-v0.19-draft",
-    "risk": "risk-v0.18-draft",
-    "scale": "scale-v0.13-draft",
-    "cooldown": "cooldown-v0.7-draft",
+    "exec": "exec-v0.20-draft",
+    "risk": "risk-v0.19-draft",
+    "scale": "scale-v0.14-draft",
+    "cooldown": "cooldown-v0.8-draft",
     "breakout": "breakout-v0.4-draft",
     "venues": "venues-v0.2-draft",
     "cycles": "cycles-v0.2-draft",
