@@ -139,10 +139,18 @@ Q2 = Decimal("0.01")
 # its own recorded exits, because the replay modelled a bracket the executor
 # didn't run. The lesson is structural — the code that settles must BE the
 # code that replays, so agreement is a property rather than a calibration
-# result. These two functions are that property. run() calls them for the
-# record; abtest calls them for the counterfactual; the pin test in
-# test_one_walk.py holds the extraction to the pre-refactor settlements to
-# the digit.
+# result. These functions are that property. run() calls them for the record;
+# abtest calls them for the counterfactual; the pin test in test_one_walk.py
+# holds the extraction to the pre-refactor settlements to the digit.
+#
+# `simulate_entry` completes the set, and it is the same lesson a fourth time.
+# Sharing `cross_fill` fixed the 76 trades that had diverged, but left the
+# harness still choosing WHICH BAR to cross on, whether the passive leg had
+# filled, and what the risk denominator was — the whole model around the one
+# line that had been extracted. Two of those three were already wrong at the
+# time (`ci+1` against a bisect on `confirmed_at`, and a maker limit re-derived
+# rather than read from the plan that recorded it); they happened to agree on
+# this book. "Agrees today" is not a convention.
 
 def walk_exit(candles, i, sl, tp, long, max_bars=MAX_BARS):
     """Walk forward from the fill bar to a terminal outcome.
@@ -239,6 +247,113 @@ def settle(profile, symbol, entry, exit_price, risk, long, outcome,
     }
 
 
+def simulate_entry(candles, atr, order_i, entry, sl, long, *, entry_model,
+                   maker_limit, maker_wait, profile,
+                   max_entry_bars=MAX_ENTRY_BARS):
+    """Turn a PLAN into the fill it actually got: which bar, what price, whose
+    fee, and the risk denominator that follows from all three.
+
+    `cross_fill` above is the crossing PRICE and this is the model around it.
+    Sharing the price alone left the harness still deciding on its own WHICH
+    BAR to cross on, whether the passive leg had filled first, and what the
+    risk denominator was — three more chances to answer differently, in the
+    code immediately next to the one that had already been answered
+    differently for a version. Sharing the price fixed the 76 trades; sharing
+    the model is what stops the next one.
+
+    Returns a dict whose `status` is one of:
+      FILLED   `fill_i`, `entry` (the price PAID, not the plan's), `entry_role`
+               (whose fee schedule applies) and `risk` are all set.
+      MISSED   the order expired unfilled; `scan_end` is the exclusive end of
+               the scan, so the caller can date the expiry.
+      PENDING  the data runs out before the order resolves. Not a result.
+    `note` carries loud-fallback text when a degraded path was taken — the
+    caller must surface it. abtest took `cross_fill`'s `slipped` flag and threw
+    it away (`entry_px, _ =`), so a fill with no ATR degraded silently in the
+    harness while degrading audibly in the engine.
+
+    THE RISK RECOMPUTE IS PART OF THE FILL. A fill that differs from the plan
+    sits a different distance from the SAME structural stop, so it has a
+    different R denominator. A better fill is a smaller one; a crossed fill
+    that chased the market is a larger one. Inheriting the plan's rescales
+    every trade the fill moved — silently, and in the flattering direction,
+    because the plan price is by construction the one the strategy wanted.
+    """
+    # The two passive models differ only in what they do when the limit does
+    # not fill, and that difference is the whole measurement. MAKER_PULLBACK
+    # declines the trade; MAKER_THEN_MARKET crosses. The pure-maker version is
+    # ADVERSELY SELECTED — measured on this book, its 32 unfilled orders would
+    # have made +0.365 R each at market against +0.074 R for the ones that
+    # filled, because price walks away precisely when the trade was right. It
+    # is kept as a model so the 2x2 can keep re-asking, not because it won.
+    passive = entry_model in ("MAKER_THEN_MARKET", "MAKER_PULLBACK")
+    cross_on_expiry = entry_model == "MAKER_THEN_MARKET"
+    market_entry = entry_model == "MARKET_NEXT_OPEN"
+
+    fill_i, entry_role, note = None, "MAKER", None
+
+    def unfilled(status, scan_end=None):
+        """No position. `entry` is whatever the plan asked for — the MISSED
+        record quotes the price it wanted and never got."""
+        return {"status": status, "fill_i": None, "entry": entry,
+                "entry_role": entry_role, "risk": None,
+                "scan_end": scan_end, "note": note}
+
+    if passive and maker_limit is not None:
+        # Passive leg: the limit rests BETTER than the market, so it can only
+        # fill if price comes back. A limit AT the market would be marketable
+        # and pay taker — claiming maker for that is a fee saving the exchange
+        # never granted.
+        wait_end = min(order_i + maker_wait, len(candles))
+        scan_end = wait_end
+        for k in range(order_i, wait_end):
+            lo, hi = Decimal(candles[k]["low"]), Decimal(candles[k]["high"])
+            if lo <= maker_limit <= hi:
+                fill_i = k
+                entry = maker_limit          # a real, better fill price
+                break
+        if fill_i is None and cross_on_expiry and wait_end < len(candles):
+            # CROSS: the passive limit never filled, so we take the market at
+            # the end of the window. ONE definition of what that costs — see
+            # cross_fill for the measurement, and for the divergence that came
+            # from fixing it in only one of the two places that crossed.
+            fill_i = wait_end
+            entry_role = "TAKER"
+            entry, slipped = cross_fill(candles, fill_i, long,
+                                        atr[fill_i], profile)
+            if not slipped:
+                note = (f"cross slippage NOT applied at bar "
+                        f"{candles[fill_i]['open_ts']} (no ATR);")
+        elif fill_i is None:
+            # A pure-maker model declines the trade rather than crossing; the
+            # window must have fully elapsed for that to be a MISS rather than
+            # a position we simply cannot resolve yet.
+            if not cross_on_expiry and order_i + maker_wait <= len(candles):
+                return unfilled("MISSED", scan_end)
+            return unfilled("PENDING")
+    else:
+        entry_role = "TAKER" if market_entry else "MAKER"
+        scan_end = min(order_i + max_entry_bars, len(candles))
+        for k in range(order_i, scan_end):
+            lo, hi = Decimal(candles[k]["low"]), Decimal(candles[k]["high"])
+            if lo <= entry <= hi:
+                fill_i = k
+                break
+        if fill_i is None:
+            if order_i + max_entry_bars > len(candles):
+                return unfilled("PENDING")
+            return unfilled("MISSED", scan_end)
+
+    risk = (entry - sl) if long else (sl - entry)
+    if risk <= 0:
+        # No denominator, no R. Booking such a trade at 0R would enter the book
+        # as a flat result rather than as the unpriceable plan it is.
+        return unfilled("PENDING")
+    return {"status": "FILLED", "fill_i": fill_i, "entry": entry,
+            "entry_role": entry_role, "risk": risk, "scan_end": scan_end,
+            "note": note}
+
+
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
     with RunRecorder(con, "execsim", EXEC_VERSION, symbol, tf) as rec:
         # Venue-derived: spot fees on a perp are a 14x over-charge, and
@@ -285,7 +400,10 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 continue
             entry, sl, tp = Decimal(s["entry"]), Decimal(s["sl"]), Decimal(s["tp"])
             long = s["direction"] == "LONG"
-            risk = (entry - sl) if long else (sl - entry)
+            # No `risk` here on purpose. The plan's risk is not this trade's
+            # risk — only the fill knows that, and a plan-derived value sitting
+            # in scope is exactly what a later edit reaches for by mistake.
+            # simulate_entry() returns the one that counts.
             # The strategy declares how it intends to get in, and the fee role
             # follows from that — not the other way round. setup-v0.7 enters
             # MARKET at the next bar's open, which pays TAKER. Labelling that
@@ -330,86 +448,22 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                               algo_version=EXEC_VERSION,
                               payload={**order_base, "event": "PLACED"})
 
-            fill_i = None
-            entry_role = "MAKER"
-            if passive_then_cross and maker_limit is not None:
-                # Passive leg: the limit rests BETTER than the market, so it can
-                # only fill if price comes back. A limit AT the market would be
-                # marketable and pay taker — claiming maker for that is a fee
-                # saving the exchange never granted.
-                wait_end = min(order_i + maker_wait, len(candles))
-                for k in range(order_i, wait_end):
-                    lo, hi = Decimal(candles[k]["low"]), Decimal(candles[k]["high"])
-                    if lo <= maker_limit <= hi:
-                        fill_i = k
-                        entry = maker_limit          # a real, better fill price
-                        break
-                if fill_i is None and wait_end < len(candles):
-                    # CROSS: the passive limit never filled, so we take the
-                    # market. A market order fills at the market — NOT at the
-                    # plan's price.
-                    #
-                    # This paid taker at `entry` and left `entry` untouched, and
-                    # `entry` is `candles[ci+1]["open"]` (setups.py) — a print
-                    # from TWO BARS EARLIER, since order_i = ci+1 and
-                    # MAKER_WAIT_BARS = 2 puts the cross on bar ci+3. The comment
-                    # at setups.py licensing that price says it is "a price that
-                    # demonstrably traded", which is true on the bar it was taken
-                    # from and false on the bar it was being applied to.
-                    #
-                    # Measured on exec-v0.13, 95 crossed orders: 78 (82.1%) were
-                    # booked at a price OUTSIDE the fill bar's own [low, high],
-                    # and the direction was never adverse — 94 of 95 filled
-                    # better than the crossing bar's open. One ETHUSDT long was
-                    # booked at 2075.49 on a bar whose LOW was 2094.69. The free
-                    # entry advantage totalled +86 R of raw edge.
-                    #
-                    # Book impact, re-simulated: +95.85 R -> +31.95 R over 642
-                    # trades (+0.1493 -> +0.0498 R/trade). REVERSAL on the traded
-                    # book falls from +0.266 R CI [+0.038,+0.498] to +0.151 R
-                    # CI [-0.066,+0.379] — it stops clearing zero.
-                    #
-                    # The honest fill is the crossing bar's OPEN: that is the
-                    # first price available once the passive window has closed,
-                    # it demonstrably traded on THIS bar, and it requires no
-                    # assumption about intrabar path. Slippage is charged because
-                    # this leg is a market order, exactly as SL and TIMEOUT
-                    # exits are.
-                    fill_i = wait_end
-                    entry_role = "TAKER"
-                    # ONE definition of a crossing fill, shared with abtest —
-                    # see cross_fill for the measurement that fixed it here and
-                    # the divergence that came from fixing it in only one place.
-                    entry, slipped = cross_fill(candles, fill_i, long,
-                                                atr[fill_i], COST_PROFILE)
-                    if not slipped:
-                        # loud-fallback rule: a degraded path must be audible
-                        rec.notes = ((rec.notes or "") +
-                                     f" cross slippage NOT applied at bar "
-                                     f"{candles[fill_i]['open_ts']} (no ATR);")
-                elif fill_i is None:
-                    counts["PENDING"] += 1
-                    continue
-                # A better fill against the SAME structural stop is a smaller
-                # risk denominator. Recompute from the actual fill rather than
-                # inheriting the plan's, or every passive fill reports inflated R.
-                risk = (entry - sl) if long else (sl - entry)
-                if risk <= 0:
-                    counts["PENDING"] += 1
-                    continue
-            else:
-                entry_role = "TAKER" if market_entry else "MAKER"
-                entry_end = min(order_i + MAX_ENTRY_BARS, len(candles))
-                for k in range(order_i, entry_end):
-                    lo, hi = Decimal(candles[k]["low"]), Decimal(candles[k]["high"])
-                    if lo <= entry <= hi:
-                        fill_i = k
-                        break
-            if fill_i is None:
-                if order_i + MAX_ENTRY_BARS > len(candles):
-                    counts["PENDING"] += 1
-                    continue
-                miss_ts = candles[entry_end - 1]["open_ts"] + tf_seconds
+            # The fill model lives in simulate_entry(), which abtest replays
+            # through as well — the record and the counterfactual cannot price
+            # an entry differently if there is only one place that prices one.
+            fill = simulate_entry(candles, atr, order_i, entry, sl, long,
+                                  entry_model=entry_model,
+                                  maker_limit=maker_limit,
+                                  maker_wait=maker_wait,
+                                  profile=COST_PROFILE)
+            if fill["note"]:
+                # loud-fallback rule: a degraded path must be audible
+                rec.notes = (rec.notes or "") + " " + fill["note"]
+            if fill["status"] == "PENDING":
+                counts["PENDING"] += 1
+                continue
+            if fill["status"] == "MISSED":
+                miss_ts = candles[fill["scan_end"] - 1]["open_ts"] + tf_seconds
                 # PHASE H — a MISSED order is the armed window expiring. Record
                 # whether it expired BECAUSE the window was too short, so
                 # MAX_ENTRY_BARS can be judged against real arming lead times
@@ -444,7 +498,13 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 counts["MISSED"] += 1
                 continue
 
-            i = fill_i
+            # The fill is what gets recorded from here down: the price PAID, the
+            # fee role that price earned, and the risk denominator measured from
+            # it. Nothing below may reach back for the plan's version of any of
+            # the three.
+            entry, entry_role, risk = (fill["entry"], fill["entry_role"],
+                                       fill["risk"])
+            i = fill["fill_i"]
             fill_ts = candles[i]["open_ts"] + tf_seconds
             store.insert_fact(con, symbol=symbol, tf=tf, kind="order",
                               market_time=s["market_time"], confirmed_at=fill_ts,

@@ -71,13 +71,26 @@ class CrossFillHonesty(unittest.TestCase):
         self.assertIn("atr_at_fill is None", fn,
                       "a missing ATR must degrade loudly, never book a free fill")
 
-        # and the harness must use the SAME model, which is the whole point
+        # and the harness must use the SAME model, which is the whole point.
+        #
+        # Repinned again: this asked for `execsim.cross_fill(` in abtest, which
+        # was right when the crossing PRICE was the shared surface. It no longer
+        # is — abtest now enters through `execsim.simulate_entry`, which calls
+        # cross_fill itself. Sharing the price alone still left the harness
+        # choosing its own crossing BAR, its own maker limit and its own risk
+        # denominator, so the assertion has to follow the surface up rather than
+        # keep pinning the narrower one.
         ab = (APP / "engine" / "abtest.py").read_text(encoding="utf-8")
-        self.assertIn("execsim.cross_fill(", ab,
-                      "abtest crosses on its own terms again — that divergence "
+        self.assertIn("execsim.simulate_entry(", ab,
+                      "abtest fills on its own terms again — that divergence "
                       "reported 70.0 R against the book's real 7.9 R")
         self.assertNotIn("entry_px = entry          # market: the planned open", ab,
                          "the v0.13 plan-price cross is back in the harness")
+        entry_block = ab[ab.index("def run_variant("):ab.index("def summarise(")]
+        self.assertNotIn("Decimal(candles[", entry_block,
+                         "run_variant is scanning bars for a fill again — a "
+                         "second fill model is how it lost this correction "
+                         "the first time")
 
 
 class RecordedFillsLieWithinTheirBar(unittest.TestCase):

@@ -14,17 +14,30 @@ So: four variants over the same candles, same cost model, same code path.
     touch entry      v0.6 baseline        isolates the EXIT fix
     confirmed entry  isolates the ENTRY   proposed v0.7
 
-WHY THIS HAS ITS OWN SIMULATION CORE, which is normally the wrong answer:
-`execsim.py` is the production simulator and a second one risks the two
-disagreeing. Two things make it correct here. First, all four variants share
-THIS core, so the comparison between them is internally valid regardless of any
-absolute offset from production. Second, and the reason it is safe: the harness
-CALIBRATES against the recorded book before it reports anything. `calibrate()`
-replays the v0.6 setups under the hold-exit variant and compares against the
-exec facts execsim actually wrote. If the reproduction drifts beyond a tight
-tolerance the harness says so and refuses to present its numbers as comparable —
-a measurement tool that cannot reproduce a known result has not earned the right
-to describe an unknown one.
+IT NO LONGER HAS ITS OWN SIMULATION CORE, and the history of that is the point.
+It was written with one, defended by the argument that all four variants share
+it so the comparison between them stays internally valid, plus a runtime
+`calibrate()` pass to catch any absolute offset from production. The offset
+arrived anyway, four times, each time as a fix that landed in `execsim.py` and
+never crossed over: the exit-fee convention, then funding, then the crossing
+fill (+0.1207 R/trade on 76 of 497 trades, the v0.13 behaviour still running
+here long after the engine had corrected it), then — once the crossing PRICE
+was shared — the model around it, which still chose its own fill bar, its own
+maker limit and its own risk denominator.
+
+So the entry (`execsim.simulate_entry`, built on `execsim.cross_fill`), the
+exit walk (`execsim.walk_exit`) and the costing (`execsim.settle`) are now the
+engine's own, called from here. What remains local is the MANAGED exit —
+partials, trail, breakeven, time stop — which execsim does not implement
+because its 2x2 gate rejected it. Agreement on everything else is a property of
+there being one implementation rather than a result calibration has to keep
+re-establishing.
+
+`calibrate()` still runs, and still refuses to present the 2x2 as comparable if
+the replay cannot reproduce the recorded book — a measurement tool that cannot
+reproduce a known result has not earned the right to describe an unknown one.
+Its job is now catching the drift a shared core cannot prevent: a change in
+what the STORE holds, rather than in what the code does.
 
 Determinism: pure function of stored candles and setup facts. No RNG, no clock,
 no network. Decimal throughout for prices.
@@ -56,6 +69,13 @@ STAGNATION_FLOOR_RATIO = Decimal("0.7")
 # the same 48h means something different on 15m and 1D, and bar-counting keeps
 # the harness free of wall-clock reasoning.
 HOLD_BARS_BY_TF = {"15m": 20, "1H": 14, "4H": 12, "1D": 10, "1W": 8}
+# Maker-leg parameters for the COUNTERFACTUAL cells only. A setup that records
+# its own `maker_limit` and `maker_wait_bars` is replayed on those — setups.py
+# is the authority for where its order rested and execsim honours that, so a
+# replay that re-derived the number would be answering a different question.
+# These fill in for the older generations the 2x2 tests this entry model over,
+# which predate the fields.
+#
 # Bars a maker limit rests before it is abandoned. Short on purpose: the
 # thesis is 'the level held and price is leaving', so a limit that has not
 # filled in two bars is waiting for a move that already went without it.
@@ -311,110 +331,67 @@ def run_variant(con, symbols, tfs, setup_version, *, managed, entry_model,
                 continue
             atr = compute_atr(candles)
             times = [c["open_ts"] for c in candles]
-            idx = {t: i for i, t in enumerate(times)}
             for sid, s in _load_setups(con, symbol, tf, setup_version).items():
                 entry, sl, tp = (Decimal(s["entry"]), Decimal(s["sl"]),
                                  Decimal(s["tp"]))
                 long = s["direction"] == "LONG"
-                if entry_model in ("MAKER_PULLBACK", "MAKER_THEN_MARKET"):
-                    # Maker variant of the confirmed entry. The break-even fee on
-                    # the live book sits at 0.033%/side against Phemex taker
-                    # 0.06% / maker 0.01%, so the entry fee role alone spans the
-                    # difference between a losing and a winning book. But it
-                    # cannot be assumed: `entrystats` measured v0.6's resting
-                    # limits as ADVERSELY SELECTED — the 90 misses had a 58.4%
-                    # target rate against 12.7% for the fills, because price came
-                    # back to the level precisely when the level was failing.
-                    #
-                    # This variant is materially different from that one: the
-                    # limit rests AFTER a confirming close, not before it, so it
-                    # is not waiting to find out whether the zone holds. Whether
-                    # that removes the adverse selection is exactly what this
-                    # cell exists to answer.
-                    ci = idx.get(s.get("confirmed_bar_ts"))
-                    if ci is None or ci + 1 >= len(candles):
-                        continue
+                # The order is available on the bar execsim would place it on
+                # — a bisect on `confirmed_at`, exactly as run() does. This was
+                # `confirmed_bar_ts + 1` for the maker and market cells and a
+                # bisect only for the resting-limit one; the two agree on all
+                # 497 facts of the current book, which is a coincidence this
+                # harness has already been burned for relying on.
+                order_i = _bisect_fill(times, s["confirmed_at"])
+                if order_i >= len(candles):
+                    continue
+                base_risk = (entry - sl) if long else (sl - entry)
+                if base_risk <= 0:
+                    continue
+                # `maker_limit` is READ from the plan when the plan recorded one
+                # — setups.py calls itself the authority for that number ("so
+                # execsim never re-derives it — one authority per number") and
+                # execsim honours it, so the replay must too. Re-deriving it
+                # here reproduced the same value on this book and would have
+                # stopped the day MAKER_OFFSET_R moved on one side only.
+                #
+                # The counterfactual cells run this entry model over OLDER setup
+                # generations that predate the field; only there is it derived,
+                # and the constants below are the ones the model is being tested
+                # with.
+                if s.get("maker_limit"):
+                    maker_limit = Decimal(s["maker_limit"])
+                    maker_wait = int(s.get("maker_wait_bars") or MAKER_WAIT_BARS)
+                else:
                     # A limit AT the next open is marketable — it crosses the
                     # spread and pays TAKER. Claiming maker for it would be a
                     # free lunch invented by the model, so the limit must rest
                     # at a BETTER price than the market and genuinely wait.
-                    base_risk = (entry - sl) if long else (sl - entry)
-                    if base_risk <= 0:
-                        continue
-                    px = (entry - MAKER_OFFSET_R * base_risk) if long                         else (entry + MAKER_OFFSET_R * base_risk)
-                    i_fill = None
-                    for k in range(ci + 1, min(ci + 1 + MAKER_WAIT_BARS, len(candles))):
-                        lo_k, hi_k = Decimal(candles[k]["low"]), Decimal(candles[k]["high"])
-                        if lo_k <= px <= hi_k:
-                            i_fill = k
-                            break
-                    if i_fill is None:
-                        if entry_model == "MAKER_THEN_MARKET":
-                            # Post passive, cross if it does not fill. The pure
-                            # maker variant is ADVERSELY SELECTED — measured on
-                            # this book, its 32 unfilled orders would have made
-                            # +0.365R each at market against +0.074R for the ones
-                            # that filled. Price walked away precisely when the
-                            # trade was right. Saving a fee by declining those is
-                            # paying for the fee with the edge.
-                            #
-                            # THE CROSS IS execsim's CROSS, and until 4 Aug 2026
-                            # it was not. This booked `entry` — the plan's price,
-                            # a print from two bars earlier — at bar ci+1, while
-                            # execsim had already been fixed to take the CROSSING
-                            # bar's open plus slippage at the end of the passive
-                            # window. So the harness built to validate the
-                            # simulator was running the exact bug the simulator
-                            # had corrected, and flattered the book by 62 R
-                            # (70.0 replayed against 7.9 recorded).
-                            i_fill = ci + 1 + MAKER_WAIT_BARS
-                            if i_fill >= len(candles):
-                                continue          # the window has not closed yet
-                            entry_px, _ = execsim.cross_fill(
-                                candles, i_fill, long, atr[i_fill], profile)
-                            taker_in = True
-                        else:
-                            if ci + 1 + MAKER_WAIT_BARS <= len(candles):
-                                results.append({"setup_id": sid, "symbol": symbol,
-                                                "tf": tf, "outcome": "MISSED",
-                                                "r": Decimal(0), "same_bar": False,
-                                                "bars_held": 0, "filled": False})
-                            continue
-                    else:
-                        entry_px = px
-                        taker_in = False
-                    entry = entry_px
-                    # A better fill with the SAME structural stop is a smaller
-                    # risk denominator, so R is recomputed from the real fill —
-                    # not inherited from the plan. Reusing the planned R here
-                    # would silently inflate every maker trade.
-                elif entry_model == "MARKET_NEXT_OPEN":
-                    # The setup already records the next bar's open as `entry`;
-                    # the fill bar is the one whose open_ts follows the
-                    # confirmation bar. No lookahead: both had already closed.
-                    ci = idx.get(s.get("confirmed_bar_ts"))
-                    i_fill = (ci + 1) if ci is not None else None
-                    if i_fill is None or i_fill >= len(candles):
-                        continue
-                    taker_in = True
-                else:
-                    # Resting limit: the original model. It may never fill, and
-                    # a MISS is a real outcome — 90 of 232 in the recorded book.
-                    order_i = _bisect_fill(times, s["confirmed_at"])
-                    i_fill = None
-                    entry_end = min(order_i + execsim.MAX_ENTRY_BARS, len(candles))
-                    for k in range(order_i, entry_end):
-                        if Decimal(candles[k]["low"]) <= entry <= Decimal(candles[k]["high"]):
-                            i_fill = k
-                            break
-                    if i_fill is None:
-                        if order_i + execsim.MAX_ENTRY_BARS <= len(candles):
-                            results.append({"setup_id": sid, "symbol": symbol,
-                                            "tf": tf, "outcome": "MISSED",
-                                            "r": Decimal(0), "same_bar": False,
-                                            "bars_held": 0, "filled": False})
-                        continue
-                    taker_in = False
+                    maker_limit = ((entry - MAKER_OFFSET_R * base_risk) if long
+                                   else (entry + MAKER_OFFSET_R * base_risk))
+                    maker_wait = MAKER_WAIT_BARS
+                # THE fill model — execsim's, not a second one. Sharing
+                # `cross_fill` fixed the crossing PRICE; this shares the model
+                # around it, which is where the harness was still deciding for
+                # itself which bar to cross on, whether the passive leg had
+                # filled, and what the risk denominator was.
+                fill = execsim.simulate_entry(
+                    candles, atr, order_i, entry, sl, long,
+                    entry_model=entry_model, maker_limit=maker_limit,
+                    maker_wait=maker_wait, profile=profile)
+                if fill["status"] == "PENDING":
+                    continue
+                if fill["status"] == "MISSED":
+                    # A MISS is a real outcome, never a zero — 90 of 232 in the
+                    # v0.6 book, and the pure-maker cell exists to price exactly
+                    # this: price walks away precisely when the trade was right.
+                    results.append({"setup_id": sid, "symbol": symbol,
+                                    "tf": tf, "outcome": "MISSED",
+                                    "r": Decimal(0), "same_bar": False,
+                                    "bars_held": 0, "filled": False})
+                    continue
+                i_fill = fill["fill_i"]
+                entry = fill["entry"]          # the price PAID, not the plan's
+                taker_in = fill["entry_role"] == "TAKER"
                 out = _simulate(candles, atr, i_fill, entry, sl, tp, long, tf,
                                 profile, managed, taker_in,
                                 symbol=symbol, tf_seconds=TF_SECONDS[tf],
@@ -516,19 +493,38 @@ def summarise(results) -> dict:
     }
 
 
-def calibrate(con, symbols, tfs, tolerance=0.15) -> dict:
-    """Reproduce the RECORDED v0.6 book, and say plainly whether we managed it.
+def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01) -> dict:
+    """Reproduce the RECORDED book TRADE BY TRADE, and say plainly whether we
+    managed it.
 
-    This is the harness's licence to be believed. It replays setup-v0.6 under
-    the touch-entry + hold-exit variant — which is exactly what execsim already
-    simulated — and compares against the exec facts on disk. Drift beyond
-    `tolerance` means the core disagrees with production, and the 2x2 numbers
-    must not then be presented as comparable to anything.
+    This is the harness's licence to be believed. It replays the generation the
+    recorded book actually came from, under the conditions that produced it, and
+    joins the result to the exec facts on disk BY setup_id.
+
+    THE JOIN IS THE POINT. Comparing sum_r to sum_r asks "do these two books
+    total the same", which 499 trades can answer yes to while disagreeing about
+    every one of them. It also divides by a total that is near zero on any
+    honest book — this one sums to 9.9 R — so a systematic +0.1207 R/trade bias
+    across 76 trades showed as 0.716 and two structurally unreproducible trades
+    showed as 0.256: two numbers of the same magnitude for a simulation defect
+    and a population mismatch, which have nothing in common and different fixes.
+    The ratio could say something was wrong. It could never say what.
+
+    Matching per trade answers the question that was actually being asked:
+      · `diverged` — trades both books have and price differently. Any at all
+        means the replay is not the engine, and no tolerance makes that
+        acceptable, because a difference in code is not a difference in degree.
+      · `unmatched` — trades one book has and the other cannot see. A
+        POPULATION difference, invisible to any per-trade comparison because
+        there is nothing to compare, and invisible to any aggregate because it
+        arrives as a magnitude rather than as a name.
+    `drift_n` and `drift_sum_r` are still reported, as context rather than as
+    the verdict.
     """
     import re
     from collections import Counter
     from .execsim import EXEC_VERSION
-    recorded, generations = [], Counter()
+    recorded, generations, set_aside = {}, Counter(), 0
     for symbol in symbols:
         for tf in tfs:
             for r in store.get_facts(con, symbol, tf, "exec", EXEC_VERSION):
@@ -542,10 +538,15 @@ def calibrate(con, symbols, tfs, tolerance=0.15) -> dict:
                 # 26% drift and kept calibration red after everything real had
                 # been fixed. Grade the adds by replaying SCALE_VERSION, not by
                 # folding them into a setup-version comparison.
+                # Counted as `set_aside` rather than dropped in silence: a
+                # calibration that certifies less than the whole book must say
+                # how much less, or "OK" quietly stops meaning what it did.
                 if p.get("strategy") == "SCALE_IN":
+                    if p["outcome"] != "MISSED":
+                        set_aside += 1
                     continue
                 if p["outcome"] != "MISSED":
-                    recorded.append(float(p["r_multiple"]))
+                    recorded[p["setup_id"]] = p
                 m = re.search(r"setup-v[\d.]+-draft", p.get("setup_id") or "")
                 if m:
                     generations[m.group(0)] += 1
@@ -578,22 +579,69 @@ def calibrate(con, symbols, tfs, tolerance=0.15) -> dict:
     if not recorded or not rep.get("n"):
         return {"status": "UNAVAILABLE", "trustworthy": False,
                 "detail": "no recorded book to calibrate against"}
-    rec_sum, rec_n = sum(recorded), len(recorded)
+    by_id = {r["setup_id"]: r for r in replayed if r.get("filled")}
+    diverged, worst, matched = [], 0.0, 0
+    for sid, p in recorded.items():
+        got = by_id.get(sid)
+        if got is None:
+            continue
+        matched += 1
+        d = float(got["r"]) - float(p["r_multiple"])
+        if abs(d) > abs(worst):
+            worst = d
+        if abs(d) > per_trade_r:
+            diverged.append({"setup_id": sid, "recorded_r": p["r_multiple"],
+                             "replayed_r": str(got["r"]),
+                             "diff_r": round(d, 4)})
+    only_recorded = [k for k in recorded if k not in by_id]
+    only_replayed = [k for k in by_id if k not in recorded]
+
+    rec_sum = sum(float(p["r_multiple"]) for p in recorded.values())
+    rec_n = len(recorded)
     drift_n = abs(rep["n"] - rec_n) / rec_n
     denom = abs(rec_sum) or 1.0
     drift_r = abs(rep["sum_r"] - rec_sum) / denom
-    ok = drift_n <= tolerance and drift_r <= tolerance
+    ok = not diverged and not only_recorded and not only_replayed
+    if ok:
+        detail = (f"core reproduces the recorded book trade by trade — "
+                  f"{matched} of {rec_n} matched, none differing by more than "
+                  f"{per_trade_r} R"
+                  + (f"; {set_aside} scale-in adds set aside, graded by "
+                     f"replaying SCALE_VERSION" if set_aside else ""))
+    elif diverged:
+        d0 = diverged[0]
+        detail = (f"REPLAY DISAGREES WITH THE RECORDED BOOK on {len(diverged)} "
+                  f"of {matched} matched trades (worst {worst:+.4f} R, e.g. "
+                  f"{d0['setup_id']} replayed {d0['replayed_r']} vs recorded "
+                  f"{d0['recorded_r']}) — the 2x2 numbers below are NOT "
+                  f"comparable to production and must not be used to accept or "
+                  f"reject the change")
+    else:
+        detail = (f"THE REPLAY AND THE RECORD ARE NOT LOOKING AT THE SAME "
+                  f"TRADES: {len(only_recorded)} recorded trades the replay "
+                  f"never produced, {len(only_replayed)} replayed trades the "
+                  f"record does not contain. Every matched trade agrees, so "
+                  f"this is a population difference, not a simulation one — "
+                  f"the 2x2 numbers below still must not be used")
     return {
         "status": "OK" if ok else "DRIFT",
         "trustworthy": ok,
         "recorded": {"n": rec_n, "sum_r": round(rec_sum, 1)},
         "replayed": {"n": rep["n"], "sum_r": rep["sum_r"]},
+        "matched": matched,
+        "diverged_n": len(diverged),
+        "worst_trade_diff_r": round(worst, 4),
+        "unmatched_recorded": len(only_recorded),
+        "unmatched_replayed": len(only_replayed),
+        "scale_in_set_aside": set_aside,
+        "examples": diverged[:5] or (only_recorded + only_replayed)[:5],
+        "per_trade_tolerance_r": per_trade_r,
+        # Reported for continuity with what this pass used to return, and
+        # because the aggregate is still worth seeing. It is no longer what
+        # decides `trustworthy` — see the docstring.
         "drift_n": round(drift_n, 3), "drift_sum_r": round(drift_r, 3),
         "tolerance": tolerance,
-        "detail": ("core reproduces the recorded book" if ok else
-                   "REPLAY DISAGREES WITH THE RECORDED BOOK — the 2x2 numbers "
-                   "below are NOT comparable to production and must not be used "
-                   "to accept or reject the change"),
+        "detail": detail,
     }
 
 

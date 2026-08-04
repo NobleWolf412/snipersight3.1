@@ -1,14 +1,32 @@
 """2x2 replay harness — the properties that make its verdict believable.
 
-The harness decides whether setup-v0.7 ships. Its own correctness is therefore
-load-bearing, and the tests below pin the four things that would silently
-invalidate a verdict: calibration honesty, no lookahead, the ambiguous-bar
-convention, and the antagonism check that caught the real result.
+The harness decides what ships. Its own correctness is therefore load-bearing,
+and the tests below pin the things that would silently invalidate a verdict:
+calibration honesty, no lookahead, the ambiguous-bar convention, the antagonism
+check that caught the real result — and that the harness prices an ENTRY the
+way production prices one.
+
+That last one is here because the harness has now drifted from `execsim.py`
+four times by keeping a copy of something: the exit-fee convention, then
+funding, then the crossing fill (+0.1207 R/trade on 76 of 497 trades), then the
+model AROUND the crossing fill once the price itself had been shared — which
+bar to cross on, which maker limit to rest, which risk denominator to divide by.
+`calibrate()` reported every one of them and could locate none, because
+comparing sum_r to sum_r never can.
 """
+import json
+import sys
 import unittest
 from decimal import Decimal
+from pathlib import Path
 
-from engine import abtest, costs
+APP = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(APP))
+
+from engine import abtest, costs, execsim, store  # noqa: E402
+from engine.universe import all_tracked_symbols   # noqa: E402
+
+TFS = ("15m", "1H", "4H", "1D", "1W")
 
 
 def _bars(spec, start=1_600_000_000, step=86400):
@@ -159,6 +177,175 @@ class Summary(unittest.TestCase):
         s = abtest.summarise([])
         self.assertEqual(s["n"], 0)
         self.assertIn("note", s)
+
+
+class OneFillModel(unittest.TestCase):
+    """The whole fill model is the engine's, not just the crossing price."""
+
+    def test_a_crossed_order_is_priced_on_the_bar_it_crossed_on(self):
+        """The passive limit rests below every low so it can never fill; the
+        engine crosses once the window closes, at THAT bar's open. The old copy
+        crossed immediately at the plan's price — 4 points better here, against
+        a risk denominator 40% too small, so one mistake inflated R twice."""
+        c = _bars([(100, 101, 99, 100), (100, 101, 99, 100),
+                   (104, 105, 103, 104)] + [(104, 105, 103, 104)] * 5)
+        atr = [None] * 8
+        fill = execsim.simulate_entry(
+            c, atr, 0, Decimal(100), Decimal(90), True,
+            entry_model="MAKER_THEN_MARKET", maker_limit=Decimal(80),
+            maker_wait=2, profile=PROFILE)
+        self.assertEqual(fill["status"], "FILLED")
+        self.assertEqual(fill["fill_i"], 2, "the cross fires after the window")
+        self.assertEqual(fill["entry"], Decimal(104),
+                         "a market order fills at the market, not at the plan")
+        self.assertEqual(fill["entry_role"], "TAKER", "crossing pays taker")
+        self.assertEqual(fill["risk"], Decimal(14),
+                         "risk is measured from the FILL to the same structural "
+                         "stop — 104-90, not the plan's 100-90")
+
+    def test_a_missing_atr_on_the_cross_degrades_audibly(self):
+        """`cross_fill` returns a `slipped` flag and abtest discarded it
+        (`entry_px, _ =`), so a fill with no ATR was silent in the harness and
+        loud in the engine. The note now rides on the fill itself, which is the
+        only way both callers can be made to surface it."""
+        c = _bars([(100, 101, 99, 100)] * 2 + [(104, 105, 103, 104)] * 6)
+        fill = execsim.simulate_entry(
+            c, [None] * 8, 0, Decimal(100), Decimal(90), True,
+            entry_model="MAKER_THEN_MARKET", maker_limit=Decimal(80),
+            maker_wait=2, profile=PROFILE)
+        self.assertIn("NOT applied", fill["note"] or "",
+                      "a degraded fill must announce itself to every caller")
+
+
+class CalibrationAgainstTheLiveStore(unittest.TestCase):
+    """THE pin: the harness reproduces the book production actually wrote,
+    trade by trade, on the real store.
+
+    Everything else in this file is constructed. This one is not, and it is the
+    only test that would have caught the drift, because the drift needed a real
+    book to show up in: a crossing leg only differs from the plan when price
+    moved between the order and the cross, which no hand-built fixture is
+    obliged to contain.
+
+    It asserts three things, and they fail for three different reasons:
+      · `diverged_n` — the two price the same trade differently. A simulation
+        difference. This is what the fill-model fork caused.
+      · `unmatched_*` — one side holds trades the other cannot see. A
+        POPULATION difference, which no per-trade comparison can find because
+        there is nothing to compare.
+      · coverage — the book still contains crossed orders at all. Without it
+        this goes quietly green the day the entry model stops crossing, while
+        claiming to pin the thing only crossing exercises.
+
+    Skips on a clean checkout so the suite still runs without a store. Note
+    that means a git WORKTREE skips it entirely — app/data is gitignored, so
+    green here proves nothing until it is run against the real book.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not (APP / "data" / "snipersight.db").exists():
+            raise unittest.SkipTest("no live store")
+        cls.con = store.connect()
+        cls.cal = abtest.calibrate(cls.con, all_tracked_symbols(cls.con), TFS)
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "con"):
+            cls.con.close()
+
+    def _cal(self):
+        if self.cal["status"] == "UNAVAILABLE":
+            self.skipTest(f"{execsim.EXEC_VERSION}: {self.cal['detail']}")
+        return self.cal
+
+    def test_every_recorded_trade_is_reproduced_to_the_cent(self):
+        cal = self._cal()
+        self.assertGreater(cal["matched"], 0,
+                           "nothing joined — the pin would pass vacuously")
+        self.assertEqual(cal["diverged_n"], 0,
+                         f"the replay and the engine settled "
+                         f"{cal['diverged_n']} of {cal['matched']} shared "
+                         f"trades for different money (worst "
+                         f"{cal['worst_trade_diff_r']:+} R): "
+                         f"{cal['examples'][:3]}")
+
+    def test_the_replay_and_the_record_hold_the_same_trades(self):
+        cal = self._cal()
+        self.assertEqual(
+            (cal["unmatched_recorded"], cal["unmatched_replayed"]), (0, 0),
+            f"{cal['unmatched_recorded']} recorded trades the replay never "
+            f"produced and {cal['unmatched_replayed']} replayed trades the "
+            f"record does not contain — the harness is grading a different "
+            f"book than the one production traded: {cal['examples'][:3]}")
+
+    def test_the_harness_says_it_is_trustworthy(self):
+        self.assertTrue(self._cal()["trustworthy"], self.cal["detail"])
+
+    def test_the_scale_in_adds_are_actually_graded_somewhere(self):
+        """calibrate() sets the adds aside on the promise that they are graded
+        by replaying SCALE_VERSION. That promise was not being kept.
+
+        `run_variant`'s maker branch keyed the fill bar on `confirmed_bar_ts`,
+        which scale plans do not carry (they are adds to a parent, not their own
+        confirmed setup), so every one of them hit `ci is None` and was dropped
+        without a word. The adds were excluded from calibration AND absent from
+        the by-strategy grade — set aside into nothing. Ordering the fill from
+        `confirmed_at`, as execsim does, is what makes them replayable at all.
+
+        So: whatever calibrate() sets aside must come back somewhere, and at
+        the R the engine recorded.
+        """
+        cal = self._cal()
+        if not cal["scale_in_set_aside"]:
+            self.skipTest("no scale-in adds in the recorded book")
+        from engine.scalein import SCALE_VERSION
+        recorded = {}
+        for symbol in all_tracked_symbols(self.con):
+            for tf in TFS:
+                for r in store.get_facts(self.con, symbol, tf, "exec",
+                                         execsim.EXEC_VERSION):
+                    p = json.loads(r["payload"])
+                    if (p.get("strategy") == "SCALE_IN"
+                            and p["outcome"] != "MISSED"):
+                        recorded[p["setup_id"]] = p
+        replayed = {r["setup_id"]: r for r in abtest.run_variant(
+            self.con, all_tracked_symbols(self.con), TFS, SCALE_VERSION,
+            managed=False, entry_model="MAKER_THEN_MARKET") if r.get("filled")}
+        self.assertEqual(len(recorded), cal["scale_in_set_aside"])
+        for sid, p in recorded.items():
+            got = replayed.get(sid)
+            self.assertIsNotNone(
+                got, f"{sid} was set aside by calibration and never replayed — "
+                     f"it is graded nowhere")
+            self.assertEqual(str(got["r"]), p["r_multiple"],
+                             f"{sid}: the add replays to a different R than the "
+                             f"engine recorded")
+
+    def test_the_book_still_exercises_the_crossing_leg(self):
+        """Coverage, asserted rather than assumed. The maker fills agreed all
+        along; only the crossed orders ever diverged. A book with no crosses
+        would pin nothing while reporting success."""
+        crossed = filled = 0
+        for symbol in all_tracked_symbols(self.con):
+            for tf in TFS:
+                for r in store.get_facts(self.con, symbol, tf, "exec",
+                                         execsim.EXEC_VERSION):
+                    p = json.loads(r["payload"])
+                    if p["outcome"] == "MISSED":
+                        continue
+                    filled += 1
+                    if p.get("entry_fee_role") == "TAKER":
+                        crossed += 1
+        if not filled:
+            self.skipTest(f"no {execsim.EXEC_VERSION} facts yet — re-run the "
+                          f"simulator to populate them")
+        self.assertGreater(
+            crossed, 0,
+            f"all {filled} recorded trades filled passively, so the pins above "
+            f"cover only the leg that never disagreed. The crossing leg is the "
+            f"one that drifted; if the entry model no longer crosses, say so "
+            f"deliberately rather than letting this pin go quiet.")
 
 
 if __name__ == "__main__":
