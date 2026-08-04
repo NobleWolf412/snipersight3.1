@@ -55,6 +55,37 @@ class PackCase(unittest.TestCase):
         self.assertIn("not taker x2", pack)
         self.assertIn("0.120%", pack)          # the worst case, named as such
 
+    def test_an_engine_position_reaches_the_pack(self):
+        """Every row in the Open Trades panel IS an engine position, and the
+        pack only ever described the operator's own manual book — so a question
+        asked from that panel reached a copilot that did not know the operator
+        was in the trade, and it answered "should you take this" about a trade
+        already taken."""
+        self.load([(100, 100.5, 99.5, 100), (100, 104, 99, 103)])
+        pos = {"direction": "LONG", "entry": "100", "sl": "98", "tp": "110",
+               "risk_usd": "200", "setup_id": "S1"}
+        pack = copilot.build_pack(self.con, "BTCUSDT", "1H", position=pos)
+        self.assertIn("THE ENGINE HOLDS THIS TRADE", pack)
+        self.assertIn("The question is NOT whether to enter", pack)
+        # marked to the last CLOSED bar, like every other surface: 103 on a
+        # 100 entry with a 2-wide stop is +1.50R
+        self.assertIn("unrealized=1.50R", pack)
+
+    def test_no_position_means_no_holding_claim(self):
+        self.load([(100, 100.5, 99.5, 100)])
+        pack = copilot.build_pack(self.con, "BTCUSDT", "1H")
+        self.assertNotIn("THE ENGINE HOLDS THIS TRADE", pack)
+
+    def test_a_position_with_an_unusable_stop_still_builds_a_pack(self):
+        """A pack that raises is a chat box that will not open. The live R is
+        the optional part; naming the position is not."""
+        self.load([(100, 100.5, 99.5, 100)])
+        pos = {"direction": "LONG", "entry": "100", "sl": "100", "tp": "110",
+               "risk_usd": "200", "setup_id": "S1"}
+        pack = copilot.build_pack(self.con, "BTCUSDT", "1H", position=pos)
+        self.assertIn("THE ENGINE HOLDS THIS TRADE", pack)
+        self.assertNotIn("unrealized=", pack)
+
     def test_open_manual_trade_reaches_the_pack(self):
         self.load([(100, 100.5, 99.5, 100), (100, 104, 99, 103)])
         manual.create_intent(self.con, "BTCUSDT", "1H", "LONG",

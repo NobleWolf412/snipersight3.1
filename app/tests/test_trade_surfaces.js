@@ -411,4 +411,71 @@ ok('the guard is per SIDE, so a hedge is still armable', () => {
             .test(CHART), 'only the same side blocks');
 });
 
+
+/* OPEN TRADES: the row shows you the trade; the trace keeps its own button. */
+console.log('open trades: click, ask, manage');
+ok('the row opens the chart, not the trace drawer', () => {
+  assert.ok(/data-manage="\$\{esc\(t\.symbol\)\}"/.test(JS), 'rows carry the symbol');
+  assert.ok(!/pos-row traceable/.test(JS), 'the whole row is no longer a trace target');
+  // go() FIRST: SSChart.open only loads data, it does not navigate. Without
+  // it the ticket silently managed a trade on a surface not being looked at.
+  const h = JS.match(/const m = e\.target\.closest\('\[data-manage\]'\);[\s\S]{0,220}/);
+  assert.ok(h && /go\('chart'\)/.test(h[0]), 'the click must navigate');
+});
+ok('the trace is still reachable, as its own control', () => {
+  // A <button data-trace> inside the row, so nothing was lost by taking the
+  // whole-row click away from it.
+  assert.ok(/<button class="btn" data-trace=/.test(JS));
+  assert.ok(/gate-by-gate story/.test(JS));
+});
+ok('keyboard reaches what the mouse reaches', () => {
+  // Anchored on the POSITIONS handler — this file has several keydown
+  // listeners and the first one is not it.
+  const k = JS.match(/\$\('positions'\)\.addEventListener\('keydown'[\s\S]{0,420}/);
+  assert.ok(k, 'positions keydown handler not found');
+  assert.ok(/data-manage/.test(k[0]) && /go\('chart'\)/.test(k[0]),
+            'Enter/Space must open the chart, same as a click');
+});
+ok('the copilot is asked a HOLDING question, not an entry one', () => {
+  assert.ok(/const holdAsk = t =>/.test(JS), 'one composer, shared by both row types');
+  assert.ok(/Do not evaluate whether to enter/.test(JS));
+  assert.ok(/hold, tighten the stop/.test(JS), 'the three live options');
+  assert.ok(/ask: holdAsk\(t\)/.test(JS), 'and it must actually be asked');
+});
+ok('the question is built from the payload, not re-copied onto the button', () => {
+  assert.ok(/let lastPortfolio = \{\}/.test(JS));
+  assert.ok(/lastPortfolio = p \|\| \{\}/.test(JS), 'kept in step with what was rendered');
+});
+
+/* THE ACTIVE-TRADE BAND. Managing a live position is a different job, and a
+   heading plus a colour was still leaving operators to work that out. */
+console.log('chart: active-trade band');
+ok('the band exists and only while a position is open', () => {
+  assert.ok(HTML.includes('id="tkManage"'));
+  assert.ok(/if\(!enginePos\)\{ el\.hidden = true/.test(CHART));
+});
+ok('R on the band uses the risk TAKEN, not the current stop', () => {
+  const f = CHART.match(/function renderManage\(\)[\s\S]*?function refreshArm/);
+  assert.ok(f, 'renderManage not found');
+  assert.ok(/riskU = Math\.abs\(entry - \+enginePos\.sl\)/.test(f[0]),
+            'the denominator must not move when the stop does');
+});
+ok('a stop move is offered only when it actually improves the position', () => {
+  const f = CHART.match(/function renderManage\(\)[\s\S]*?function refreshArm/)[0];
+  assert.ok(/const better = v =>/.test(f), 'no move that loosens the stop');
+  // "Lock +1R" at +0.3R would sit the wrong side of price and exit at once.
+  assert.ok(/const safe = v =>/.test(f), 'no stop on the wrong side of price');
+  assert.ok(/better\(be\) && safe\(be\)/.test(f));
+  assert.ok(/better\(lock1\) && safe\(lock1\)/.test(f));
+});
+ok('the band sets levels but never commits', () => {
+  const f = CHART.match(/function renderManage\(\)[\s\S]*?function refreshArm/)[0];
+  assert.ok(/levels\.sl = parseFloat\(b\.dataset\.mv\)/.test(f));
+  assert.ok(!/manual\/arm|positions\/adopt|fetch\(/.test(f), 'one button writes to the book');
+});
+ok('the band does not rebuild on every mousemove of a drag', () => {
+  const f = CHART.match(/function renderManage\(\)[\s\S]*?function refreshArm/)[0];
+  assert.ok(/if\(el\.dataset\.h === html\) return/.test(f));
+});
+
 console.log(`  ${passed} passed`);
