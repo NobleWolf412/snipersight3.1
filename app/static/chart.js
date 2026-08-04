@@ -563,6 +563,11 @@ window.SSChart = (() => {
        per-trade risk override are market-specific for the same reason — a
        stale `base` would let Reset restore the WRONG symbol's plan. */
     base = null; modified = false; riskOverride = null;
+    /* The ticket maths too: refreshArm() below rebuilds the blocking notice
+       from `lastMetrics`, and stale metrics re-painted the OLD market's
+       margin line — "posts $20,838" — under the NEW market's loading state
+       (caught on camera, beta demo 4 Aug 2026). */
+    lastMetrics = null;
     try{ applyLevels(); }catch(e){ /* chart may not be built yet */ }
     try{ series.setData([]); }catch(e){ /* chart may not be built yet */ }
     try{ drawOverlays(); }catch(e){ /* overlays follow the now-empty facts */ }
