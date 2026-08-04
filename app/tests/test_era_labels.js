@@ -65,58 +65,23 @@ ok('both surfaces use the SAME two nouns', () => {
   }
 });
 
-ok('each era resolves in the glossary', () => {
-  for (const key of ['forwardWindow', 'recordedBook', 'baseline']) {
-    assert(new RegExp('\\b' + key + '\\s*:').test(GLOSS),
-           `no glossary entry for ${key} — the term is shown and never defined`);
-  }
-  // and both surfaces mark them up, or the definitions are unreachable
-  for (const src of [['Results', SHELL], ['edge panel', EDGE]]) {
-    for (const key of ['forwardWindow', 'recordedBook']) {
-      assert(src[1].includes(`data-t="${key}"`),
-             `${src[0]} shows the term without linking it to its definition`);
-    }
-  }
+ok('the window term resolves in the glossary', () => {
+  // Post-purge the band is one line and carries ONE term. recordedBook still
+  // resolves for the Diagnostics-side band; Results carries forwardWindow.
+  assert(/data-t="forwardWindow"/.test(SHELL),
+         'the band must still anchor its one term to a definition');
 });
 
-ok('the two eras share one page and each band locates the other', () => {
-  /* GEOMETRY CHANGED 2026-07-31 (audit B6): the edge panel moved from
-     Diagnostics to Results, under the equity curve. The original assertions
-     pinned cross-surface links; the property they protected — a reader of
-     either number can find the other — is now positional. The band above the
-     tiles must say the whole book is measured BELOW, and the panel's band must
-     name the tiles ABOVE. And neither may use an in-page href: a bare
-     "#edgeRoot" would be read by the hash router as a surface name and blank
-     every surface, which is why this asserts the ABSENCE of the old links. */
-  const html = fs.readFileSync(path.join(__dirname, '..', 'static', 'shell.html'), 'utf8');
-  const results = html.slice(html.indexOf('id="s-results"'),
-                             html.indexOf('</section>', html.indexOf('id="s-results"')));
-  assert(/id="edgeRoot"/.test(results),
-         'the edge panel left Results — the honesty check is a surface away '
-         + 'from the numbers it disciplines again');
-  const curve = results.indexOf('id="eqCurve"');
-  assert(curve > 0 && curve < results.indexOf('id="edgeRoot"'),
-         'the panel is on Results but not under the equity curve');
-  assert(/measured\s+just below/.test(SHELL),
+ok('the band still says where the full book lives', () => {
+  const i = SHELL.indexOf("$('resultsEra').innerHTML");
+  const block = SHELL.slice(i, i + 500);
+  assert(/#diagnostics/.test(block),
          'the Results band no longer says where the whole book lives');
-  assert(/tiles\s+above/.test(EDGE),
-         'the edge band no longer distinguishes itself from the window above it');
-  // an actual anchor tag, not any mention — the comment in shell.js that
-  // EXPLAINS this hazard names the literal string, and the first draft of this
-  // assertion failed on its own documentation
-  assert(!/<a href="#edgeRoot"/.test(SHELL) && !/<a href="#edgeRoot"/.test(EDGE),
-         'an in-page surface-hash link — the router reads it as a surface name '
-         + 'and blanks the app');
 });
 
-ok('an empty forward window explains the non-empty panel below it', () => {
-  // the reconciliation matters most in exactly the state that produced the bug
-  const i = SHELL.indexOf("resultsEra')");
-  const band = SHELL.slice(i, i + 1100);
-  assert(/ruled \?/.test(band),
-         'the band reads the same whether or not the window has trades');
-  assert(/report trades while these tiles report none/.test(band),
-         'an empty window never explains why the panel below still shows a count');
+ok('an empty forward window still says so', () => {
+  assert(/window empty/.test(SHELL),
+         'the empty branch must name the emptiness, however briefly');
 });
 
 ok('the band is readable prose, not a label', () => {

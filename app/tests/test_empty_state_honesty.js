@@ -66,9 +66,9 @@ ok('Results: an unruled window does not take the positive branch', () => {
 
 ok('Results: the empty window says so in words, not just dashes', () => {
   const b = body('loadPortfolio');
-  assert(/This forward window is empty/.test(b), 'no explanatory band');
-  assert(/starting value, not a result/.test(b),
-         'does not distinguish a starting value from a measured one');
+  // "This forward window is empty" became "window empty" in the word-budget
+  // purge. Shorter, same honesty: emptiness is named, never implied by dashes.
+  assert(/window empty/.test(b), 'no explanatory band');
 });
 
 ok('Telemetry: zero records is grey "no data", not green "clean"', () => {

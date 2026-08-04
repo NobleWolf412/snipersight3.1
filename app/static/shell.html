@@ -90,10 +90,8 @@
           <!-- The reason is ON the control, not hidden in a hover title. A
                disabled button whose explanation you have to discover teaches an
                operator that the app is arbitrary. -->
-          <span class="locked-ctl" title="Autonomous mode stays locked until the forward record earns it">
-            <button class="btn" id="btnAuto" disabled>Auto: Off</button>
-            <span class="locked-why">locked until the forward record earns it</span>
-          </span>
+          <button class="btn" id="btnAuto" disabled
+                  title="locked until the forward record earns it">Auto: Off</button>
         </div>
         <div class="panel-body">
           <!-- What the last action did, and when. Run Scan used to show
@@ -126,7 +124,6 @@
           <h2 class="t-section">Risk budget</h2>
           <span class="chip" id="budgetChip" style="margin-left:auto">—</span>
         </div>
-        <p class="panel-sub">Three ceilings the engine sizes against. A full bar is not a fault — it means the next setup is refused until something closes.</p>
         <div class="budget-grid" id="budget"></div>
         <!-- What these three bars do NOT count. `manual.arm` never consults the
              risk authority, so armed hand-picked orders are outside the budget
@@ -151,10 +148,6 @@
           <span class="chip" style="margin-left:auto">hand-picked · not engine record</span>
           <span class="chip" id="mineRisk">—</span>
         </div>
-        <p class="panel-sub">Orders you armed yourself. A resting order is not a
-          position — it fills only if price reaches your entry before its window
-          closes, and then it expires. None of this counts toward the strategy's
-          record on Results.</p>
         <div id="mine"></div>
       </div>
 
@@ -171,7 +164,6 @@
           <h2 class="t-section">Open trades</h2>
           <span class="chip" id="posRisk" style="margin-left:auto">—</span>
         </div>
-        <p class="panel-sub">What the paper book is holding right now, and what each position loses if its stop is hit.</p>
         <div id="positions"></div>
       </div>
 
@@ -184,9 +176,6 @@
                has to live here rather than one surface away. -->
           <span class="chip" style="margin-left:auto">One per token · best replaces pending</span>
         </div>
-        <div class="deck-note t-body">Setups appear only when price returns to a
-          zone and confirms there — not when a symbol merely looks tradeable.
-          Empty is normal. <a href="#rules">How the scanner works</a></div>
         <div id="deck"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:58px"></div>
           <div class="skel" style="height:58px"></div>
@@ -205,7 +194,6 @@
           <h2 class="t-section">Approaching</h2>
           <span class="chip chip-amber" id="radarCount" style="margin-left:auto">—</span>
         </div>
-        <p class="panel-sub">Price is closing on a zone but has not reached it. Nothing here is tradeable yet — it is a heads-up, not a queue.</p>
         <div id="radar"></div>
       </div>
 
@@ -472,7 +460,6 @@
       <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head"><h2 class="t-section">Equity Curve</h2>
           <span class="chip" id="baselineChip" style="margin-left:auto">—</span></div>
-        <p class="panel-sub">One point per closed trade, in dollars, since this forward window opened. Hover a point — or focus the chart and use ← → — for the exact figure.</p>
         <div class="panel-body">
           <!-- viewBox is set in JS to the measured pixel width. It used to be a
                fixed 0 0 800 160 with preserveAspectRatio="none", which stretches
@@ -512,14 +499,12 @@
       <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head"><h2 class="t-section">Trade Journal</h2>
           <span class="chip" id="jnlCount" style="margin-left:auto">—</span></div>
-        <p class="panel-sub">Every closed trade in this window, newest first: what it did, and what it cost.</p>
         <div id="journal"><div class="empty">no closed trades in this window yet</div></div>
       </div>
 
       <div class="grid cols-2" style="margin-bottom:var(--lg)">
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">By Symbol</h2></div>
-          <p class="panel-sub">The same closed trades as the journal, grouped by what was traded.</p>
           <div id="perfSymbol"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:24px"></div>
           <div class="skel" style="height:24px"></div>
@@ -529,7 +514,6 @@
         </div>
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">By Strategy</h2></div>
-          <p class="panel-sub">The same closed trades again, grouped by which playbook found them.</p>
           <div id="perfStrategy"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:24px"></div>
           <div class="skel" style="height:24px"></div>
@@ -721,7 +705,6 @@
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Pipeline</h2>
             <button class="btn" id="btnAudit" style="margin-left:auto">Re-audit</button></div>
-        <p class="panel-sub">Whether the recorded facts still agree with each other. This checks bookkeeping, not whether the trades were any good.</p>
           <div class="panel-body">
             <div class="t-metric" id="dVerdict" style="margin-bottom:var(--sm)">—</div>
             <div class="t-mono" id="dCounts" style="color:var(--fg-3)">—</div>
@@ -730,7 +713,6 @@
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Why nothing fired</h2>
             <button class="btn" id="btnDiagnose" style="margin-left:auto">Diagnose</button></div>
-        <p class="panel-sub">Where today’s candidates died, stage by stage. The biggest bar is the reason your deck is empty.</p>
           <div class="panel-body" id="dFunnel"><span class="skeleton" role="status" aria-label="loading">
         <span class="skel skel-line" style="width:70%"></span>
         <span class="skel skel-line" style="width:55%"></span></span></div>
@@ -741,7 +723,6 @@
       <div class="grid cols-2">
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Open <span class="term" data-t="blocker">Issues</span></h2></div>
-          <p class="panel-sub">Faults the audit found that need a person. Empty is the target, not a missing report.</p>
           <div id="dIssues"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:36px"></div>
           <div class="skel" style="height:36px"></div>
@@ -752,7 +733,6 @@
           <div class="panel-head"><h2 class="t-section">Setup
             <span class="term" data-t="telemetry">Telemetry</span></h2>
             <span class="chip" id="telChip" style="margin-left:auto">—</span></div>
-        <p class="panel-sub">Per-setup counters straight from the engine — developer detail, not a trade record.</p>
           <div id="dTelemetry"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:30px"></div>
           <div class="skel" style="height:30px"></div>
@@ -800,7 +780,6 @@
           <span class="chip" id="consoleState" style="margin-left:auto">idle</span>
           <button class="btn" id="btnFollow" title="follow new output">Following</button>
         </div>
-        <p class="panel-sub">Raw engine output as it happens. Nothing here is a decision — decisions are on Command.</p>
         <pre id="console" class="t-mono">connecting…</pre>
       </div>
     </section>

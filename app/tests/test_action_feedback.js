@@ -73,14 +73,14 @@ ok('a failed result is visually distinct', () => {
          'a failure and a success render identically');
 });
 
-ok('the disabled Auto button carries its reason inline', () => {
-  assert(/class="locked-ctl"/.test(HTML), 'no inline reason wrapper');
-  const i = HTML.indexOf('id="btnAuto"');
-  const around = HTML.slice(i - 400, i + 300);
-  assert(/locked-why/.test(around), 'the reason is still hover-only');
-  assert(/locked until the forward record earns it/.test(around),
-         'the reason text is not on screen');
-  assert(/\.locked-ctl \.locked-why\{/.test(CSS), 'the reason has no styling');
+ok('the disabled Auto button still carries its reason', () => {
+  // Post-purge the reason moved from a visible caption to a hover title —
+  // words on demand. The property that matters survives: the control is
+  // never disabled WITHOUT a stated reason.
+  const m2 = HTML.match(/<button[^>]*id="btnAuto"[^>]*>/);
+  assert(m2, 'the Auto control is gone');
+  assert(/title="locked until/.test(m2[0]),
+         'a disabled control with no stated reason teaches that the app is arbitrary');
 });
 
 ok('the scanner chip cannot shove the header around', () => {

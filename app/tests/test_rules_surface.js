@@ -119,17 +119,9 @@ ok('every term it underlines is defined', () => {
   }
 });
 
-ok('the deck says what it is, where the deck is', () => {
-  assert(/class="deck-note\b/.test(HTML), 'no note beside the deck');
-  const i = HTML.indexOf('class="deck-note');
-  const note = HTML.slice(i, i + 400);
-  assert(/Empty is normal/i.test(note),
-         'the correction is missing from the place it is misread');
-  assert(/#rules/.test(note), 'no route to the longer explanation');
-});
 
 ok('both are readable prose, not chrome', () => {
-  for (const sel of ['.explainer-body{', '.deck-note{']) {
+  for (const sel of ['.explainer-body{']) {
     const i = CSS.indexOf(sel);
     assert(i >= 0, sel + ' has no styling');
     const rule = CSS.slice(i, CSS.indexOf('}', i));

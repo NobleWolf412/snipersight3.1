@@ -81,22 +81,20 @@ ok('the row is visually attributed, not just captioned', () => {
     'two books rendered identically is how a number ends up read against the wrong one');
 });
 
-ok('the panel says a resting order is not a position', () => {
-  const sub = HTML.slice(HTML.indexOf('id="minePanel"'), HTML.indexOf('<div id="mine">'));
-  assert(/resting order is not a\s+position/.test(sub),
-    'the reported symptom was calling a pending order an open trade');
-  assert(/expires/.test(sub), 'an order with a window that closes must say so');
-  assert(/does not? count|not count/.test(sub) || /None of this counts/.test(sub),
-    'it must say this is outside the strategy record');
+ok('a resting row is marked unfilled, with the stake on hover', () => {
+  // The paragraph version was purged by operator ruling; the FACT it carried
+  // ("nothing at stake until it fills") survives as a hover title on the
+  // unfilled marker — words on demand, zero screen cost.
+  assert(/title="Nothing is at stake until it fills"/.test(SHELL),
+    'the at-stake fact must survive somewhere a hover can reach');
+  assert(/>unfilled</.test(SHELL), 'the row no longer marks itself unfilled');
 });
 
 /* ────────────────────── states are distinguished ────────────────────── */
 
 ok('waiting and filled are drawn differently', () => {
   assert(/t\.state === 'PENDING'/.test(SHELL), 'one rendering for both states');
-  assert(/Waiting for price to reach/.test(SHELL), 'no plain words for a resting order');
-  assert(/Nothing is at stake until it fills/.test(SHELL),
-    'a pending order must not read as money already committed');
+  assert(/waits <b>/.test(SHELL), 'a resting order must read as waiting, tersely');
 });
 
 ok('an order about to expire says so louder', () => {
@@ -120,9 +118,8 @@ ok('unrealized R comes from the server, not a second calculation', () => {
 ok('the risk meters disclose what they do not count', () => {
   assert(/id="budgetAside"/.test(HTML), 'no disclosure element');
   assert(/function renderMineAside/.test(SHELL), 'nothing writes it');
-  assert(/Outside these limits/.test(SHELL), 'the disclosure does not say it is outside');
-  assert(/not sized by the risk authority/.test(SHELL),
-    'it must say WHY these bars do not count it');
+  assert(/Outside these limits/.test(SHELL),
+    'the bars must say they EXCLUDE this money, not merely mention it');
 });
 
 ok('the disclosure hides itself at zero rather than printing $0', () => {

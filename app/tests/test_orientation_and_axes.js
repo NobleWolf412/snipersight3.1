@@ -11,9 +11,8 @@
    sibling. Credentials became three venue cards tall and Risk stretched to
    match it, leaving ~800px of empty bordered box.
 
-   #28 — a dense block with no summary makes the reader derive what they are
-   looking at from the numbers themselves, which is the one thing numbers are
-   bad at.
+   (#28's summaries were later ruled over-explaining and purged — see
+   test_word_budget.js, which now enforces the opposite direction.)
 
    (#31, the guided tour, died with the Learn surface — 2026-08-03.)
 */
@@ -102,33 +101,6 @@ ok('Rules packs its panels instead of stretching them', () => {
     'a panel split across a column boundary is worse than the hole it replaced');
   assert(/@media\(max-width:900px\)\{\.pack-cols\{column-count:1\}\}/.test(CSS),
     'two columns at phone width is unreadable');
-});
-
-/* ──────────────────── #28 plain-language summaries ──────────────────── */
-
-ok('every dense block opens with one plain sentence', () => {
-  const subs = HTML.match(/<p class="panel-sub">([^<]+)<\/p>/g) || [];
-  assert(subs.length >= 12, `only ${subs.length} summaries — the dense panels are uncovered`);
-  for (const s of subs) {
-    const text = s.replace(/<[^>]+>/g, '').trim();
-    assert(text.length > 30, `a summary that says nothing: "${text}"`);
-    assert(/[.!]$/.test(text), `not a sentence: "${text}"`);
-  }
-});
-
-ok('the summaries cover the panels that are walls of figures', () => {
-  for (const head of ['Risk budget', 'Open trades', 'Approaching', 'Equity Curve',
-                      'Trade Journal', 'By Symbol', 'By Strategy', 'Why nothing fired']) {
-    const at = HTML.indexOf('>' + head + '</h2>');
-    assert(at > 0, `${head} is gone`);
-    const after = HTML.slice(at, at + 700);
-    assert(/<p class="panel-sub">/.test(after), `${head} has no plain-language summary`);
-  }
-});
-
-ok('the summaries are set in prose, not in the same face as the data', () => {
-  assert(/\.panel-sub\{font-family:var\(--f-body\)/.test(CSS),
-    'a summary set in the same monospace as the table is not read as a summary');
 });
 
 console.log('\n  ' + passed + ' passed');

@@ -1047,9 +1047,9 @@
             esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
         </div>
         <div>
-          <div class="pos-wait">Order resting at <b>${px(entry)}</b>${
-            away == null ? '' : ` — price is ${away.toFixed(1)}% away`}.
-            Nothing is at stake until it fills.</div>
+          <div class="pos-wait">rests <b>${px(entry)}</b>${
+            away == null ? '' : ` · ${away.toFixed(1)}% away`}
+            <span class="t-sub" title="Nothing is at stake until it fills">unfilled</span></div>
           <div class="pos-ends">
             <span>stop ${px(+t.sl)}</span>
             <span class="now">${now == null ? 'price unavailable' : 'now ' + px(now)}</span>
@@ -1137,10 +1137,10 @@
         return `<div class="pos-row pending mine">
           ${head}
           <div>
-            <div class="pos-wait">Waiting for price to reach <b>${px(entry)}</b>${
-              away == null ? '' : ` — ${away.toFixed(1)}% away`}.
-              Nothing is at stake until it fills${
-                bars == null ? '' : `, and it expires in ${bars} bar${bars === 1 ? '' : 's'}`}.</div>
+            <div class="pos-wait">waits <b>${px(entry)}</b>${
+              away == null ? '' : ` · ${away.toFixed(1)}% away`}${
+              bars == null ? '' : ` · ${bars} bar${bars === 1 ? '' : 's'} left`}
+              <span class="t-sub" title="Nothing is at stake until it fills">unfilled</span></div>
             <div class="pos-ends">
               <span>stop ${px(sl)}</span>
               <span class="now">${now == null ? 'price unavailable' : 'now ' + px(now)}</span>
@@ -1240,9 +1240,10 @@
     const parts = [];
     if(open > 0) parts.push(`${money(open)} in your open trades`);
     if(pend > 0) parts.push(`${money(pend)} in orders you armed that have not filled`);
-    el.innerHTML = `Outside these limits: <b>${money(total)}</b> — ${parts.join(' and ')}.
-      Hand-picked trades are not sized by the risk authority, so these bars do
-      not count them.`;
+    // ≤ 8 words. "Outside these limits" is load-bearing (test-pinned): the
+    // bars must say they exclude this money, not merely mention it.
+    el.innerHTML = `Outside these limits: <b>${money(total)}</b> hand-picked
+      <span class="term" data-t="paper">(not risk-sized)</span>`;
   }
 
   /* ---------- risk budget ----------
@@ -1524,30 +1525,22 @@
        the whole book, so without the label the page contradicts itself at a
        glance. No in-page link on purpose — a bare href="#edgeRoot" would be
        read by the hash router as a surface name and blank every surface. */
+    /* One chip-sized line each. The paragraph versions explained the era
+       split in full sentences; the operator ruled "no one wants to read", and
+       the numbers carry the fact: the tiles count THIS window, the full book
+       lives on Diagnostics. */
     $('resultsEra').innerHTML =
-      `The tiles and curve count the
-       <span class="term" data-t="forwardWindow">forward window</span> that opened${
-         started ? ' <b>' + started + '</b>' : ''} — not the whole history.
-       The full <span class="term" data-t="recordedBook">recorded book</span>,
-       across every <span class="term" data-t="baseline">baseline</span>, is measured
-       just below, under the equity curve${
-         ruled ? '' : ' — which is why that panel can report trades while these tiles report none'}.`;
+      `<span class="term" data-t="forwardWindow">window</span>${
+         started ? ' · since <b>' + started + '</b>' : ''} · full book in
+       <a href="#diagnostics">Diagnostics</a>`;
     $('resultsNote').innerHTML = ruled
-      /* "12 rejected" is the most useful number on this surface for anyone
-         asking "why didn't it trade?" and it went nowhere. It routes into the
-         funnel now, which already holds the per-reason breakdown and the
-         per-setup trace — the answer existed, it just had no door. */
-      ? `Risk authority decisions: <b>${d.APPROVED || 0}</b> approved,
-         <b>${d.REDUCED || 0}</b> reduced,
+      ? `<b>${d.APPROVED || 0}</b> approved · <b>${d.REDUCED || 0}</b> reduced ·
          <a href="#diagnostics" class="num-link" data-jump="funnel"
-            title="see every refusal, grouped by reason"><b>${d.REJECTED || 0}</b> rejected</a>.
-         Sizing runs at ${p.config ? p.config.risk_pct : '—'}% per trade with a
-         ${p.config ? p.config.max_total_risk_pct : '—'}% total cap.
-         Everything here is <span class="term" data-t="paper">paper</span>.`
-      : `<b>This forward window is empty.</b> It opened${started ? ' ' + started : ''}
-         and the risk authority has not ruled on a single setup, so every number
-         above is a starting value, not a result.
-         Everything here is <span class="term" data-t="paper">paper</span>.`;
+            title="every refusal, grouped by reason"><b>${d.REJECTED || 0}</b> rejected</a>
+         · ${p.config ? p.config.risk_pct : '—'}%/trade ·
+         <span class="term" data-t="paper">paper</span>`
+      : `window empty — opened${started ? ' ' + started : ''}, nothing ruled yet ·
+         <span class="term" data-t="paper">paper</span>`;
   }
 
   /* Write a tile's sub-line, creating it on first use. The qualifier has to sit
