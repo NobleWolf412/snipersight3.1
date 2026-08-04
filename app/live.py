@@ -1,6 +1,8 @@
 """Forward paper loop — the scanner running live.
 
-Every POLL_SECONDS: import newly CLOSED candles (never developing ones, §5),
+Wakes are aligned to the candle grid: just past each 15m boundary (where every
+tracked timeframe closes — see next_wake), capped by the POLL_SECONDS drift
+heartbeat. Each pass: import newly CLOSED candles (never developing ones, §5),
 re-aggregate 4H/1W, re-run every engine (all idempotent/append-only — a cycle
 with no new data writes zero facts), then notify on any NEW validated setup.
 This is the start of the forward paper track record (§15: paper results are
@@ -89,6 +91,56 @@ ALL_TFS = pipeline.ALL_TFS
 # `risk.py` consumes has never fired once. See that module for the measurements.
 ENGINES = pipeline.PER_SYMBOL
 POLL_SECONDS = 60
+
+# ---------------------------------------------------- boundary-aligned wakeups
+#
+# The sleep used to be a blind 60-second tick, unaligned to anything. A candle
+# is the unit of knowledge in this system — every engine is deliberately blind
+# between closes (§5) — yet the moment a candle closed, the scanner was a
+# uniformly random 0-60s into its nap, plus the cycle time, before it looked.
+# Signal latency was jitter, not a number.
+#
+# Ported from the prior project's ohlcv_cache TTL fix, which is the same
+# insight from the caching side: expiry anchored to elapsed time served
+# readings up to ~59 minutes stale past a boundary, and 84 LONG rejections in
+# one May 2026 session traced to one stale reading. Staleness must be anchored
+# to the CANDLE BOUNDARY, because that is when the world can change.
+#
+# One grid covers every boundary, and that is a checked fact, not a hope:
+# every tracked granularity is a multiple of 900s, and the 1D/1W boundaries
+# (midnight / Monday 00:00 UTC) sit on the 900s grid too — pinned in
+# test_boundary_wake. So a wake landing just after each 15m edge lands just
+# after EVERY edge that matters.
+#
+# The drift heartbeat still caps the nap at POLL_SECONDS: the drift monitor
+# is the one consumer that genuinely wants elapsed-time cadence (it watches
+# the live price BETWEEN closes), and the scanner-health light declares the
+# process stuck at SCANNER_STALE_S=90 — both constraints hold by construction
+# because next_wake never exceeds the poll.
+CANDLE_GRID_S = 900
+# How long after the boundary the venue needs to finalize the bar before an
+# import can land it. The prior project ran 5.0s in production
+# (ohlcv_cache.is_expired buffer_seconds); kept. A candle that finalizes
+# slower than this is not lost — the next heartbeat tick retries within 60s,
+# exactly as before this change.
+CANDLE_FINALIZATION_S = 5
+
+
+def next_wake(now: float, poll: float = POLL_SECONDS,
+              grid: float = CANDLE_GRID_S,
+              buffer: float = CANDLE_FINALIZATION_S) -> float:
+    """Seconds to sleep so the next wake serves both masters.
+
+    Lands on whichever comes first: the drift heartbeat (poll) or the moment
+    just past the next candle boundary (boundary + finalization buffer). The
+    floor of 1s exists so a wake a hair before its target cannot degenerate
+    into a hot loop; the cap at poll is the liveness contract.
+    """
+    floor = now - now % grid
+    for target in (floor + buffer, floor + grid + buffer):
+        if target > now:
+            return max(1.0, min(poll, target - now))
+    return poll                                    # unreachable; belt and braces
 
 # Price-drift monitor (ported concept from user's prior project): between
 # candle closes the engines are deliberately blind (§5). This watches the
@@ -475,6 +527,13 @@ def main():
             refresh_universe(con, log, beat=write_hb)   # hourly (self-throttled)
             write_hb("drift")
             check_drift(con, log)        # runs every poll, even quiet ones
+            # How far past the candle boundary this pass BEGAN. With aligned
+            # wakeups this should read ~{CANDLE_FINALIZATION_S}s on the passes
+            # that import; a persistently larger figure means the venue
+            # finalizes slower than the buffer and the number to tune is
+            # CANDLE_FINALIZATION_S — measured from production logs, the same
+            # way the prior project arrived at its 5s.
+            boundary_lag = time.time() % CANDLE_GRID_S
             n, fired = cycle(con, log, beat=write_hb)
             n_cycles += 1
             state.update(cycles=n_cycles, last_new_candles=n,
@@ -483,7 +542,7 @@ def main():
             if n:
                 stamp = datetime.now(tz=timezone.utc).strftime("%H:%M:%S")
                 log.info(f"cycle {stamp}Z: {n} new candles, {len(fired)} new setups "
-                         f"({time.monotonic()-t0:.1f}s)")
+                         f"({time.monotonic()-t0:.1f}s, began boundary+{boundary_lag:.0f}s)")
             for sym, tf, p in fired:
                 announce(sym, tf, p, log)
             # Housekeeping at the ONE moment this process is not mid-read. A
@@ -498,7 +557,9 @@ def main():
             log.error(f"live cycle failed: {e}")
         if args.once:
             break
-        time.sleep(POLL_SECONDS)
+        # Aligned, not blind: the nap ends at the drift heartbeat or just past
+        # the next candle boundary, whichever is sooner — see next_wake.
+        time.sleep(next_wake(time.time()))
     con.close()
 
 
