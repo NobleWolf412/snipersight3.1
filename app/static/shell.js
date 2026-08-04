@@ -1376,8 +1376,12 @@
          numbers says in thirty seconds. */
       const barR = Math.max(-3, Math.min(3, j.r_multiple || 0));
       const barW = Math.abs(barR) / 3 * 50;
-      const reason = [j.regime ? String(j.regime).replace('_', ' ').toLowerCase() : '',
-                      j.why ? plainReason(j.why) : ''].filter(Boolean).join(' · ');
+      // The setup's `why` sentence already opens with its regime ("TRANSITION
+      // regime · reversal off..."), so prefixing the regime again printed
+      // "transition · transition..." on every row. The why alone when it
+      // exists; the bare regime only as the fallback.
+      const reason = j.why ? plainReason(j.why)
+        : (j.regime ? String(j.regime).replace('_', ' ').toLowerCase() : '');
       return `<div class="jnl-row${flat ? '' : up ? ' up' : ' down'}">
         <div>
           <div class="t-mono" style="font-size:13px;color:var(--fg)">${
