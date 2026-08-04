@@ -15,8 +15,7 @@
    looking at from the numbers themselves, which is the one thing numbers are
    bad at.
 
-   #31 — the orientation described the app beside the app: four columns of
-   prose above the fold, pointing at nothing.
+   (#31, the guided tour, died with the Learn surface — 2026-08-03.)
 */
 const fs = require('fs');
 const path = require('path');
@@ -27,7 +26,6 @@ const HTML = S('shell.html');
 const SHELL = S('shell.js');
 const CSS = S('ss.css');
 const EDGE = S('edgeview.js');
-const LESSONS = require('../static/lessons.js');
 
 let passed = 0;
 function ok(name, fn) {
@@ -131,76 +129,6 @@ ok('the summaries cover the panels that are walls of figures', () => {
 ok('the summaries are set in prose, not in the same face as the data', () => {
   assert(/\.panel-sub\{font-family:var\(--f-body\)/.test(CSS),
     'a summary set in the same monospace as the table is not read as a summary');
-});
-
-/* ──────────────────────── #31 the guided tour ──────────────────────── */
-
-ok('every orientation step points at a real element', () => {
-  const steps = LESSONS.orientation.steps;
-  assert(steps.length === 4, 'the tour is four steps');
-  for (const s of steps) {
-    assert(typeof s.anchor === 'string' && s.anchor.startsWith('#'),
-      `"${s.title}" points at nothing`);
-    assert(typeof s.lede === 'string' && s.lede.length > 60,
-      `"${s.title}" has no short form — the tour would show the wall again`);
-    assert(s.lede.length < 400, `"${s.title}" is not a coach mark, it is an essay`);
-  }
-});
-
-ok('the anchors exist in the shell', () => {
-  for (const s of LESSONS.orientation.steps) {
-    const id = s.anchor.slice(1);
-    assert(new RegExp('id="' + id + '"').test(HTML), `${s.anchor} is not on the page`);
-  }
-});
-
-ok('the tour is resumable, and says where it stopped', () => {
-  assert(typeof LESSONS.orientation.at === 'function', 'nothing records where you stopped');
-  assert(typeof LESSONS.orientation.start === 'function', 'the tour cannot be started');
-  assert(/Resume tour · step ' \+ \(at \+ 1\)/.test(S('lessons.js')),
-    'the launcher must name the step it will resume at');
-  assert(/ss\.orientation\.v1\.at/.test(S('lessons.js')), 'the position is not persisted');
-});
-
-ok('the tour can be left at any time, by keyboard', () => {
-  const js = S('lessons.js');
-  assert(/ev\.key === 'Escape'/.test(js), 'Escape does not close the tour');
-  assert(/ev\.key !== 'Tab'/.test(js) && /first\.focus\(\)/.test(js),
-    'tabbing out of a tour that has dimmed the screen lands on invisible controls');
-  assert(/back\.focus\(\)/.test(js), 'focus is not returned to the opener');
-  assert(/aria-modal="true"/.test(js) && /aria-labelledby="tourTitle"/.test(js),
-    'the coach mark is not announced as a dialog');
-});
-
-ok('the long prose survives, one click away', () => {
-  const js = S('lessons.js');
-  assert(/<details class="tour-more"><summary>more<\/summary>' \+ step\.html/.test(js),
-    'the full text was deleted rather than folded away');
-});
-
-ok('the tour honours the reduced-motion setting', () => {
-  const js = S('lessons.js');
-  assert(/prefers-reduced-motion: reduce/.test(js), 'no reduced-motion check');
-  assert(/behavior: reduced\(\) \? 'auto' : 'smooth'/.test(js),
-    'the scroll between steps ignores the OS setting');
-  assert(/@media\(prefers-reduced-motion:reduce\)\{\.tour-ring\{transition:none\}\}/
-    .test(S('lessons.css')), 'the ring animates regardless of the OS setting');
-});
-
-ok('the tour routes to the surface its anchor lives on', () => {
-  const js = S('lessons.js');
-  assert(/location\.hash = step\.surface/.test(js),
-    'a step started from Results would describe a control that is not on screen');
-  const onCommand = LESSONS.orientation.steps.filter(s => s.surface === '#command');
-  assert(onCommand.length >= 3, 'the Command steps do not name their surface');
-});
-
-/* ─────────────────────────── the glossary ─────────────────────────── */
-
-ok('the A–Z glossary is styled, not just rendered', () => {
-  for (const cls of ['.gl-search', '.gl-body', '.gl-letter', '.gl-entry', '.gl-term', '.gl-def']) {
-    assert(CSS.includes(cls), `${cls} has no styles — the list renders unstyled`);
-  }
 });
 
 console.log('\n  ' + passed + ' passed');

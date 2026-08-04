@@ -1060,28 +1060,6 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .dirty-banner .spacer{margin-left:auto}
 .dirty-banner[hidden]{display:none}
 
-/* ---------- the A–Z glossary (Learn) ----------
-   67 terms the app underlines, browsable rather than only stumble-into-able. */
-.gl-search{display:flex;align-items:center;gap:var(--sm);margin-left:auto}
-.gl-search input{background:rgba(0,0,0,.5);border:1px solid var(--border);
-  border-radius:var(--r-md);padding:6px 10px;color:var(--fg);font-size:12px;
-  min-width:190px}
-.gl-search input:focus{outline:0;border-color:var(--accent)}
-.gl-body{padding:var(--lg);display:block;max-height:none}
-.gl-letter{font-family:var(--f-display);font-size:13px;letter-spacing:.22em;
-  color:var(--accent);margin:var(--lg) 0 var(--sm);padding-bottom:4px;
-  border-bottom:1px solid var(--border-soft)}
-.gl-letter:first-child{margin-top:0}
-.gl-entry{display:grid;grid-template-columns:minmax(140px,22%) minmax(0,1fr);
-  gap:var(--md);padding:7px 0;border-bottom:1px solid var(--border-soft)}
-.gl-entry:last-child{border-bottom:0}
-.gl-term{font-family:var(--f-mono);font-size:11.5px;font-weight:600;
-  letter-spacing:.08em;color:var(--fg);margin:0}
-.gl-def{font-family:var(--f-body);font-size:12.5px;line-height:1.55;
-  color:var(--fg-2);margin:0;max-width:72ch}
-@media(max-width:900px){.gl-entry{grid-template-columns:1fr;gap:2px}
-  .gl-search input{min-width:120px}}
-
 /* A term whose trigger was demoted because the same word already carries one
    in this card. Still readable, no longer another tab stop. */
 .term-plain{border-bottom:0;cursor:inherit;color:inherit}

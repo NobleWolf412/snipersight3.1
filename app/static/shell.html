@@ -61,8 +61,6 @@
          toggles are for. The surface's own question already said Rules. -->
     <a href="#rules"                data-s="rules">Rules</a>
     <a href="#diagnostics"          data-s="diagnostics">Diagnostics<span class="nav-count" id="nDiag"></span></a>
-    <div class="nav-sep"></div>
-    <a href="#learn"                data-s="learn">Learn</a>
   </nav>
 
   <!-- Outcome of the last mutating action. aria-live=polite so a screen
@@ -114,9 +112,6 @@
           </div>
         </div>
       </div>
-
-      <!-- first-run orientation; lessons.js owns it and self-hides once dismissed -->
-      <div id="orientRoot"></div>
 
       <!-- Risk budget. The caps have always been enforced and never shown: the
            ticket said "$195 at risk" without saying at risk AGAINST WHAT, so a
@@ -811,33 +806,6 @@
     </section>
 
     <!-- ─── LEARN ─── -->
-    <section class="surface" id="s-learn">
-      <div class="surface-head"><h1 class="t-page">Learn</h1>
-        <p>What do these words mean, and why do they work?</p></div>
-
-      <!-- A–Z. Every term the app underlines, in one searchable place. The
-           tooltips are a reminder for a word you half-know; they are no use
-           at all if you do not know which word you are looking for, and
-           nothing linked the 67 of them together. -->
-      <div class="panel" style="margin-bottom:var(--lg)">
-        <div class="panel-head">
-          <h2 class="t-section">Glossary</h2>
-          <label class="gl-search">
-            <span class="t-label">Search</span>
-            <input id="glSearch" class="t-mono" type="search" autocomplete="off"
-                   placeholder="type a word…" aria-label="Search the glossary">
-          </label>
-          <span class="chip" id="glCount" style="margin-left:var(--sm)">—</span>
-        </div>
-        <div id="glossaryRoot" class="gl-body"></div>
-      </div>
-
-      <div id="learnRoot"><div class="skeleton" role="status" aria-label="loading">
-          <div class="skel" style="height:88px"></div>
-          <div class="skel" style="height:88px"></div>
-          <div class="skel" style="height:88px"></div>
-        </div></div>
-    </section>
 
   </main>
 
@@ -872,7 +840,6 @@
 <!-- A11 — every one of these was synchronous, so 280KB of JavaScript parsed
      before the first paint whether or not you ever opened the surface that
      needs it: lightweight-charts is 160KB for a Chart you may not visit and
-     lessons.js is 122KB for Learn.
 
      `defer` on all of them. It keeps EXECUTION ORDER, which matters here —
      ssdata must initialise before any consumer reads through it, glossary
@@ -897,7 +864,6 @@
      never blank a surface that another owns. -->
 <script defer src="/static/playbooks.js?v=36"></script>
 <script defer src="/static/weather.js?v=36"></script>
-<script defer src="/static/lessons.js?v=36"></script>
 <script defer src="/static/tracer.js?v=36"></script>
 <script defer src="/static/copilot.js?v=36"></script>
 <script defer src="/static/wizard.js?v=36"></script>
