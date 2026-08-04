@@ -28,16 +28,16 @@ engines because it derives purely from exec facts, so it must see the adds too.
 `cycles` is observational (BTC 1D, no consumers) and sits at the end.
 """
 
-from . import (breakout, cooldowns, cycles, execsim, liquidity, ma, manual,
-               momentum, ranges, regime, scalein, setups, structure, swings,
-               volatility, volume, zones)
+from . import (breakout, cooldowns, cycles, execsim, fvg, liquidity, ma,
+               manual, momentum, ranges, regime, scalein, setups, structure,
+               swings, volatility, volprofile, volume, zones)
 
 # Facts the market DESCRIPTION layer derives. No trading consumer reads the
 # indicator engines yet and none may until `factorstats` grades them — they are
 # here because an engine that is built, tested and never run emits nothing to
 # grade, which is exactly how `ranges.py` and `cooldowns.py` both died.
 DESCRIPTIVE = (swings, structure, zones, liquidity, regime, ranges,
-               ma, momentum, volatility, volume)
+               ma, momentum, volatility, volume, fvg, volprofile)
 
 # MEASURED AND NOT ENABLED. `breakout` emits setup facts so its sample keeps
 # growing and can be re-graded, but neither `execsim` nor `risk` reads
