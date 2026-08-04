@@ -54,6 +54,8 @@ window.SSChart = (() => {
   // disabled instead of leaving the reason in footer prose
   let lastMetrics = null;
   let priceLines = {}, zoneLines = [], handles = {};
+  // what the grab tags say and whether they go gold — applyLevels owns these
+  let lvlSpec = null, lvlLive = false;
   let drawnKind = null;          // 'engine' | 'draft' — see applyLevels()
   let refreshTimer = null, refreshing = false;   // see startAutoRefresh()
   let loadedAt = null, freshTimer = null;        // see showFreshness()
@@ -161,7 +163,12 @@ window.SSChart = (() => {
       else{
         el.style.display = '';
         el.style.top = y + 'px';
-        el.firstChild.textContent = k.toUpperCase() + ' ' + pf(p);
+        /* The one label a plan level gets: WHOSE · WHICH and the price, on
+           the thing you drag. The state vocabulary (PLAN / ENGINE / LIVE)
+           used to live only in the right-axis tags this replaced. */
+        el.firstChild.textContent =
+          (lvlSpec ? lvlSpec[k].t : k.toUpperCase()) + '  ' + pf(p);
+        el.style.color = lvlLive ? '#fbbf24' : '';
       }
     }
   }
@@ -239,10 +246,18 @@ window.SSChart = (() => {
         continue;
       }
       if(priceLines[k]) priceLines[k].applyOptions({price: p});
+      /* No axis label: the grab tag IS this level's one label (state, name,
+         price — see placeHandles). Each plan price was printed twice, in the
+         drag pill on the left and again as an axis tag on the right, and the
+         operator read the pair as two different things. The split is now
+         semantic: LEFT is your editable plan, the RIGHT axis carries only
+         facts — the live price, armed orders, the zone shelf. */
       else priceLines[k] = series.createPriceLine({
         price: p, color: spec[k].c, lineWidth: 1, lineStyle: spec[k].s,
-        axisLabelVisible: true, title: spec[k].t});
+        axisLabelVisible: false});
     }
+    // the grab tags render from these — set BEFORE placeHandles paints
+    lvlSpec = spec; lvlLive = live;
     $('tkEntry').value = levels.entry == null ? '' : pf(levels.entry);
     $('tkTp').value    = levels.tp    == null ? '' : pf(levels.tp);
     $('tkSl').value    = levels.sl    == null ? '' : pf(levels.sl);
