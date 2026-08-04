@@ -30,7 +30,7 @@ engines because it derives purely from exec facts, so it must see the adds too.
 
 from . import (breakout, cooldowns, cycles, execsim, fvg, liquidity, ma,
                manual, momentum, ranges, regime, scalein, setups, structure,
-               swings, volatility, volprofile, volume, zones)
+               swings, trend, volatility, volprofile, volume, zones)
 
 # Facts the market DESCRIPTION layer derives. No trading consumer reads the
 # indicator engines yet and none may until `factorstats` grades them — they are
@@ -44,7 +44,17 @@ DESCRIPTIVE = (swings, structure, zones, liquidity, regime, ranges,
 # BREAKOUT_VERSION, so it trades nothing. Graded 2026-07-30: n=55, -0.076 R,
 # CI [-0.545, +0.426], P(>0) 37.4% — indistinguishable from zero. REVERSAL
 # cleared this bar; this did not, so it does not ship.
-MEASURED_NOT_ENABLED = (breakout,)
+#
+# `trend` joins on the same terms, and for a reason that is not about its P&L.
+# Grading the MA against the book on 2026-08-04 found LONG x ABOVE = 0 and
+# SHORT x BELOW = 0 across all 477 closed trades: both shipped playbooks enter
+# counter-move, so every trend-following factor is a CONSTANT here and cannot
+# be graded at all. This records trades that buy strength, which is the only
+# thing that can populate that cohort. First sample on BTCUSDT 1H: 32 setups,
+# 26 of them in the previously-empty AGREES bucket. Whether it MAKES money is
+# a separate question its own sample will answer, on the same bar as everything
+# else — an interval above zero.
+MEASURED_NOT_ENABLED = (breakout, trend)
 
 # The trading path, in dependency order. See the module docstring for why
 # `execsim` is listed twice and why `cooldowns` is last.

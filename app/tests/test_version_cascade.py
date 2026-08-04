@@ -27,7 +27,7 @@ import unittest
 from engine import (breakout, cooldowns, cycles, execsim, venues, liquidity, ma,
                     manual, momentum, ranges, regime,
                     risk, scalein, setups, structure, swings, volatility,
-                    volume, zones)
+                    volume, zones, trend)
 
 # The current, deliberate state of the pipeline. Update WITH the cascade.
 LOCKED = {
@@ -47,6 +47,10 @@ LOCKED = {
     "scale": scalein.SCALE_VERSION,
     "cooldown": cooldowns.COOLDOWN_VERSION,
     "breakout": breakout.BREAKOUT_VERSION,
+    # Measured and not enabled, like breakout. Locked from the first commit
+    # because a version that only starts being tracked once something reads it
+    # is a version whose early facts nobody can place.
+    "trend": trend.TREND_VERSION,
     "venues": venues.VENUES_VERSION,
     # Observational satellite with no consumers — locked anyway, because
     # "nothing reads it" is exactly how it went dead unnoticed for 21 hours.
@@ -135,6 +139,15 @@ EXPECTED = {
     "scale": "scale-v0.14-draft",
     "cooldown": "cooldown-v0.8-draft",
     "breakout": "breakout-v0.4-draft",
+    # trend-v0.1: NEW ENGINE, measured and not enabled. It arrives because
+    # grading the MA against the book found LONG x ABOVE = 0 and
+    # SHORT x BELOW = 0 across all 477 closed trades — both shipped playbooks
+    # enter counter-move, so every trend-following factor is a constant here
+    # and cannot be graded at all. No cascade DOWNSTREAM (nothing reads
+    # trend-*), but it sits downstream of `ma` and `swing`: it computes the
+    # ribbon with ma.ema / ma.sma and takes targets from INTERMEDIATE+ swings,
+    # so both appear in its CONSUMERS entries and a bump to either moves this.
+    "trend": "trend-v0.1-draft",
     "venues": "venues-v0.2-draft",
     "cycles": "cycles-v0.2-draft",
     # manual-v0.2: partial exits. The one bump on this line with NO cascade, and
@@ -172,14 +185,18 @@ CONSUMERS = {
     # change to the EMA formula changes THEIR facts without touching a line of
     # their source. That is the version cascade in its most invisible form: no
     # import of a VERSION constant to grep for, just a shared function.
-    "ma": ("momentum", "volatility", "volume"),
+    # `trend` joins this list on the same CODE-level terms and is the strongest
+    # case of it yet: it reads no `ma` FACT at all, it computes the ribbon with
+    # ma.ema / ma.sma / ma.stack / ma.position, so an EMA change moves its
+    # entries without touching its source or any version constant it imports.
+    "ma": ("momentum", "volatility", "volume", "trend"),
     # S53: setup and breakout were MISSING here despite reading swing facts
     # directly (setups.py takes targets from INTERMEDIATE+ swings; breakout.py
     # does the same) — and the cascade plan drafted from this map missed them,
     # which is precisely the failure mode the map exists to prevent. Same for
     # structure: setup and breakout both read structure facts.
     "swing": ("structure", "zone", "liquidity", "ranges", "momentum",
-              "setup", "breakout"),
+              "setup", "breakout", "trend"),
     "structure": ("regime", "scale", "setup", "breakout"),
     "zone": ("setup",),
     "liquidity": ("setup",),
