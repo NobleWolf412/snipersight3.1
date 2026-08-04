@@ -57,6 +57,12 @@ def sym_of(k):
     return k.replace("_", "").upper() + "USDT"     # -> phemex-perp economics
 
 
+def entry_model_of(k):
+    """What the PLAN declares — the only thing execsim consults, so the only
+    thing a replay reproducing execsim may consult."""
+    return "MAKER_THEN_MARKET" if k == "G_cross" else None
+
+
 def bars(k, base):
     out = []
     for i in range(N):
@@ -183,7 +189,20 @@ class WalkCase(unittest.TestCase):
 
 class AgreementCase(unittest.TestCase):
     """The prize: the harness's hold cell and execsim agree because they ARE
-    the same walk — every outcome and every R, not within tolerance, equal."""
+    the same walk — every outcome and every R, not within tolerance, equal.
+
+    G_cross used to be EXCLUDED here, on the reasoning that "the cross entry leg
+    is execsim's own model; the harness's entry variants are deliberately
+    different experiments and are not asked to reproduce it." That reasoning is
+    true of a variant cell and false of the CALIBRATION cell, which replays the
+    engine's own declared entry model and is asked for exactly that. The
+    exclusion is why a +0.1207 R/trade divergence on every crossed order lived
+    long enough to be found by a calibration failure instead: the one case that
+    would have caught it was the one case the test skipped.
+
+    So the entry model is now taken from the PLAN, as execsim takes it, and
+    every band including the cross must agree.
+    """
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -196,11 +215,6 @@ class AgreementCase(unittest.TestCase):
 
     def test_hold_cell_reproduces_execsim_exactly(self):
         for k in BANDS:
-            if k == "G_cross":
-                # The cross entry leg is execsim's own model; the harness's
-                # entry variants are deliberately different experiments and are
-                # not asked to reproduce it.
-                continue
             sym = sym_of(k)
             execsim.run(self.con, sym, TF, TFS)
             exec_by_id = {}
@@ -209,7 +223,8 @@ class AgreementCase(unittest.TestCase):
                 p = json.loads(row["payload"])
                 exec_by_id[p["setup_id"]] = p
             got = abtest.run_variant(self.con, [sym], [TF], SETUP_VERSION,
-                                     managed=False, entry_model=None)
+                                     managed=False,
+                                     entry_model=entry_model_of(k))
             with self.subTest(case=k):
                 self.assertEqual(len(got), 1)
                 g = got[0]
@@ -223,6 +238,35 @@ class AgreementCase(unittest.TestCase):
                                  f"{k}: the harness and the engine settled the "
                                  f"same trade for different money")
                 self.assertEqual(g["bars_held"], e["bars_held"])
+
+    def test_the_crossing_leg_is_where_they_used_to_disagree(self):
+        """Name the specific defect, so a re-introduction fails HERE with a
+        readable message rather than as one row of a 499-trade join.
+
+        The old harness crossed at bar `ci+1` and paid the PLAN's entry price,
+        against the PLAN's risk denominator. The engine crosses once the passive
+        window has closed — `order_i + maker_wait_bars`, here ci+3 — at that
+        bar's own open. On this band the plan entry is 701 against a stop at
+        694, so the plan risk is 7 and the fill's is 6: a replay reading the
+        plan reports every crossed trade against a denominator 17% too large.
+        """
+        sym = sym_of("G_cross")
+        execsim.run(self.con, sym, TF, TFS)
+        e = next(json.loads(r["payload"])
+                 for r in store.get_facts(self.con, sym, TF, "exec",
+                                          execsim.EXEC_VERSION))
+        g = abtest.run_variant(self.con, [sym], [TF], SETUP_VERSION,
+                               managed=False,
+                               entry_model="MAKER_THEN_MARKET")[0]
+        self.assertEqual(e["entry"], "700",
+                         "the engine fills the cross at the crossing bar's open")
+        self.assertNotEqual(e["entry"], "701", "...not at the plan's entry")
+        self.assertEqual(e["bars_to_fill"], 2,
+                         "the cross fires after the passive window, not on the "
+                         "bar the order was placed")
+        self.assertEqual(str(g["r"]), e["r_multiple"],
+                         "the replay must price the crossing leg the engine's "
+                         "way — same bar, same price, same risk denominator")
 
 
 if __name__ == "__main__":
