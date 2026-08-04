@@ -203,6 +203,47 @@ def _cli() -> str:
     return exe
 
 
+def build_diag_pack(con) -> str:
+    """Everything a code-diagnosis turn may ground itself in.
+
+    The chart pack answers "is this trade worth taking"; this one answers
+    "why is the machine failing" — engine faults (current state), data gates,
+    the latest quality verdict, and the tail of the engine log. Same format
+    discipline as build_pack: labelled prose, because the reader is a model.
+    """
+    from pathlib import Path
+    parts = ["DIAGNOSTIC PACK — assembled from the SniperSight fact store "
+             "and runtime state.", ""]
+    faults = con.execute(
+        "SELECT symbol, tf, engine, error, first_seen, times FROM engine_faults "
+        "ORDER BY last_seen DESC LIMIT 20").fetchall()
+    parts.append("ENGINE FAULTS (current state; a clean run clears a row):")
+    parts += [f"  {r[2]} on {r[0]} {r[1]} — {r[3]} (seen {r[5]}x)"
+              for r in faults] or ["  none"]
+    gates = con.execute(
+        "SELECT symbol, tf, gate, detail FROM pipeline_gates "
+        "ORDER BY measured_at LIMIT 20").fetchall()
+    parts.append("")
+    parts.append("DATA GATES (symbols the engines are not fully running on):")
+    parts += [f"  {r[0]} {r[1]}: {r[2]} — {r[3]}" for r in gates] or ["  none"]
+    q = con.execute("SELECT status, summary FROM quality_runs "
+                    "ORDER BY observed_at DESC LIMIT 1").fetchone()
+    parts.append("")
+    parts.append(f"LATEST QUALITY AUDIT: {q[0]} — {q[1][:400]}" if q
+                 else "LATEST QUALITY AUDIT: none recorded")
+    log_path = Path(__file__).resolve().parent.parent / "data" / "engine.log"
+    try:
+        tail = log_path.read_text(encoding="utf-8", errors="replace")
+        lines = [l for l in tail.splitlines() if l.strip()][-40:]
+        parts += ["", "ENGINE LOG (last 40 lines):"] + [f"  {l}" for l in lines]
+    except OSError:
+        parts += ["", "ENGINE LOG: unavailable"]
+    parts += ["", "The codebase lives in app/ — engines in app/engine/, one "
+              "per module, run by pipeline.run_symbol. Answer as a debugging "
+              "partner: name the likely failing module and the next check."]
+    return chr(10).join(parts)
+
+
 def ask(message: str, pack: str | None = None, session_id: str | None = None,
         model: str = DEFAULT_MODEL) -> dict:
     """One turn against the operator's Claude subscription via `claude -p`.

@@ -1169,3 +1169,27 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .jnl-bar i{position:absolute;top:0;height:100%;border-radius:2px}
 .jnl-bar i.pos{background:var(--green)}
 .jnl-bar i.neg{background:var(--red-2)}
+
+/* ── copilot dock (was a modal drawer) ──
+   No scrim: the page the question is about stays visible and live. */
+.cp-dock{position:fixed;top:var(--topbar-h);right:0;bottom:var(--statusbar-h);
+  width:min(380px,94vw);z-index:55;display:flex;flex-direction:column;
+  background:var(--card);border-left:1px solid var(--accent);
+  box-shadow:-14px 0 34px rgba(0,0,0,.45)}
+.cp-dock .cp-head{display:flex;align-items:center;gap:8px;padding:10px 12px;
+  border-bottom:1px solid var(--border-soft)}
+.cp-dock .cp-title{font-family:var(--f-display);font-size:14px;letter-spacing:.08em}
+.cp-dock .cp-sub{font-family:var(--f-mono);font-size:9px;letter-spacing:.1em;
+  color:var(--fg-4);margin-right:auto}
+.cp-dock .cp-chips{padding:8px 12px 0;display:flex;gap:6px;flex-wrap:wrap}
+.cp-dock .cp-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;
+  flex-direction:column;gap:8px}
+.cp-dock .cp-input{display:flex;gap:8px;padding:10px 12px;
+  border-top:1px solid var(--border-soft)}
+.cp-dock textarea{flex:1;background:rgba(0,0,0,.5);border:1px solid var(--border);
+  border-radius:var(--r-md);padding:8px 10px;color:var(--fg);font-size:12.5px;
+  resize:none}
+.cp-dock textarea:focus{outline:0;border-color:var(--accent)}
+.cp-dock .cp-foot{font-family:var(--f-mono);font-size:9px;letter-spacing:.08em;
+  color:var(--fg-4);padding:6px 12px 10px;text-align:center}
+.fail-diag{font-size:9px;padding:2px 8px}

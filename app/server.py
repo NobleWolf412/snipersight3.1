@@ -2215,16 +2215,22 @@ def copilot_chat(payload: dict):
     tf = str(payload.get("tf") or "1H")
     session_id = payload.get("session_id") or None
     model = str(payload.get("model") or copilot.DEFAULT_MODEL)
+    context = str(payload.get("context") or "chart")
     pack = None
     if not session_id:
-        if not symbol:
-            raise HTTPException(400, "symbol required on the first turn")
-        if tf not in VALID_TFS:
-            raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
         con = store.connect()
         try:
-            pack = copilot.build_pack(con, symbol, tf,
-                                      payload.get("setup_id") or None)
+            if context == "diagnostics":
+                # the code-diagnosis pack: faults, gates, quality, log tail —
+                # no symbol needed, the machine itself is the subject
+                pack = copilot.build_diag_pack(con)
+            else:
+                if not symbol:
+                    raise HTTPException(400, "symbol required on the first turn")
+                if tf not in VALID_TFS:
+                    raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
+                pack = copilot.build_pack(con, symbol, tf,
+                                          payload.get("setup_id") or None)
         finally:
             con.close()
     out = copilot.ask(message, pack=pack, session_id=session_id, model=model)

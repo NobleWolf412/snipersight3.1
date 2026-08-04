@@ -594,6 +594,7 @@ window.SSChart = (() => {
     // when the candles fail to arrive, and it is the thing that says whether
     // the empty chart in front of you is a failure or simply unscanned.
     paintSymBtn();
+    window.SSChartCtx = {symbol: sym, tf};
     // The live suffix is per-symbol and the ticker only corrects it every 5s —
     // long enough for BTC's tick to sit beside LINK's closed price, which is
     // the wrong-market-under-the-right-name failure with a $55k tell. Hide it
@@ -1250,11 +1251,9 @@ window.SSChart = (() => {
       $('ticket').scrollTop = 0;
     });
 
-    $('btnCopilot').addEventListener('click', () => {
-      if(!sym || !window.SSCopilot) return;
-      SSCopilot.open({symbol: sym, tf,
-                      setupId: setup ? setup.setup_id : null});
-    });
+    /* copilot binding lives in copilot.js now — the dock is an app feature
+       with a chart mode, not a chart feature. This surface just publishes
+       what it is looking at. */
     /* The BUTTON KEEPS ITS NAME. It used to become its own status line —
        "ANALYZING…" then "ALREADY CURRENT" — so the control the operator was
        reaching for changed identity underneath the cursor, and the outcome

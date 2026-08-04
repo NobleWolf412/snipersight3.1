@@ -447,6 +447,9 @@
         <span class="fail-what"><b>${esc(f.engine)}</b> ${esc(String(f.symbol).replace('-USD',''))} ${esc(f.tf)}</span>
         <span class="fail-err" title="${esc(f.error)}">${esc(f.error)}</span>
         <span class="fail-meta">${f.times}× · since ${since(f.since)}</span>
+        <button class="btn fail-diag" data-diag="${esc(
+          `Why is the ${f.engine} engine failing on ${f.symbol} ${f.tf}? Error: ${f.error}`
+        )}">Diagnose</button>
       </div>`);
     }
     for (const g of (m.gates || [])) {
@@ -670,6 +673,15 @@
   }
 
   /* ---------- events ---------- */
+
+  document.addEventListener('click', e => {
+    const d = e.target.closest('.fail-diag');
+    if (d) {
+      if (window.SSCopilot) SSCopilot.open({kind: 'diagnostics', prefill: d.dataset.diag});
+      else alert('The copilot could not be loaded (static/copilot.js).');
+      return;
+    }
+  });
 
   ROOT.addEventListener('click', e => {
     const stage = e.target.closest('[data-stage]');

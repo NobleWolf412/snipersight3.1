@@ -1,22 +1,29 @@
-/* SniperSight copilot drawer — chat over the fact pack, observer only.
+/* SniperSight copilot dock — chat over the fact pack, observer only.
 
-   Boundaries mirrored from the server (engine/copilot.py):
-     · It analyses; it cannot arm. There is no path from a reply to the
-       ticket, deliberately — even "apply suggestion" is refused as a
-       feature, or the manual book stops meaning "the operator's judgement".
+   A DOCK, not a modal. The drawer version dimmed the page behind a scrim, so
+   asking a question meant losing the chart the question was about. The dock
+   sits on the right edge, the page stays live, and it survives surface
+   switches — one topbar button toggles it from anywhere.
+
+   Context follows the surface. On Chart it reads the chart pack (setup trace,
+   draft, weather, costs — chart.js publishes the current symbol/tf on
+   window.SSChartCtx). Everywhere else it reads the DIAGNOSTIC pack: engine
+   faults, data gates, the latest quality verdict and the engine-log tail —
+   "why is the machine failing" answered from the same tables Diagnostics
+   leads with. The Failing-now rows open it pre-filled with their own fault.
+
+   Boundaries mirrored from the server (engine/copilot.py), unchanged:
+     · It analyses; it cannot arm. No path from a reply to the ticket.
      · Nothing said here is recorded as a fact.
-     · Runs on the operator's Claude subscription through the local CLI; the
-       footer says so because a chat box that silently spends quota is rude.
+     · Runs on the operator's Claude subscription through the local CLI.
 
-   Sessions: one CLI session per context (symbol|tf|setup), resumed across
-   messages so the fact pack is transmitted once per conversation. The session
-   id AND the transcript are both held in sessionStorage against that context,
-   so closing the drawer, switching symbol and back, or reloading the page all
-   return to the conversation where it was left. A browser restart starts
-   fresh, which is the right default for advice that goes stale with the
-   chart; "New" discards a conversation on purpose.
+   Sessions: one CLI session per context, resumed across messages, transcript
+   and session id both held in sessionStorage against the context key — so
+   toggling the dock, switching surfaces and reloading all return to the
+   conversation where it was left.
 
-   Public: window.SSCopilot.open({symbol, tf, setupId?}) / .close() / .clear() */
+   Public: window.SSCopilot.open({kind?, symbol?, tf?, setupId?, prefill?})
+           / .toggle() / .close() / .clear() */
 (() => {
   'use strict';
   const ROOT = document.getElementById('copilotRoot');
@@ -25,17 +32,13 @@
   const esc = s => String(s == null ? '' : s)
     .replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
 
-  let ctx = null;          // {symbol, tf, setupId}
+  let ctx = null;          // {kind:'chart'|'diagnostics', symbol?, tf?, setupId?}
   let busy = false;
-  let msgs = [];           // {who:'op'|'cp'|'err', text}
+  let msgs = [];
   let model = localStorage.getItem('ss-cp-model') || 'sonnet';
 
-  /* Context identity. The CLI session id AND the visible transcript are both
-     stored against it, because losing either one alone is worse than losing
-     both: the session survived a close while the transcript did not, so the
-     model remembered an exchange the operator could no longer read, and a
-     follow-up question got "as noted above" about text that was gone. */
-  const ctxKey = c => `${c.symbol}|${c.tf}|${c.setupId || ''}`;
+  const ctxKey = c => c.kind === 'diagnostics'
+    ? 'diag' : `${c.symbol}|${c.tf}|${c.setupId || ''}`;
   const sKey = c => 'ss-cp-session|' + ctxKey(c);
   const mKey = c => 'ss-cp-msgs|' + ctxKey(c);
   const MAX_KEPT = 40;
@@ -49,44 +52,54 @@
     catch(e){ return []; }
   }
   function saveMsgs(){
-    // Storage can be full or blocked; a failed save must never break the chat.
     try{ sessionStorage.setItem(mKey(ctx), JSON.stringify(msgs.slice(-MAX_KEPT))); }
     catch(e){}
   }
 
+  /* What is the operator looking at right now? Chart publishes its symbol/tf;
+     every other surface gets the machine itself as the subject. */
+  function surfaceCtx(){
+    const h = (location.hash || '').replace('#', '');
+    if(h === 'chart' && window.SSChartCtx && window.SSChartCtx.symbol){
+      return {kind: 'chart', symbol: SSChartCtx.symbol, tf: SSChartCtx.tf || '1H',
+              setupId: SSChartCtx.setupId || null};
+    }
+    return {kind: 'diagnostics'};
+  }
+
   function render(){
-    if(!ctx){ ROOT.innerHTML = ''; return; }
-    const chips = [`${esc(ctx.symbol)} ${esc(ctx.tf)}`,
-                   ctx.setupId ? 'engine setup attached' : 'chart context',
-                   'trace · draft · weather · book'];
+    if(!ctx){ ROOT.innerHTML = ''; document.body.classList.remove('cp-open'); return; }
+    document.body.classList.add('cp-open');
+    const chip = ctx.kind === 'diagnostics'
+      ? 'diagnosing the machine — faults · gates · quality · log'
+      : `${esc(ctx.symbol)} ${esc(ctx.tf)}${ctx.setupId ? ' · setup attached' : ''}`;
     ROOT.innerHTML = `
-      <div class="cp-scrim" data-close="1"></div>
-      <aside class="cp-drawer" role="dialog" aria-modal="true" aria-label="Copilot">
+      <aside class="cp-dock" role="complementary" aria-label="Copilot">
         <div class="cp-head">
           <span class="cp-title">Copilot</span>
-          <span class="cp-sub">observer only — cannot arm</span>
+          <span class="cp-sub">observer — cannot arm</span>
           <select id="cpModel" class="btn" title="model for the next message">
             <option value="sonnet"${model==='sonnet'?' selected':''}>Sonnet</option>
             <option value="haiku"${model==='haiku'?' selected':''}>Haiku</option>
             <option value="opus"${model==='opus'?' selected':''}>Opus</option>
           </select>
-          <button class="btn" id="cpClear" title="forget this conversation and start a new one">New</button>
-          <button class="btn" data-close="1">Close</button>
+          <button class="btn" id="cpClear" title="forget this conversation">New</button>
+          <button class="btn" id="cpClose">Close</button>
         </div>
-        <div class="cp-chips">${chips.map(c => `<span class="chip">${c}</span>`).join('')}</div>
+        <div class="cp-chips"><span class="chip">${chip}</span></div>
         <div class="cp-msgs" id="cpMsgs">
-          ${msgs.length ? '' : `<div class="cp-hint">Ask about this chart — the
-            copilot reads the same facts the engine decided on: the setup's
-            trace, the draft and its basis, regime weather, venue costs, and
-            the honest state of the book. It analyses; you decide.</div>`}
+          ${msgs.length ? '' : `<div class="cp-hint">${ctx.kind === 'diagnostics'
+            ? 'Ask why something is failing — it reads the fault table, the data gates, the quality audit and the log tail.'
+            : 'Ask about this chart — it reads the same facts the engine decided on.'}</div>`}
           ${msgs.map(m => `<div class="cp-msg ${m.who}">${esc(m.text)}</div>`).join('')}
           ${busy ? '<div class="cp-msg cp busy">thinking…</div>' : ''}
         </div>
         <div class="cp-input">
-          <textarea id="cpText" rows="2" placeholder="Ask about this setup"></textarea>
+          <textarea id="cpText" rows="2" placeholder="${ctx.kind === 'diagnostics'
+            ? 'Why is…' : 'Ask about this setup'}"></textarea>
           <button class="btn btn-cyan" id="cpSend"${busy ? ' disabled' : ''}>Send</button>
         </div>
-        <div class="cp-foot">opinion layer — never enters the record · runs on your Claude plan</div>
+        <div class="cp-foot">never enters the record · runs on your Claude plan</div>
       </aside>`;
     const box = document.getElementById('cpMsgs');
     box.scrollTop = box.scrollHeight;
@@ -94,8 +107,7 @@
   }
 
   function wire(){
-    ROOT.querySelectorAll('[data-close]').forEach(el =>
-      el.addEventListener('click', close));
+    document.getElementById('cpClose').addEventListener('click', close);
     const sel = document.getElementById('cpModel');
     sel.addEventListener('change', () => {
       model = sel.value;
@@ -107,6 +119,7 @@
     });
     document.getElementById('cpSend').addEventListener('click', send);
     document.getElementById('cpClear').addEventListener('click', clear);
+    if(ctx.prefill){ ta.value = ctx.prefill; ctx.prefill = null; }
     ta.focus();
   }
 
@@ -119,7 +132,8 @@
     busy = true; render();
     try{
       const body = {message: text, model,
-                    symbol: ctx.symbol, tf: ctx.tf,
+                    context: ctx.kind,
+                    symbol: ctx.symbol || null, tf: ctx.tf || '1H',
                     setup_id: ctx.setupId || null,
                     session_id: getSession()};
       const r = await fetch('/api/copilot', {
@@ -141,19 +155,16 @@
   }
 
   function open(c){
-    const next = {symbol: c.symbol, tf: c.tf || '1H', setupId: c.setupId || null};
-    /* Reopening restores the transcript. It did not: close() nulls `ctx`, so
-       the guard `!ctx || ...` was true on EVERY reopen and wiped the history
-       the comment claimed it kept. Reading it from storage keyed by context
-       fixes both that and the page reload — the transcript now lives exactly
-       as long as the CLI session it belongs to. */
+    const next = c && (c.kind || c.symbol)
+      ? {kind: c.kind || 'chart', symbol: c.symbol || null, tf: c.tf || '1H',
+         setupId: c.setupId || null, prefill: c.prefill || null}
+      : surfaceCtx();
     ctx = next;
     msgs = loadMsgs(next);
     render();
   }
+  function toggle(){ ctx ? close() : open(); }
   function close(){ ctx = null; render(); }
-
-  /* A transcript is worth keeping until the operator says otherwise. */
   function clear(){
     if(!ctx) return;
     msgs = [];
@@ -162,5 +173,11 @@
     render();
   }
 
-  window.SSCopilot = {open, close, clear};
+  /* THE button — one binding, here, whatever surface is showing. chart.js
+     used to own it, which made the copilot a chart feature; it is an app
+     feature with a chart mode. */
+  const btn = document.getElementById('btnCopilot');
+  if(btn) btn.addEventListener('click', toggle);
+
+  window.SSCopilot = {open, toggle, close, clear};
 })();
