@@ -59,7 +59,7 @@
      to a de-underscored version of itself and no CTA — guessing at a meaning we
      do not have would be worse than showing the raw code. */
 
-  const SETUP_SURFACE  = { href: '#rules',       label: 'Rules' };
+  const SETUP_SURFACE  = { href: '#settings',    label: 'Settings' };
   const CHART_SURFACE  = { href: '#chart',       label: 'Chart' };
   const RESULTS_SURF   = { href: '#results',     label: 'Results' };
   const COMMAND_SURF   = { href: '#command',     label: 'Command' };

@@ -56,12 +56,7 @@
     <a href="#chart"                data-s="chart">Chart</a>
     <a href="#results"              data-s="results">Results</a>
     <div class="nav-sep"></div>
-    <!-- "Rules", not "Scanner Setup". A SETUP is a trade candidate everywhere
-         else in this app — the Setup Deck, active setups, "a setup only appears
-         once price returns to a zone" — and this surface is configuration. One
-         word meaning two things is why an operator cannot tell what these
-         toggles are for. The surface's own question already said Rules. -->
-    <a href="#rules"                data-s="rules">Rules</a>
+    <a href="#settings"             data-s="settings">Settings</a>
     <a href="#diagnostics"          data-s="diagnostics">Diagnostics<span class="nav-count" id="nDiag"></span></a>
   </nav>
 
@@ -516,75 +511,12 @@
     </section>
 
     <!-- ─── SCANNER SETUP ─── -->
-    <section class="surface" id="s-rules">
-      <div class="surface-head"><h1 class="t-page">Rules</h1><p>What is the bot allowed to do?</p></div>
+    <section class="surface" id="s-settings">
+      <div class="surface-head"><h1 class="t-page">Settings</h1><p>keys · Claude · configuration</p></div>
 
-      <!-- Every control below changes one step of a pipeline nobody had
-           described. An operator cannot judge "min volume usd" without knowing
-           there IS a ranking step, and asking them to is how a settings page
-           becomes unusable. Closed by default: it is reference, not news. -->
-      <details class="explainer" id="howItWorks">
-        <summary class="explainer-head">
-          <h2 class="t-section">How the scanner works</h2>
-          <span class="wx-sub">the five steps these rules control</span>
-        </summary>
-        <div class="explainer-body t-body">
-          <!-- This described a data pipeline: rank, warm up, import closed
-               candles, run the engines over them. Two of the five steps were
-               about moving price history around, which is not a thing the
-               reader controls, judges or can act on — and the one step they
-               most need ("why did nothing appear today?") was buried last.
+      <!-- The "How the scanner works" essay lived here. Operator ruling: this
+           surface is configuration, and nobody reads a wall to flip a switch. -->
 
-               Same five stages, told as what the bot is doing to find a trade.
-               The "Controlled by" pointers stay: they are what ties a sentence
-               to the toggle underneath it, and they now name the controls as
-               the controls are actually labelled. -->
-          <p><b>It is always running.</b> The scanner re-checks every symbol it
-          watches, around the clock. <b>Run Scan</b> on Command does not do
-          anything extra — it runs the same check straight away instead of
-          waiting for the next one.</p>
-
-          <ol class="explainer-steps">
-            <li><b>Pick what to watch.</b> The most heavily traded symbols on
-              the venue are admitted and thin markets are left out — a stop in
-              a thin book does not get filled where you put it.
-              <em>Controlled by: how many symbols to admit, minimum 24h volume,
-              trade perpetual futures.</em></li>
-            <li><b>Learn each market before trading it.</b> A new symbol is
-              watched but never sized until there is enough history to map its
-              levels honestly — about six months. A market whose structure the
-              engine cannot see is one it will not risk money in.</li>
-            <li><b>Read the conditions.</b> For each symbol it works out the
-              trend, marks the supply and demand zones, and notes where
-              liquidity is resting. This is what <b>Market Weather</b> shows:
-              what state each market is in right now.</li>
-            <li><b>Wait for price to come to you.</b> A tradeable condition is
-              not a trade. A <span class="term" data-t="setup">setup</span>
-              appears only when price returns to one of those zones and
-              confirms there — then it lands on the <b>Setup Deck</b>.
-              <em>Controlled by: the playbook switches above.</em></li>
-            <li><b>Check it against your limits.</b> Even a valid setup is
-              refused if it would break a risk rule — too many trades open,
-              too much at stake, or resting after a recent stop-out. Command
-              says which rule stopped it.
-              <em>Controlled by: the risk settings below.</em></li>
-          </ol>
-
-          <p><b>So an empty Setup Deck beside a busy Market Weather is the
-          normal state</b>, not a fault. Weather is necessary and nowhere near
-          sufficient: a symbol can sit in a tradeable regime for days without
-          price ever coming back to a zone. Quiet days are the design.</p>
-
-          <p>Nothing here places a real order. <b>Arm</b> writes to your own
-          <span class="term" data-t="paper">paper</span> book, kept separate
-          from the strategy's record so hand-picked trades are never counted as
-          engine edge. Live execution is locked.</p>
-        </div>
-      </details>
-
-      <!-- Playbook catalogue: what each strategy hunts, and its live record —
-           losses included. playbooks.js owns it and reads /api/playbooks. -->
-      <div id="playbookRoot" style="margin-bottom:var(--lg)"></div>
 
       <!-- Two packed columns, not a 2-up grid. As a grid these four panels sat
            in two rows of equal-height cells, and Credentials is now three venue
@@ -596,48 +528,25 @@
            order are still exactly the source order. -->
       <div class="pack-cols">
         <div class="panel">
-          <div class="panel-head"><h2 class="t-section">Venue &amp; Credentials</h2>
+          <div class="panel-head"><h2 class="t-section">Exchanges</h2>
+            <span class="chip" title="keys are encrypted with Windows DPAPI, tied to your user account, never written to the fact store or the log, and cannot be read back — a stored key does NOT enable live trading, that gate is separate and locked">read-only keys only</span>
             <span class="chip" id="credChip" style="margin-left:auto">—</span></div>
           <div class="panel-body">
             <div id="credFields"></div>
-            <p class="t-body" style="margin-top:var(--md);color:var(--fg-3)">
-              Keys are encrypted with Windows DPAPI, tied to your user account.
-              They are never written to the fact store, the log, or git, and no
-              endpoint can read one back — the app can only tell you whether one
-              is set. <b>Use read-only keys.</b> A stored key does not enable
-              <span class="term" data-t="live">live</span> trading; that gate is
-              separate and still locked.
-            </p>
           </div>
         </div>
         <div class="panel">
           <!-- the cost-model build stamp (`costs-v0.4`) lived here; it is
                provenance for a developer, not a rule the reader can change -->
-          <div class="panel-head"><h2 class="t-section">Risk</h2></div>
+          <div class="panel-head"><h2 class="t-section">Risk</h2>
+            <span class="chip" style="margin-left:auto" title="sized by the engine, not editable here — changing risk per trade would replay and re-size the entire forward record under the same engine version, which the versioning rule forbids">read-only</span></div>
           <div class="panel-body">
             <div class="tk-out" id="riskNow"></div>
             <!-- B7 — one line, then a disclosure. This was a nine-line essay
                  standing between the operator and the numbers above it. The
                  reasoning is worth keeping; it is not worth reading on every
                  visit to a settings page. -->
-            <p class="t-body" style="margin-top:var(--md);color:var(--fg-3)">
-              These are the live numbers the risk authority sizes with — read
-              from the engine, not editable here.
-            </p>
-            <details class="fine-print">
-              <summary>why not?</summary>
-              <p class="t-body" style="color:var(--fg-3)">
-                Changing <span class="term" data-t="riskPerTrade">risk per
-                trade</span> re-sizes the <em>entire</em> forward record,
-                because the account is recomputed by replaying every setup.
-                Doing that in place would rewrite your paper track record under
-                the same <span class="term" data-t="algoVersion">engine
-                version</span>, which is exactly what the versioning rule
-                forbids. The envelope is also coupled: the total cap holds two
-                concurrent trades and the daily halt is about three stop-outs,
-                so one value cannot move alone.
-              </p>
-            </details>
+            <!-- the "why not editable" essay lives on the chip's hover now -->
           </div>
         </div>
         <div class="panel">
@@ -663,16 +572,26 @@
           </div>
         </div>
         <div class="panel">
+          <div class="panel-head"><h2 class="t-section">Claude</h2>
+            <span class="chip" id="cpHealth" style="margin-left:auto">—</span></div>
+          <div class="panel-body">
+            <label class="set-row"><span>Copilot model</span>
+              <select id="setCpModel" class="btn">
+                <option value="sonnet">Sonnet</option>
+                <option value="haiku">Haiku</option>
+                <option value="opus">Opus</option>
+              </select></label>
+            <div class="set-row"><span>Claude CLI</span>
+              <button class="btn" id="btnCpTest"
+                title="runs `claude --version` — the copilot needs the CLI on PATH and a logged-in plan">Test</button></div>
+          </div>
+        </div>
+        <div class="panel">
           <div class="panel-head"><h2 class="t-section">Guardrails</h2>
-            <span class="chip" id="guardChip" style="margin-left:auto">—</span></div>
+            <span class="chip" id="guardChip" style="margin-left:auto"
+              title="every guardrail blocks NEW entries only — open positions still settle, and live order submission stays locked regardless">—</span></div>
           <div class="panel-body">
             <div class="tk-out" id="guardRows"></div>
-            <p class="t-body" style="margin-top:var(--md);color:var(--fg-3)">
-              Every one of these blocks NEW entries only. Open positions still
-              settle — refusing to close a position is not a safety feature, it
-              is just a different way to lose control of it. Live order
-              submission stays locked regardless.
-            </p>
           </div>
         </div>
       </div>
@@ -824,7 +743,6 @@
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must
      never blank a surface that another owns. -->
-<script defer src="/static/playbooks.js?v=36"></script>
 <script defer src="/static/weather.js?v=36"></script>
 <script defer src="/static/tracer.js?v=36"></script>
 <script defer src="/static/copilot.js?v=36"></script>

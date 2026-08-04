@@ -2154,6 +2154,30 @@ def manual_open(symbol: str, tf: str = "1H"):
         con.close()
 
 
+@app.get("/api/copilot/health")
+def copilot_health():
+    """Does the copilot's engine exist? Runs `claude --version`, nothing more.
+
+    The Settings panel offers this as a button because the copilot's failure
+    mode without the CLI is a mid-question error — a check that can be run
+    BEFORE the first question is the difference between configuration and
+    debugging."""
+    import shutil
+    import subprocess
+    exe = shutil.which("claude")
+    if not exe:
+        return {"ok": False, "error": "the `claude` CLI is not on PATH"}
+    try:
+        r = subprocess.run([exe, "--version"], capture_output=True, text=True,
+                           timeout=15)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "`claude --version` timed out"}
+    if r.returncode != 0:
+        return {"ok": False,
+                "error": (r.stderr or r.stdout or "CLI failed").strip()[:200]}
+    return {"ok": True, "version": (r.stdout or "").strip()[:80]}
+
+
 @app.post("/api/copilot")
 def copilot_chat(payload: dict):
     """One copilot turn. Observer only: returns prose, writes no facts.

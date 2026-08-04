@@ -37,7 +37,9 @@
      everywhere else in this app. Old hashes are still honoured — a bookmark, a
      link in the wizard's prose, or anything the operator saved must not land on
      a blank screen because we improved a word. */
-  const SURFACE_ALIASES = {setup: 'rules'};
+  // `rules` lived at this address for the whole redesign; links and habits
+  // survive the rename to Settings.
+  const SURFACE_ALIASES = {setup: 'settings', rules: 'settings'};
   let pendingJump = null;
   function go(name){
     name = SURFACE_ALIASES[name] || name;
@@ -2024,9 +2026,14 @@
      its consequence, confirms — and the guardrails panel still DISPLAYS the
      halt state, so nothing is hidden, there is just one way to change it. */
   const BUTTON_OWNED = new Set(['halted']);
+  /* Operator ruling: "no need to talk about dead anything." Range-fade has no
+     engine behind it and breakout-retest was measured and left off — a toggle
+     wired to nothing and a toggle nobody should flip are both noise on a
+     settings page. The SERVER still knows both settings; hiding is a UI act. */
+  const HIDDEN_SETTINGS = new Set(['strategy_breakout_retest', 'strategy_range_fade']);
 
   function buildSettings(){
-    $('setFields').innerHTML = setSpec.filter(s => !BUTTON_OWNED.has(s.name)).map(s => {
+    $('setFields').innerHTML = setSpec.filter(s => !BUTTON_OWNED.has(s.name) && !HIDDEN_SETTINGS.has(s.name)).map(s => {
       const v = (s.name in setPending) ? setPending[s.name] : setValues[s.name];
       const ctl = s.type === 'bool'
         ? `<input type="checkbox" data-set="${s.name}" ${v ? 'checked' : ''}>`
@@ -2617,6 +2624,30 @@
     while(host.children.length > 3) host.firstChild.remove();
   }
   window.SSToast = toast;
+
+  /* ---------- Settings · Claude panel ----------
+     The model select writes the SAME localStorage key the copilot drawer
+     reads, so there is one preference, not two. Test runs `claude --version`
+     server-side — the copilot cannot work without the CLI on PATH, and a
+     button that proves it beats a first failure mid-question. */
+  (function wireClaudePanel(){
+    const sel = $('setCpModel'), test = $('btnCpTest'), chip = $('cpHealth');
+    if(!sel) return;
+    sel.value = localStorage.getItem('ss-cp-model') || 'sonnet';
+    sel.addEventListener('change', () =>
+      localStorage.setItem('ss-cp-model', sel.value));
+    test.addEventListener('click', async () => {
+      test.disabled = true; chip.textContent = 'testing…'; chip.className = 'chip';
+      try{
+        const d = await api('/api/copilot/health');
+        chip.textContent = d.ok ? ('CLI ok · ' + (d.version || '')) : 'CLI missing';
+        chip.className = 'chip ' + (d.ok ? 'chip-green' : 'chip-red');
+        chip.title = d.ok ? '' : (d.error || 'the `claude` CLI is not on PATH');
+      }catch(err){
+        chip.textContent = 'check failed'; chip.className = 'chip chip-red';
+      }finally{ test.disabled = false; }
+    });
+  })();
 
   function scanResult(text, bad){
     const el = $('scanResult');

@@ -40,21 +40,23 @@ ok('halting has exactly one path', () => {
          'halted is not the setting the filter owns');
   const i = JS.indexOf('function buildSettings');
   const body = JS.slice(i, i + 300);
-  assert(/filter\(s => !BUTTON_OWNED\.has\(s\.name\)\)/.test(body),
+  // The filter grew a second clause (HIDDEN_SETTINGS, the dead-toggle hide
+  // list) in the Settings rebuild; the property is unchanged — halted never
+  // renders as a checkbox.
+  assert(/!BUTTON_OWNED\.has\(s\.name\)/.test(body),
          'the settings list still renders a second, unconfirmed route to a halt');
   // display is not a path: the guardrails panel must still SHOW the state
   assert(/operator halt/.test(JS), 'hiding the control also hid the state');
 });
 
-ok('the risk justification is one line plus a disclosure', () => {
+ok('the risk justification survives on the hover', () => {
+  // The one-line + disclosure pair was purged with the rest of the prose;
+  // the justification now rides the Risk chip's title. The property is the
+  // same: read-only is never unexplained.
   const i = HTML.indexOf('id="riskNow"');
-  const after = HTML.slice(i, i + 2200);
-  assert(/not editable here/.test(after), 'the one-line version is gone');
-  assert(/<details class="fine-print">/.test(after),
-         'the essay is back in the reading path');
-  assert(/re-sizes/.test(after) && /versioning rule/.test(after),
-         'the reasoning was deleted rather than folded — it is worth keeping');
-  assert(/\.fine-print summary\{/.test(CSS), 'the disclosure has no styling');
+  const before = HTML.slice(Math.max(0, i - 900), i);
+  assert(/re-size the entire forward record/.test(before),
+         'read-only with no reachable reason teaches that the app is arbitrary');
 });
 
 ok('the per-timeframe context still reaches the chart', () => {

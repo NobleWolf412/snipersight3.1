@@ -146,7 +146,7 @@
       means: M + ' It is empty, so there is nothing to scan and nothing can ever fire.',
       doing: 'Open Rules and check the universe settings — a minimum volume ' +
              'or minimum history threshold may be excluding every token.',
-      cta: { href: '#rules', label: 'Rules' }
+      cta: { href: '#settings', label: 'Settings' }
     };
   }
 
@@ -339,7 +339,7 @@
              'which is itself a defect worth chasing.'),
       doing: meta && meta.means ? meta.means
         : 'Open a trace on any refused setup from the funnel to see the exact rule.',
-      cta: meta && meta.cta ? meta.cta : { href: '#rules', label: 'Rules' }
+      cta: meta && meta.cta ? meta.cta : { href: '#settings', label: 'Settings' }
     };
   }
 
