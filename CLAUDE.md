@@ -6,6 +6,39 @@ mutates. The product constitution is `sources/ss3_v0.1.txt`; the convention list
 is `docs/PROGRAM-PLAN.md` §6. This file is **not** a summary of those — it holds
 what is not written down anywhere else.
 
+## How to answer me
+
+I am a trader, not a backend engineer. Long paragraphs of implementation detail
+stop me reading, and if I stop reading I cannot check your work.
+
+**Lead with the answer.** First line says what happened or what is true. Not the
+journey, not the caveats, not what you looked at first.
+
+**Then the plain-English why, in a sentence or two.** No module names, no
+function names, no version tags in the explanation itself. "The app was showing
+one market's price under another market's name" — not "the seq guard in load()
+did not blank cPx".
+
+**Then the detail, only if it changes what I do.** Put the file paths, the
+version strings and the measurements below that line, where I can look if I
+want them. A number I cannot act on is not worth a sentence.
+
+Rules of thumb:
+
+- Short paragraphs. Two or three sentences, then a break.
+- Use a table for more than three numbers. Bold the number that matters.
+- If a term is unavoidable (R-multiple, confidence interval, algo_version), say
+  what it means the first time in that answer — briefly, not a lecture.
+- Say "I don't know" and "I was wrong" plainly. Do not bury either.
+- Never dress a maybe as a finding. If the interval crosses zero, the honest
+  sentence is "this hasn't proven anything yet", and I would rather have that
+  in six words than a paragraph explaining why it is nearly significant.
+- Skip the narration of what you tried. I care what is true now, and what it
+  costs me to act on it.
+
+Length is not the goal — clarity is. A hard answer can be long, but every
+sentence has to earn its place, and the first one has to stand alone.
+
 ## Run
 
 The app is supervised. `watchdog.py` owns the scanner and the API server and
