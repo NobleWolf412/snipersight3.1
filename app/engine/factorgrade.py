@@ -78,6 +78,28 @@ FACTORS = [
     {"name": "range_state", "kind": "range", "version_from": "ranges",
      "event": None, "field": "state", "supports": None,
      "note": "inside a formed range, testing its edge, or broken out"},
+    # ---- continuous: bucketed, because the directional form is degenerate --
+    #
+    # `ma_position` CANNOT be graded as agreement on this book, and the reason
+    # is structural rather than statistical. Measured 4 Aug 2026 over all 477
+    # closed trades:
+    #
+    #     LONG  x price BELOW ribbon   190        LONG  x ABOVE   0
+    #     SHORT x price ABOVE ribbon   146        SHORT x BELOW   0
+    #
+    # Not one trade in the book was taken trend-following. Both playbooks
+    # enter counter-move — longs buy dips into demand, shorts sell rips into
+    # supply — so "does the trade agree with the moving average" is a constant,
+    # and a constant predicts nothing. Filtering to the continuation playbook
+    # does not rescue it: PULLBACK alone is 91 OPPOSES and 0 AGREES.
+    #
+    # What DOES vary is how far price had run from the ribbon when the trade
+    # was taken, which the engine already records in ATR units. That is the
+    # gradable question, so it is the one asked.
+    {"name": "ma_depth", "kind": "ma", "version_from": "ma",
+     "event": None, "field": "close_to_fast_atr", "supports": None,
+     "buckets": ((0.5, "shallow<0.5"), (1.5, "medium0.5-1.5"), (None, "deep>=1.5")),
+     "note": "distance from the fast MA in ATR at entry, unsigned"},
 ]
 
 
@@ -155,7 +177,20 @@ def annotate(con, candidates, spec, *, window_bars: int) -> int:
                               window_bars * TF_SECONDS[tf])
         if state is None:
             continue
-        if spec["supports"] is None:
+        if spec.get("buckets"):
+            # A continuous reading, bucketed. UNSIGNED on purpose: the sign is
+            # the direction the entry already encodes (longs sit below the
+            # ribbon, shorts above), so keeping it would re-split the cohorts
+            # by side and measure the entry model a second time.
+            try:
+                v = abs(float(state))
+            except (TypeError, ValueError):
+                continue
+            for edge, label in spec["buckets"]:
+                if edge is None or v < edge:
+                    p[key_name] = label
+                    break
+        elif spec["supports"] is None:
             p[key_name] = state
         else:
             side = spec["supports"].get(state)
@@ -173,8 +208,15 @@ def _clear(candidates, names) -> None:
 
 
 def grade(con, *, window_bars: int = DEFAULT_WINDOW, resamples: int = 5000,
+          strategy: str | None = None,
           setup_version=None, exec_version=None) -> dict:
-    """Grade every factor at one window. Returns cohorts with bootstrap CIs."""
+    """Grade every factor at one window. Returns cohorts with bootstrap CIs.
+
+    `strategy` restricts the book — PULLBACK is the CONTINUATION playbook and
+    REVERSAL the counter-trend one, and a factor can behave oppositely on the
+    two. Splitting costs sample, so a filtered run will push more cohorts under
+    the floor; that is reported rather than hidden.
+    """
     from . import edgestats, factorstats
     kwargs = {}
     if setup_version:
@@ -182,6 +224,9 @@ def grade(con, *, window_bars: int = DEFAULT_WINDOW, resamples: int = 5000,
     if exec_version:
         kwargs["exec_version"] = exec_version
     candidates, warnings = factorstats.load_candidates(con, **kwargs)
+    if strategy:
+        candidates = [c for c in candidates
+                      if c["payload"].get("strategy") == strategy]
     specs = FACTORS + [{"name": "fvg_gap", "kind": "fvg", "version_from": "fvg",
                         "event": None, "field": "direction",
                         "supports": {"BULL": "LONG", "BEAR": "SHORT"},
@@ -224,6 +269,7 @@ def grade(con, *, window_bars: int = DEFAULT_WINDOW, resamples: int = 5000,
     return {
         "derived_at_analysis_time": True,
         "window_bars": window_bars, "resamples": resamples,
+        "strategy": strategy or "ALL",
         "candidates": len(candidates),
         "closed_trades": sum(1 for c in candidates if c.get("r") is not None),
         "min_trades": factorstats.MIN_TRADES,
@@ -234,7 +280,8 @@ def grade(con, *, window_bars: int = DEFAULT_WINDOW, resamples: int = 5000,
 
 
 def _fmt(rep: dict) -> str:
-    L = [f"UNWIRED ENGINES vs THE BOOK   window {rep['window_bars']} bars · "
+    L = [f"UNWIRED ENGINES vs THE BOOK   book {rep['strategy']} · "
+         f"window {rep['window_bars']} bars · "
          f"{rep['closed_trades']} closed · floor {rep['min_trades']}"]
     for name, d in rep["factors"].items():
         L.append("")
@@ -263,13 +310,16 @@ def main(argv=None) -> int:
     ap.add_argument("--window", type=int, default=DEFAULT_WINDOW,
                     help=f"bars of lookback (report default {DEFAULT_WINDOW}; "
                          f"divstats grades {WINDOWS})")
+    ap.add_argument("--strategy", default=None,
+                    help="PULLBACK is the continuation book; REVERSAL the "
+                         "counter-trend one")
     ap.add_argument("--setup-version", default=None)
     ap.add_argument("--exec-version", default=None)
     args = ap.parse_args(argv)
     con = store.connect()
     con.row_factory = sqlite3.Row
     try:
-        rep = grade(con, window_bars=args.window,
+        rep = grade(con, window_bars=args.window, strategy=args.strategy,
                     setup_version=args.setup_version,
                     exec_version=args.exec_version)
     finally:

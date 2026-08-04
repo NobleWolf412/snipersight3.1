@@ -130,6 +130,42 @@ class GradingCase(unittest.TestCase):
         self.assertEqual(n, 0)
         self.assertNotIn("squeeze", cands[0]["payload"])
 
+    def test_the_continuation_book_is_a_first_class_query(self):
+        """PULLBACK is the continuation playbook, REVERSAL the counter-trend
+        one, and a factor can behave oppositely on the two — MA depth grades
+        negative on the first and positive on the second."""
+        rep = factorgrade.grade(self.con, strategy="PULLBACK")
+        self.assertEqual(rep["strategy"], "PULLBACK")
+        self.assertEqual(factorgrade.grade(self.con)["strategy"], "ALL")
+
+    def test_depth_is_bucketed_unsigned(self):
+        """The SIGN is the entry model, not a reading: longs sit below the
+        ribbon and shorts above it, so keeping the sign would re-split the
+        cohorts by side and measure the entry model a second time."""
+        spec = _spec("ma_depth")
+        cands = [
+            {"confirmed_at": 2000, "r": 1.0,
+             "payload": {"symbol": "S", "tf": "1H", "direction": "LONG"}},
+            {"confirmed_at": 2000, "r": 1.0,
+             "payload": {"symbol": "S", "tf": "1H", "direction": "SHORT"}},
+        ]
+        store.insert_fact(self.con, symbol="S", tf="1H", kind="ma",
+                          algo_version=factorgrade._version("ma"),
+                          market_time=1900, confirmed_at=1900,
+                          payload={"close_to_fast_atr": "-2.4"})
+        factorgrade.annotate(self.con, cands, spec, window_bars=10)
+        # -2.4 is 2.4 ATR away; both sides land in the same depth bucket
+        self.assertEqual(cands[0]["payload"]["ma_depth"], "deep>=1.5")
+        self.assertEqual(cands[1]["payload"]["ma_depth"], "deep>=1.5")
+
+    def test_depth_buckets_are_ordered_and_closed(self):
+        """Every reading must land somewhere: the last bucket has no upper
+        edge, or a big move would silently vanish from the grade."""
+        edges = _spec("ma_depth")["buckets"]
+        self.assertIsNone(edges[-1][0], "the top bucket is not open-ended")
+        finite = [e for e, _ in edges if e is not None]
+        self.assertEqual(finite, sorted(finite), "bucket edges are unordered")
+
     def test_clear_removes_every_factor_key(self):
         """The report grades nine factors over ONE candidate list; a stale key
         would silently grade the previous factor's answer."""
