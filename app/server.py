@@ -237,6 +237,16 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
                 "ORDER BY measured_at, symbol, tf")
             if (not symbol or s == symbol) and (not tf or t in (tf, "*"))]
 
+        # Engine exceptions, as current state — the list Diagnostics leads
+        # with. Same lifecycle as data_gates: a clean run clears the row.
+        engine_faults = [
+            {"symbol": r0, "tf": r1, "engine": r2, "error": r3,
+             "since": r4, "last_seen": r5, "times": r6}
+            for r0, r1, r2, r3, r4, r5, r6 in con.execute(
+                "SELECT symbol, tf, engine, error, first_seen, last_seen, times "
+                "FROM engine_faults ORDER BY last_seen DESC")
+            if (not symbol or r0 == symbol) and (not tf or r1 == tf)]
+
         # Vocabulary drift, marked where it becomes visible. A reason string
         # in the store that `setups.REJECTION_REASONS` does not contain means
         # an engine grew a word the funnel has no sentence for — the exact
@@ -285,6 +295,7 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
             "failure_points": dict(failures.most_common()),
             "candidate_rejections": dict(rejected_candidates.most_common()),
             "data_gates": data_gates,
+            "engine_faults": engine_faults,
             "unlabelled_rejections": unlabelled,
             "cohorts": cohorts,
             "records": records[:limit],

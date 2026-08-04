@@ -170,6 +170,74 @@ class GateCase(unittest.TestCase):
             pipeline._record_gate(self.con, SYM, "*", "NO_DATTA", "", 0)
 
 
+class FaultCase(unittest.TestCase):
+    """Engine exceptions become current state, not archaeology.
+
+    The one loop already refused to let a fault take the other symbols down;
+    what it did with the fault was a log line. Diagnostics now leads with
+    "Failing now", and that panel is only as honest as this table: a row per
+    currently-failing (symbol, tf, engine), times counted, first_seen kept,
+    and CLEARED the walk the engine runs clean — a fixed fault must vanish
+    without a human sweeping it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.con = store.connect(Path(self.tmp.name) / "t.db")
+        for i in range(4):
+            self.con.execute(
+                "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (SYM, "15m", i * TF, "1", "2", "0.5", "1", "1", "test", i * TF))
+        self.con.commit()
+        self.broken = True
+        case = self
+
+        def run(con, symbol, tf, tf_seconds):
+            if case.broken:
+                raise ZeroDivisionError("division by zero")
+
+        self._patches = [
+            patch.object(pipeline, "PER_SYMBOL",
+                         (SimpleNamespace(run=run, __name__="alpha"),)),
+            patch.object(quality, "assert_market_ready", lambda *a, **k: None),
+            patch.object(ingest, "missing_history", lambda *a, **k: []),
+        ]
+        for p in self._patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self._patches:
+            p.stop()
+        self.con.close()
+        self.tmp.cleanup()
+
+    def faults(self):
+        return self.con.execute(
+            "SELECT engine, error, first_seen, times FROM engine_faults "
+            "WHERE symbol=?", (SYM,)).fetchall()
+
+    def test_a_throwing_engine_becomes_a_row(self):
+        pipeline.run_symbol(self.con, SYM, now=1000)
+        rows = self.faults()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][0], "alpha")
+        self.assertIn("ZeroDivisionError", rows[0][1])
+
+    def test_recurrence_counts_and_first_seen_survives(self):
+        pipeline.run_symbol(self.con, SYM, now=1000)
+        pipeline.run_symbol(self.con, SYM, now=2000)
+        (_, _, first_seen, times), = self.faults()
+        self.assertEqual(times, 2, "a fixture and a blip must be tellable apart")
+        self.assertEqual(first_seen, 1000, "'since Tuesday' needs first_seen kept")
+
+    def test_a_clean_run_clears_the_row(self):
+        pipeline.run_symbol(self.con, SYM, now=1000)
+        self.assertTrue(self.faults())
+        self.broken = False
+        pipeline.run_symbol(self.con, SYM, now=2000)
+        self.assertEqual(self.faults(), [],
+                         "a fixed fault must vanish without a human sweeping it")
+
+
 class OneLoopCase(unittest.TestCase):
     """Both runners must call THE loop — asserted on source, the same way the
     roster test asserts identity, so a re-inlined copy fails a test instead of

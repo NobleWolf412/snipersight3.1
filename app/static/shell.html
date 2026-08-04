@@ -597,7 +597,15 @@
 
     <!-- ─── DIAGNOSTICS ─── -->
     <section class="surface" id="s-diagnostics">
-      <div class="surface-head"><h1 class="t-page">Diagnostics</h1><p>Is the machine telling me the truth?</p></div>
+      <div class="surface-head"><h1 class="t-page">Diagnostics</h1><p>what is failing, and why</p></div>
+      <!-- Failures first, per operator ruling. One list: engine exceptions
+           (engine_faults, current state), data gates, and vocabulary drift.
+           funnel.js paints it from the same payload the funnel reads. -->
+      <div class="panel" id="failingPanel" style="margin-bottom:var(--lg)">
+        <div class="panel-head"><h2 class="t-section">Failing now</h2>
+          <span class="chip" id="failingChip" style="margin-left:auto">—</span></div>
+        <div id="failingRoot"><div class="empty">reading…</div></div>
+      </div>
       <!-- packed, not gridded: "Why nothing fired" runs three times the height of
            "Pipeline", and as a grid cell Pipeline stretched to match it — 836px of
            empty bordered box. Same reason as the Rules columns. -->
@@ -632,7 +640,8 @@
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Setup
             <span class="term" data-t="telemetry">Telemetry</span></h2>
-            <span class="chip" id="telChip" style="margin-left:auto">—</span></div>
+            <span class="chip" id="telChip" style="margin-left:auto"
+              title="per-setup counters straight from the engine — developer detail">—</span></div>
           <div id="dTelemetry"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:30px"></div>
           <div class="skel" style="height:30px"></div>

@@ -96,6 +96,24 @@ CREATE TABLE IF NOT EXISTS pipeline_gates (
     PRIMARY KEY (symbol, tf, gate)
 );
 
+-- Engine exceptions, as current state. A roster engine that throws is
+-- caught by the one loop (a fault must not take the other 74 symbols down)
+-- and used to vanish into a log line — which is an archaeology dig, not a
+-- diagnostic. One row per currently-failing (symbol, tf, engine); a clean
+-- run of that engine clears its row, `first_seen` survives re-trips so the
+-- row can say "since Tuesday", and `times` says whether it is a blip or a
+-- fixture.
+CREATE TABLE IF NOT EXISTS engine_faults (
+    symbol      TEXT NOT NULL,
+    tf          TEXT NOT NULL,
+    engine      TEXT NOT NULL,
+    error       TEXT NOT NULL,
+    first_seen  INTEGER NOT NULL,
+    last_seen   INTEGER NOT NULL,
+    times       INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (symbol, tf, engine)
+);
+
 CREATE TABLE IF NOT EXISTS quality_runs (
     id          INTEGER PRIMARY KEY,
     observed_at INTEGER NOT NULL,

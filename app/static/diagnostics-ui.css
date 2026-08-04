@@ -725,3 +725,18 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-drift{border-left:2px solid var(--amber);padding-left:8px}
 .dx-drift-tag{font-style:normal;color:var(--amber);font-size:10px;
   letter-spacing:.04em;margin-left:6px}
+
+/* ── "Failing now" — the list Diagnostics leads with ── */
+.fail-row{display:grid;grid-template-columns:52px 200px minmax(0,1fr) auto;
+  gap:12px;align-items:baseline;padding:7px 14px;
+  border-bottom:1px solid rgba(255,255,255,.05);font-size:11.5px}
+.fail-row:last-child{border-bottom:0}
+.fail-row.dim{opacity:.8}
+.fail-kind{font-family:var(--f-mono);font-size:9px;font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+.fail-what{font-family:var(--f-mono);color:var(--fg-2)}
+.fail-what b{color:var(--fg)}
+.fail-err{font-family:var(--f-mono);color:var(--red-2);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.fail-row.dim .fail-err{color:var(--fg-3)}
+.fail-meta{font-family:var(--f-mono);font-size:10px;color:var(--fg-4);white-space:nowrap}

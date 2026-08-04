@@ -207,18 +207,41 @@ def run_symbol(con, symbol: str, now: int | None = None, log=None) -> dict:
         # duration. Without it, every module re-parsed the same rows out of
         # SQLite — eighteen reads of an identical series per (symbol, tf).
         from . import store as _store
+        faulted = set()
         with _store.candle_cache(con):
             for mod in PER_SYMBOL:
+                name = mod.__name__.rsplit(".", 1)[-1]
                 for tf in live_tfs:
                     try:
                         mod.run(con, symbol, tf, importer.TF_SECONDS[tf])
                     except Exception as exc:
                         # One engine's failure is a fault to surface, not a
                         # rejection reason to count — an exception that becomes
-                        # a funnel statistic is an exception nobody fixes.
+                        # a funnel statistic is an exception nobody fixes. It
+                        # is RECORDED as current state (engine_faults): a
+                        # fault living only in a log line is an archaeology
+                        # dig, and Diagnostics now leads with what is failing.
+                        faulted.add((tf, name))
+                        con.execute(
+                            "INSERT INTO engine_faults "
+                            "(symbol, tf, engine, error, first_seen, last_seen, times) "
+                            "VALUES (?,?,?,?,?,?,1) "
+                            "ON CONFLICT(symbol, tf, engine) DO UPDATE SET "
+                            "error=excluded.error, last_seen=excluded.last_seen, "
+                            "times=times+1",
+                            (symbol, tf, name,
+                             f"{type(exc).__name__}: {exc}"[:300], now, now))
                         if log:
-                            log.warning(f"engine {mod.__name__} failed on "
+                            log.warning(f"engine {name} failed on "
                                         f"{symbol} {tf}: {type(exc).__name__} {exc}")
+        # a fault that did not recur this walk has been fixed — current state,
+        # exactly like the gates table below
+        stale_faults = [(f_tf, f_eng) for (f_sym, f_tf, f_eng) in con.execute(
+            "SELECT symbol, tf, engine FROM engine_faults WHERE symbol=?",
+            (symbol,)) if (f_tf, f_eng) not in faulted]
+        for f_tf, f_eng in stale_faults:
+            con.execute("DELETE FROM engine_faults WHERE symbol=? AND tf=? "
+                        "AND engine=?", (symbol, f_tf, f_eng))
 
     # A gate that no longer trips is DELETED: this table is current state, and
     # a stale row would keep reporting a hole the last cycle already closed.

@@ -413,6 +413,7 @@
     return { counts, rows, reasons, exact, bottleneck, inSample,
              ovErr, baseline: tel.baseline, total: counts.candidates,
              gates: tel.data_gates || [],
+             faults: tel.engine_faults || [],
              unlabelled: tel.unlabelled_rejections || [] };
   }
 
@@ -428,6 +429,47 @@
                    'less past than they were designed to see',
     QUALITY_BLOCKED: 'the market-data audit failed — engines skipped until it clears'
   };
+
+  /* "Failing now" — the panel Diagnostics leads with. Engine exceptions,
+     data gates and vocabulary drift in one list, newest first, each row one
+     line: what · where · error · how long. Painted from the same payload the
+     funnel already fetches, into its own panel above the funnel. */
+  function paintFailing(m) {
+    const root = document.getElementById('failingRoot');
+    const chip = document.getElementById('failingChip');
+    if (!root) return;
+    const since = ts => new Date(ts * 1000)
+      .toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    const rows = [];
+    for (const f of (m.faults || [])) {
+      rows.push(`<div class="fail-row">
+        <span class="fail-kind">engine</span>
+        <span class="fail-what"><b>${esc(f.engine)}</b> ${esc(String(f.symbol).replace('-USD',''))} ${esc(f.tf)}</span>
+        <span class="fail-err" title="${esc(f.error)}">${esc(f.error)}</span>
+        <span class="fail-meta">${f.times}× · since ${since(f.since)}</span>
+      </div>`);
+    }
+    for (const g of (m.gates || [])) {
+      rows.push(`<div class="fail-row dim">
+        <span class="fail-kind">data</span>
+        <span class="fail-what"><b>${esc(String(g.symbol).replace('-USD',''))}</b> ${esc(g.tf === '*' ? 'all TFs' : g.tf)}</span>
+        <span class="fail-err">${esc(GATE_LABELS[g.gate] || g.gate)}</span>
+        <span class="fail-meta">since ${since(g.since)}</span>
+      </div>`);
+    }
+    for (const u of (m.unlabelled || [])) {
+      rows.push(`<div class="fail-row dim">
+        <span class="fail-kind">drift</span>
+        <span class="fail-what"><b>${esc(u)}</b></span>
+        <span class="fail-err">a rejection reason with no written sentence</span>
+        <span class="fail-meta"></span>
+      </div>`);
+    }
+    chip.textContent = rows.length ? rows.length + ' failing' : 'all clear';
+    chip.className = 'chip ' + (rows.length ? 'chip-amber' : 'chip-green');
+    root.innerHTML = rows.join('') ||
+      '<div class="empty">nothing failing — engines clean, data flowing</div>';
+  }
 
   function renderGates(m) {
     if (!m.gates.length) return '';
@@ -606,6 +648,7 @@
 
   function render(m) {
     model = m;
+    paintFailing(m);
     ROOT.innerHTML = '<div class="dx-funnel">' +
       renderPill(m) + renderGates(m) + renderStages(m) + renderDetail(m) + '</div>';
     // Only now is the flat list in #dFunnel superseded. If this module had
