@@ -1057,6 +1057,13 @@
      for a trade ALREADY TAKEN: the copilot's default instinct is to weigh an
      entry, which is the one question that is settled by the time a row exists
      in this panel. Concise because it is read between bars. */
+  /* OFFERED, NOT SENT. This used to be composed and fired the instant the
+     button was clicked, so the operator's first sight of the dock was their
+     own name above a paragraph they had not written. Operator ruling,
+     4 Aug 2026: the box is theirs. It is now the first suggestion chip —
+     one tap to fill, then edit or discard. Still composed rather than typed,
+     because it is long and carries this trade's own levels, which is exactly
+     the question nobody wants to retype between bars. */
   const holdAsk = t => `I am already in this trade: ${t.direction} ${
     tokenOf(t.symbol)} on ${t.tf}, entry ${t.entry}, stop ${t.sl}, target ${
     t.tp}. Do not evaluate whether to enter — that is done. Give me, in a few
@@ -1659,7 +1666,7 @@ weighed in. Name the facts you used.`;
           if(!t) return;
           SSCopilot.open({kind: 'chart', symbol: a.dataset.asksym,
                           tf: a.dataset.asktf, setupId: a.dataset.ask,
-                          ask: holdAsk(t)});
+                          suggest: holdAsk(t)});
           return;
         }
         const d = e.target.closest('[data-trace]');

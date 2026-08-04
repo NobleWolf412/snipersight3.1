@@ -19,6 +19,7 @@ const S = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 const CP = S('static/copilot.js');
 const CHART = S('static/chart.js');
 const FUNNEL = S('static/funnel.js');
+const SHELL = S('static/shell.js');
 const HTML = S('static/shell.html');
 const SERVER = S('server.py');
 const ENGINE = S('engine/copilot.py');
@@ -63,11 +64,45 @@ ok('the diagnostics pack exists server-side and needs no symbol', () => {
   assert(/build_diag_pack\(con\)/.test(SERVER), 'the endpoint never builds the pack');
 });
 
-ok('a failing row opens the dock pre-filled with its own fault', () => {
+/* Repinned 4 Aug 2026. Operator ruling: "maybe get rid of that and allow the
+   user to type. but maybe clickable hints to fill in?" — so a caller's question
+   is OFFERED as a chip rather than written into the box. The property is
+   unchanged and slightly stronger: the fault still travels from the row to the
+   dock, and it still cannot be lost, but the operator's input stays theirs. */
+ok('a failing row carries its own fault into the dock as an offer', () => {
   assert(/fail-diag/.test(FUNNEL), 'no Diagnose button on fault rows');
-  assert(/SSCopilot\.open\(\{kind: 'diagnostics', prefill/.test(FUNNEL),
-    'the button does not carry the fault into the question');
-  assert(/ctx\.prefill/.test(CP), 'the dock ignores the prefill');
+  assert(/SSCopilot\.open\(\{kind: 'diagnostics', suggest/.test(FUNNEL),
+    'the button does not carry the fault into the dock');
+  assert(/ctx\.suggest/.test(CP), 'the dock ignores the caller\'s question');
+});
+
+ok('nothing types in the box, and nothing sends, on open', () => {
+  // The open-trades panel used to compose a paragraph and fire it the instant
+  // the button was clicked — the operator's first sight of the dock was their
+  // own name above text they had not written.
+  assert(!/ta\.value = ctx\./.test(CP),
+    'the dock writes into the textarea on open again');
+  assert(!/if\(c && c\.ask/.test(CP), 'a caller can auto-send again');
+  assert(!/ask: holdAsk/.test(SHELL),
+    'the open-trade button auto-asks again — it must suggest');
+  assert(/suggest: holdAsk/.test(SHELL),
+    'the composed hold question was dropped rather than offered — it carries ' +
+    'the trade\'s own levels and is the one nobody wants to retype');
+});
+
+ok('a suggestion fills the box and stops there', () => {
+  assert(/data-q/.test(CP), 'suggestions are not clickable');
+  const h = CP.slice(CP.indexOf("const sug = document.getElementById('cpSuggest')"),
+                     CP.indexOf('ta.focus();\n  }'));
+  assert(/ta\.value = b\.dataset\.q/.test(h), 'a chip does not fill the box');
+  assert(!/send\(/.test(h),
+    'a chip SENDS — clicking a hint must never spend a token on its own');
+});
+
+ok('starters step aside once the conversation has started', () => {
+  assert(/msgs\.length\) return ''/.test(CP.replace(/\s+/g, ' ')) ||
+         /if\(!list\.length \|\| msgs\.length\)/.test(CP),
+    'the starter row survives into a live conversation, covering the reply');
 });
 
 ok('the transcript survives a toggle, keyed by context', () => {

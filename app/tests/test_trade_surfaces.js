@@ -438,11 +438,16 @@ ok('keyboard reaches what the mouse reaches', () => {
   assert.ok(/data-manage/.test(k[0]) && /go\('chart'\)/.test(k[0]),
             'Enter/Space must open the chart, same as a click');
 });
-ok('the copilot is asked a HOLDING question, not an entry one', () => {
+ok('the copilot is OFFERED a HOLDING question, not an entry one', () => {
   assert.ok(/const holdAsk = t =>/.test(JS), 'one composer, shared by both row types');
   assert.ok(/Do not evaluate whether to enter/.test(JS));
   assert.ok(/hold, tighten the stop/.test(JS), 'the three live options');
-  assert.ok(/ask: holdAsk\(t\)/.test(JS), 'and it must actually be asked');
+  /* Repinned 4 Aug 2026: the question is OFFERED, not sent. Operator ruling —
+     the box belongs to the operator, so this arrives as the first suggestion
+     chip. It must still be COMPOSED (it carries this trade's own levels) and
+     it must still reach the dock; it must no longer fire on its own. */
+  assert.ok(/suggest: holdAsk\(t\)/.test(JS), 'and it must reach the dock');
+  assert.ok(!/ask: holdAsk/.test(JS), 'clicking must not spend a token by itself');
 });
 ok('the question is built from the payload, not re-copied onto the button', () => {
   assert.ok(/let lastPortfolio = \{\}/.test(JS));

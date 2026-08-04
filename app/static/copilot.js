@@ -94,6 +94,7 @@
           ${msgs.map(m => `<div class="cp-msg ${m.who}">${esc(m.text)}</div>`).join('')}
           ${busy ? '<div class="cp-msg cp busy">thinking…</div>' : ''}
         </div>
+        ${suggestHtml()}
         <div class="cp-input">
           <textarea id="cpText" rows="2" placeholder="${ctx.kind === 'diagnostics'
             ? 'Why is…' : 'Ask about this setup'}"></textarea>
@@ -119,8 +120,50 @@
     });
     document.getElementById('cpSend').addEventListener('click', send);
     document.getElementById('cpClear').addEventListener('click', clear);
-    if(ctx.prefill){ ta.value = ctx.prefill; ctx.prefill = null; }
+    /* SUGGESTIONS FILL THE BOX; THEY DO NOT SEND IT.
+
+       Opening the dock from an open trade used to compose a long question and
+       send it immediately. Operator ruling, 4 Aug 2026: the box should be the
+       operator's, and the app's ideas should be offered rather than typed on
+       their behalf. So a chip drops its text into the textarea, puts the caret
+       at the end, and stops — the question can be edited, extended or thrown
+       away before a single token is spent on it. */
+    const sug = document.getElementById('cpSuggest');
+    if(sug) sug.addEventListener('click', e => {
+      const b = e.target.closest('[data-q]');
+      if(!b) return;
+      ta.value = b.dataset.q;
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      // it has served its purpose; the row would otherwise cover the reply
+      sug.hidden = true;
+    });
     ta.focus();
+  }
+
+  /* What is worth asking here, offered as one-tap starters. Deliberately
+     short: a chip is a prompt for the operator, not the prompt for the model —
+     they are expected to be edited. The first slot is reserved for a caller's
+     own question (a Failing-now row knows its exact fault; a held trade knows
+     its own levels), because that is the one nobody could retype. */
+  const STARTERS = {
+    chart: ["Where does this setup stand right now?",
+            "What would prove this thesis wrong?",
+            "Is the stop in a sensible place?",
+            "What does this cost to hold?"],
+    diagnostics: ["What should I fix first?",
+                  "Why did nothing fire today?",
+                  "Is the data healthy enough to trade on?"],
+  };
+
+  function suggestHtml(){
+    const list = (STARTERS[ctx.kind] || []).slice();
+    if(ctx.suggest) list.unshift(ctx.suggest);
+    if(!list.length || msgs.length) return '';   // starters are for a blank slate
+    return `<div class="cp-suggest" id="cpSuggest">` +
+      list.map(q => `<button class="cp-q" type="button" data-q="${esc(q)}">${
+        esc(q.length > 46 ? q.slice(0, 44) + '…' : q)}</button>`).join('') +
+      `</div>`;
   }
 
   /* `override` lets a caller ASK rather than merely prefill. The open-trades
@@ -162,17 +205,11 @@
   function open(c){
     const next = c && (c.kind || c.symbol)
       ? {kind: c.kind || 'chart', symbol: c.symbol || null, tf: c.tf || '1H',
-         setupId: c.setupId || null, prefill: c.prefill || null}
+         setupId: c.setupId || null, suggest: c.suggest || null}
       : surfaceCtx();
     ctx = next;
     msgs = loadMsgs(next);
     render();
-    /* Asking costs the operator's Claude quota, so it happens only when a
-       caller explicitly asked for an answer — never on a plain open, and never
-       twice over an in-flight one. Repeat clicks DO re-ask on purpose: the
-       useful question about a trade you are holding is "what about now", and
-       the reply lands under the previous one where both can be compared. */
-    if(c && c.ask && !busy) send(c.ask);
   }
   function toggle(){ ctx ? close() : open(); }
   function close(){ ctx = null; render(); }
