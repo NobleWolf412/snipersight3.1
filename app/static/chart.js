@@ -58,6 +58,11 @@ window.SSChart = (() => {
   let refreshTimer = null, refreshing = false;   // see startAutoRefresh()
   let loadedAt = null, freshTimer = null;        // see showFreshness()
   let loadSeq = 0;                            // guards out-of-order responses
+  // Which market the screen currently DESCRIBES — set only when a load paints,
+  // nulled whenever the screen is cleared. load() compares against it to tell
+  // a switch (clear first, everything on screen is the old market) from a
+  // refresh (repaint in place, never flash).
+  let painted = null;                         // 'SYM|TF' of the painted market
 
   const overlays = {swings: true, structure: true, zones: true,
                     liquidity: false, cycle: false};
@@ -546,6 +551,7 @@ window.SSChart = (() => {
      lines, both header chips, the Arm button, and the whole order ticket —
      its pinned figures, its warning, its rationale and its source chip. */
   function clearChart(title, detail){
+    painted = null;                 // the screen no longer describes any market
     candles = [];
     facts = {swing: [], struct: [], zone: [], liq: [], regime: [],
              setupF: [], cycle: [], riskF: []};
@@ -600,6 +606,16 @@ window.SSChart = (() => {
     // the wrong-market-under-the-right-name failure with a $55k tell. Hide it
     // now; the next tick repaints it for the RIGHT symbol.
     if($('cLiveIn')) $('cLiveIn').hidden = true;
+    /* A SWITCH is not a refresh. Until the new market's data lands, every
+       pixel below the header — candles, both chips, the bracket, the ticket,
+       the Arm button — still describes the OLD market under the NEW name.
+       That window measured 3+ seconds on a cold symbol, and Arm stayed live
+       through it: the confirm dialog quoted one market's levels over another
+       market's symbol (beta pass, 4 Aug 2026). clearChart() is the one honest
+       state for that interval. Same-market refreshes skip it, so the 60s
+       repaint and the post-arm reload never flash. */
+    if(painted !== sym + '|' + tf)
+      clearChart('Loading ' + sym + ' · ' + tf + '…');
     const seq = ++loadSeq;
     const q = k => api(`/api/facts?kind=${k}&symbol=${sym}&tf=${tf}`);
     let res;
@@ -662,6 +678,7 @@ window.SSChart = (() => {
       return;
     }
     $('chartEmpty').style.display = 'none';
+    painted = sym + '|' + tf;      // from here down, the screen describes THIS market
 
     series.applyOptions({priceFormat: {type: 'price',
       precision: digits(candles[candles.length - 1].close),
@@ -1162,7 +1179,24 @@ window.SSChart = (() => {
              : 'trade config unavailable');
   }
 
-  function setLock(){ refreshArm(); }
+  /* Venue truth reaches the TOGGLE, not just the endpoint. The server refuses
+     a spot short at arm time (manual.validate: "cannot sell what it does not
+     hold"), but refusing at the last click means the operator planned an
+     impossible trade for as long as the ticket was open — the beta pass sat
+     in SHORT on a Coinbase chart with the ticket earnestly critiquing the
+     stop geometry of a trade the venue cannot take. Dead button, reason under
+     the finger, same sentence the server would use. */
+  function setLock(){
+    const sb = document.querySelector('#tkDir [data-d="SHORT"]');
+    if(sb){
+      const can = !cfg || !cfg.venue || cfg.venue.allow_shorts !== false;
+      sb.disabled = !can;
+      sb.title = can ? ''
+        : `${cfg.venue.key} is spot — cannot sell what it does not hold`;
+      if(!can && dir === 'SHORT') setDir('LONG');
+    }
+    refreshArm();
+  }
 
   /* ---------- wiring ---------- */
   function wire(){
@@ -1320,9 +1354,19 @@ window.SSChart = (() => {
          irreversible-feeling action should be the action's own terms, not the
          label on a button. */
       if(!enginePos){
+        /* Say where the entry sits RELATIVE TO THE MARKET, not just its
+           digits. "entry 63,847.12" reads as plausible on any chart; "15.2%
+           below market" is a plan, and "94% below market" is another symbol's
+           levels about to be armed under this one's name. The Your-trades
+           panel words resting orders exactly this way, so the promise and the
+           receipt match. */
+        const lastClose = candles.length ? candles[candles.length - 1].close : null;
+        const away = lastClose ? (armedEntry - lastClose) / lastClose * 100 : null;
         const lines = [
           `${String(armedDir).toUpperCase()} ${sym} ${tf}`,
-          `entry ${pf(armedEntry)}`,
+          `entry ${pf(armedEntry)}${away == null ? ''
+            : Math.abs(away) < 0.05 ? ' · at market'
+            : ` · ${Math.abs(away).toFixed(1)}% ${away > 0 ? 'above' : 'below'} market`}`,
           `stop ${pf(levels.sl)}`,
           `target ${pf(levels.tp)}`,
           `risking ${usd(riskUsd)}${cfg && cfg.max_leverage > 1 && leverage > 1

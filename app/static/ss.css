@@ -380,6 +380,22 @@ body{
 /* tabular numerals so a changing clock does not shuffle its own digits */
 #clock{font-variant-numeric:tabular-nums;width:8ch;flex:none}
 #equityChip{font-variant-numeric:tabular-nums}
+/* The bar sheds its LUXURIES before its controls. The flex row overflowed
+   rightward at laptop-half widths, and the first casualties were the LAST two
+   items — Copilot and HALT, the one control that must survive every layout
+   (at 900px HALT sat 86px off-screen; beta pass, 4 Aug 2026). Shed in order
+   of expendability: the venue note and clock first, then the audit chip, then
+   the scanner slot — its state lives on Command too. HALT never leaves. */
+@media (max-width:1020px){
+  #venueNote, #clock{display:none}
+}
+@media (max-width:780px){
+  #healthChip{display:none}
+  #scanChip{width:auto;max-width:120px;flex:0 1 auto}
+}
+@media (max-width:680px){
+  #scanChip{display:none}
+}
 
 .nav{border-right:1px solid var(--border-soft);padding:var(--lg) 0;display:flex;flex-direction:column;gap:2px;
   background:linear-gradient(180deg,var(--bg-2),var(--bg))}
@@ -442,7 +458,10 @@ body{
    highlights when you land there) and leaves the DEGRADED chip pointing at
    a destination with no home. Developer mode still gates the RAWEST
    material inside the surface; the route itself is navigable. */
-.shell:not(.dev) #consolePanel{display:none}
+/* keyed to BODY, not .shell: the console panel lives on the stage, which is
+   not a .shell descendant, so the old selector never matched anything and the
+   raw log showed for everyone (beta pass, 4 Aug 2026) */
+body:not(.dev) #consolePanel{display:none}
 
 /* status orb — ambient state, not decoration */
 .orb{width:7px;height:7px;border-radius:50%;flex:none;background:var(--fg-4)}

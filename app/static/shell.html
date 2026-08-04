@@ -29,7 +29,7 @@
          while the scan universe was 19 Phemex perps and nothing else. The
          venue of the chart in front of you is named by the #cVenue chip and on
          every entry in the symbol picker, which is where the fact is true. -->
-    <span class="chip" title="venue is per-symbol — see the chart's venue chip"><span class="term" data-t="perps">multi-venue</span></span>
+    <span class="chip" id="venueNote" title="venue is per-symbol — see the chart's venue chip"><span class="term" data-t="perps">multi-venue</span></span>
 
     <span class="chip chip-amber" id="modeChip">
       <span class="orb warn"></span><span class="term" data-t="paper">Paper</span>
@@ -671,7 +671,12 @@
       <div id="edgeRoot" style="margin-bottom:var(--lg)">
         <div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:64px"></div>
-
+        </div>
+      </div>
+      <!-- SIBLING of #edgeRoot, never a child: edgeview.js mounts by replacing
+           edgeRoot's innerHTML, and when two closing divs went missing here
+           (beta pass, 4 Aug 2026) this details — and the console panel below —
+           were parsed as edgeRoot children and silently wiped on mount. -->
       <details class="explainer" id="provenance" style="margin-top:var(--lg)">
         <summary class="explainer-head">
           <h2 class="t-section">Decision Provenance</h2>

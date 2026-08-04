@@ -2723,20 +2723,25 @@
      Diagnostics moves you somewhere that still exists rather than leaving a
      blank stage. */
   const DEV_KEY = 'ss.devMode';
-  const shellEl = document.querySelector('.shell');
   const readDev = () => { try{ return localStorage.getItem(DEV_KEY) === '1'; }
                           catch(e){ return false; } };
   function setDev(on){
-    shellEl.classList.toggle('dev', on);
+    // On BODY: the console panel sits on the stage, outside .shell, so a
+    // .shell-scoped class could never reach it and the gate was decorative.
+    document.body.classList.toggle('dev', on);
     const b = $('devToggle');
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
     b.textContent = on ? 'Developer mode · on' : 'Developer mode';
     try{ localStorage.setItem(DEV_KEY, on ? '1' : '0'); }catch(e){}
-    if(!on && location.hash === '#diagnostics') go('command');
+    /* This used to bounce #diagnostics to Command, from the era when the
+       WHOLE surface was dev-gated. The surface is a public nav tab now and
+       this only gates the console panel — but setDev runs at boot, so the
+       leftover bounce was silently eating every #diagnostics deep link and
+       reload for anyone with dev mode off (beta pass, 4 Aug 2026). */
   }
   setDev(readDev());
   $('devToggle').addEventListener('click',
-    () => setDev(!shellEl.classList.contains('dev')));
+    () => setDev(!document.body.classList.contains('dev')));
 
   /* ---------- refresh loop ---------- */
   async function refresh(){
