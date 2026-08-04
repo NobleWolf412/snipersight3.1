@@ -35,7 +35,7 @@ conversation rather than per message. The UI holds the id per context.
 import json
 import shutil
 import subprocess
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from . import store, venues, draft as draft_mod, manual
@@ -133,7 +133,20 @@ def _setup_block(con, symbol: str, tf: str, setup_id: str | None) -> str:
     return "\n".join(lines)
 
 
-def build_pack(con, symbol: str, tf: str, setup_id: str | None = None) -> str:
+def _last_close(con, symbol: str, tf: str):
+    """Last CLOSED bar's close, or None. The same number every other surface
+    marks to — a fresher price here would read as precision and be drift."""
+    r = con.execute(
+        "SELECT close FROM candles WHERE symbol=? AND tf=? "
+        "ORDER BY open_ts DESC LIMIT 1", (symbol, tf)).fetchone()
+    try:
+        return Decimal(str(r[0])) if r else None
+    except (InvalidOperation, TypeError):
+        return None
+
+
+def build_pack(con, symbol: str, tf: str, setup_id: str | None = None,
+               position: dict | None = None) -> str:
     """Everything the analyst may ground itself in, compact and labelled.
 
     Assembled fresh per conversation. Deliberately TEXT, not JSON: the reader
@@ -188,6 +201,33 @@ def build_pack(con, symbol: str, tf: str, setup_id: str | None = None) -> str:
                           f"{scaled} (marked to last CLOSED bar)"]
     except Exception:
         pass
+    # The ENGINE's own open position. `manual.status` above covers the
+    # operator's book only, so a question asked from the Open Trades panel —
+    # where every row IS an engine position — reached a pack that never
+    # mentioned the operator was in the trade at all, and the copilot answered
+    # "should you take this" about a trade already taken.
+    if position:
+        px = _last_close(con, symbol, tf)
+        live = ""
+        if px is not None:
+            try:
+                entry = Decimal(str(position["entry"]))
+                sl = Decimal(str(position["sl"]))
+                per = abs(entry - sl)
+                if per > 0:
+                    d = (px - entry) if position["direction"] == "LONG" else (entry - px)
+                    live = (f" price={px} unrealized={(d / per).quantize(Decimal('0.01'))}R"
+                            f" (marked to last CLOSED bar)")
+            except (InvalidOperation, KeyError, TypeError):
+                live = ""
+        parts += ["", f"THE ENGINE HOLDS THIS TRADE AND THE OPERATOR IS IN IT: "
+                      f"{position.get('direction')} entry={position.get('entry')} "
+                      f"sl={position.get('sl')} tp={position.get('tp')} "
+                      f"risk={position.get('risk_usd')} USD{live}. "
+                      f"The question is NOT whether to enter — that already "
+                      f"happened. It is whether to hold, tighten the stop, or "
+                      f"close, and what the recorded evidence says about each."]
+
     b = manual.book(con)
     parts += ["", f"OPERATOR'S MANUAL BOOK: {b['n']} settled, "
                   f"{len(b['open_intents'])} open, total {b['total_r']}R, "

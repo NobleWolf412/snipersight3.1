@@ -894,12 +894,12 @@ body:not(.dev) #consolePanel{display:none}
   text-transform:uppercase;font-variant-numeric:tabular-nums}
 .pos-ends .now{color:var(--fg)}
 /* anything carrying data-trace opens the per-setup trace drawer */
-.traceable{cursor:pointer}
-.traceable:hover .chip{filter:brightness(1.25)}
-.pos-row.traceable:hover{background:rgba(255,255,255,.03)}
+.traceable,.manageable{cursor:pointer}
+.traceable:hover .chip,.manageable:hover .chip{filter:brightness(1.25)}
+.pos-row.traceable:hover,.pos-row.manageable:hover{background:rgba(255,255,255,.03)}
 /* the drawer is keyboard-reachable, so its focus must be visible */
-.traceable:focus-visible{outline:1px solid var(--accent);outline-offset:-2px;
-  border-radius:var(--r-sm)}
+.traceable:focus-visible,.manageable:focus-visible{
+  outline:1px solid var(--accent);outline-offset:-2px;border-radius:var(--r-sm)}
 .pos-r{text-align:right;font-family:var(--f-display);font-size:20px;font-weight:800;color:var(--fg)}
 .pos-r.up{color:var(--green)} .pos-r.down{color:var(--red-2)}
 /* the dollars at risk on a live position — data, not decoration; see the
@@ -996,8 +996,15 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 
 /* Close, on an open position. Deliberately small and quiet: it is an override
    of a rule the engine is still simulating, not the primary way trades end. */
-.pos-close{margin-top:6px;font-size:10px;padding:2px 8px;opacity:.75}
+/* Three controls where one sat. They are small and right-aligned because the
+   R-multiple above them is the number the eye should land on first — these are
+   what you do about it, not what it is. */
+.pos-acts{display:flex;gap:5px;justify-content:flex-end;margin-top:7px;flex-wrap:wrap}
+.pos-acts .btn{font-size:10px;padding:2px 8px;opacity:.8}
+.pos-acts .btn:hover{opacity:1}
+.pos-close{opacity:.75}
 .pos-close:hover{opacity:1}
+@media (max-width:900px){ .pos-acts{justify-content:flex-start} }
 
 /* MANAGING A LIVE POSITION. The ticket is the same controls doing a different
    job — money already at stake rather than a plan being drawn — so the panel
@@ -1276,3 +1283,30 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .cp-dock .cp-foot{font-family:var(--f-mono);font-size:9px;letter-spacing:.08em;
   color:var(--fg-4);padding:6px 12px 10px;text-align:center}
 .fail-diag{font-size:9px;padding:2px 8px}
+
+/* ═══ THE ACTIVE-TRADE BAND ═══
+   Sits at the top of the ticket only while a position is open. Amber, like
+   every other "your money is on this" surface in the app — the deck row, the
+   managing panel, the armed price lines — so the four of them read as one
+   state rather than four coincidences. */
+.tk-manage{margin:0 0 var(--md);padding:var(--md);border-radius:var(--r-md);
+  border:1px solid rgba(251,191,36,.35);background:rgba(251,191,36,.06)}
+.tkm-head{font-family:var(--f-mono);font-size:11px;color:var(--fg-2);
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tkm-head b{color:var(--amber-2);letter-spacing:.06em}
+.tkm-dot{width:6px;height:6px;border-radius:50%;background:var(--amber-2);
+  box-shadow:0 0 8px rgba(251,191,36,.9);flex:none;
+  animation:pulse 2.8s ease-in-out infinite}
+.tkm-r{margin-left:auto;font-family:var(--f-display);font-size:15px;
+  font-weight:800;color:var(--fg)}
+.tkm-r.up{color:var(--green)} .tkm-r.down{color:var(--red-2)}
+.tkm-acts{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+.tkm-acts .btn{font-size:10px;padding:3px 9px;
+  border-color:rgba(251,191,36,.4);color:var(--amber-2)}
+.tkm-acts .btn:hover{border-color:var(--amber-2);color:var(--amber)}
+/* Not an error, so not red: it is the honest answer to "what can I do", which
+   on a trade that has not moved yet is "nothing that helps". */
+.tkm-none{margin-top:8px;font-size:10.5px;color:var(--fg-3);line-height:1.45}
+.tkm-foot{margin-top:8px;font-family:var(--f-mono);font-size:9.5px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--fg-4)}
+.tkm-foot b{color:var(--fg-3)}

@@ -451,17 +451,44 @@ def calibrate(con, symbols, tfs, tolerance=0.15) -> dict:
     `tolerance` means the core disagrees with production, and the 2x2 numbers
     must not then be presented as comparable to anything.
     """
+    import re
+    from collections import Counter
     from .execsim import EXEC_VERSION
-    recorded = []
+    recorded, generations = [], Counter()
     for symbol in symbols:
         for tf in tfs:
             for r in store.get_facts(con, symbol, tf, "exec", EXEC_VERSION):
                 p = json.loads(r["payload"])
                 if p["outcome"] != "MISSED":
                     recorded.append(float(p["r_multiple"]))
-    replayed = run_variant(con, symbols, tfs, "setup-v0.6-draft",
-                           managed=False, entry_model="LIMIT_AT_EDGE",
-                           profile_override=costs.DEFAULT_COST_PROFILE)
+                m = re.search(r"setup-v[\d.]+-draft", p.get("setup_id") or "")
+                if m:
+                    generations[m.group(0)] += 1
+    if not generations:
+        return {"status": "UNAVAILABLE", "trustworthy": False,
+                "detail": "no recorded book to calibrate against"}
+
+    # WHICH GENERATION THE RECORDED BOOK ACTUALLY IS, derived rather than
+    # assumed. This replayed a hardcoded "setup-v0.6-draft" — correct when the
+    # harness was written as the gate on v0.7, and meaningless ten versions
+    # later. Measured 4 Aug 2026: every one of the 499 recorded exec facts came
+    # from setup-v0.16, so the harness was replaying one book and comparing it
+    # against a different one, drifting 71.6% BY CONSTRUCTION and reporting its
+    # own core as untrustworthy when the core was fine and the comparison was
+    # wrong. A calibration that cannot go green is worse than none: it retires
+    # the tool silently.
+    version = generations.most_common(1)[0][0]
+
+    # The conditions that PRODUCED that book, which are version-dependent.
+    # v0.6/v0.7 were simulated touch-entry under the venue-blind Coinbase
+    # default; everything since is the entry model the setup declares, exits
+    # held to SL/TP (the managed exit was rejected by its own 2x2 gate — see
+    # execsim line 105), and venue-derived costs.
+    legacy = version in ("setup-v0.6-draft", "setup-v0.7-draft")
+    replayed = run_variant(
+        con, symbols, tfs, version, managed=False,
+        entry_model="LIMIT_AT_EDGE" if legacy else "MAKER_THEN_MARKET",
+        profile_override=costs.DEFAULT_COST_PROFILE if legacy else None)
     rep = summarise(replayed)
     if not recorded or not rep.get("n"):
         return {"status": "UNAVAILABLE", "trustworthy": False,

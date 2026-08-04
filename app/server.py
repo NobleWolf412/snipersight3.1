@@ -2300,8 +2300,15 @@ def copilot_chat(payload: dict):
                     raise HTTPException(400, "symbol required on the first turn")
                 if tf not in VALID_TFS:
                     raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
-                pack = copilot.build_pack(con, symbol, tf,
-                                          payload.get("setup_id") or None)
+                # The engine position on this chart, if the operator is in
+                # one. Looked up HERE rather than inside build_pack, so
+                # engine/ never has to import server to know what the
+                # portfolio holds.
+                sid = payload.get("setup_id") or None
+                pos = next((p for p in portfolio().get("active_positions", [])
+                            if p["symbol"] == symbol and p["tf"] == tf
+                            and (not sid or p["setup_id"] == sid)), None)
+                pack = copilot.build_pack(con, symbol, tf, sid, position=pos)
         finally:
             con.close()
     out = copilot.ask(message, pack=pack, session_id=session_id, model=model)

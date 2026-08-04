@@ -214,6 +214,11 @@
      re-fetching them there would be a second request for data this function
      already holds — and could disagree with what is on screen. */
   let lastOverview = null;
+  /* The portfolio payload the Open Trades rows were built from. The copilot
+     button needs the whole trade — direction, entry, stop, target — to compose
+     its question, and putting six values on the button as data attributes
+     would be a second copy of the trade that can disagree with the first. */
+  let lastPortfolio = {};
 
   /* ═══════════════ ONE DERIVED STATE ═══════════════
      Four surfaces disagreed about whether a position was open. The trace said
@@ -1048,7 +1053,21 @@
      One last close per open symbol is what turns a plan into a position — it
      says whether the trade is winning and how far it is from either end. A
      price that will not load costs that row its marker, never the row. */
+  /* The question the Open Trades panel asks on the operator's behalf. Written
+     for a trade ALREADY TAKEN: the copilot's default instinct is to weigh an
+     entry, which is the one question that is settled by the time a row exists
+     in this panel. Concise because it is read between bars. */
+  const holdAsk = t => `I am already in this trade: ${t.direction} ${
+    tokenOf(t.symbol)} on ${t.tf}, entry ${t.entry}, stop ${t.sl}, target ${
+    t.tp}. Do not evaluate whether to enter — that is done. Give me, in a few
+short paragraphs: where this trade actually stands right now against the
+facts in the pack; what would have to happen for the thesis to be wrong;
+and a concrete recommendation — hold, tighten the stop (to what price and
+why), or close — with the round-trip cost and the recorded edge state
+weighed in. Name the facts you used.`;
+
   async function renderPositions(p){
+    lastPortfolio = p || {};
     const panel = $('posPanel'), box = $('positions');
     const list = p.active_positions || [];
     /* Armed orders that have not filled yet. Same payload, same builder — the
@@ -1088,9 +1107,15 @@
       const r = (now == null || !perR) ? null
         : (long ? now - entry : entry - now) / perR;
       const tone = r == null ? '' : r >= 0 ? 'up' : 'down';
-      return `<div class="pos-row traceable" data-trace="${esc(t.setup_id || '')}"
+      /* The ROW opens the chart. It used to open the trace, which answers
+         "why was this taken" — a good question, but not the one an operator
+         clicking a live position is asking. They want to see it, and to be
+         able to act on it. The trace keeps its own control, so nothing is
+         lost; it just stops being the thing a whole-row click does. */
+      return `<div class="pos-row manageable" data-manage="${esc(t.symbol)}"
+        data-managetf="${esc(t.tf)}"
         tabindex="0" role="button"
-        title="click for why this trade was taken — the zone, the confirmation, every gate">
+        title="open this trade on the chart — drag the stop or target and press Update trade">
         <div>
           <div class="pos-sym">${esc(tokenOf(t.symbol))}</div>
           <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
@@ -1119,8 +1144,15 @@
         <div class="pos-r ${tone}">${
           rr(r)}
           <span class="t-sub">${money(t.risk_usd)} at risk</span>
-          <button class="btn pos-close" data-close-sid="${esc(t.setup_id || '')}"
-            title="close this on YOUR book at the last closed price — the engine keeps simulating its own plan, so the two outcomes can be compared">Close</button></div>
+          <div class="pos-acts">
+            <button class="btn" data-trace="${esc(t.setup_id || '')}"
+              title="the gate-by-gate story: the zone, the confirmation, every rule it passed">Why</button>
+            <button class="btn btn-cyan" data-ask="${esc(t.setup_id || '')}"
+              data-asksym="${esc(t.symbol)}" data-asktf="${esc(t.tf)}"
+              title="ask the copilot to read this open trade and recommend hold, tighten or close — runs on your Claude plan">Copilot</button>
+            <button class="btn pos-close" data-close-sid="${esc(t.setup_id || '')}"
+              title="close this on YOUR book at the last closed price — the engine keeps simulating its own plan, so the two outcomes can be compared">Close</button>
+          </div></div>
       </div>`;
     }).join('') + pending.map((t, i) => {
       const long = t.direction === 'LONG';
@@ -1129,9 +1161,13 @@
       // ATR: this is a distance to a resting limit, not a volatility judgement.
       const away = (now == null || !now) ? null
         : Math.abs(now - entry) / now * 100;
-      return `<div class="pos-row pending traceable" data-trace="${esc(t.setup_id || '')}"
+      // Same rule as a filled row: the click shows you the trade. An unfilled
+      // order cannot be managed on the chart, so it gets no Update path — but
+      // "let me look at it" is the same request either way.
+      return `<div class="pos-row pending manageable" data-manage="${esc(t.symbol)}"
+        data-managetf="${esc(t.tf)}"
         tabindex="0" role="button"
-        title="click for why this trade was taken — the zone, the confirmation, every gate">
+        title="open this order on the chart">
         <div>
           <div class="pos-sym">${esc(tokenOf(t.symbol))}</div>
           <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
@@ -1149,7 +1185,14 @@
         </div>
         <div class="pos-r">
           <span class="chip chip-amber">waiting</span>
-          <span class="t-sub">${money(t.risk_usd)} if it fills</span></div>
+          <span class="t-sub">${money(t.risk_usd)} if it fills</span>
+          <div class="pos-acts">
+            <button class="btn" data-trace="${esc(t.setup_id || '')}"
+              title="the gate-by-gate story: the zone, the confirmation, every rule it passed">Why</button>
+            <button class="btn btn-cyan" data-ask="${esc(t.setup_id || '')}"
+              data-asksym="${esc(t.symbol)}" data-asktf="${esc(t.tf)}"
+              title="ask the copilot whether this resting order still makes sense — runs on your Claude plan">Copilot</button>
+          </div></div>
       </div>`;
     }).join('');
   }
@@ -1603,17 +1646,49 @@
           setTimeout(() => { c.disabled = false; c.textContent = was; }, 3000);
           return;
         }
+        /* Ask the copilot about a trade already taken. The question is
+           composed here rather than typed, because the useful one is long and
+           the operator should not have to write it every time. */
+        const a = e.target.closest('[data-ask]');
+        if(a){
+          e.stopPropagation();
+          if(!window.SSCopilot) return;
+          const t = (lastPortfolio.active_positions || [])
+            .concat(lastPortfolio.pending_orders || [])
+            .find(x => x.setup_id === a.dataset.ask);
+          if(!t) return;
+          SSCopilot.open({kind: 'chart', symbol: a.dataset.asksym,
+                          tf: a.dataset.asktf, setupId: a.dataset.ask,
+                          ask: holdAsk(t)});
+          return;
+        }
         const d = e.target.closest('[data-trace]');
-        if(d && d.dataset.trace && window.SSTracer) SSTracer.open(d.dataset.trace);
+        if(d && d.dataset.trace && window.SSTracer){
+          e.stopPropagation();
+          SSTracer.open(d.dataset.trace);
+          return;
+        }
+        // The row itself: show me this trade. go() FIRST — SSChart.open only
+        // loads the data; navigating is the caller's job, as at every other
+        // call site. Without it the ticket silently switched to managing a
+        // trade on a surface the operator was not looking at.
+        const m = e.target.closest('[data-manage]');
+        if(m){
+          go('chart');
+          if(window.SSChart) SSChart.open(m.dataset.manage, m.dataset.managetf);
+        }
       });
       // delegation covers the click; the rows still have to be reachable and
       // operable, which is per-element and has to run after each render
       $('positions').addEventListener('keydown', e => {
         if(e.key !== 'Enter' && e.key !== ' ') return;
-        const d = e.target.closest('[data-trace]');
-        if(!d || !d.dataset.trace) return;
+        // Keyboard must reach what the mouse reaches: the row opens the chart.
+        // Buttons inside it are real <button>s and handle their own keys.
+        const m = e.target.closest('[data-manage]');
+        if(!m) return;
         e.preventDefault();
-        if(window.SSTracer) SSTracer.open(d.dataset.trace);
+        go('chart');
+        if(window.SSChart) SSChart.open(m.dataset.manage, m.dataset.managetf);
       });
     }
     // fire-and-forget: the positions panel fetches a price per open trade, and

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SniperSight</title>
 <link rel="icon" href="/static/assets/snipersight-logo.png">
-<link rel="stylesheet" href="/static/ss.css?v=36">
+<link rel="stylesheet" href="/static/ss.css?v=20">
 </head>
 <body data-mode="idle">
 
@@ -346,6 +346,16 @@
                the moment you opened Size to set leverage, and there was no way
                to check it without navigating back. Side is not a detail of one
                tab; it qualifies every number in all four. -->
+          <!-- MANAGING A LIVE TRADE. Above everything, because when money is
+               already at stake the question is not "what shall I build" but
+               "what do I do with this". Hidden entirely when planning, so the
+               ticket does not carry an empty band the rest of the time.
+
+               The quick actions are the two stop moves an operator actually
+               makes on a winner, each offered only when it is genuinely an
+               improvement — "lock +1R" on a trade at +0.3R would place the
+               stop the wrong side of price and close the trade on the spot. -->
+          <div class="tk-manage" id="tkManage" hidden></div>
           <div class="seg seg-dir tk-pinned-dir" id="tkDir" aria-label="Trade direction">
             <button data-d="LONG" type="button">Long</button
             ><button data-d="SHORT" type="button">Short</button>
@@ -855,24 +865,24 @@
      its own mount point, so there was never a reason for them to block. -->
 <script defer src="/static/lightweight-charts.js"></script>
 <!-- must load before any consumer: every module reads through it -->
-<script defer src="/static/ssdata.js?v=36"></script>
-<script defer src="/static/ticket-math.js?v=36"></script>
-<script defer src="/static/glossary.js?v=36"></script>
-<script defer src="/static/chart.js?v=36"></script>
+<script defer src="/static/ssdata.js?v=20"></script>
+<script defer src="/static/ticket-math.js?v=20"></script>
+<script defer src="/static/glossary.js?v=20"></script>
+<script defer src="/static/chart.js?v=20"></script>
 <!-- funnel.js FIRST: it owns the plain-language reason dictionary that
      shell.js reads on its very first render. Deferred scripts execute in
      document order, so with shell.js ahead of it the deck and the
      not-taken blocks painted raw engine codes until the next 30s refresh
      happened to land after funnel.js had run. -->
-<script defer src="/static/funnel.js?v=36"></script>
-<script defer src="/static/shell.js?v=36"></script>
+<script defer src="/static/funnel.js?v=20"></script>
+<script defer src="/static/shell.js?v=20"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must
      never blank a surface that another owns. -->
-<script defer src="/static/weather.js?v=36"></script>
-<script defer src="/static/tracer.js?v=36"></script>
-<script defer src="/static/copilot.js?v=36"></script>
-<script defer src="/static/wizard.js?v=36"></script>
-<script defer src="/static/edgeview.js?v=36"></script>
+<script defer src="/static/weather.js?v=20"></script>
+<script defer src="/static/tracer.js?v=20"></script>
+<script defer src="/static/copilot.js?v=20"></script>
+<script defer src="/static/wizard.js?v=20"></script>
+<script defer src="/static/edgeview.js?v=20"></script>
 </body>
 </html>

@@ -22,7 +22,7 @@
    toggling the dock, switching surfaces and reloading all return to the
    conversation where it was left.
 
-   Public: window.SSCopilot.open({kind?, symbol?, tf?, setupId?, prefill?})
+   Public: window.SSCopilot.open({kind?, symbol?, tf?, setupId?, prefill?, ask?})
            / .toggle() / .close() / .clear() */
 (() => {
   'use strict';
@@ -123,10 +123,15 @@
     ta.focus();
   }
 
-  async function send(){
+  /* `override` lets a caller ASK rather than merely prefill. The open-trades
+     panel wants one click to produce an answer, not a typed-out question the
+     operator still has to send — but prefill stays, because a question you are
+     meant to edit before sending is a different affordance. */
+  async function send(override){
     const ta = document.getElementById('cpText');
-    const text = (ta.value || '').trim();
+    const text = String(override != null ? override : (ta.value || '')).trim();
     if(!text || busy) return;
+    if(override == null) ta.value = '';
     msgs.push({who: 'op', text});
     saveMsgs();
     busy = true; render();
@@ -162,6 +167,12 @@
     ctx = next;
     msgs = loadMsgs(next);
     render();
+    /* Asking costs the operator's Claude quota, so it happens only when a
+       caller explicitly asked for an answer — never on a plain open, and never
+       twice over an in-flight one. Repeat clicks DO re-ask on purpose: the
+       useful question about a trade you are holding is "what about now", and
+       the reply lands under the previous one where both can be compared. */
+    if(c && c.ask && !busy) send(c.ask);
   }
   function toggle(){ ctx ? close() : open(); }
   function close(){ ctx = null; render(); }

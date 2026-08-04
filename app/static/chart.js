@@ -1455,6 +1455,72 @@ window.SSChart = (() => {
      is why it was dead. The live reason is still printed underneath, so the
      distinction between "your paper trade was recorded" and "this system can
      send real orders" is on screen rather than assumed. */
+  /* ═══ THE ACTIVE-TRADE BAND ═══
+     A live position is a different job from drawing a plan, and until now the
+     only things saying so were a heading and the panel's colour. This states
+     where the trade stands and offers the two moves an operator actually makes
+     on a winner — stop to breakeven, stop to +1R — each shown ONLY when it
+     would improve the position. Offering "lock +1R" at +0.3R would put the
+     stop the wrong side of price and close the trade the moment it was armed.
+
+     It sets the level and marks the ticket modified; it does NOT commit. The
+     commit is still Update trade, deliberately: one button writes to the book,
+     and these are ways of filling it in. */
+  function renderManage(){
+    const el = $('tkManage');
+    if(!el) return;
+    if(!enginePos){ el.hidden = true; el.innerHTML = ''; el.dataset.h = ''; return; }
+    el.hidden = false;
+    const long = enginePos.direction === 'LONG';
+    const entry = +enginePos.entry;
+    // The risk TAKEN, from the stop the trade was entered with — never the
+    // current one, or every R on this band would move when the stop does.
+    const riskU = Math.abs(entry - +enginePos.sl);
+    const px = candles.length ? +candles[candles.length - 1].close : null;
+    const nowR = (px == null || !riskU) ? null
+      : (long ? px - entry : entry - px) / riskU;
+
+    const be = entry;
+    const lock1 = long ? entry + riskU : entry - riskU;
+    // "Better" means further into profit than where the stop sits now.
+    const better = v => long ? v > levels.sl : v < levels.sl;
+    // A stop must not be placed the wrong side of the last close, or it is not
+    // a stop, it is a market exit wearing one.
+    const safe = v => px == null ? false : (long ? v < px : v > px);
+
+    const acts = [];
+    if(better(be) && safe(be))
+      acts.push(`<button class="btn" data-mv="${be}">Stop to breakeven</button>`);
+    if(better(lock1) && safe(lock1))
+      acts.push(`<button class="btn" data-mv="${lock1}">Lock +1R</button>`);
+
+    const rTxt = nowR == null ? 'price unavailable'
+      : `${nowR >= 0 ? '+' : ''}${nowR.toFixed(2)}R right now`;
+    const rCls = nowR == null ? '' : nowR >= 0 ? 'up' : 'down';
+    const html =
+      `<div class="tkm-head"><span class="tkm-dot"></span>You are in this trade
+         <b>${long ? 'LONG' : 'SHORT'} ${sym}</b> ${tf}
+         <span class="tkm-r ${rCls}">${rTxt}</span></div>` +
+      (acts.length
+        ? `<div class="tkm-acts">${acts.join('')}</div>`
+        : `<div class="tkm-none">No stop move improves this yet — it needs to
+             be in profit first. Drag a level to set your own.</div>`) +
+      `<div class="tkm-foot">Nothing here commits. Set a level, then press
+         <b>Update trade</b>.</div>`;
+    /* refreshArm() runs on every mousemove of a drag, so rebuilding this
+       unconditionally would replace the band's DOM sixty times a second and
+       flicker the buttons under the cursor. */
+    if(el.dataset.h === html) return;
+    el.dataset.h = html;
+    el.innerHTML = html;
+    el.querySelectorAll('[data-mv]').forEach(b =>
+      b.addEventListener('click', () => {
+        levels.sl = parseFloat(b.dataset.mv);
+        modified = true;
+        applyLevels(); recompute();
+      }));
+  }
+
   function refreshArm(){
     const holding = !!enginePos;
     const btn = $('tkArm');
@@ -1487,6 +1553,7 @@ window.SSChart = (() => {
       ? (modified ? 'Managing trade — unsaved' : 'Managing open trade')
       : dupe ? 'Already armed' : 'New trade';
     $('ticket').classList.toggle('managing', holding);
+    renderManage();
     // Holding a position: the only honest commit is changing where it ends,
     // and only once a level has actually moved.
     btn.textContent = holding ? 'Update trade' : 'Arm (paper)';
