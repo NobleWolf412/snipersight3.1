@@ -1310,3 +1310,34 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .tkm-foot{margin-top:8px;font-family:var(--f-mono);font-size:9.5px;
   letter-spacing:.06em;text-transform:uppercase;color:var(--fg-4)}
 .tkm-foot b{color:var(--fg-3)}
+
+/* ── TRACE DRAWER: THE ANSWER FIRST ──
+   Nine stages with rules, details and fact chips answered "where did I fill
+   and why" in three thousand characters. The ladder is the record and it
+   stays; this is the part an operator reads. */
+.dx-sum{margin:var(--md) 0;padding:var(--md);border-radius:var(--r-md);
+  border:1px solid var(--border-soft);background:rgba(255,255,255,.03)}
+.dx-sum-head{font-family:var(--f-mono);font-size:12px;color:var(--fg-2);
+  letter-spacing:.04em}
+.dx-sum-head b{color:var(--fg);font-weight:600}
+/* The engine's own sentence. Prose, because it is one. */
+.dx-sum-why{margin-top:7px;font-family:var(--f-body);font-size:12.5px;
+  line-height:1.5;color:var(--fg-2);max-width:64ch}
+.dx-sum-nums{margin-top:8px;font-family:var(--f-mono);font-size:11px;
+  color:var(--fg-3);font-variant-numeric:tabular-nums}
+
+/* A check that failed or warned explains the trade; it is not buried. */
+.dx-flagged{margin:var(--md) 0}
+.dx-flagged-t{font-family:var(--f-mono);font-size:10px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--amber-2);
+  margin-bottom:6px}
+
+.dx-all{margin-top:var(--md);border-top:1px solid var(--border-soft);
+  padding-top:var(--sm)}
+.dx-all>summary{cursor:pointer;font-family:var(--f-mono);font-size:10px;
+  font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--fg-3);padding:4px 0;list-style:none}
+.dx-all>summary::-webkit-details-marker{display:none}
+.dx-all>summary::before{content:"B8  ";color:var(--fg-4)}
+.dx-all[open]>summary::before{content:"BE  "}
+.dx-all>summary:hover{color:var(--fg-2)}

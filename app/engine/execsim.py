@@ -168,6 +168,37 @@ def walk_exit(candles, i, sl, tp, long, max_bars=MAX_BARS):
     return None                             # not enough data yet — OPEN
 
 
+def cross_fill(candles, fill_i, long, atr_at_fill, profile):
+    """The price a crossing market order actually gets, and the ONE definition.
+
+    THE FILL IS THE CROSSING BAR'S OPEN, plus slippage against you. It is the
+    first price available once the passive window has closed, it demonstrably
+    traded on THAT bar, and it needs no assumption about intrabar path.
+
+    This was a bug in v0.13 and its measurement is the reason the rule is
+    written down here rather than inlined: the cross used to book the PLAN's
+    price, a print from two bars earlier. On 95 crossed orders, 78 (82.1%) were
+    booked outside the fill bar's own [low, high], never adversely — 94 of 95
+    filled better than the crossing bar's open. That free entry advantage was
+    +86 R of raw edge, and re-simulating the book without it moved +95.85 R to
+    +31.95 R over 642 trades.
+
+    Extracted 4 Aug 2026 because `abtest` still had the v0.13 behaviour long
+    after execsim was fixed — the harness meant to VALIDATE the simulator was
+    quietly running the bug the simulator had corrected, and reported 70.0 R
+    against the book's real 7.9 R. Two implementations of one fill model is how
+    they come to disagree; there is now one, and both call it.
+
+    Returns (fill_price, slipped) — `slipped` False means no ATR was available
+    and the caller must degrade LOUDLY rather than book a flattered fill.
+    """
+    px = Decimal(candles[fill_i]["open"])
+    if atr_at_fill is None:
+        return px, False
+    slip = profile.market_slippage_atr * atr_at_fill
+    return ((px + slip) if long else (px - slip)), True
+
+
 def settle(profile, symbol, entry, exit_price, risk, long, outcome,
            bars_held, tf_seconds, atr_exit, *, entry_role):
     """Price one closed leg: slippage, fees, funding, and the R they leave.
@@ -346,17 +377,16 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                     # exits are.
                     fill_i = wait_end
                     entry_role = "TAKER"
-                    cross_open = Decimal(candles[fill_i]["open"])
-                    cross_slip = Decimal(0)
-                    if atr[fill_i] is not None:
-                        cross_slip = COST_PROFILE.market_slippage_atr * atr[fill_i]
-                    else:
+                    # ONE definition of a crossing fill, shared with abtest —
+                    # see cross_fill for the measurement that fixed it here and
+                    # the divergence that came from fixing it in only one place.
+                    entry, slipped = cross_fill(candles, fill_i, long,
+                                                atr[fill_i], COST_PROFILE)
+                    if not slipped:
                         # loud-fallback rule: a degraded path must be audible
                         rec.notes = ((rec.notes or "") +
                                      f" cross slippage NOT applied at bar "
                                      f"{candles[fill_i]['open_ts']} (no ATR);")
-                    # Crossing costs you: a long pays up, a short sells down.
-                    entry = (cross_open + cross_slip) if long else (cross_open - cross_slip)
                 elif fill_i is None:
                     counts["PENDING"] += 1
                     continue

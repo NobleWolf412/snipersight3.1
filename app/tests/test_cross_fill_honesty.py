@@ -50,15 +50,34 @@ class CrossFillHonesty(unittest.TestCase):
         cross booked `entry` (the plan price, far below the crossing bar) and
         handed the trade a free gain it never earned.
         """
+        """Repinned 4 Aug 2026: the branch now DELEGATES to execsim.cross_fill.
+
+        The rule was enforced here on execsim's inline code while `abtest` kept
+        the v0.13 behaviour it was supposed to be validating — the harness ran
+        the exact bug the simulator had fixed and flattered the book by 62 R.
+        One implementation now, so the properties are asserted where they live
+        and both callers get them.
+        """
         src = (APP / "engine" / "execsim.py").read_text(encoding="utf-8")
         cross = src[src.index("# CROSS:"):src.index("elif fill_i is None:")]
-        self.assertIn("candles[fill_i]", cross,
-                      "the crossing branch must read the bar it fills on")
-        self.assertIn("market_slippage_atr", cross,
+        self.assertIn("cross_fill(", cross,
+                      "the crossing branch must use the shared fill model")
+
+        fn = src[src.index("def cross_fill("):src.index("def settle(")]
+        self.assertIn('candles[fill_i]["open"]', fn,
+                      "the cross must price off the bar it fills on, not the plan")
+        self.assertIn("market_slippage_atr", fn,
                       "a market cross pays slippage, like every other market order")
-        self.assertNotIn("fill_i = wait_end\n                    entry_role = \"TAKER\"\n"
-                         "                elif", cross,
-                         "the branch must set an entry price, not inherit the plan's")
+        self.assertIn("atr_at_fill is None", fn,
+                      "a missing ATR must degrade loudly, never book a free fill")
+
+        # and the harness must use the SAME model, which is the whole point
+        ab = (APP / "engine" / "abtest.py").read_text(encoding="utf-8")
+        self.assertIn("execsim.cross_fill(", ab,
+                      "abtest crosses on its own terms again — that divergence "
+                      "reported 70.0 R against the book's real 7.9 R")
+        self.assertNotIn("entry_px = entry          # market: the planned open", ab,
+                         "the v0.13 plan-price cross is back in the harness")
 
 
 class RecordedFillsLieWithinTheirBar(unittest.TestCase):

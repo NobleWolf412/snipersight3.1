@@ -130,9 +130,76 @@
     }).join('') + '</span>';
   }
 
+  /* ── THE ANSWER, BEFORE THE AUDIT ──
+     This drawer opened onto nine stages, each with its rule, its detail and up
+     to eight fact chips — three thousand characters to answer "why am I in
+     this and where did I fill". The ladder is the right record and it stays,
+     but it is the WORKING. What an operator wants first is the fill, the
+     reason, and the levels; everything else is available one click down.
+
+     Facts are looked up BY KEY across the stages rather than by stage label:
+     labels are prose the server may reword, and a summary that silently
+     empties when a label changes is worse than no summary. */
+  function factOf(t, key) {
+    for (const st of (t.stages || [])) {
+      const f = st.facts || {};
+      if (f[key] !== null && f[key] !== undefined) return f[key];
+    }
+    return null;
+  }
+
+  function summary(t, verdictChip, life) {
+    life = life || t.lifecycle || {};
+    const num = v => v === null || v === undefined ? null : human(v).txt;
+    const order = t.order || {};
+    const risk = t.risk || {};
+
+    const fill = order.fill_price != null ? num(order.fill_price)
+               : factOf(t, 'fill_price') != null ? num(factOf(t, 'fill_price')) : null;
+    const limit = order.limit_price != null ? num(order.limit_price) : null;
+    /* What actually happened to this order, in the operator's words. The
+       lifecycle code is the authority; the fill price is only a number. */
+    const head = fill ? `filled at <b>${esc(fill)}</b>`
+      : life.stage === 'ARMED' || order.event === 'PLACED'
+        ? `order resting${limit ? ` at <b>${esc(limit)}</b>` : ''} — not filled`
+        : 'never entered';
+
+    const entry = num(factOf(t, 'entry'));
+    const sl = num(factOf(t, 'sl'));
+    const tp = num(factOf(t, 'tp'));
+    const rr = num(factOf(t, 'computed_rr') ?? factOf(t, 'recorded_rr'));
+    const usd = risk.risk_usd != null ? risk.risk_usd : factOf(t, 'risk_usd');
+
+    /* The engine's sentence ends "· TP 0.17692 · R:R 3.00", which is exactly
+       what the numbers line below prints. Two copies of a price on a panel
+       being cut for length is the easiest one to drop. */
+    const why = String(t.why || '').split(' · ')
+      .filter(part => !/^(TP|SL|R:R)/i.test(part.trim())).join(' · ');
+
+    const nums = [
+      entry ? `entry ${esc(entry)}` : null,
+      sl ? `stop ${esc(sl)}` : null,
+      tp ? `target ${esc(tp)}` : null,
+      rr ? `${esc(rr)}R if it works` : null,
+      usd != null ? `$${esc(Math.round(Number(usd)))} at risk` : null,
+    ].filter(Boolean).join(' · ');
+
+    /* The header already says which market and which way. Repeating it here
+       cost a line and taught nothing; what this line owes the reader is what
+       HAPPENED to the order and how it stands now. */
+    const outcome = window.SSFunnel && life.failure_code
+      ? SSFunnel.plain(life.failure_code) : (life.failure_code || null);
+    return `<div class="dx-sum">
+      <div class="dx-sum-head">${head}${outcome
+        ? ` <span class="chip ${verdictChip || ''}" title="${
+            esc(life.failure_code || '')}">${esc(outcome)}</span>` : ''}</div>
+      ${why ? `<div class="dx-sum-why">${esc(humanProse(why))}</div>` : ''}
+      ${nums ? `<div class="dx-sum-nums">${nums}</div>` : ''}
+    </div>`;
+  }
+
   function render(t) {
     const life = t.lifecycle || {};
-    const dirChip = t.direction === 'SHORT' ? 'chip-red' : 'chip-green';
     const verdictChip = life.failure_code === 'WINNER' ? 'chip-green'
       : (life.classification === 'DECISION' ? 'chip-red' : 'chip-amber');
 
@@ -155,7 +222,10 @@
         See <span class="term" data-t="algoVersion">engine version</span>.</span></div>`;
     }
 
-    const stages = (t.stages || []).map(s => {
+    /* A stage that FAILED or WARNED is the reason this trade is what it is —
+       it stays open. A passing stage is a box ticked, and nine ticked boxes
+       are the audit trail, not the answer. */
+    const stageHtml = (s, compact) => {
       const st = GLYPH[s.status] ? s.status : 'skip';
       return `<div class="dx-tstage ${st}">
         <span class="dx-tglyph">${GLYPH[st]}</span>
@@ -165,10 +235,13 @@
             ? 'not recorded' : esc(humanProse(s.value))}</span>
           ${s.expected ? `<span class="dx-texpect">rule: ${esc(humanProse(s.expected))}</span>` : ''}
           ${s.detail ? `<span class="dx-tdetail">${esc(humanProse(s.detail))}</span>` : ''}
-          ${factRow(s.facts)}
+          ${compact ? '' : factRow(s.facts)}
         </span>
       </div>`;
-    }).join('');
+    };
+    const all = t.stages || [];
+    const notable = all.filter(s => s.status === 'fail' || s.status === 'warn');
+    const stages = all.map(stageHtml).join('');
 
     paint(shell(
       esc(String(t.symbol || '').replace('-USD', '')) + ' · ' + esc(t.tf || ''),
@@ -184,37 +257,41 @@
       `<button class="dx-copyid" type="button" data-copyid="${esc(t.setup_id)}"
                title="copy the internal id for this setup">copy id</button>`,
       `${notes}
-      <div class="dx-verdict">
-        <span class="chip ${dirChip}">${esc(t.direction || '—')}</span>
-        <span class="chip">${esc(String(t.strategy || 'unknown').replace(/_/g, ' ').toLowerCase())}</span>
-        <!-- The drawer is reachable from Command now (deck verdict, open and
-             pending rows), so it is a trader surface and its verdict has to
-             read like one. SSFunnel is loaded on this page and has a sentence
-             for every code telemetry.classify_failure emits; the raw code
-             stays in the title for whoever is debugging. -->
-        <span class="chip ${verdictChip}" title="${esc(life.failure_code || '')}">${
-          esc(window.SSFunnel && life.failure_code
-                ? SSFunnel.plain(life.failure_code)
-                : (life.failure_code || 'unknown'))}</span>
-        <!-- The rank chip is deliberately absent. The deck removed it after
-             grading it against 228 closed trades: it is non-monotone — its
-             modal bucket was the WORST performing — so showing it invites
-             trust in an ordering the data contradicts. Re-exposing it in a
-             drawer opened FROM the deck would undo that on the same surface.
-             Still in the PLAYBOOK stage facts below, for developers. -->
-        <span class="dx-verdict-line">${esc(life.detail || 'no lifecycle verdict recorded')}</span>
-        ${t.why ? `<span class="dx-why"><b>why this trade</b>${esc(t.why)}</span>` : ''}
-        <span class="dx-verdict-owner">${life.failure_owner
-          ? 'attributed to ' + esc(String(life.failure_owner).replace(/_/g, ' ').toLowerCase())
-          : 'no failure to attribute'}${life.classification
-          ? ' · ' + esc(life.classification.replace(/_/g, ' ').toLowerCase()) : ''}</span>
-      </div>
-      <div class="dx-trace">${stages || '<div class="dx-empty">no stages recorded</div>'}</div>
-      ${(t.missing_evidence || []).length ? `<div class="dx-note" style="margin-top:var(--md)">
-        ◌ some evidence was never captured
-        <span class="dx-note-what">These inputs were not retained by the facts
-        this trace is built from, so they are shown as missing rather than
-        guessed: <b>${esc(t.missing_evidence.join(', '))}</b>.</span></div>` : ''}`));
+      ${summary(t, verdictChip, life)}
+      <!-- A check that failed or warned is the reason this trade is what it
+           is, so it stays out here. Nine ticked boxes are the audit trail. -->
+      ${notable.length ? `<div class="dx-flagged">
+        <div class="dx-flagged-t">${notable.length === 1 ? 'One check needs reading'
+          : notable.length + ' checks need reading'}</div>
+        <div class="dx-trace">${notable.map(x => stageHtml(x, true)).join('')}</div>
+      </div>` : ''}
+      <!-- Collapsed, not removed. The ladder is the record this app is built
+           on and a developer chasing a fact still needs every rung; it just
+           should not be the first three thousand characters an operator reads
+           to find out where they filled and why.
+
+           The verdict block came in here with it. It used to open the drawer
+           with a direction chip, a strategy chip and three sentences that all
+           said "it is still open", above a header already reading
+           "ADAUSDT · 4H · reversal short". Its one irreducible fact — the
+           outcome — is now a chip on the summary line; who a failure is
+           attributed to is developer detail and belongs with the ladder. -->
+      <details class="dx-all">
+        <summary>Every check (${all.length})</summary>
+        <div class="dx-verdict">
+          <span class="dx-verdict-line">${esc(life.detail || 'no lifecycle verdict recorded')}</span>
+          <span class="dx-verdict-owner">${life.failure_owner
+            ? 'attributed to ' + esc(String(life.failure_owner).replace(/_/g, ' ').toLowerCase())
+            : 'no failure to attribute'}${life.classification
+            ? ' · ' + esc(life.classification.replace(/_/g, ' ').toLowerCase()) : ''}</span>
+        </div>
+        <div class="dx-trace">${stages || '<div class="dx-empty">no stages recorded</div>'}</div>
+        ${(t.missing_evidence || []).length ? `<div class="dx-note" style="margin-top:var(--md)">
+          ◌ some evidence was never captured
+          <span class="dx-note-what">These inputs were not retained by the facts
+          this trace is built from, so they are shown as missing rather than
+          guessed: <b>${esc(t.missing_evidence.join(', '))}</b>.</span></div>` : ''}
+      </details>`));
   }
 
   /* ---------- api ---------- */

@@ -357,8 +357,21 @@ def run_variant(con, symbols, tfs, setup_version, *, managed, entry_model,
                             # that filled. Price walked away precisely when the
                             # trade was right. Saving a fee by declining those is
                             # paying for the fee with the edge.
-                            i_fill = ci + 1
-                            entry_px = entry          # market: the planned open
+                            #
+                            # THE CROSS IS execsim's CROSS, and until 4 Aug 2026
+                            # it was not. This booked `entry` — the plan's price,
+                            # a print from two bars earlier — at bar ci+1, while
+                            # execsim had already been fixed to take the CROSSING
+                            # bar's open plus slippage at the end of the passive
+                            # window. So the harness built to validate the
+                            # simulator was running the exact bug the simulator
+                            # had corrected, and flattered the book by 62 R
+                            # (70.0 replayed against 7.9 recorded).
+                            i_fill = ci + 1 + MAKER_WAIT_BARS
+                            if i_fill >= len(candles):
+                                continue          # the window has not closed yet
+                            entry_px, _ = execsim.cross_fill(
+                                candles, i_fill, long, atr[i_fill], profile)
                             taker_in = True
                         else:
                             if ci + 1 + MAKER_WAIT_BARS <= len(candles):
@@ -459,6 +472,17 @@ def calibrate(con, symbols, tfs, tolerance=0.15) -> dict:
         for tf in tfs:
             for r in store.get_facts(con, symbol, tf, "exec", EXEC_VERSION):
                 p = json.loads(r["payload"])
+                # LIKE FOR LIKE. A scale-in leg reuses its PARENT's setup_id
+                # (scalein.py), so these facts carry `setup-v0.16-draft` in the
+                # id while being produced by scale-v0.14 — and `run_variant` is
+                # given one setup version, so it can never produce them. Counted
+                # here, they were 2 trades and -2.07 R the replay was structurally
+                # unable to reproduce, which on a book totalling 7.9 R showed as
+                # 26% drift and kept calibration red after everything real had
+                # been fixed. Grade the adds by replaying SCALE_VERSION, not by
+                # folding them into a setup-version comparison.
+                if p.get("strategy") == "SCALE_IN":
+                    continue
                 if p["outcome"] != "MISSED":
                     recorded.append(float(p["r_multiple"]))
                 m = re.search(r"setup-v[\d.]+-draft", p.get("setup_id") or "")
