@@ -1175,6 +1175,15 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .layers-pop button.on::before{background:var(--accent);border-color:var(--accent)}
 .layers-pop button:hover{background:rgba(255,255,255,.05)}
 .layers-pop button.empty{color:var(--fg-4)}
+/* a lazy layer fetching its facts — the checkbox is already ticked, so say
+   the data is on its way rather than looking like a toggle that did nothing */
+.layers-pop button.loading{color:var(--fg-3)}
+.layers-pop button.loading::before{background:var(--border);
+  border-color:var(--border);animation:lyrPulse 1s ease-in-out infinite}
+@keyframes lyrPulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){
+  .layers-pop button.loading::before{animation:none}
+}
 
 /* journal rows: the reason line and the signed R bar */
 .jnl-why{font-family:var(--f-mono);font-size:10px;letter-spacing:.05em;

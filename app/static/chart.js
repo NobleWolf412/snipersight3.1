@@ -66,8 +66,20 @@ window.SSChart = (() => {
   // refresh (repaint in place, never flash).
   let painted = null;                         // 'SYM|TF' of the painted market
 
+  /* The four layers below (gaps/shelf/ranges/signals) read engines that ran
+     from the beginning and had nowhere to appear. They are LAZY: their facts
+     are fetched the first time the layer is switched on for a symbol/timeframe
+     and cached until the market changes, so a chart nobody asked to decorate
+     costs exactly what it did before. Default OFF for the same reason — the
+     operator's standing complaint about this surface is clutter, and the fix
+     for "I can't see momentum" is not "here is everything at once". */
+  let extra = {};                 // kind -> facts[], for extraKey's market only
+  let extraKey = null;            // 'SYM|TF' the cache belongs to
+  const LAZY = {gaps: 'fvg', shelf: 'volprofile', ranges: 'range',
+                signals: 'momentum|volume|volatility'};
   const overlays = {swings: true, structure: true, zones: true,
-                    liquidity: false, cycle: false};
+                    liquidity: false, cycle: false,
+                    gaps: false, shelf: false, ranges: false, signals: false};
   const VISIBLE_BARS = 120;                   // the opening window, not the limit
 
   /* Through SSData. /api/overview, /api/portfolio and /api/trade-config are all
@@ -699,6 +711,13 @@ window.SSChart = (() => {
     }
     $('chartEmpty').style.display = 'none';
     painted = sym + '|' + tf;      // from here down, the screen describes THIS market
+    /* Lazy-layer facts are per market — drop them the moment the market
+       changes, or the old symbol's gaps would be drawn under the new
+       symbol's candles. The RE-FETCH is deliberately not here: awaiting it
+       before setData meant the price chart waited on four decorative
+       queries, and a refresh landing mid-await could return past the paint
+       and leave the chart blank. Layers fill in after price is on screen. */
+    if(extraKey !== painted){ extra = {}; extraKey = painted; }
 
     series.applyOptions({priceFormat: {type: 'price',
       precision: digits(candles[candles.length - 1].close),
@@ -727,6 +746,17 @@ window.SSChart = (() => {
     drawPosition();
     loadedAt = Date.now();
     showFreshness();
+
+    /* Lazy layers refill AFTER price is on screen, and deliberately without
+       an await on the caller: the chart is complete without them, and a
+       decorative query must never be able to delay or blank the candles.
+       The seq guard means a switch mid-fetch drops the stale layer instead
+       of drawing it over the new market. */
+    const layerSeq = seq;
+    (async () => {
+      for(const key of Object.keys(LAZY)) if(overlays[key]) await ensureLayer(key);
+      if(layerSeq === loadSeq && candles.length) drawOverlays();
+    })();
   }
 
   /* The operator's live trade, on the chart and in words.
@@ -927,9 +957,160 @@ window.SSChart = (() => {
         title: p.side === 'HIGH' ? 'STOPS ABOVE' : 'STOPS BELOW'}));
     }
 
+    /* ── the engines that had nowhere to appear ──────────────────────────
+       Everything below reads a lazily-fetched kind. `extra[k]` is undefined
+       until the layer has been switched on once for this market, and an
+       undefined kind contributes nothing and counts zero — so a layer that
+       has never been opened is indistinguishable from one with no facts,
+       which is exactly right: neither has anything to show. */
+    const ex = k => extra[k] || [];
+
+    /* GAPS. A fair-value gap is a hole in the tape: price moved so fast that
+       a whole band went untraded. They tend to get revisited, which makes an
+       unfilled one a magnet and a filled one history. Last fact per gap wins,
+       and FILLED gaps are dropped — a gap line left up after it has been
+       traded through marks a level that no longer exists, the same lie the
+       liquidity-pool filter above exists to prevent. */
+    const gapState = {};
+    for(const g of ex('fvg')) gapState[g.gap_id] = g;
+    const openGaps = Object.values(gapState)
+      .filter(g => g.event !== 'FILLED' && g.market_time >= first)
+      .sort((a, b) => b.market_time - a.market_time).slice(0, 6);
+    n.gaps = openGaps.length;
+    if(overlays.gaps) for(const g of openGaps){
+      const bull = g.direction === 'BULL';
+      const col = bull ? 'rgba(74,222,128,.34)' : 'rgba(248,113,113,.34)';
+      for(const [edge, title] of [['top', bull ? '' : 'GAP'],
+                                  ['bottom', bull ? 'GAP' : '']])
+        zoneLines.push(series.createPriceLine({price: +g[edge], color: col,
+          lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title}));
+    }
+
+    /* VOLUME SHELF. Where the market actually did its business. HVN is a price
+       the market keeps agreeing on — it slows down there; LVN is a band it
+       crossed in a hurry and tends to cross in a hurry again. Drawn as the
+       shelf edges, deduped by bin so a state that reports every bar does not
+       stack fifty identical lines on one price. */
+    /* AT_HVN / AT_LVN / MID — the engine's Schmitt-trigger states, not bare
+       HVN/LVN. Matching the wrong strings drew nothing and reported "no
+       data" over 81 real facts, which is the exact failure this whole layer
+       set exists to end. */
+    const bins = {};
+    for(const v of ex('volprofile'))
+      if(v.state === 'AT_HVN' || v.state === 'AT_LVN') bins[v.bin_lo + '|' + v.state] = v;
+    const shelves = Object.values(bins)
+      .sort((a, b) => b.market_time - a.market_time).slice(0, 8);
+    n.shelf = shelves.length;
+    if(overlays.shelf) for(const v of shelves){
+      const hvn = v.state === 'AT_HVN';
+      zoneLines.push(series.createPriceLine({
+        price: (+v.bin_lo + +v.bin_hi) / 2,
+        color: hvn ? 'rgba(148,163,184,.55)' : 'rgba(217,119,6,.45)',
+        lineWidth: hvn ? 2 : 1,
+        lineStyle: hvn ? 0 : 2,          // solid = traded heavily, dashed = thin
+        axisLabelVisible: false, title: hvn ? 'HVN' : 'LVN'}));
+    }
+
+    /* RANGES. The sideways boxes the market has been respecting. BROKEN ones
+       go for the same reason broken zones do. */
+    const rState = {};
+    for(const r of ex('range')) rState[r.range_id] = r;
+    const liveRanges = Object.values(rState)
+      .filter(r => r.event !== 'BROKEN' && r.state !== 'BROKEN')
+      .sort((a, b) => b.market_time - a.market_time).slice(0, 2);
+    n.ranges = liveRanges.length;
+    if(overlays.ranges) for(const r of liveRanges)
+      for(const [edge, title] of [['top', 'RANGE'], ['bottom', '']])
+        zoneLines.push(series.createPriceLine({price: +r[edge],
+          color: 'rgba(56,189,248,.40)', lineWidth: 1, lineStyle: 3,
+          axisLabelVisible: false, title}));
+
+    /* MOMENTUM, VOLUME AND VOLATILITY — one layer, because they answer one
+       question together: is price arriving at this structure with force
+       behind it, or out of breath? That is the reading the operator asked
+       for by name ("highly beneficial to know about momentum when analyzing
+       price against structure"), and it is a property of a MOMENT, so it
+       belongs on the bar it happened to rather than in a side panel.
+
+       Only the events that change a decision are drawn. MACD_ZERO, VWAP
+       crosses and ATR-regime changes fire constantly and would rebuild the
+       clutter this layer exists to justify removing. */
+    /* TEXT IS THE CLUTTER, not the markers. The first cut labelled every
+       event and produced three overlapping "DIVERGENCE" tags and a stack of
+       "2.1x VOL / 3.1x VOL" on adjacent bars — the exact look this surface
+       was cleaned up to remove. Only divergence keeps a word, because it is
+       the only one whose meaning is not carried by its own shape and colour;
+       the rest are read positionally, against the structure they sit on. */
+    const sig = [];
+    for(const m of ex('momentum')){
+      if(m.event === 'DIVERGENCE'){
+        // price made the high; momentum did not follow. The one momentum
+        // event that speaks directly about structure.
+        const bear = m.side === 'HIGH' || m.direction === 'BEAR';
+        sig.push({time: m.market_time, position: bear ? 'aboveBar' : 'belowBar',
+          shape: bear ? 'arrowDown' : 'arrowUp', color: '#a78bfa', size: 1.3,
+          text: 'DIV'});
+      }else if(m.event === 'RSI_BAND' && m.state){
+        const hot = /OVERBOUGHT/i.test(m.state);
+        if(!hot && !/OVERSOLD/i.test(m.state)) continue;
+        sig.push({time: m.market_time, position: hot ? 'aboveBar' : 'belowBar',
+          shape: 'circle', color: hot ? '#f87171' : '#4ade80', size: 0.8});
+      }
+    }
+    /* A 2x-of-baseline bar is common enough to be background. The threshold
+       is raised here rather than in the engine because the ENGINE's job is to
+       record every crossing for grading; the CHART's job is to show the ones
+       worth looking at. */
+    for(const v of ex('volume')){
+      if(v.event !== 'RVOL' || v.rvol_state !== 'HOT') continue;
+      if(!(+v.rvol >= 2.5)) continue;
+      sig.push({time: v.market_time, position: 'belowBar', shape: 'square',
+        color: '#fbbf24', size: 0.85});
+    }
+    for(const v of ex('volatility')){
+      if(v.event !== 'SQUEEZE') continue;
+      const on = v.squeeze === true || v.squeeze === 'true' || v.state === 'ON';
+      if(!on) continue;                     // the squeeze forming is the signal
+      sig.push({time: v.market_time, position: 'belowBar', shape: 'circle',
+        color: '#38bdf8', size: 0.75});
+    }
+    // Most recent first: an old signal off the left edge of the opening
+    // window cannot inform the trade being considered now.
+    sig.sort((a, b) => b.time - a.time);
+    const shown = sig.slice(0, 40);
+    n.signals = shown.length;
+    if(overlays.signals) markers.push(...shown);
+
     markers.sort((a, b) => a.time - b.time);
     series.setMarkers(markers);
     labelOverlays(n);
+  }
+
+  /* Fetch a lazy layer's facts once per market, then redraw.
+
+     Every kind behind one toggle is fetched together, so switching "Momentum"
+     on asks for momentum, volume and volatility in one go and never asks
+     again until the symbol or timeframe changes. Failure is silent-but-honest:
+     the kind stays an empty array, so the toggle reports "no data" rather than
+     appearing to work. */
+  async function ensureLayer(key){
+    const kinds = (LAZY[key] || '').split('|').filter(Boolean);
+    if(!kinds.length) return;
+    const want = sym + '|' + tf;
+    if(extraKey !== want){ extra = {}; extraKey = want; }
+    const missing = kinds.filter(k => !extra[k]);
+    if(!missing.length) return;
+    const btn = document.querySelector(`#cLayersPop [data-o="${key}"]`);
+    if(btn) btn.classList.add('loading');
+    await Promise.all(missing.map(async k => {
+      try{
+        const rows = await api(
+          `/api/facts?kind=${k}&symbol=${encodeURIComponent(sym)}&tf=${tf}`);
+        // the market may have changed while this was in flight
+        if(extraKey === want) extra[k] = Array.isArray(rows) ? rows : [];
+      }catch(err){ if(extraKey === want) extra[k] = []; }
+    }));
+    if(btn) btn.classList.remove('loading');
   }
 
   function paintLayersBtn(){
@@ -1267,11 +1448,16 @@ window.SSChart = (() => {
       pop.hidden = !pop.hidden;
       $('cLayersBtn').setAttribute('aria-expanded', String(!pop.hidden));
     });
-    $('cLayersPop').addEventListener('click', e => {
+    $('cLayersPop').addEventListener('click', async e => {
       const b = e.target.closest('button'); if(!b) return;
-      overlays[b.dataset.o] = !overlays[b.dataset.o];
-      b.classList.toggle('on', overlays[b.dataset.o]);
+      const key = b.dataset.o;
+      overlays[key] = !overlays[key];
+      b.classList.toggle('on', overlays[key]);
       paintLayersBtn();
+      // Lazy layers pay for themselves on first use only; the await is why
+      // this handler is async, and drawOverlays runs after either way so
+      // switching a layer OFF is instant.
+      if(overlays[key] && LAZY[key]) await ensureLayer(key);
       if(candles.length) drawOverlays();
     });
     $('tkDir').addEventListener('click', e => {

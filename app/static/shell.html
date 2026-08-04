@@ -249,6 +249,14 @@
             <button data-o="zones"     data-label="Zones"     class="on">Zones</button>
             <button data-o="liquidity" data-label="Liquidity" data-note="stop clusters inferred from the chart's own shape — a likely place for stops, not a measured one">Liquidity</button>
             <button data-o="cycle"     data-label="Cycle" data-note="daily and weekly cycle lows — observational, never traded">Cycle</button>
+            <!-- The engines that ran from day one with nowhere to appear.
+                 Lazy: nothing is fetched until one of these is switched on,
+                 and default-off because the standing complaint about this
+                 surface is clutter. -->
+            <button data-o="gaps"    data-label="Gaps"    data-note="price moved so fast it left a band untraded — unfilled gaps tend to get revisited">Gaps</button>
+            <button data-o="shelf"   data-label="Volume shelf" data-note="prices the market kept agreeing on (solid) and bands it crossed in a hurry (dashed)">Volume shelf</button>
+            <button data-o="ranges"  data-label="Ranges"  data-note="sideways boxes the market is still respecting">Ranges</button>
+            <button data-o="signals" data-label="Momentum" data-note="divergences, RSI extremes, volume spikes and volatility squeezes — is price arriving with force behind it">Momentum</button>
           </div>
         </div>
         <button class="btn" id="cAnalyse"

@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from engine import registry, store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
+from engine import momentum, volatility, volume, ma, fvg, volprofile, ranges
 
 KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "structure": structure.STRUCTURE_VERSION,
@@ -30,7 +31,22 @@ KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  # the chart's order ticket reads the sizing verdict for the
                  # setup it is showing, so it can never invite the operator to
                  # size a trade the risk authority already refused
-                 "risk": risk.RISK_VERSION}
+                 "risk": risk.RISK_VERSION,
+                 # THE EVIDENCE ENGINES, previously unreachable over HTTP.
+                 # They ran on every cycle and wrote hundreds of thousands of
+                 # facts that no surface could request: momentum 194,753,
+                 # volume 231,946, ma 171,982, volatility 83,771, fvg 74,596,
+                 # volprofile 20,050, range 12,367 (measured 4 Aug 2026).
+                 # Meanwhile the chart offered a Cycle layer over 116 facts.
+                 # An engine the operator cannot see is an engine that cannot
+                 # inform a decision.
+                 "momentum": momentum.MOMENTUM_VERSION,
+                 "volatility": volatility.VOLATILITY_VERSION,
+                 "volume": volume.VOLUME_VERSION,
+                 "ma": ma.MA_VERSION,
+                 "fvg": fvg.FVG_VERSION,
+                 "volprofile": volprofile.VOLPROFILE_VERSION,
+                 "range": ranges.RANGES_VERSION}
 
 app = FastAPI(title="SniperSight", version="0.1-draft")
 STATIC = Path(__file__).resolve().parent / "static"
