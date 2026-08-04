@@ -199,17 +199,26 @@ def run_symbol(con, symbol: str, now: int | None = None, log=None) -> dict:
         # scalein before this cycle's HTF execsim passes exist, landing every
         # add one cycle late — a silent lag, which is the drift disease this
         # function exists to end.
-        for mod in PER_SYMBOL:
-            for tf in live_tfs:
-                try:
-                    mod.run(con, symbol, tf, importer.TF_SECONDS[tf])
-                except Exception as exc:
-                    # One engine's failure is a fault to surface, not a
-                    # rejection reason to count — an exception that becomes a
-                    # funnel statistic is an exception nobody fixes.
-                    if log:
-                        log.warning(f"engine {mod.__name__} failed on "
-                                    f"{symbol} {tf}: {type(exc).__name__} {exc}")
+        #
+        # The candle cache is scoped to exactly this walk, and the scoping IS
+        # the correctness argument: engines write facts and never candles
+        # (pinned by test_candle_cache's source scan), and imports/aggregation
+        # both ran before this point, so the series is immutable for the
+        # duration. Without it, every module re-parsed the same rows out of
+        # SQLite — eighteen reads of an identical series per (symbol, tf).
+        from . import store as _store
+        with _store.candle_cache(con):
+            for mod in PER_SYMBOL:
+                for tf in live_tfs:
+                    try:
+                        mod.run(con, symbol, tf, importer.TF_SECONDS[tf])
+                    except Exception as exc:
+                        # One engine's failure is a fault to surface, not a
+                        # rejection reason to count — an exception that becomes
+                        # a funnel statistic is an exception nobody fixes.
+                        if log:
+                            log.warning(f"engine {mod.__name__} failed on "
+                                        f"{symbol} {tf}: {type(exc).__name__} {exc}")
 
     # A gate that no longer trips is DELETED: this table is current state, and
     # a stale row would keep reporting a hole the last cycle already closed.

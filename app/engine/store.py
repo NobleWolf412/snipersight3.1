@@ -9,6 +9,7 @@ import hashlib
 import json
 import sqlite3
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "snipersight.db"
@@ -312,14 +313,60 @@ def insert_fact(con, *, symbol: str, tf: str, kind: str, market_time: int,
     return cur.rowcount == 1
 
 
+# ---------------------------------------------------------- the candle cache
+#
+# Scoped, explicit, and empty by default. The engine roster reads the same
+# series 18 times per (symbol, timeframe) per pass — seventeen modules with
+# execsim twice, every one opening with `[dict(r) for r in get_candles(...)]`
+# — so one scan pass re-parsed identical rows out of SQLite up to 18 times
+# for every series it walked. Ported in shape from the prior project's
+# bulk-prefetch (`parallel_fetch` once, workers read the dict), reduced to
+# this codebase's actual need: the walk is serial, so a fetch-through cache
+# whose lifetime is one `pipeline.run_symbol` call is the whole design.
+#
+# WHY THE LIFETIME IS THE CORRECTNESS ARGUMENT, not a tuning choice: engines
+# write FACTS and never candles (test_candle_cache pins that with a source
+# scan), and imports/aggregation both happen before the engine walk begins —
+# so within one walk the series is immutable and a cache cannot go stale.
+# Outside the walk no cache exists and every caller gets today's behaviour,
+# byte for byte. Keyed by id(con) and popped in a finally: entry always binds
+# a fresh dict, so id reuse after close cannot resurrect old candles.
+#
+# Only the whole-series call (no range, no limit) is cached — it is the only
+# form any engine uses. A ranged call bypasses the cache by construction
+# rather than by a subtle key, so the server's windowed endpoints cannot even
+# reach this code path.
+_CANDLE_CACHE: dict[int, dict] = {}
+
+
+@contextmanager
+def candle_cache(con):
+    """Serve repeated whole-series candle reads from memory, for one walk."""
+    _CANDLE_CACHE[id(con)] = {}
+    try:
+        yield
+    finally:
+        _CANDLE_CACHE.pop(id(con), None)
+
+
 def get_candles(con, symbol: str, tf: str, start_ts: int = 0,
-                end_ts: int = 2**53, limit: int | None = None) -> list[sqlite3.Row]:
+                end_ts: int = 2**53, limit: int | None = None) -> list:
     con.row_factory = sqlite3.Row
+    whole = start_ts == 0 and end_ts == 2**53 and limit is None
+    cache = _CANDLE_CACHE.get(id(con)) if whole else None
+    if cache is not None and (symbol, tf) in cache:
+        return cache[(symbol, tf)]
     q = ("SELECT * FROM candles WHERE symbol=? AND tf=? AND open_ts>=? AND open_ts<? "
          "ORDER BY open_ts")
     rows = con.execute(q, (symbol, tf, start_ts, end_ts)).fetchall()
     if limit is not None:
         rows = rows[-limit:]
+    if cache is not None:
+        # Stored as plain dicts — the terminal form every consumer builds
+        # anyway — so `dict(r)` in each engine's comprehension keeps handing
+        # out private copies and no engine can mutate another's view.
+        rows = [dict(r) for r in rows]
+        cache[(symbol, tf)] = rows
     return rows
 
 
