@@ -1227,8 +1227,14 @@ window.SSChart = (() => {
     }
     for(const v of ex('volatility')){
       if(v.event !== 'SQUEEZE') continue;
-      const on = v.squeeze === true || v.squeeze === 'true' || v.state === 'ON';
-      if(!on) continue;                     // the squeeze forming is the signal
+      /* `squeeze` is the STRING 'ON'/'OFF' — volatility.py emits
+         {"squeeze": new, "from": state, "state": "CHANGED"|"ESTABLISHED"}.
+         The first cut tested `=== true` and `state === 'ON'`, neither of
+         which can ever match: `state` is the event PHASE, not the squeeze.
+         So this marker silently never drew, the same class of failure as the
+         AT_HVN mismatch beside it. Caught 4 Aug 2026 by enumerating the real
+         values in the store rather than reading the code. */
+      if(v.squeeze !== 'ON') continue;      // the squeeze forming is the signal
       sig.push({time: v.market_time, position: 'belowBar', shape: 'circle',
         color: '#38bdf8', size: 0.75});
     }
