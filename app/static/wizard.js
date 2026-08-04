@@ -501,8 +501,14 @@
   });
   document.addEventListener('keydown', e => { if (open && e.key === 'Escape') close(); });
 
-  const btn = document.getElementById('btnDiagnose');
-  if (btn) btn.addEventListener('click', openWizard);
+  /* Two doors, one room. The Diagnostics one has always existed, buried in a
+     panel called "Why nothing fired" on the surface that looks like it is for
+     engineers; the audit found that a newcomer would never reach the single
+     most useful thing in the app. The Command one is the fix. */
+  for (const id of ['btnDiagnose', 'btnDiagnoseCmd']) {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener('click', openWizard);
+  }
 
   window.SSWizard = { open: openWizard, close };
 })();

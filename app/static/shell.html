@@ -87,8 +87,19 @@
           <!-- The reason is ON the control, not hidden in a hover title. A
                disabled button whose explanation you have to discover teaches an
                operator that the app is arbitrary. -->
+          <!-- "Auto: Off" under a heading that says Scanner read as "the
+               scanner is off" — it means auto-TRADING, and the scanner was
+               running 213 cycles at the time (UX audit, 4 Aug 2026). The
+               label now names what is off, and the reason points at the four
+               criteria in Settings rather than gesturing at an undefined
+               condition. -->
           <button class="btn" id="btnAuto" disabled
-                  title="locked until the forward record earns it">Auto: Off</button>
+                  title="the scanner is running — this is automatic ORDER PLACEMENT, locked until the forward record earns it. Settings → Going live lists the four criteria.">Auto-trade: off</button>
+          <!-- The best guidance in the app was three clicks into Diagnostics,
+               under a panel called "Why nothing fired". A newcomer never went
+               there. It runs eight checks and says which to fix first. -->
+          <button class="btn" id="btnDiagnoseCmd"
+                  title="run eight checks and say which one to fix first">Diagnose</button>
         </div>
         <div class="panel-body">
           <!-- What the last action did, and when. Run Scan used to show
@@ -443,6 +454,23 @@
         <div class="tile"><span class="t-label">Max <span class="term" data-t="drawdown">drawdown</span></span><span class="t-metric" id="rDD">—</span></div>
         <div class="tile"><span class="t-label"><span class="term" data-t="killSwitch">Halt</span> days</span><span class="t-metric" id="rHalt">—</span></div>
       </div>
+      <!-- THE SCOREBOARD. This surface asks "Is this actually working?" and
+           could not answer it: equity and drawdown say what happened to the
+           money, not whether the method works. Win rate, average R and the
+           sample were on DIAGNOSTICS, framed as engineering detail (UX audit,
+           4 Aug 2026). The confidence intervals stay there — those ARE an
+           engineering reading — but these four are the scoreboard.
+           Baseline-scoped like every tile above, so the era band covers them. -->
+      <div class="grid cols-4" style="margin-bottom:var(--sm)">
+        <div class="tile"><span class="t-label">Trades closed</span><span class="t-metric" id="rTrades">—</span></div>
+        <div class="tile"><span class="t-label">Win rate</span><span class="t-metric" id="rWin">—</span></div>
+        <div class="tile"><span class="t-label">Average <span class="term" data-t="rMultiple">R</span></span><span class="t-metric" id="rAvgR">—</span></div>
+        <div class="tile"><span class="t-label">Profit factor</span><span class="t-metric" id="rPF">—</span></div>
+      </div>
+      <!-- The sample caveat, sized to the sample. A win rate off seven trades
+           is a number, not evidence, and saying so here is cheaper than
+           letting the reader find out later. -->
+      <p class="t-body" id="rSample" style="margin:0 0 var(--lg);color:var(--fg-4);font-size:11px"></p>
       <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head"><h2 class="t-section">Trade Journal</h2>
           <span class="chip" id="jnlCount" style="margin-left:auto">—</span></div>

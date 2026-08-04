@@ -154,7 +154,12 @@ ok('Pipeline: severity rungs are translated, not dropped', () => {
 });
 
 ok('Deck: a fresh window is distinguished from a quiet market', () => {
-  const b = body('renderDeck');
+  /* Repinned 4 Aug 2026: the three branches moved out of renderDeck into
+     `deckEmptyHtml` so the "nothing ACTIONABLE" path can lead with the same
+     sentence instead of inventing a fourth wording. The property under test —
+     three distinct states, three different messages — is unchanged; only its
+     address moved. */
+  const b = body('deckEmptyHtml');
   assert(/cycles/.test(b), 'no check for whether anything was scanned at all');
   assert(/nothing has been examined in this window yet/i.test(b),
          'the unexamined-window message is missing');

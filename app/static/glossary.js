@@ -34,6 +34,15 @@ window.GLOSSARY = {
   trailing:   "A stop that follows price as the trade moves your way, locking in gains instead of sitting still.",
   setup:      "A trade opportunity the scanner found: a direction, an entry, a target, a stop, and the reasoning behind it.",
   shadow:     "A symbol the scanner watches, scores and simulates but NEVER sizes a real position on — usually because its venue is not one this system trades yet. Its record is evidence about whether to admit that venue, not part of your own record. Market Weather counts shadow symbols separately from tradeable ones for that reason.",
+  /* Added after the UX audit walked the primary surface as a first-time
+     trader and listed the words that appear there with no way to look them
+     up. "1D agrees" was the costliest omission: it is the higher-timeframe
+     confirmation that makes the trade, and it was unexplained on the card
+     asking you to take it. */
+  liquidity:  "Prices where a lot of stop orders are probably resting — under an obvious low, above an obvious high. Price is drawn to them, because triggering stops creates the volume a large order needs to fill. This is INFERRED from the shape of the chart, never measured: no exchange publishes where stops sit.",
+  sized:      "Turned into an actual position with a dollar amount at risk. A setup can be found, scored and recorded without ever being sized — sizing is the moment the risk authority approves it and decides how much. Shadow and warming symbols are scanned and scored but never sized.",
+  halt:       "A limit that stops NEW entries when the day or the account goes badly enough. Open positions still run to their own stop or target — a halt is not a liquidation. The daily one triggers on losses in a single day; the drawdown one on the fall from your account's high-water mark.",
+  htfAgrees:  "The higher timeframe is pointing the same way as the trade. A 4H short with '1D agrees' means the daily structure is also falling, so the trade runs with the larger trend rather than against it. When they disagree, the smaller timeframe is fighting the bigger one — which is the trade most likely to be stopped out by ordinary noise.",
   warming:    "A symbol that is still downloading history. It needs 200 daily candles before the engines can map its structure honestly, so until then it is scanned and recorded but never sized. Warming is the system waiting on data, not the system finding nothing.",
   cooldown:   "A rest period after a trade closes, per symbol and direction. A stop-out rests far longer than a target: a stop means the level was proven wrong, and re-entering an idea that just failed is one of the easiest ways to turn one loss into three. A setup refused this way was VALID — it was refused on timing, not on quality. This rule is new and has never been checked against outcomes: it is a rule of thumb the engine applies, not a proven improvement.",
   universe:   "The symbols the scanner is allowed to trade right now. Shadow symbols are watched, scored and simulated but never sized — their record is evidence for whether to admit that venue, not part of yours. Warming ones are still backfilling history. Symbols we merely still hold candles for are not in the count at all.",
@@ -206,7 +215,14 @@ window.GLOSSARY = {
      of "zone" is dotted reads as noise and gets skipped wholesale. */
   const TERMS = [
     [/\bliquidity sweeps?\b/i, 'sweep'],
+    /* "1D agrees" / "4H opposes" — the higher-timeframe verdict, printed on
+       the deck card that asks you to take the trade and unexplained until the
+       UX audit walked this surface cold. Placed above the bare /liquidity/
+       and /timeframe/ patterns so the whole phrase is claimed as one term
+       rather than half of it being underlined. */
+    [/\b\d+[DWHM] (?:agrees|opposes)\b/i, 'htfAgrees'],
     [/\bhigher[- ]timeframe\b/i, 'timeframe'],
+    [/\bliquidity\b/i, 'liquidity'],
     [/\btimeframes?\b/i, 'timeframe'],
     [/\bpullbacks?\b/i, 'pullback'],
     [/\breversals?\b/i, 'reversal'],

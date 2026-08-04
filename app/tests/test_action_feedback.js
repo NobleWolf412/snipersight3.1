@@ -77,10 +77,22 @@ ok('the disabled Auto button still carries its reason', () => {
   // Post-purge the reason moved from a visible caption to a hover title —
   // words on demand. The property that matters survives: the control is
   // never disabled WITHOUT a stated reason.
-  const m2 = HTML.match(/<button[^>]*id="btnAuto"[^>]*>/);
+  // through the CLOSING tag: the label is text content, not an attribute
+  const m2 = HTML.match(/<button[^>]*id="btnAuto"[\s\S]*?<\/button>/);
   assert(m2, 'the Auto control is gone');
-  assert(/title="locked until/.test(m2[0]),
+  assert(/title="[^"]*locked until/.test(m2[0]),
          'a disabled control with no stated reason teaches that the app is arbitrary');
+  /* Repinned 4 Aug 2026. The reason no longer OPENS with "locked until": the
+     UX audit found "Auto: Off" under a heading reading Scanner was taken to
+     mean the scanner was off, while it was running 213 cycles. The title now
+     leads by saying the scanner IS running and names what is actually off,
+     then gives the reason. Both properties are pinned — the label distinguishes
+     itself from the scanner, and the reason is still stated. */
+  assert(/Auto-trade/.test(m2[0]),
+         'the label reads "Auto" alone again — under a Scanner heading that ' +
+         'says the scanner is off, which it is not');
+  assert(/scanner is running/.test(m2[0]),
+         'the title no longer distinguishes auto-trading from scanning');
 });
 
 ok('the scanner chip cannot shove the header around', () => {

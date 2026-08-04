@@ -493,41 +493,49 @@
     }).join(', ');
   }
 
+  /* THE EMPTY-WINDOW RULE, site 4 of 4.
+     The informative branch was gated on `total > 0`, so on a FRESH BASELINE —
+     when nothing has been rejected because nothing has been examined — it was
+     unreachable, and the operator got four bare words. That is precisely the
+     moment after every rule change, when "no setups right now" is most likely
+     to be read as "the scanner is broken".
+
+     Three distinct states, three different messages. Two of them are the
+     OPPOSITE of each other and were collapsed into the same sentence: a quiet
+     market and an unexamined one.
+
+     Extracted from renderDeck so the "nothing ACTIONABLE" path can lead with
+     the same sentence rather than inventing a fourth wording for what is the
+     same fact. */
+  function deckEmptyHtml(funnel){
+    const rows = Object.entries(funnel).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const total = Object.values(funnel).reduce((s, n) => s + n, 0);
+    const cycles = (lastOverview && lastOverview.scanner && lastOverview.scanner.cycles) || 0;
+    const nSyms = (lastOverview && (lastOverview.universe_counts || {}).admitted) || 0;
+    let body;
+    if(total){
+      body = '<br><span style="color:var(--fg-3)">The engine looked at ' +
+        fmt(total) + ' chances in this window and passed on every one. ' +
+        'The most common reasons:</span><br>' +
+        rows.map(([r, n]) => '<span style="color:var(--amber)">' + fmt(n) + '</span> ' +
+          plainReason(r)).join('<br>');
+    } else if(!cycles){
+      body = '<br><span style="color:var(--fg-3)">Nothing has been rejected ' +
+        'either, because nothing has been examined in this window yet.</span>';
+    } else {
+      body = '<br><span style="color:var(--fg-3)">' + nSyms + ' symbols scanned. ' +
+        'None are in a state any ' +
+        '<span class="term" data-t="playbook">playbook</span> has a play for — ' +
+        'Market Weather below shows which regimes they are in.</span>';
+    }
+    return '<div class="empty">no setups right now' + body + '</div>';
+  }
+
   function renderDeck(setups, funnel){
     lastDeckArgs = [setups, funnel];
     const el = $('deck');
     if(!setups.length){
-      /* THE EMPTY-WINDOW RULE, site 4 of 4.
-         The informative branch was gated on `total > 0`, so on a FRESH
-         BASELINE — when nothing has been rejected because nothing has been
-         examined — it was unreachable, and the operator got four bare words.
-         That is precisely the moment after every rule change, when "no setups
-         right now" is most likely to be read as "the scanner is broken".
-
-         Three distinct states, three different messages. Two of them are the
-         OPPOSITE of each other and were collapsed into the same sentence:
-         a quiet market and an unexamined one. */
-      const rows = Object.entries(funnel).sort((a, b) => b[1] - a[1]).slice(0, 3);
-      const total = Object.values(funnel).reduce((s, n) => s + n, 0);
-      const cycles = (lastOverview && lastOverview.scanner && lastOverview.scanner.cycles) || 0;
-      const nSyms = (lastOverview && (lastOverview.universe_counts || {}).admitted) || 0;
-      let body;
-      if(total){
-        body = '<br><span style="color:var(--fg-3)">The engine looked at ' +
-          fmt(total) + ' chances in this window and passed on every one. ' +
-          'The most common reasons:</span><br>' +
-          rows.map(([r, n]) => '<span style="color:var(--amber)">' + fmt(n) + '</span> ' +
-            plainReason(r)).join('<br>');
-      } else if(!cycles){
-        body = '<br><span style="color:var(--fg-3)">Nothing has been rejected ' +
-          'either, because nothing has been examined in this window yet.</span>';
-      } else {
-        body = '<br><span style="color:var(--fg-3)">' + nSyms + ' symbols scanned. ' +
-          'None are in a state any ' +
-          '<span class="term" data-t="playbook">playbook</span> has a play for — ' +
-          'Market Weather below shows which regimes they are in.</span>';
-      }
-      el.innerHTML = '<div class="empty">no setups right now' + body + '</div>';
+      el.innerHTML = deckEmptyHtml(funnel);
       deckRows.clear();          // the differ's nodes went with that innerHTML
       return;
     }
@@ -544,7 +552,25 @@
       if(!cur || expiry(s) < expiry(cur)) best.set(key, s);
     }
     const now = Date.now() / 1000;
-    const ordered = [...best.values()].sort((a, b) => expiry(a) - expiry(b));
+    const all = [...best.values()].sort((a, b) => expiry(a) - expiry(b));
+
+    /* ACTIONABLE FIRST, AND NEVER A DEAD CARD ALONE.
+
+       This panel answers "What should I do right now?" and the audit found it
+       answering with a single setup that was four days old, expiring, refused
+       by the risk authority, and carrying `dead` in its own class list. The
+       experienced reader treats a stale signal as noise and stops trusting
+       the deck; the newcomer cannot tell whether a card marked NOT TRADED is
+       advice or a rejection, because it sits in the slot where advice goes.
+
+       Nothing is hidden — a refused setup is still the best available answer
+       to "why did nothing fire", which is why the funnel exists. It is
+       demoted, and when it is ALL there is, the honest empty state leads and
+       the refusals follow it under a heading that says what they are. */
+    const spent = s => (s.risk && s.risk.decision === 'REJECTED')
+                    || (s.expires_at_ts && s.expires_at_ts <= now);
+    const ordered = all.filter(s => !spent(s));
+    const passed = all.filter(spent);
 
     /* Keyed diff, because the next click on this surface opens an order ticket.
        This deck used to be replaced wholesale via `innerHTML` every 30s: every
@@ -570,9 +596,20 @@
        went unseen because the deck was empty in every test until a real setup
        finally fired. */
     el.querySelectorAll(':scope > .skeleton, :scope > .empty').forEach(n => n.remove());
+    el.querySelectorAll(':scope > .deck-divider').forEach(n => n.remove());
+
+    /* Nothing actionable: say so FIRST, in the same words the fully-empty
+       deck uses, and let the refusals follow under a heading that names them.
+       Before this, the refusals WERE the answer to "what should I do right
+       now" — the top card of the primary surface was four days dead. */
+    if(!ordered.length && passed.length){
+      el.insertAdjacentHTML('afterbegin', deckEmptyHtml(funnel));
+      el.insertAdjacentHTML('beforeend',
+        '<div class="deck-divider">Looked at, not taken</div>');
+    }
 
     const seen = new Set();
-    ordered.forEach(s => {
+    ordered.concat(passed).forEach(s => {
       const key = s.symbol;
       seen.add(key);
       const held = heldSids.has(s.setup_id || '') || pendSids.has(s.setup_id || '');
@@ -1525,6 +1562,7 @@
       setSub('rReturn', ''); setSub('rDD', ''); setSub('rEquity', '');
     }
     $('rHalt').textContent = p.kill_switch_days ?? 0;
+    renderScoreboard(p.journal || []);
     if(p.config) $('mRisk').textContent = money(p.config.next_risk_usd);
     drawCurve(p.curve, p.start_equity);
 
@@ -1881,6 +1919,21 @@
     const tone = healthTone(h);
     $('healthOrb').className = 'orb ' + tone;
     $('healthTxt').textContent = h.status;
+    /* A STATUS WITH NO CONSEQUENCE IS NOT A STATUS. This chip read DEGRADED on
+       every surface with nothing to say whether that meant "do not trade
+       today" or "a background check is noisy". The newcomer freezes; the
+       experienced reader learns it never changes and stops seeing it — and
+       then misses the day it says BLOCKED. The consequence, in one sentence,
+       on the hover that was previously a bare label. */
+    $('healthChip').title =
+      !h.evaluation_allowed
+        ? 'BLOCKED — the engine is refusing to size new entries on this data. ' +
+          'Fix the data before trading. Diagnostics lists what failed.'
+      : h.status === 'PASS'
+        ? 'Every data check passed. Nothing is being held back.'
+        : 'Trading continues — the data is being used with a mark on it, not ' +
+          'held back. Only BLOCKED stops new entries. Diagnostics lists what ' +
+          'is flagged.';
     $('dVerdict').textContent = h.status + (h.evaluation_allowed ? '' : ' · BLOCKED');
     $('dVerdict').style.color = TONE_VAR[tone];
 
@@ -2165,6 +2218,53 @@
       ? 'new entries are blocked — click to resume'
       : 'stop sizing new entries (open positions still settle)';
     document.body.classList.toggle('is-halted', halted);
+  }
+
+  /* ---------- the scoreboard ----------
+
+     "Is this actually working?" is the question printed at the top of this
+     surface, and equity and drawdown do not answer it — they say what
+     happened to the money, not whether the method works. Win rate, average R
+     and the sample lived on Diagnostics, framed as engineering detail.
+
+     Computed from the FORWARD journal, never from the edge panel's whole
+     recorded book: those two populations differ by hundreds of trades, and
+     mixing them on one page is a bug this project has already had to fix
+     once. The era band above these tiles is their scope statement. */
+  function renderScoreboard(journal){
+    const rs = journal.map(t => t.r_multiple)
+                      .filter(r => r != null).map(Number);
+    const n = rs.length;
+    if(!n){
+      for(const id of ['rTrades', 'rWin', 'rAvgR', 'rPF']) $(id).textContent = '—';
+      $('rSample').textContent = '';
+      return;
+    }
+    const wins = rs.filter(r => r > 0);
+    const gross = wins.reduce((s, r) => s + r, 0);
+    const loss = rs.filter(r => r < 0).reduce((s, r) => s - r, 0);
+    const avg = rs.reduce((s, r) => s + r, 0) / n;
+
+    $('rTrades').textContent = n;
+    $('rWin').textContent = Math.round(wins.length / n * 100) + '%';
+    $('rAvgR').textContent = (avg >= 0 ? '+' : '') + avg.toFixed(2) + 'R';
+    $('rAvgR').parentElement.className = 'tile ' + (avg > 0 ? 'up' : avg < 0 ? 'down' : '');
+    // A book with no losses has no profit factor — it has no denominator.
+    // Printing ∞ or 999 there would read as a result rather than an absence.
+    $('rPF').textContent = loss > 0 ? (gross / loss).toFixed(2)
+                         : gross > 0 ? 'no losses yet' : '—';
+
+    /* THE SAMPLE CAVEAT, sized to the sample. A win rate off seven trades is
+       a number, not evidence. The thresholds match the ones the rest of the
+       app already uses: edgestats needs 10 trades to compute an interval at
+       all, and livegate wants 100 before it will unlock real money. */
+    $('rSample').textContent = n >= 100
+      ? ''
+      : n < 10
+        ? `${n} trade${n === 1 ? '' : 's'} — far too few to read anything into. ` +
+          `A confidence interval needs at least 10.`
+        : `${n} trades — enough to compute, not enough to trust. Settings ` +
+          `wants 100 before the record argues for real money.`;
   }
 
   /* ---------- going live: the criteria, and where the record stands ----------

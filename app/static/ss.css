@@ -1185,6 +1185,13 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   .layers-pop button.loading::before{animation:none}
 }
 
+/* "Looked at, not taken" — the line between what you can act on and what the
+   engine merely examined. Without it, a refused four-day-old setup sat in the
+   slot where advice goes and read as advice. */
+.deck-divider{font-family:var(--f-mono);font-size:9.5px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--fg-4);padding:12px var(--lg) 6px;
+  border-top:1px solid var(--border-soft);margin-top:var(--sm)}
+
 /* Going live: four criteria as bars that move. A dead end cannot answer
    "how close am I", which is the only question worth asking of a lock. */
 .gate-row{padding:9px 0;border-bottom:1px solid var(--border-soft)}
