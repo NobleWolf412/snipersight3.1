@@ -185,23 +185,40 @@
     const M = 'Setups are only as trustworthy as the candles behind them.';
     if (!b.health.ok) return undetermined(T, b.health, M);
     const h = b.health.d;
+    /* `stale_series` counts only MAINTAINED series — the ones the scanner
+       actually refreshes. Everything else in the store is history for symbols
+       outside the scan universe, which ages by design and which no scan will
+       ever bring current. This step used to count those too and then tell the
+       operator to "run a scan to re-import", an instruction that could never
+       succeed: 227 permanently stale series, a permanent DEGRADED, and a
+       permanent piece of advice that did nothing (UX audit, 4 Aug 2026). */
     const stale = (h.stale_series || []).length;
+    const stored = h.stored_stale_count || 0;
+    // Said the same way whether the step passes or not, so the number never
+    // reappears later as a surprise.
+    const aside = stored
+      ? ` ${fmt(stored)} more are history for tokens outside the scan list — ` +
+        `those age by design and no scan changes them.`
+      : '';
     if (h.status === 'OK') return {
       title: T, result: 'pass',
-      value: `database ${h.database} · ${fmt((h.series || []).length)} series, none stale`,
-      means: M + ' Every series is current and the store passes its integrity check.'
+      value: `database ${h.database} · ${fmt(h.maintained_series || 0)} ` +
+             `scanned series, all current`,
+      means: M + ' Every series the scanner maintains is current and the store ' +
+             'passes its integrity check.' + aside
     };
     return {
       title: T, result: stale ? 'warn' : 'fail',
-      value: `${h.status} · database ${h.database} · ${fmt(stale)} stale series · ` +
+      value: `${h.status} · database ${h.database} · ${fmt(stale)} stale of ` +
+             `${fmt(h.maintained_series || 0)} scanned · ` +
              `${fmt(h.bad_candles_rejected || 0)} bad candles rejected`,
       means: M + (stale
-        ? ' Some series stopped updating, so any setup on those tokens is being ' +
-          'judged on old prices.'
+        ? ' A token the scanner is supposed to keep current stopped updating, ' +
+          'so any setup on it is being judged on old prices.'
         : ' The fact store failed its integrity check, which is more serious ' +
-          'than stale data — numbers built on it cannot be trusted.'),
+          'than stale data — numbers built on it cannot be trusted.') + aside,
       doing: stale
-        ? 'Run a scan to re-import. If a series stays stale, the venue is not ' +
+        ? 'Run a scan to re-import. If it stays stale, the venue is not ' +
           'returning candles for that token.'
         : 'Stop trading decisions on these numbers and rebuild the store.',
       cta: { href: '#command', label: 'Command' }

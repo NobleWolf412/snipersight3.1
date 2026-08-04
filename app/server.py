@@ -2482,12 +2482,31 @@ def health():
         rows = con.execute(
             "SELECT symbol, tf, MAX(open_ts) FROM candles GROUP BY symbol, tf"
         ).fetchall()
+        # MAINTAINED vs MERELY STORED. The live loop refreshes candles for
+        # `universe.scan_symbols` and nothing else (live.py:236, :350). Every
+        # other symbol in this table is history the store happens to hold —
+        # the chart picker offers 48 symbols outside the scan universe, and
+        # opening one fetches candles that then sit there ageing forever, by
+        # design.
+        #
+        # Measured 4 Aug 2026: 227 of 419 series were stale and ZERO of them
+        # were in the scan universe. `status` was computed over all of them,
+        # so it had been DEGRADED continuously and could never read OK again
+        # — a status that cannot change is not a status. Worse, the Diagnose
+        # wizard reads this and told the operator to "run a scan to
+        # re-import", which cannot work for a symbol the scanner does not
+        # fetch: advice that never succeeds, in the one tool whose job is
+        # telling you what to do.
+        maintained = set(universe.scan_symbols(con))
         series = []
         for symbol, tf, last_open in rows:
             sec = importer.TF_SECONDS[tf]
             age_s = max(0, now - (last_open + sec))
             series.append({"symbol": symbol, "tf": tf, "last_open": last_open,
-                           "age_s": age_s, "stale": age_s > 2 * sec})
+                           "age_s": age_s, "stale": age_s > 2 * sec,
+                           "maintained": symbol in maintained})
+        stale_maintained = [s for s in series if s["stale"] and s["maintained"]]
+        stale_stored = [s for s in series if s["stale"] and not s["maintained"]]
         # Gap rows whose requested range STARTS before 2000 are artefacts of the
         # cold-start bug fixed 2026-07-30: a symbol with no candles asked the
         # venue for history from 1970 and logged every bucket since as missing.
@@ -2503,8 +2522,8 @@ def health():
         quarantined = con.execute(
             "SELECT COUNT(*), COALESCE(SUM(n_gaps),0) FROM import_log "
             "WHERE range_start < ?", (PRE_2000,)).fetchone()
-        return {"status": "OK" if integrity == "ok" and not any(
-                    s["stale"] for s in series) else "DEGRADED",
+        return {"status": "OK" if integrity == "ok" and not stale_maintained
+                          else "DEGRADED",
                 "database": integrity, "bad_candles_rejected": bad,
                 "gaps_logged": gaps,
                 "quarantined_gap_rows": quarantined[0],
@@ -2515,7 +2534,21 @@ def health():
                     "gaps_logged but retained in the log"
                 ) if quarantined[0] else None,
                 "series": series,
-                "stale_series": [s for s in series if s["stale"]]}
+                "maintained_series": sum(1 for s in series if s["maintained"]),
+                # `stale_series` means STALE AND MAINTAINED: the ones a scan
+                # can actually fix. Its consumer (the Diagnose wizard) turns
+                # this into an instruction, and an instruction that cannot
+                # succeed is worse than none.
+                "stale_series": stale_maintained,
+                # Nothing is hidden — the rest is reported, and named as what
+                # it is rather than counted as a fault.
+                "stored_stale_count": len(stale_stored),
+                "stored_stale_reason": (
+                    f"{len(stale_stored)} series are history for symbols "
+                    f"outside the scan universe. Nothing refreshes them by "
+                    f"design — they are candles fetched when a chart was "
+                    f"opened. Not a fault, and no scan will change it."
+                ) if stale_stored else None}
     finally:
         con.close()
 
