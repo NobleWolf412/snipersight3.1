@@ -679,8 +679,15 @@ def portfolio():
                 continue
             risk_usd = float(sized.get("risk_usd") or 0)
             r_net = float(ex.get("r_multiple") or 0)
+            # The reason the trade was taken, from the setup that took it —
+            # the setup's own `why` sentence and the regime it fired in. The
+            # journal is the surface an operator reads to learn what their
+            # system does; a row with an outcome but no reason teaches nothing.
+            setup = setup_by_id.get(sid, {})
             journal.append({
                 "setup_id": sid, "symbol": ex["symbol"], "tf": ex["tf"],
+                "why": setup.get("why"),
+                "regime": setup.get("regime"),
                 "ts": ex["ts"],
                 "direction": ex.get("direction"),
                 "strategy": ex.get("strategy"),

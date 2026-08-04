@@ -436,6 +436,11 @@
         <div class="tile"><span class="t-label"><span class="term" data-t="killSwitch">Halt</span> days</span><span class="t-metric" id="rHalt">—</span></div>
       </div>
       <div class="panel" style="margin-bottom:var(--lg)">
+        <div class="panel-head"><h2 class="t-section">Trade Journal</h2>
+          <span class="chip" id="jnlCount" style="margin-left:auto">—</span></div>
+        <div id="journal"><div class="empty">no closed trades in this window yet</div></div>
+      </div>
+      <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head"><h2 class="t-section">Equity Curve</h2>
           <span class="chip" id="baselineChip" style="margin-left:auto">—</span></div>
         <div class="panel-body">
@@ -460,9 +465,7 @@
            interval right beneath it. edgeview.js owns it, reads
            /api/edge-stats, and measures the WHOLE recorded book — its era band
            says so and distinguishes it from the forward-window tiles above. -->
-      <div id="edgeRoot" style="margin-bottom:var(--lg)">
-        <div class="skeleton" role="status" aria-label="loading">
-          <div class="skel" style="height:64px"></div>
+
           <div class="skel skel-line" style="width:60%"></div>
           <div class="skel skel-line" style="width:85%"></div>
         </div>
@@ -474,11 +477,6 @@
            trades and how did each one end?", which is the first question
            anyone evaluating a bot asks of it. Only sized trades appear here;
            the engine's research simulations never touch this list. -->
-      <div class="panel" style="margin-bottom:var(--lg)">
-        <div class="panel-head"><h2 class="t-section">Trade Journal</h2>
-          <span class="chip" id="jnlCount" style="margin-left:auto">—</span></div>
-        <div id="journal"><div class="empty">no closed trades in this window yet</div></div>
-      </div>
 
       <div class="grid cols-2" style="margin-bottom:var(--lg)">
         <div class="panel">
@@ -657,6 +655,14 @@
            someone designed it to be embedded here and stopped one step short.
            This is that step. The iframe stays src-less until opened, so the
            second app costs nothing until someone asks for it. -->
+      <!-- "Is the edge real?" — moved here from Results (operator ruling:
+           Results is the trades; the statistics deep-dive is an engineering
+           reading and lives with the other instruments). edgeview.js mounts
+           into this div wherever it sits. -->
+      <div id="edgeRoot" style="margin-bottom:var(--lg)">
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:64px"></div>
+
       <details class="explainer" id="provenance" style="margin-top:var(--lg)">
         <summary class="explainer-head">
           <h2 class="t-section">Decision Provenance</h2>

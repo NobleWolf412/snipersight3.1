@@ -1369,11 +1369,22 @@
         String(j.outcome).toUpperCase() === 'TP' && j.r_multiple <= 0
           ? 'hit target — too close to pay'
           : outcomeWord(j.outcome);
+      /* The row is read left to right as: what · why · how it went · what it
+         paid. The bar is the visual verdict — signed R against a zero line,
+         capped at 3R so one runner cannot flatten every other bar — because
+         a column of green and red bars says in one glance what a column of
+         numbers says in thirty seconds. */
+      const barR = Math.max(-3, Math.min(3, j.r_multiple || 0));
+      const barW = Math.abs(barR) / 3 * 50;
+      const reason = [j.regime ? String(j.regime).replace('_', ' ').toLowerCase() : '',
+                      j.why ? plainReason(j.why) : ''].filter(Boolean).join(' · ');
       return `<div class="jnl-row${flat ? '' : up ? ' up' : ' down'}">
         <div>
-          <div class="t-mono" style="font-size:13px;color:var(--fg)">${esc(String(j.symbol).replace('-USD',''))}</div>
-          <div class="t-label" style="margin-top:3px">${esc(j.tf)} · ${
-            j.direction === 'LONG' ? 'long' : 'short'} · ${playbookLabel(j.strategy)}</div>
+          <div class="t-mono" style="font-size:13px;color:var(--fg)">${
+            j.direction === 'LONG' ? '<span class="dir-up">▲</span>' : '<span class="dir-dn">▼</span>'} ${
+            esc(tokenOf(j.symbol))}</div>
+          <div class="t-label" style="margin-top:3px">${esc(j.tf)} · ${playbookLabel(j.strategy)}</div>
+          ${reason ? `<div class="jnl-why" title="why the engine took it">${esc(reason)}</div>` : ''}
         </div>
         <div class="jnl-say">
           ${outcomeText}${costsAte
@@ -1386,7 +1397,9 @@
             'risked ' + money(j.risk_usd)].filter(Boolean).join(' · ')}</div>
         </div>
         <div class="jnl-r">${rr(j.r_multiple)}
-          <span class="t-sub">${signedMoney(j.pnl_usd)}</span></div>
+          <span class="t-sub">${signedMoney(j.pnl_usd)}</span>
+          <span class="jnl-bar"><i class="${barR >= 0 ? 'pos' : 'neg'}"
+            style="width:${barW.toFixed(1)}%;${barR >= 0 ? 'left:50%' : 'right:50%'}"></i></span></div>
       </div>`;
     }).join('');
   }

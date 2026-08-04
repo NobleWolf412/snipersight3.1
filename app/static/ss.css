@@ -1156,3 +1156,16 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .layers-pop button.on::before{background:var(--accent);border-color:var(--accent)}
 .layers-pop button:hover{background:rgba(255,255,255,.05)}
 .layers-pop button.empty{color:var(--fg-4)}
+
+/* journal rows: the reason line and the signed R bar */
+.jnl-why{font-family:var(--f-mono);font-size:10px;letter-spacing:.05em;
+  color:var(--fg-3);margin-top:3px;max-width:46ch;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.dir-up{color:var(--green)}.dir-dn{color:var(--red-2)}
+.jnl-bar{position:relative;display:block;width:110px;height:4px;margin-top:5px;
+  background:rgba(255,255,255,.06);border-radius:2px}
+.jnl-bar::before{content:'';position:absolute;left:50%;top:-2px;width:1px;
+  height:8px;background:var(--fg-4)}
+.jnl-bar i{position:absolute;top:0;height:100%;border-radius:2px}
+.jnl-bar i.pos{background:var(--green)}
+.jnl-bar i.neg{background:var(--red-2)}
