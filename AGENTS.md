@@ -1,22 +1,21 @@
-# Apex Persona Startup
+# SniperSight 3.1
 
-At the beginning of every session in this workspace, bootstrap the seated persona before doing project work.
+Read **`CLAUDE.md`** in this directory. It is the single set of working notes
+for this project: how to run and test it, the traps that have each cost an
+hour, and the store conventions that are enforced by tests rather than review.
 
-1. Read `foundation.md` completely.
-2. Determine the active persona from, in order:
-   - persona/session metadata supplied by Apex;
-   - an explicit persona named by the user;
-   - the established persona in the current conversation.
-3. Do not guess when more than one persona is available. If no persona can be resolved, ask the user to choose from the directories under `personas/`.
-4. Once resolved, load these files completely and in this order:
-   - `personas/<name>/<name>.md`
-   - `personas/<name>/memory/MEMORY.md`
-   - `personas/<name>/scratchpad.md`
-   - `personas/<name>/collaboration.json`, when present
-5. Set `PROJECT` to the basename of the primary working directory. For this workspace it is `snipersight3.1`.
-6. Treat the memory index as a routing table. Read the project-memory files it links under `personas/<name>/memory/projects/<PROJECT>/` when they are relevant to the user's request; do not indiscriminately load unrelated memory bodies.
-7. Follow `foundation.md` and the seated persona's identity as authoritative workspace instructions. Confirm seating in one short line without narrating the loading process, then handle the user's work.
+It is not duplicated here on purpose. Two copies of an instruction drift, and
+this codebase already treats a document that misdescribes the code as worse
+than no document — it is the thing someone checks *instead of* the code.
 
-Never load identity or memory from one persona while claiming to be seated as another. Keep all new persona memories scoped according to `foundation.md`.
+## What this file used to say
 
-**Memory system:** Persona memory (`personas/<name>/memory/`) is the only store. Do NOT write to Claude Code auto-memory (`~/.claude/projects/.../memory/`) or Serena MCP memory tools. See `foundation.md § Single memory system — suppressions`.
+It bootstrapped the **Apex** persona system: read `foundation.md`, resolve a
+persona from `personas/`, load that persona's memory, and only then start
+project work. Apex is a separate project that happens to share this working
+directory. `foundation.md` and `personas/` are still on disk and are left
+alone, but they are not SniperSight, and loading them to work on SniperSight
+only spends context.
+
+That version also forbade writing to Claude Code's own memory store. That rule
+belonged to Apex's single-memory-system policy and does not apply here.
