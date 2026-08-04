@@ -2557,19 +2557,34 @@ def health():
 def pipeline_health(symbol: str | None = None):
     """Read-only A-to-Z contract audit used to qualify performance.
 
-    Serves the shared cached verdict (quality.cached_audit): a cold full audit
-    runs ~72s, which hangs every caller and made the shell's health chip sit
-    blank. A per-symbol query still audits directly since it is narrow.
+    Serves the verdict THE SCANNER RECORDED (`quality.last_persisted`), which
+    is the one `risk.py` actually gated on. It does not audit here, and that is
+    the point: this process kept its own `cached_audit` slot, audited whenever
+    a request happened to arrive, and could therefore publish a verdict the
+    trading engine never saw. On 4 Aug 2026 it published BLOCKED — 23 symbols
+    whose 15m bar had not closed yet, a HALT-rung code — while the scanner's
+    audit eight seconds later recorded DEGRADED and kept trading. A read-only
+    surface must not invent a verdict; see `quality.last_persisted`.
+
+    Falls back to the in-process cache only before the scanner has ever
+    recorded one, so a fresh store still shows something rather than nothing.
+    A per-symbol query still audits directly since it is narrow and on demand.
     """
     con = store.connect()
     try:
         if symbol:
             return quality.audit(con, symbol=symbol, persist=False)
-        report = quality.cached_audit(con)
+        report = quality.last_persisted(con)
+        if report is None:
+            # No recorded verdict yet. The in-process cache is the only thing
+            # that can answer, and it is honest about being provisional.
+            report = quality.cached_audit(con)
+            if report is not None:
+                report = {**report, "source": "local", "age_s": 0}
         if report is None:
             return {"status": "PENDING", "evaluation_allowed": True,
                     "pending": True, "stages": [], "blockers": [], "warnings": [],
-                    "detail": "first audit running"}
+                    "source": "none", "detail": "first audit running"}
         return report
     finally:
         con.close()

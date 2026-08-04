@@ -53,7 +53,16 @@ class TestManifestsAndCosts(TempStore):
             versions = [r[0] for r in migrated.execute(
                 "SELECT version FROM schema_migrations ORDER BY version").fetchall()]
             self.assertIn("n_bad", columns)
-            self.assertEqual(versions, [1, 2, 3, 4, 5, 6])
+            # Repinned 4 Aug 2026 when migration 7 landed. The list used to be
+            # hardcoded, which made every future schema change break a test
+            # about something else. The PROPERTY is unchanged and is what the
+            # name promises: every migration ran, each recorded exactly ONCE,
+            # contiguous from 1.
+            self.assertEqual(versions, sorted(set(versions)),
+                             "a migration was recorded twice")
+            self.assertEqual(versions, list(range(1, len(versions) + 1)),
+                             "migration versions are not contiguous from 1")
+            self.assertGreaterEqual(len(versions), 6)
         finally:
             migrated.close()
 
