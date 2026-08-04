@@ -426,7 +426,9 @@ ok('the trace is still reachable, as its own control', () => {
   // A <button data-trace> inside the row, so nothing was lost by taking the
   // whole-row click away from it.
   assert.ok(/<button class="btn" data-trace=/.test(JS));
-  assert.ok(/gate-by-gate story/.test(JS));
+  // "Why" did not say why WHAT, and read oddly beside Copilot and Close.
+  assert.ok(/>Reasons<\/button>/.test(JS), 'the control names what it opens');
+  assert.ok(!/gate-by-gate/.test(JS), 'and its tooltip is plain English');
 });
 ok('keyboard reaches what the mouse reaches', () => {
   // Anchored on the POSITIONS handler — this file has several keydown

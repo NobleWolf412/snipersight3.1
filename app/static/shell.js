@@ -961,7 +961,7 @@
           ${storyOf(s)}
         </div>
         <div class="traceable" data-trace="${esc(s.setup_id || '')}"
-             title="click for the gate-by-gate story: the zone, the confirmation, every rule it passed or failed">${verdict}</div>
+             title="click to see what this setup passed and what it failed — the zone, the confirmation, and every check">${verdict}</div>
         <button class="btn" data-copilot="1" data-sym="${s.symbol}" data-tf="${s.tf}"
                 data-sid="${esc(s.setup_id || '')}"
                 title="ask the copilot about this setup — it reads the trace and cannot arm">Ask copilot</button>
@@ -1146,7 +1146,7 @@ weighed in. Name the facts you used.`;
           <span class="t-sub">${money(t.risk_usd)} at risk</span>
           <div class="pos-acts">
             <button class="btn" data-trace="${esc(t.setup_id || '')}"
-              title="the gate-by-gate story: the zone, the confirmation, every rule it passed">Why</button>
+              title="what this trade had to pass before it was taken — the zone, the confirmation, and every check">Reasons</button>
             <button class="btn btn-cyan" data-ask="${esc(t.setup_id || '')}"
               data-asksym="${esc(t.symbol)}" data-asktf="${esc(t.tf)}"
               title="ask the copilot to read this open trade and recommend hold, tighten or close — runs on your Claude plan">Copilot</button>
@@ -1188,7 +1188,7 @@ weighed in. Name the facts you used.`;
           <span class="t-sub">${money(t.risk_usd)} if it fills</span>
           <div class="pos-acts">
             <button class="btn" data-trace="${esc(t.setup_id || '')}"
-              title="the gate-by-gate story: the zone, the confirmation, every rule it passed">Why</button>
+              title="what this trade had to pass before it was taken — the zone, the confirmation, and every check">Reasons</button>
             <button class="btn btn-cyan" data-ask="${esc(t.setup_id || '')}"
               data-asksym="${esc(t.symbol)}" data-asktf="${esc(t.tf)}"
               title="ask the copilot whether this resting order still makes sense — runs on your Claude plan">Copilot</button>
