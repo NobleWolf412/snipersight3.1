@@ -427,6 +427,67 @@ def run_variant(con, symbols, tfs, setup_version, *, managed, entry_model,
     return results
 
 
+def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000) -> dict:
+    """Replay the live book and split it by PLAYBOOK, with intervals.
+
+    The aggregate hides the disagreement. Measured 4 Aug 2026 on 495 trades:
+    REVERSAL +0.0792 R and PULLBACK -0.1511 R net to +0.0201 R, a number that
+    describes neither and would have both playbooks judged by the average of a
+    thing that works and a thing that does not.
+
+    The bar is the house bar — an interval clear of zero, not a mean above it.
+    Groups under `edgestats.MIN_TRADES` report their counts (those are facts)
+    and no verdict, because the alternative is a confident number computed from
+    nothing.
+
+    Read only through a TRUSTWORTHY calibration: the caller is responsible for
+    checking `calibrate()` first, and this returns its verdict alongside so a
+    result can never be quoted without it.
+    """
+    from . import edgestats, scalein
+    from .setups import SETUP_VERSION
+    versions = versions or (SETUP_VERSION, scalein.SCALE_VERSION)
+
+    strategies = {}
+    for symbol in symbols:
+        for tf in tfs:
+            for version in versions:
+                for r in store.get_facts(con, symbol, tf, "setup", version):
+                    p = json.loads(r["payload"])
+                    strategies[(version, p["setup_id"])] = p.get("strategy")
+
+    groups: dict[str, list[float]] = {}
+    for version in versions:
+        for r in run_variant(con, symbols, tfs, version, managed=False,
+                             entry_model="MAKER_THEN_MARKET"):
+            if not r.get("filled"):
+                continue
+            name = strategies.get((version, r["setup_id"])) or "UNATTRIBUTED"
+            groups.setdefault(name, []).append(float(r["r"]))
+
+    out = {}
+    for name, rs in sorted(groups.items()):
+        wins = [x for x in rs if x > 0]
+        losses = [x for x in rs if x < 0]
+        b = (edgestats._bootstrap_mean(rs, resamples)
+             if len(rs) >= edgestats.MIN_TRADES else None)
+        out[name] = {
+            "n": len(rs), "sum_r": round(sum(rs), 2),
+            "expectancy_r": round(sum(rs) / len(rs), 4),
+            "win_pct": round(100 * len(wins) / len(rs), 1),
+            "profit_factor": (round(sum(wins) / abs(sum(losses)), 2)
+                              if wins and losses else None),
+            "ci_lo": None if b is None else round(b["ci_lo"], 4),
+            "ci_hi": None if b is None else round(b["ci_hi"], 4),
+            "p_gt_zero": None if b is None else b["p_gt_zero"],
+            "clears_zero": bool(b and b["ci_lo"] > 0),
+            "sample_ok": b is not None,
+        }
+    cal = calibrate(con, symbols, tfs)
+    return {"calibration": cal, "trustworthy": cal.get("trustworthy", False),
+            "strategies": out}
+
+
 def summarise(results) -> dict:
     filled = [r for r in results if r.get("filled")]
     rs = [float(r["r"]) for r in filled]
