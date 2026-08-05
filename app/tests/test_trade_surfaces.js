@@ -522,10 +522,10 @@ ok('the engine sentence does not repeat the levels line', () => {
   assert.ok(/\/\^\(TP\|SL\|R:R\)/.test(TRACER), 'TP and R:R are dropped from why');
 });
 ok('no control character survives where a regex escape was meant', () => {
-  // /^(TP|SL|R:R)/ and humanProse's epoch bounds each held a literal 0x08
+  // /^(TP|SL|R:R)\b/ and humanProse's epoch bounds each held a literal 0x08
   // backspace instead of backslash-b, so neither could ever match. Two of the
   // three predated this change and had silently disabled epoch formatting.
-  assert.ok(!/[ --]/.test(TRACER),
+  assert.ok(!/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(TRACER),
             'a stray control byte is an unmatchable regex, and invisible');
 });
 
