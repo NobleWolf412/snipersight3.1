@@ -12,6 +12,7 @@ Neither shows up as an error when it regresses. The first just quietly stops
 refusing; the second just quietly stops offering to install.
 """
 import json
+import os
 import unittest
 from pathlib import Path
 
@@ -75,6 +76,116 @@ class CrossSiteGuardTests(unittest.TestCase):
                     path.startswith("/api/"),
                     f"{path} writes but sits outside /api/, so the cross-site "
                     f"guard does not cover it")
+
+
+class TailnetIdentityTests(unittest.TestCase):
+    """The login. There is no password, and that is the stronger choice.
+
+    `tailscale serve` sets Tailscale-User-Login from the authenticated tailnet
+    identity and OVERWRITES any the caller sent — measured 4 Aug 2026, a
+    request carrying a forged `attacker@evil.example` arrived at the app with
+    the real address substituted. So the header is Tailscale's assertion, not
+    the caller's claim, and a second secret would only add something to phish,
+    forget and leak.
+
+    These tests spell the header out because the whole design rests on it: if
+    a future proxy change stopped overwriting it, every one of these would
+    still pass while the gate had become decorative. The forgery-resistance
+    itself cannot be tested from in here — it is a property of the proxy, and
+    it is recorded in the commit and in _gate's docstring.
+    """
+
+    def setUp(self):
+        self.client = TestClient(server.app)
+        self._env = os.environ.get("SNIPERSIGHT_ALLOWED_USERS")
+        os.environ["SNIPERSIGHT_ALLOWED_USERS"] = "operator@example.com"
+
+    def tearDown(self):
+        if self._env is None:
+            os.environ.pop("SNIPERSIGHT_ALLOWED_USERS", None)
+        else:
+            os.environ["SNIPERSIGHT_ALLOWED_USERS"] = self._env
+
+    @staticmethod
+    def _proxied(login=None):
+        """What `tailscale serve` puts on a request it forwards."""
+        h = {"X-Forwarded-For": "100.99.215.76", "X-Forwarded-Proto": "https"}
+        if login:
+            h["Tailscale-User-Login"] = login
+        return h
+
+    def test_this_machine_is_not_gated(self):
+        """No proxy headers means nothing forwarded it, so it came from here.
+        The desktop cockpit, the watchdog's health poll and these suites all
+        arrive this way, and anything running here already has the database."""
+        self.assertEqual(self.client.get("/api/status").status_code, 200)
+
+    def test_a_permitted_tailnet_user_is_let_in(self):
+        r = self.client.get("/api/status", headers=self._proxied("operator@example.com"))
+        self.assertEqual(r.status_code, 200)
+
+    def test_the_match_ignores_case(self):
+        r = self.client.get("/api/status", headers=self._proxied("Operator@Example.COM"))
+        self.assertEqual(r.status_code, 200)
+
+    def test_an_unknown_tailnet_user_is_refused(self):
+        r = self.client.get("/api/status", headers=self._proxied("someone@else.example"))
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("not permitted", r.json()["detail"])
+
+    def test_a_proxied_request_with_no_identity_is_refused(self):
+        """This is what a Tailscale *Funnel* request looks like — the public
+        internet. Enabling Funnel by accident must fail closed rather than
+        publish the operator's book."""
+        r = self.client.get("/api/status", headers=self._proxied())
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("Funnel", r.json()["detail"])
+
+    def test_an_empty_allowlist_refuses_every_remote_device(self):
+        os.environ["SNIPERSIGHT_ALLOWED_USERS"] = ""
+        r = self.client.get("/api/status", headers=self._proxied("operator@example.com"))
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("No operator is configured", r.json()["detail"])
+
+    def test_an_empty_allowlist_still_leaves_this_machine_working(self):
+        """The failure mode has to be 'the phone stops', never 'the desk
+        stops' — the desk is where it gets fixed."""
+        os.environ["SNIPERSIGHT_ALLOWED_USERS"] = ""
+        self.assertEqual(self.client.get("/api/status").status_code, 200)
+
+    def test_the_gate_covers_the_page_not_only_the_api(self):
+        """Letting an unlisted device load the shell and then 403 every panel
+        renders an empty cockpit, which reads as 'broken app' rather than
+        'you are not on the list'."""
+        r = self.client.get("/", headers=self._proxied("someone@else.example"))
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("NOT PERMITTED", r.text)
+        self.assertIn("text/html", r.headers["content-type"])
+
+    def test_a_refusal_to_the_api_stays_json(self):
+        r = self.client.get("/api/status", headers=self._proxied("someone@else.example"))
+        self.assertIn("application/json", r.headers["content-type"])
+
+    def test_revoking_access_needs_no_restart(self):
+        """Read per request, deliberately: access should end when the operator
+        saves the file, not when they next remember to restart."""
+        allow = self._proxied("operator@example.com")
+        self.assertEqual(self.client.get("/api/status", headers=allow).status_code, 200)
+        os.environ["SNIPERSIGHT_ALLOWED_USERS"] = "somebody@else.example"
+        self.assertEqual(self.client.get("/api/status", headers=allow).status_code, 403)
+
+    def test_whoami_reports_which_path_the_caller_came_in_on(self):
+        """A gate whose output nobody can see is a gate nobody notices has
+        stopped working."""
+        local = self.client.get("/api/whoami").json()
+        self.assertFalse(local["checked"])
+        self.assertEqual(local["via"], "this machine")
+
+        remote = self.client.get("/api/whoami",
+                                 headers=self._proxied("operator@example.com")).json()
+        self.assertTrue(remote["checked"])
+        self.assertEqual(remote["via"], "tailnet")
+        self.assertEqual(remote["identity"], "operator@example.com")
 
 
 class BaselineResetTests(unittest.TestCase):

@@ -214,6 +214,97 @@ function load() {
     assert(/cache: *'no-store'/.test(around), 'the direct console fetch lost no-store');
   });
 
+  /* ── How old is what I am looking at? ──────────────────────────────────
+     This layer keeps the last good payload on screen when a fetch fails,
+     which is right, and it justified that by pointing at the shell's health
+     chip to report the staleness. For that to be honest the age has to be
+     the age of the DATA, and `at` used to be stamped in the failure branch
+     too — so it advanced while every request failed. On loopback the failure
+     branch is unreachable; over a tunnel or on cellular it is the common
+     case, and the app would have shown hour-old prices with a confident
+     face. */
+
+  await ok('a failure does not make the data on screen look younger', async () => {
+    const {D, sandbox} = load();
+    await D.get('/a', 0);
+    const fresh = D._stats().find(e => e.path === '/a').ageMs;
+    await sleep(30);
+    sandbox.plan['/a'] = {fail: true};
+    await D.get('/a', 0).catch(() => {});
+    const after = D._stats().find(e => e.path === '/a').ageMs;
+    assert(after >= fresh + 25,
+      'the age reset on a FAILED fetch (' + fresh + ' -> ' + after + '), so a ' +
+      'stale panel would report itself as current');
+  });
+
+  await ok('unreachable reads as offline, not as a bad answer', async () => {
+    /* The operator answers these two differently: one means walk out of the
+       lift, the other means the desk needs attention. */
+    const {D, sandbox} = load();
+    D.subscribe('/a', () => {}, 5000);
+    await sleep(20);
+    sandbox.plan['/a'] = {fail: true};       // fetch() itself rejects
+    await D.get('/a', 0).catch(() => {});
+    assert.strictEqual(D.health().state, 'offline', 'a dead tunnel read as a server fault');
+  });
+
+  await ok('a bad answer reads as a server fault, not as offline', async () => {
+    const {D, sandbox} = load();
+    D.subscribe('/a', () => {}, 5000);
+    await sleep(20);
+    sandbox.plan['/a'] = {status: 500};      // something answered, badly
+    await D.get('/a', 0).catch(() => {});
+    assert.strictEqual(D.health().state, 'server', 'a 500 read as "no connection"');
+  });
+
+  await ok('everything current reads as ok', async () => {
+    const {D} = load();
+    D.subscribe('/a', () => {}, 5000);
+    await sleep(20);
+    assert.strictEqual(D.health().state, 'ok');
+    assert.strictEqual(D.health().failing, 0);
+  });
+
+  await ok('health ignores paths nothing on screen depends on', async () => {
+    /* A chart the operator browsed away from must not be able to put the
+       whole cockpit into a failure state. */
+    const {D, sandbox} = load();
+    sandbox.plan['/gone'] = {fail: true};
+    await D.get('/gone', 0).catch(() => {});
+    assert.strictEqual(D.health().state, 'ok', 'an unsubscribed path raised an alarm');
+  });
+
+  await ok('staleness reports the OLDEST failing panel, not the newest', async () => {
+    /* The worst number on screen is the one that can mislead. */
+    const {D, sandbox} = load();
+    D.subscribe('/old', () => {}, 5000);
+    await sleep(60);
+    D.subscribe('/new', () => {}, 5000);
+    await sleep(20);
+    sandbox.plan['/old'] = {fail: true};
+    sandbox.plan['/new'] = {fail: true};
+    await Promise.all([D.get('/old', 0).catch(() => {}), D.get('/new', 0).catch(() => {})]);
+    const h = D.health();
+    assert.strictEqual(h.failing, 2);
+    const newest = D._stats().find(e => e.path === '/new').ageMs;
+    assert(h.staleMs > newest,
+      'staleMs followed the freshest panel (' + h.staleMs + ' vs ' + newest + ')');
+  });
+
+  await ok('the shell does not keep its own copy of the age', async () => {
+    /* §8, one authority per number. shell.js stamped its own lastGoodAt in
+       its own refresh loop, which drifted the moment anything else fetched —
+       the exact class of bug this file exists to retire. */
+    const shell = fs.readFileSync(
+      path.join(__dirname, '..', 'static', 'shell.js'), 'utf8');
+    const code = shell.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    assert(!/lastGoodAt\s*=/.test(code),
+      'shell.js is stamping its own lastGoodAt again instead of reading ' +
+      'SSData.health()');
+    assert(/SSData\.health\(\)/.test(code),
+      'shell.js stopped reading the age from the layer that owns it');
+  });
+
   console.log('\n' + passed + ' passed');
   /* SSData starts a scheduler on load and a browser module has no reason to
      offer a teardown, so the interval holds the event loop open and node would

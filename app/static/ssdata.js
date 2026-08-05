@@ -44,7 +44,16 @@
   function entry(path) {
     let e = entries.get(path);
     if (!e) {
-      e = {path, data: undefined, err: null, at: 0, inflight: null,
+      /* `at` is when this path last returned GOOD data; `triedAt` is when it
+         was last asked. They were one field, stamped in both the success and
+         the failure branch, which made "how old is what I am showing you"
+         unanswerable from here — the number went on advancing while every
+         request failed. On loopback that never showed, because loopback
+         fetches do not fail. Over a tunnel or on cellular they fail
+         constantly, and this layer deliberately KEEPS the last good payload
+         on screen, so the age is the only thing standing between the operator
+         and an hour-old price wearing a confident face. */
+      e = {path, data: undefined, err: null, at: 0, triedAt: 0, inflight: null,
            subs: new Set(), everyMs: 0, nextAt: 0, used: Date.now()};
       entries.set(path, e);
       evict();
@@ -85,16 +94,39 @@
            stale win rate on a page whose entire claim is that its numbers are
            current. Freshness is this layer's decision to make, explicitly and
            per path — never the browser's to guess at. */
-        const r = await fetch(path, {cache: 'no-store'});
-        if (!r.ok) throw new Error(path + ' → ' + r.status);
+        let r;
+        try {
+          r = await fetch(path, {cache: 'no-store'});
+        } catch (netErr) {
+          /* fetch() itself rejecting means the request never reached a
+             server: the tunnel is down, the phone is in a lift, wifi handed
+             over. That is a DIFFERENT operator problem from a server that
+             answered badly, and conflating them is how "the scanner is dead"
+             and "your phone lost the tunnel" ended up rendering as the same
+             sentence. The scanner light can look perfectly healthy while you
+             are reading a snapshot from before you walked into the lift. */
+          netErr.kind = 'network';
+          throw netErr;
+        }
+        if (!r.ok) {
+          const httpErr = new Error(path + ' → ' + r.status);
+          httpErr.kind = 'server';
+          httpErr.status = r.status;
+          throw httpErr;
+        }
         const d = await r.json();
-        e.data = d; e.err = null; e.at = Date.now();
+        e.data = d; e.err = null; e.at = Date.now(); e.triedAt = e.at;
         return d;
       } catch (err) {
         /* Keep the last good payload. A panel showing data it can label as
            stale is more use than a panel that blanks itself — and the shell's
-           health chip already reports staleness in words. */
-        e.err = err; e.at = Date.now();
+           health chip reports the staleness in words.
+
+           `at` is deliberately NOT touched here: it is the age of the data
+           still on screen, and a failed request does not make that data any
+           younger. */
+        if (!err.kind) err.kind = 'network';
+        e.err = err; e.triedAt = Date.now();
         throw err;
       } finally {
         e.inflight = null;
@@ -175,8 +207,48 @@
     for (const e of entries.values()) if (e.everyMs && e.subs.size) fetchNow(e.path).catch(() => {});
   });
 
+  /* THE THREE STATES, answered from one place.
+
+     The shell kept its own lastGoodAt, stamped in its own refresh loop. That
+     is a second authority for a number this layer already owns, and the two
+     drift the moment anything else fetches — which is the whole reason this
+     file exists. The shell now asks.
+
+     Three states, because the operator's next move differs for each:
+       ok       — everything watched is current.
+       offline  — every failure was fetch() rejecting, so nothing reached a
+                  server. The tunnel is down or the phone has no signal. What
+                  is on screen is old; the engine is probably fine.
+       server   — something answered, badly. The PC is reachable and the
+                  problem is at the far end.
+     A single "degraded" cannot separate those, and the difference decides
+     whether the operator reaches for their phone's settings or their desk. */
+  function health() {
+    let watched = 0, failing = 0, network = 0;
+    let lastGoodAt = null;      // newest good anywhere — proves we ever arrive
+    let staleSince = null;      // oldest good among the paths NOT refreshing
+    let neverLoaded = false;
+    for (const e of entries.values()) {
+      if (!e.subs.size) continue;             // nothing on screen depends on it
+      watched++;
+      if (e.at && (lastGoodAt === null || e.at > lastGoodAt)) lastGoodAt = e.at;
+      if (!e.err) continue;
+      failing++;
+      if (e.err.kind === 'network') network++;
+      if (!e.at) { neverLoaded = true; continue; }
+      if (staleSince === null || e.at < staleSince) staleSince = e.at;
+    }
+    const state = !failing ? 'ok' : (network === failing ? 'offline' : 'server');
+    return {
+      state, watched, failing, neverLoaded, lastGoodAt, staleSince,
+      // age of the OLDEST thing that has stopped refreshing, not the newest:
+      // the worst number on screen is the one that can mislead.
+      staleMs: staleSince === null ? null : Date.now() - staleSince,
+    };
+  }
+
   window.SSData = {
-    get, subscribe, invalidate, refresh,
+    get, subscribe, invalidate, refresh, health,
     // introspection, for tests and for the request-rate work in the audit
     _stats: () => [...entries.values()].map(e =>
       ({path: e.path, subs: e.subs.size, everyMs: e.everyMs, ageMs: e.at ? Date.now() - e.at : null})),

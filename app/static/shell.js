@@ -195,24 +195,44 @@
      operator needs is how many surfaces are stale and how old the numbers still
      on screen are; the stack detail belongs in the console, where it already is.
      The chip carries the count and routes to Diagnostics for the rest. */
-  let lastGoodAt = null;
-  function ageText(ts){
-    if(ts == null) return 'Nothing on this page has loaded successfully yet.';
-    const s = Math.round((Date.now() - ts) / 1000);
+  /* The age comes from ssdata.js, which owns it. This file used to stamp its
+     own lastGoodAt in its own refresh loop — a second authority for a number
+     the data layer already had, and one that went stale the moment anything
+     else on the page fetched. §8: the UI reads, it never re-derives. */
+  function ageText(ms){
+    if(ms == null) return 'Nothing on this page has loaded successfully yet.';
+    const s = Math.round(ms / 1000);
     const age = s < 90 ? `${s} seconds` : `${Math.round(s / 60)} minutes`;
     return `The numbers still on screen are ${age} old.`;
   }
+  /* WHICH FAILURE, in words. "API DEGRADED" covered two situations the
+     operator answers differently: the phone cannot reach the PC at all
+     (nothing is wrong at the desk — walk out of the lift), and the PC
+     answered badly (the desk needs attention). On loopback only the second
+     could ever happen, which is why one word was enough until the app was
+     reachable from a phone. Colour cannot carry this distinction; the words
+     have to. */
+  const FAILURE_WORDS = {
+    offline: {chip: 'NO CONNECTION',
+              say: n => `This device cannot reach the PC — ${n} ` +
+                        `${n === 1 ? 'panel has' : 'panels have'} stopped refreshing.`},
+    server:  {chip: 'API DEGRADED',
+              say: n => `The PC answered, badly: ${n} ` +
+                        `${n === 1 ? 'panel' : 'panels'} could not refresh.`},
+  };
   function markDegraded(detail, failedCount){
     degraded = true;
-    const n = failedCount || 1;
+    const h = (window.SSData.health && window.SSData.health()) || {};
+    const n = h.failing || failedCount || 1;
+    const words = FAILURE_WORDS[h.state] || FAILURE_WORDS.server;
     $('healthOrb').className = 'orb bad';
-    $('healthTxt').textContent = 'API DEGRADED';
+    $('healthTxt').textContent = words.chip;
     $('healthChip').title =
-      `${n} ${n === 1 ? 'panel' : 'panels'} on this page could not refresh. ` +
-      `${ageText(lastGoodAt)} Click for Diagnostics.`;
+      `${words.say(n)} ` +
+      `${ageText(h.neverLoaded ? null : h.staleMs)} Click for Diagnostics.`;
     $('healthChip').classList.add('clickable');
     /* The chip is shed below 900px to make room in the top bar, which is fine
-       while it reads OK and wrong the moment it reads API DEGRADED. ssdata.js
+       while it reads OK and wrong the moment it reports a failure. ssdata.js
        deliberately keeps the last good numbers on screen when a fetch fails,
        and its comment justifies that by saying THIS chip reports the staleness
        in words — so hiding it turns a stated contract into stale prices with a
@@ -3210,7 +3230,6 @@ weighed in. Name the facts you used.`;
     const failed = results.filter(r => r.status === 'rejected');
     if(failed.length) markDegraded(failed.map(f => f.reason).join('; '), failed.length);
     else {
-      lastGoodAt = Date.now();                    // the age the chip reports when it next fails
       if(degraded){
         degraded = false;
         $('healthChip').classList.remove('clickable', 'degraded');

@@ -4,6 +4,7 @@ never derives them). Serves the chart UI at / and JSON at /api/*.
 Run: uvicorn server:app --port 8422
 """
 import json
+import os
 import re
 import threading
 import time
@@ -11,7 +12,7 @@ from collections import Counter
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -60,31 +61,98 @@ STATIC = Path(__file__).resolve().parent / "static"
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
-@app.middleware("http")
-async def _reject_cross_site_api(request, call_next):
-    """Refuse /api/* requests a *different site* caused the browser to make.
+ALLOWED_USERS_FILE = Path(__file__).resolve().parent / "data" / "allowed-users.txt"
 
-    Twelve endpoints write. Four of them took their arguments from the query
-    string — `/api/system/restart`, `/api/analyse`, `/api/baseline/reset`,
-    `/api/scan` — and a POST with no body is exactly what a plain HTML form
-    sends, so any page the operator happened to visit could fire them at
-    localhost:8422. The browser blocks the attacker from READING the reply; it
-    does not block the request, and the side effect has already happened by
-    then. `/api/baseline/reset` is the one that hurts: it is undoable only by
-    editing the database by hand.
 
-    Guarding here rather than per endpoint is deliberate. It covers all twelve
-    POSTs plus the two GET handlers that call `manual.run()` and therefore
-    write fills — a per-endpoint body change would have left those open — and
-    it needs no edit to the ~17 fetch() call sites, which matters while other
-    sessions are editing those files.
+def _allowed_users() -> set:
+    """Who may reach this app from another device on the tailnet.
 
-    `Sec-Fetch-Site` is set by the browser and cannot be forged by page script.
-    Absent means the caller is not a browser (curl, the test client, the
-    watchdog's health poll), which is not the case CSRF describes, so those
-    pass. `none` is a typed address or a bookmark. Everything the app itself
-    requests is `same-origin`.
+    One address per line, `#` comments ignored, matched case-insensitively.
+    Read per request rather than cached: revoking access should take effect
+    when the operator saves the file, not when they next remember to restart.
+    The file is small and the OS caches it.
+
+    `SNIPERSIGHT_ALLOWED_USERS` (comma separated) overrides the file, for a
+    scratch instance that should not touch the operator's config.
     """
+    env = os.environ.get("SNIPERSIGHT_ALLOWED_USERS")
+    if env is not None:
+        return {u.strip().lower() for u in env.split(",") if u.strip()}
+    try:
+        lines = ALLOWED_USERS_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return set()
+    return {ln.strip().lower() for ln in lines
+            if ln.strip() and not ln.lstrip().startswith("#")}
+
+
+@app.middleware("http")
+async def _gate(request, call_next):
+    """Who is allowed in, and what a page they merely visited may make them do.
+
+    Two refusals, deliberately in one place, because both answer "should this
+    request run at all" and splitting them invites an ordering bug.
+
+    ── WHO ──────────────────────────────────────────────────────────────────
+    uvicorn binds 127.0.0.1, so there are exactly two ways to arrive: from
+    this machine, or through the `tailscale serve` proxy. Measured 4 Aug 2026,
+    the proxy injects `X-Forwarded-For` and `Tailscale-User-Login` and
+    OVERWRITES both if the client sent its own — a request carrying a forged
+    `attacker@evil.example` arrived with the real address substituted. So the
+    identity is Tailscale's assertion, not the caller's claim.
+
+    That makes a password the weaker option, not the stronger one. The device
+    is on the tailnet because it already authenticated; a second secret would
+    add something to phish, forget and leak, and would still be revoked from
+    the same admin console. Access is withdrawn by removing the device or the
+    user there, or by editing data/allowed-users.txt.
+
+    `X-Forwarded-For` absent means nothing proxied the request, so it came
+    from this machine — the desktop cockpit, the watchdog's health poll, the
+    suites. Those are exempt: anything with code execution here already has
+    the database. A browser cannot forge the header either way; it is on the
+    forbidden list that page script may not set.
+
+    Present-but-no-identity is refused rather than trusted. That is what a
+    Tailscale *Funnel* request looks like — the public internet — so enabling
+    Funnel by accident fails closed instead of publishing the book.
+
+    ── WHAT ─────────────────────────────────────────────────────────────────
+    Twelve endpoints write. Four took their arguments from the query string —
+    `/api/system/restart`, `/api/analyse`, `/api/baseline/reset`, `/api/scan`
+    — and a POST with no body is exactly what a plain HTML form sends, so any
+    page the operator happened to visit could fire them at localhost:8422. The
+    browser blocks the attacker from READING the reply; it does not block the
+    request, and the side effect has already happened. `/api/baseline/reset`
+    is the one that hurts: undoable only by editing the database by hand.
+
+    Guarding here rather than per endpoint covers all twelve POSTs plus the
+    two GET handlers that call `manual.run()` and therefore record fills — a
+    per-endpoint body change would have left those two open, which is the more
+    interesting hole — and needs no edit to the ~17 fetch() call sites.
+
+    `Sec-Fetch-Site` is set by the browser and page script cannot forge it.
+    Absent means the caller is not a browser, which is not the case CSRF
+    describes. `none` is a typed address or a bookmark; the app's own requests
+    are `same-origin`.
+    """
+    who = request.headers.get("tailscale-user-login")
+    if request.headers.get("x-forwarded-for") is not None:
+        allowed = _allowed_users()
+        if not who:
+            return _refuse(request, 403, "anonymous",
+                           "This request reached the app without a Tailscale "
+                           "identity. Funnel and other public proxies are not "
+                           "permitted; use the tailnet address.")
+        if who.lower() not in allowed:
+            return _refuse(
+                request, 403, who,
+                f"{who} is not permitted on this instance. Add the address to "
+                f"{ALLOWED_USERS_FILE.name} on the host, one per line."
+                if allowed else
+                f"No operator is configured, so every remote device is "
+                f"refused. Create {ALLOWED_USERS_FILE} containing {who}.")
+
     if request.url.path.startswith("/api/"):
         site = request.headers.get("sec-fetch-site")
         if site is not None and site not in ("same-origin", "none"):
@@ -92,6 +160,44 @@ async def _reject_cross_site_api(request, call_next):
                 {"detail": f"cross-site request to {request.url.path} refused"},
                 status_code=403)
     return await call_next(request)
+
+
+def _refuse(request, code: int, who: str, detail: str):
+    """A refusal the operator can act on, in the format the caller can read.
+
+    A phone that gets bare JSON where it expected a page shows a blank screen,
+    which reads as "the app is broken" rather than "this device is not on the
+    list" — and the second is the one that tells them what to do.
+    """
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"detail": detail, "identity": who}, status_code=code)
+    return HTMLResponse(
+        "<!doctype html><meta charset=utf-8>"
+        "<meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<title>SniperSight — not permitted</title>"
+        "<body style=\"margin:0;display:grid;place-items:center;min-height:100vh;"
+        "background:#11120e;color:#d6dbd0;font:14px/1.6 system-ui,sans-serif\">"
+        "<main style='max-width:34rem;padding:2rem'>"
+        "<h1 style='font:600 15px system-ui;letter-spacing:.12em'>NOT PERMITTED</h1>"
+        f"<p>{detail}</p>"
+        "<p style='color:#7d857a'>Paper trading only. No live execution exists "
+        "in this application.</p></main>", status_code=code)
+
+
+@app.get("/api/whoami")
+def whoami(request: Request):
+    """How the app sees the caller. Reaching this at all means it let you in.
+
+    Exists so "is the phone actually authenticated, or merely reaching a
+    server that never checks?" is a question with an observable answer. A gate
+    nobody can see the output of is a gate nobody notices has stopped working.
+    """
+    proxied = request.headers.get("x-forwarded-for") is not None
+    return {"identity": request.headers.get("tailscale-user-login"),
+            "name": request.headers.get("tailscale-user-name"),
+            "via": "tailnet" if proxied else "this machine",
+            "checked": proxied,
+            "allowed_users_configured": len(_allowed_users())}
 
 VALID_TFS = set(importer.TF_SECONDS)
 
