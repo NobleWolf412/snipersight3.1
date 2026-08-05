@@ -561,13 +561,22 @@ console.log('backend console toggle');
 // two previous attempts in this file died on exactly that.
 const setDevBody = (() => {
   const i = JS.indexOf('function setDev(on, jump)');
-  return i < 0 ? '' : JS.slice(i, i + 1800);
+  if(i < 0) return '';
+  // To the end of the function, not a fixed byte count: the body grew past a
+  // 1800-char window when the toggle gained a second thing to gate, and the
+  // assertions below started passing vacuously on a truncated slice.
+  // Bound by the next declaration, not a byte count: the body grew past
+  // an 1800-char window when the toggle gained a second thing to gate,
+  // and these assertions started passing vacuously on a truncated slice.
+  const end = JS.indexOf('function ', i + 10);
+  return end < 0 ? JS.slice(i) : JS.slice(i, end);
 })();
 ok('it is named for the one thing it reveals', () => {
-  assert.ok(/Backend console/.test(HTML), 'the markup ships the honest label');
-  assert.ok(!/>Developer mode</.test(HTML), 'nothing still promises a mode');
-  assert.ok(/Backend console · on/.test(JS) || JS.includes('Backend console'),
-            'and it says when it is on');
+  // The label tracks the scope. One panel -> "Backend console"; that plus the
+  // raw internals in a trace -> the category, not one of its members.
+  assert.ok(/Developer detail/.test(HTML), 'the markup ships the honest label');
+  assert.ok(!/>Developer mode</.test(HTML), 'the vague original is gone');
+  assert.ok(JS.includes('Developer detail · on'), 'and it says when it is on');
 });
 ok('turning it on goes to the panel it just revealed', () => {
   assert.ok(setDevBody, 'setDev(on, jump) not found');
@@ -575,7 +584,8 @@ ok('turning it on goes to the panel it just revealed', () => {
   assert.ok(setDevBody.includes("go('diagnostics')"));
 });
 ok('it never hijacks the route at boot, or on the way off', () => {
-  assert.ok(setDevBody.includes('if(on && jump)'), 'both conditions, not either');
+  assert.ok(setDevBody.includes('if(on && jump && !reading)'),
+            'all three conditions, not any one of them');
   assert.ok(JS.includes('setDev(readDev());'), 'boot passes no jump');
   assert.ok(JS.includes("setDev(!document.body.classList.contains('dev'), true)"),
             'only the click asks to jump');
@@ -585,6 +595,39 @@ ok('the id and the storage key are unchanged', () => {
   // for everyone who already has one. The label is the part that was wrong.
   assert.ok(/id="devToggle"/.test(HTML));
   assert.ok(JS.includes("DEV_KEY = 'ss.devMode'"));
+});
+
+
+ok('it gates the raw internals in a trace, not just the console', () => {
+  const DXCSS = S('diagnostics-ui.css');
+  for(const sel of ['.dx-copyid', '.dx-tfacts', '.dx-verdict-owner'])
+    assert.ok(DXCSS.includes('body:not(.dev) ' + sel),
+              sel + ' must be developer-gated');
+  assert.ok(CSS.includes('body:not(.dev) #consolePanel'), 'and still the console');
+});
+ok('it does not route you away from a trace you are reading', () => {
+  // The drawer is one of the things this toggle changes; pressing it there
+  // asks for more of what is on screen, not for a different screen.
+  assert.ok(setDevBody.includes("document.querySelector('.dx-drawer')"));
+  assert.ok(setDevBody.includes('if(on && jump && !reading)'));
+});
+ok('every stage keeps its facts — map passes the INDEX', () => {
+  // `all.map(stageHtml)` fed the array index into `compact`, so eight of nine
+  // stages silently lost their fact chips. Only the first, at index 0, kept
+  // them; nothing errored and the drawer looked plausible.
+  // Strip comments first. The fix's own comment quotes the broken form, so a
+  // naive search matches the explanation and fails on correct code.
+  // String.fromCharCode(10) rather than a backslash-n literal: three separate
+  // escapes written into this repo through patch scripts have landed as the
+  // BYTE they denote instead of the characters that spell it.
+  const NL = String.fromCharCode(10);
+  const code = TRACER.split(NL).filter(l => {
+    const t = l.trim();
+    return t && !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
+  }).join(NL);
+  assert.ok(!code.includes('all.map(stageHtml)'),
+            'never pass a multi-arg function straight to map');
+  assert.ok(TRACER.includes('all.map(s => stageHtml(s))'));
 });
 
 console.log(`  ${passed} passed`);

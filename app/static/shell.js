@@ -3479,9 +3479,14 @@ weighed in. Name the facts you used.`;
     b.disabled = false; b.textContent = was;
   });
 
-  /* ---------- backend console ----------
-     What this gates is ONE panel: the live server log at the foot of
-     Diagnostics. It used to gate that whole surface — Diagnostics sat in the
+  /* ---------- developer detail ----------
+     What this gates: the live server log at the foot of Diagnostics, AND the
+     raw internals inside a setup trace — the composite id behind `copy id`,
+     the per-stage fact chips, and the failure-attribution line. The CSS lives
+     with each of them (ss.css, diagnostics-ui.css) and keys off `body.dev`;
+     this function only owns the class, the label and the preference.
+
+     It began as one panel. It used to gate that whole surface — Diagnostics sat in the
      rail between Rules and Learn, so the first thing a new reader clicked
      showed them `ohlc invariant failure` and a log tail — but the surface is a
      public tab now and only the console stayed behind the switch. The name and
@@ -3509,10 +3514,10 @@ weighed in. Name the facts you used.`;
        the single rule left is `body:not(.dev) #consolePanel{display:none}`.
        One panel is not a mode, and a label that overstates its scope leaves
        the operator hunting for changes that were never going to happen. */
-    b.textContent = on ? 'Backend console · on' : 'Backend console';
+    b.textContent = on ? 'Developer detail · on' : 'Developer detail';
     b.title = on
-      ? 'the live server log, on Diagnostics — click to hide it again'
-      : 'show the live server log (Diagnostics, at the bottom)';
+      ? 'raw internals are showing: backend console, and fact-level detail in a trace'
+      : 'show raw internals: the backend console, and the fact-level detail in a trace';
     try{ localStorage.setItem(DEV_KEY, on ? '1' : '0'); }catch(e){}
     /* Turning it ON goes to the thing that was just turned on. This button
        lives in the status bar, on every surface; the panel it reveals is the

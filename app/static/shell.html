@@ -976,14 +976,14 @@
     <span class="sb-item"><span class="orb" id="sbOrb"></span><b id="sbLive">connecting…</b></span>
     <span class="sb-item" id="sbWatch"></span>
     <span style="margin-left:auto">Sim only — no live orders</span>
-    <!-- Named for the ONE thing it reveals: the live server log at the foot
-         of Diagnostics. It read "Developer mode" from when it gated that whole
-         surface, and kept the label after the scope shrank to a single panel —
-         so pressing it from any other surface changed nothing the operator
-         could see. shell.js gives the label its state and its tooltip, and
-         sends you to the panel on the way on. -->
+    <!-- The label tracks the scope, which is the whole point of having
+         renamed it once already. When this gated a single panel it said
+         "Backend console"; it now also restores the raw internals in the trace
+         drawer — the composite id, the per-stage fact chips, the attribution
+         line — so it is named for the category rather than one of its members.
+         shell.js gives it state, tooltip, and the jump on the way on. -->
     <button class="sb-dev" id="devToggle" type="button" aria-pressed="false"
-            title="show the live server log (Diagnostics, at the bottom)">Backend console</button>
+            title="show raw internals: the backend console, and the fact-level detail in a trace">Developer detail</button>
   </footer>
 
 </div>
