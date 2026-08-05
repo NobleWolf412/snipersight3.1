@@ -1185,6 +1185,127 @@
       }));
   }
 
+  /* At a level: where price is standing near structure, across every tradeable
+     market at once.
+
+     DESCRIPTIVE, NOT PRESCRIPTIVE, and the row shape enforces it. The endpoint
+     returns a full bracket per row — it is the same draft.for_symbol() the
+     ticket calls — and this deliberately renders only the zone and the
+     distance. An entry, a stop and a target laid out in a Command-tab row read
+     as advice no matter what the heading says, which is the exact misreading
+     that made this panel necessary: a bracket drawn on a chart the engine had
+     never looked at was taken for the engine's own plan. The numbers are one
+     click away on the chart, where the ticket says whose plan they are.
+
+     `engine_reach` comes from the payload rather than being recomputed from
+     distance here. The bounds it is derived from (setups.PROX_ATR,
+     FORMING_TFS) are the engine's, and a second copy in the client is a second
+     answer waiting to drift. */
+  const NEAR_SAY = {
+    AT_ZONE: () =>
+      ['in the zone now', 'chip-accent',
+       'Price is inside the zone. If the engine takes it, it arrives on the Deck above.'],
+    IN_RANGE: () =>
+      ['engine is watching', 'chip-accent',
+       'Near enough that the engine is considering this zone. It becomes a setup ' +
+       'only if a strategy covers the conditions, and most do not.'],
+    NO_FORMING_ON_TF: (r) =>
+      ['waits for price', 'chip-amber',
+       `Near, but the engine does not plan ahead on ${r.tf} — it only acts once ` +
+       'price actually reaches the zone.'],
+    OUT_OF_RANGE: (r, prox) =>
+      ['engine is not looking', 'chip-amber',
+       `Further out than the ${prox} ATR the engine looks. It is not considering ` +
+       'this zone; anything the chart draws here is the chart\'s, not the engine\'s.'],
+  };
+
+  function renderNear(d){
+    const panel = $('nearPanel'), box = $('near');
+    const rows = (d && d.rows) || [];
+    if(!rows.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
+    panel.style.display = '';
+    const c = d.counts || {};
+    const prox = d.prox_atr, max = d.max_distance_atr;
+    $('nearCount').textContent = `${c.in_engine_range || 0} of ${rows.length} in range`;
+    /* Says what was scanned and what was left out, in the panel rather than in
+       a tooltip. A list that cannot say what it excluded reads as a complete
+       one, and the shadow half is 11 of the 30 symbols the universe carries. */
+    $('nearLede').textContent =
+      `${c.symbols} tradeable markets across ${(d.timeframes || []).length} timeframes. ` +
+      `${rows.length} are within ${max} ATR of a live zone, ` +
+      `${c.in_engine_range || 0} of them inside the ${prox} ATR the engine itself looks at. ` +
+      `${c.shadow_excluded} shadow symbols are not listed — the risk authority will not size them.`;
+    /* Degraded loudly (§4): a market whose structure could not be read is
+       MISSING from this list, and silence would read as "price is not near a
+       level there" — the strongest possible wrong answer. */
+    const warn = (d.warnings || []).length
+      ? `<div class="deck-divider" style="color:var(--amber)">${esc(d.warnings.length +
+          ' market(s) could not be read and are missing from this list')}</div>`
+      : '';
+    /* The line the panel exists to draw, drawn once instead of only being
+       spelled out 23 times in chips. Rows are sorted by distance, so the
+       engine's own bound is a single clean boundary in the list — everything
+       above it is a zone the engine is at least close enough to consider,
+       everything below is one it is not. Same device as the Deck's
+       "Looked at, not taken", for the same reason: without it the far rows sit
+       in the slot where actionable things go. */
+    let drewDivider = false;
+    box.innerHTML = warn + rows.map(r => {
+      const dist = parseFloat(r.distance_atr);
+      let divider = '';
+      if(!drewDivider && r.engine_reach === 'OUT_OF_RANGE'){
+        drewDivider = true;
+        const n = rows.filter(x => x.engine_reach === 'OUT_OF_RANGE').length;
+        divider = `<div class="deck-divider">Beyond the ${esc(String(prox))} ATR the engine looks — ${n} market${n === 1 ? '' : 's'}</div>`;
+      }
+      const bound = parseFloat(max) || 3;
+      const fill = isNaN(dist) ? 10 : Math.max(8, Math.min(96, (1 - dist / bound) * 100));
+      const say = (NEAR_SAY[r.engine_reach] || NEAR_SAY.OUT_OF_RANGE)(r, prox);
+      /* basis[0] is draft.py's own sentence for the zone it anchored on —
+         type, bounds, state and strength. The WORDS are lifted rather than
+         reworded: it is the one authority on what this row is standing at.
+
+         Only the price range is reformatted, and only through px() — the
+         shared formatter every other panel prices through. Zone bounds come
+         off a Decimal and arrive full length ("7.156–7.8689580900"), which is
+         ten digits of noise on a surface read between bars. Both sides go
+         through px together so one cannot end up with a thousands separator
+         while the other does not. A wording change in draft.py makes this
+         match nothing and the sentence renders as it does today — the
+         degradation is a longer number, never a broken row. */
+      const zone = ((r.basis || [])[0] || 'a live zone')
+        .replace(/([\d.]+)–([\d.]+)/, (m, a, b) => `${px(a)}–${px(b)}`);
+      /* The reach chip lives in the WIDE column, not beside the timeframe.
+         Its natural width is ~144px and the identity column is 150px, so
+         sitting there it wrapped to two lines on every one of 23 rows and
+         pushed the row to 110px tall. Same crush the Deck's reasoning column
+         took: a label narrower than its own content is not a label. */
+      return `${divider}<div class="radar-row">
+        <div>
+          <div class="radar-sym">${esc(String(r.symbol).replace('-USD', ''))}</div>
+          <div class="t-label" style="margin-top:3px">${esc(r.tf)} · ${r.direction === 'LONG' ? 'long' : 'short'} side</div>
+        </div>
+        <div>
+          <div style="margin-bottom:6px"><span class="chip ${say[1]}">${esc(say[0])}</span></div>
+          <div class="radar-say">${esc(say[2])}</div>
+          <div class="t-label" style="margin-bottom:7px;color:var(--fg-4)">${esc(zone)}</div>
+          <div class="radar-meter"><i style="width:${fill.toFixed(0)}%"></i></div>
+        </div>
+        <div class="radar-dist">${isNaN(dist) ? '—' : dist.toFixed(2)}<span class="t-sub">ATR away</span>
+          <button class="btn" style="margin-top:6px" data-nsym="${esc(r.symbol)}" data-ntf="${esc(r.tf)}">Chart</button></div>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('button[data-nsym]').forEach(b =>
+      b.addEventListener('click', () => {
+        go('chart');
+        if(window.SSChart) SSChart.open(b.dataset.nsym, b.dataset.ntf);
+      }));
+  }
+
+  async function loadNearLevels(){
+    renderNear(await api('/api/near-levels'));
+  }
+
   /* Open trades, drawn on the surface that asks what to do next.
 
      `active_positions` has been in the portfolio payload the whole time and
@@ -3319,6 +3440,10 @@ weighed in. Name the facts you used.`;
     [null,          () => loadHealth()],        // top-bar health chip
     ['command',     () => loadOverview()],
     ['command',     () => loadRisk()],
+    // Command-only, deliberately: the sweep costs ~1.7s across 95 symbol/tf
+    // pairs and there is no reason to pay it while the operator is reading
+    // Results.
+    ['command',     () => loadNearLevels()],
     ['settings',    () => loadSettings()],
     ['settings',    () => loadCredentials()],
     ['results',     () => loadPerformance()],
