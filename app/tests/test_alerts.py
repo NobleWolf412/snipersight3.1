@@ -294,6 +294,39 @@ class TheSupervisorNeverSpawnsToAnnounce(unittest.TestCase):
         self.assertIn('key=f"restart|{self.name}|{self.proc.pid}"', src)
 
 
+class TheHeartbeatAssertsTheStack(unittest.TestCase):
+    """Silence is the signal, so the ping must mean more than "I am running".
+
+    The supervisor is the one component whose survival proves the least — its
+    entire job is to outlive the others. A heartbeat sent merely because the
+    watchdog loop is executing would tell an outside monitor "all good" while
+    the scanner had been dark for an hour, which is the exact hour the operator
+    needed to hear about.
+    """
+
+    def test_the_ping_is_withheld_when_the_scanner_is_dark(self):
+        src = (Path(__file__).resolve().parents[1] / "watchdog.py").read_text(
+            encoding="utf-8")
+        body = src.split("def alert_tick")[1].split("\ndef main")[0]
+        self.assertIn("if scanner_dark:", body,
+                      "the heartbeat no longer checks whether the scanner is alive")
+        # and the check has to come BEFORE the send, not decorate it afterwards
+        self.assertLess(body.index("if scanner_dark:"), body.index("notify.heartbeat("),
+                        "the heartbeat fires before the dark check is consulted")
+
+    def test_an_unreadable_heartbeat_file_does_not_claim_health(self):
+        """A monitor that cannot read its input must not declare either
+        verdict — and specifically must not tell the outside world it is fine.
+        `scanner_dark` starts False, so this pins that the unreadable path is
+        reached only after the flag exists."""
+        src = (Path(__file__).resolve().parents[1] / "watchdog.py").read_text(
+            encoding="utf-8")
+        body = src.split("def alert_tick")[1].split("\ndef main")[0]
+        self.assertLess(body.index("scanner_dark = False"),
+                        body.index("heartbeat.json"),
+                        "scanner_dark is not initialised before the file is read")
+
+
 class TheShadowBookIsNeverAnnounced(unittest.TestCase):
     def test_the_watchdog_reads_only_risk_and_the_operators_own_trades(self):
         """`exec` and `order` are the engine's simulation — 100-400 events a

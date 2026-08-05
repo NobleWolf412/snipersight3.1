@@ -581,6 +581,7 @@ def alert_tick(state: dict, live, warmup: bool = False) -> dict:
     # THE SCANNER GOING DARK. Its heartbeat file already existed and nothing
     # read it. Keyed to the minute it went quiet so a scanner that stays down
     # says so once rather than every tick.
+    scanner_dark = False
     try:
         hb = json.loads((APP / "data" / "heartbeat.json").read_text(encoding="utf-8"))
         # The field is `ts`. A first draft read `at`, got None, and would have
@@ -596,6 +597,7 @@ def alert_tick(state: dict, live, warmup: bool = False) -> dict:
             raise KeyError("ts")
         age = int(time.time()) - int(beat)
         if age > SCANNER_DARK_AFTER_S:
+            scanner_dark = True
             notify.enqueue(
                 f"dark|{int(time.time()) // 600}",
                 "⚠ Scanner has stopped",
@@ -619,12 +621,25 @@ def alert_tick(state: dict, live, warmup: bool = False) -> dict:
     # A heartbeat this machine sends OUT, to something that alarms when it
     # stops. Nothing running here can report this machine's own death, and the
     # watchdog's log shows eight starts against one clean stop.
+    #
+    # IT ASSERTS THE STACK, NOT THIS PROCESS. Pinging merely because the
+    # supervisor is executing would tell the outside world "all good" while the
+    # scanner had been dark for an hour — the supervisor is the one part of the
+    # system whose survival proves the least, since its whole job is to outlive
+    # the others. Silence is the signal, so the ping is withheld whenever this
+    # tick has just concluded the scanner is dark. The ntfy alert covers that
+    # case too; this covers it when ntfy is down, the phone is off, or the
+    # machine cannot reach anything at all.
     if time.monotonic() - state.get("hb_at", 0.0) >= HEARTBEAT_INTERVAL_SEC:
         state["hb_at"] = time.monotonic()
-        try:
-            notify.heartbeat(log=log)
-        except Exception:
-            pass
+        if scanner_dark:
+            log("heartbeat withheld: scanner is dark, so this machine is not "
+                "healthy and must not tell an outside monitor that it is")
+        else:
+            try:
+                notify.heartbeat(log=log)
+            except Exception:
+                pass
     return state
 
 
