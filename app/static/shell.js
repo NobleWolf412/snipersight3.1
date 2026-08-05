@@ -3528,7 +3528,13 @@ weighed in. Name the facts you used.`;
 
        Only on the way ON, and never at boot — a preference restored on load
        must not hijack the route the operator actually asked for. */
-    if(on && jump){
+    /* ...but not out from under an open trace drawer. That drawer is one of
+       the things this toggle now changes, so someone pressing it while reading
+       one is asking to see MORE OF WHAT IS IN FRONT OF THEM — routing them to
+       Diagnostics would throw away the thing they were looking at to show them
+       a different thing they were not. */
+    const reading = document.querySelector('.dx-drawer');
+    if(on && jump && !reading){
       pendingJump = 'consolePanel';
       go('diagnostics');
     }
