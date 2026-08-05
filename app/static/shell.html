@@ -259,6 +259,31 @@
         <div id="radar"></div>
       </div>
 
+      <!-- At a level: where price is standing near structure, across the whole
+           tradeable universe. Distinct from BOTH panels above it, and the
+           distinction is the reason it exists:
+
+             Setup Deck   — the engine's plans.
+             Approaching  — the engine's own FORMING signal: a candidate it has
+                            already accepted and is waiting on.
+             At a level   — structure. The engine may not have looked at it.
+
+           Without this, "which markets is price actually at a level in" could
+           only be answered by opening charts one at a time — and the ticket
+           draws a bracket on every chart, including ones the engine has never
+           considered, so the answer that came back looked like an engine plan.
+           Every row is stamped with how the engine regards that zone for
+           exactly that reason; a caption alone would not survive being read
+           beside three price lines. -->
+      <div class="panel" id="nearPanel" style="margin-bottom:var(--lg);display:none">
+        <div class="panel-head">
+          <h2 class="t-section">At a level</h2>
+          <span class="chip" id="nearCount" style="margin-left:auto">—</span>
+        </div>
+        <p class="t-body" id="nearLede" style="padding:0 var(--lg) 4px;color:var(--fg-3)"></p>
+        <div id="near"></div>
+      </div>
+
       <!-- Market Weather: regime x timeframe, and what it MEANS. weather.js owns it. -->
       <div id="weatherRoot"></div>
 

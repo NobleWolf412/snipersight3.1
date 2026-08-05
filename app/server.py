@@ -2312,6 +2312,33 @@ def draft_bracket(symbol: str, tf: str = "1H"):
         con.close()
 
 
+@app.get("/api/near-levels")
+def near_levels():
+    """The same question `/api/draft` answers for one chart, asked of them all.
+
+    "Which markets is price standing at a level in" had no answer anywhere, so
+    finding out meant opening charts one at a time — and a draft bracket on a
+    chart the engine has never looked at reads exactly like the engine's own
+    plan. Measured 2026-08-05: LINKUSDT 1D drew a LONG off a demand zone
+    2.46 ATR away while the engine's attention stops at 1 ATR and it had no
+    validated setup on that symbol all baseline.
+
+    NOT a setup list. The Setup Deck is the engine's plans and "Approaching" is
+    the engine's own FORMING signal; this is structure, and every row carries
+    `engine_reach` saying whether the engine is even looking at that zone.
+
+    Its own endpoint rather than a field on `/api/overview`: the sweep costs
+    ~1.4s across 95 symbol/timeframe pairs, and overview is on the 30s poll
+    that every surface waits behind.
+    """
+    from engine import nearlevels
+    con = store.connect()
+    try:
+        return nearlevels.sweep(con)
+    finally:
+        con.close()
+
+
 @app.post("/api/analyse")
 def analyse_symbol(symbol: str, response: Response):
     """Run the engine chain over ONE symbol, on demand.
