@@ -149,6 +149,29 @@ class RemoteDeliveryIsOffUntilAskedFor(QueueCase):
         self.assertEqual(notify._send_remote(sink, "t", "m", notify.QUIET),
                          "skipped (quiet)")
 
+    def test_ntfy_sends_the_title_once_with_its_symbol(self):
+        """The header form sends Title: in an HTTP header, and headers are
+        ASCII — so the one glyph that distinguishes a kill switch from a setup
+        at a glance was stripped, and putting the title in the body to
+        compensate made the phone show it twice. JSON publish carries UTF-8 and
+        keeps the fields apart."""
+        sent = {}
+        real = notify._post
+        notify._post = lambda url, body, headers, timeout=8.0: (
+            sent.update(url=url, body=json.loads(body), headers=headers), "http 200")[1]
+        try:
+            notify._send_remote({"type": "ntfy", "url": "https://ntfy.sh/mytopic"},
+                                "⛔ Daily loss limit", "equity 9321.15", notify.LOUD)
+        finally:
+            notify._post = real
+        self.assertEqual(sent["body"]["topic"], "mytopic")
+        self.assertEqual(sent["body"]["title"], "⛔ Daily loss limit",
+                         "the symbol was stripped from the title again")
+        self.assertEqual(sent["body"]["message"], "equity 9321.15")
+        self.assertNotIn(sent["body"]["title"], sent["body"]["message"],
+                         "the title is repeated inside the body")
+        self.assertIn("json", sent["headers"]["Content-Type"])
+
     def test_delivery_records_the_outcome_rather_than_raising(self):
         """An unreachable phone must not stop the local toast, and neither
         must stop the supervisor."""

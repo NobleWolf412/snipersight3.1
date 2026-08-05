@@ -94,7 +94,26 @@
      Media queries cannot read a custom property, so these are documented
      here and written literally at each @media. Use one of these four. */
 }
-/* Dynamic Accent Rule: the whole shell restates its accent by mode. */
+/* Dynamic Accent Rule: the whole shell restates its accent by mode.
+
+   These three rules existed for months and never fired. shell.html wrote
+   data-mode="idle" as a literal and nothing in the repo ever changed it — one
+   hit across every .js, .py, .html and .css — so the design system was
+   documented around a mechanism that had never run, and the comment below
+   claimed the button goes amber on paper while it was permanently green.
+
+   setAccentMode() in shell.js is the authority now, and the mode is EXPOSURE,
+   not which book is selected:
+
+     idle   flat. Nothing of yours is in the market.
+     paper  an engine position, a pending order, or one of your own hand-armed
+            orders is live. Amber already means "your money is on this" in
+            .deck-row.held, .ticket.managing, .tk-open and .tkm-dot; the shell
+            now agrees with the four components that got there first.
+     live   real order submission is possible. server.py hardcodes live_enabled
+            to False and no order-routing code exists behind it, so this should
+            never fire. It is wired as a tripwire: if that constant flips, every
+            accent in the app turns red before an order is sent. */
 [data-mode="paper"]{--accent:var(--amber);--accent-rgb:255,194,102}
 [data-mode="live"] {--accent:var(--red);  --accent-rgb:255,100,100}
 [data-mode="idle"] {--accent:var(--green);--accent-rgb:0,255,170}
