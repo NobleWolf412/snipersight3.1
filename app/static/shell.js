@@ -1791,18 +1791,63 @@ weighed in. Name the facts you used.`;
         if(c){
           e.stopPropagation();
           if(c.disabled) return;
+          const sid = c.dataset.closeSid;
+
+          /* SAY WHAT IS ABOUT TO END. The ticket restates side, symbol, levels
+             and dollars before arming; closing had no equivalent, on the
+             reasoning that it is small and quiet. That reasoning was written
+             for a 55x19 button under a cursor. On a phone this control is now
+             48px and full width, sitting in a list the operator is scrolling
+             with the same thumb — and closing is the irreversible half of the
+             pair: an arm can be left to expire, a close is recorded and the
+             engine's own simulation carries on without it.
+
+             Restated from the payload the row was built from, so the dialog
+             quotes the position the operator can see rather than a second
+             fetch that could name a different one. */
+          const pos = (lastPortfolio.active_positions || [])
+            .concat(lastPortfolio.pending_orders || [])
+            .find(x => x.setup_id === sid);
+          if(pos){
+            const r0 = pos.r_multiple != null ? Number(pos.r_multiple) : null;
+            const lines = [
+              `${String(pos.direction || '').toUpperCase()} ${pos.symbol || ''} ${pos.tf || ''}`,
+              `entry ${pos.entry}`,
+              r0 == null ? 'result so far unknown'
+                         : `closing at ${r0 >= 0 ? '+' : ''}${r0}R`,
+              '',
+              'This ends the trade on your paper book now, at the last closed',
+              "bar. The engine's own simulation of the setup carries on.",
+            ];
+            if(!confirm('Close this position?\n\n' + lines.join('\n'))) return;
+          }
+
           const was = c.textContent;
           c.disabled = true; c.textContent = 'closing…';
           try{
             const r = await fetch('/api/positions/close', {
               method: 'POST', headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({setup_id: c.dataset.closeSid})});
+              body: JSON.stringify({setup_id: sid})});
             const d = await r.json().catch(() => ({}));
             c.textContent = r.ok
               ? (d.closed ? `closed ${d.closed.r_at_close}R` : 'closed')
               : 'failed — ' + (d.detail || r.status);
             if(r.ok) refresh();
-          }catch(err){ c.textContent = 'unreachable'; }
+          }catch(err){
+            /* 'unreachable' claimed the close did not happen. fetch() rejects
+               both when the request never left AND when it arrived, was
+               recorded, and the reply was lost — indistinguishable from here,
+               and the second is ordinary on cellular. Refreshing is the answer
+               that cannot be wrong: the row either disappears because it
+               closed, or it is still there because it did not. */
+            c.textContent = 'no reply — checking…';
+            try{
+              await refresh();
+              c.textContent = 'no reply; see the list';
+            }catch(_){
+              c.textContent = 'no reply, and the list will not load — unknown';
+            }
+          }
           setTimeout(() => { c.disabled = false; c.textContent = was; }, 3000);
           return;
         }

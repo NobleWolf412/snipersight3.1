@@ -404,12 +404,39 @@
 
           <div class="ticket-body">
            <div class="tk-pane on" data-p="trade">
+            <!-- NUDGE, not only drag. On a phone-sized price axis one pixel of
+                 finger travel is several ticks, so dragging is imprecise even
+                 when it works — and the keyboard alternative is retyping a
+                 five-decimal number with the on-screen pad covering the chart.
+                 A tick is the smallest move the price format can express; 0.1R
+                 is a tenth of the distance from entry to stop, which is the
+                 unit the risk is actually denominated in. Both step the level
+                 and the ticket maths follow live. chart.js fills the labels,
+                 which is why they are blank here. -->
             <label class="fld"><span class="t-label"><span class="term" data-t="entry">Entry</span></span>
               <input id="tkEntry" class="t-mono" inputmode="decimal" autocomplete="off"></label>
+            <div class="tk-nudge" data-k="entry" aria-label="Adjust entry">
+              <button type="button" data-step="-r">−0.1R</button
+              ><button type="button" data-step="-t">−tick</button
+              ><button type="button" data-step="+t">+tick</button
+              ><button type="button" data-step="+r">+0.1R</button>
+            </div>
             <label class="fld"><span class="t-label"><span class="term" data-t="tp">Take profit</span></span>
               <input id="tkTp" class="t-mono" inputmode="decimal" autocomplete="off"></label>
+            <div class="tk-nudge" data-k="tp" aria-label="Adjust take profit">
+              <button type="button" data-step="-r">−0.1R</button
+              ><button type="button" data-step="-t">−tick</button
+              ><button type="button" data-step="+t">+tick</button
+              ><button type="button" data-step="+r">+0.1R</button>
+            </div>
             <label class="fld"><span class="t-label"><span class="term" data-t="sl">Stop loss</span></span>
               <input id="tkSl" class="t-mono" inputmode="decimal" autocomplete="off"></label>
+            <div class="tk-nudge" data-k="sl" aria-label="Adjust stop loss">
+              <button type="button" data-step="-r">−0.1R</button
+              ><button type="button" data-step="-t">−tick</button
+              ><button type="button" data-step="+t">+tick</button
+              ><button type="button" data-step="+r">+0.1R</button>
+            </div>
            </div>
 
            <div class="tk-pane" data-p="size">
@@ -502,6 +529,14 @@
              ran last. The reason sits ON the control rather than in a hover
              title, same rule as the locked Auto button. -->
         <div class="tk-warn" id="tkDup" hidden></div>
+        <!-- A drag that changed the risk by more than a factor of three. Not a
+             refusal — the operator may genuinely want a much wider stop — so
+             it does not live in #tkBlock, which means "Arm is off". It is here
+             because a fling is arithmetically VALID: the price is finite and
+             positive, so nothing else in the ticket has any objection to a
+             stop the finger skidded 10% away. Also restated in the arm
+             confirmation, where it cannot be scrolled past. -->
+        <div class="tk-warn" id="tkFling" hidden></div>
         <!-- Why Arm is off, and the one action that turns it on. This lived in
              grey footer prose while the button stayed enabled and primary, so
              the validation and the control the validation was about were in

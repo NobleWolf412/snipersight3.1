@@ -756,10 +756,52 @@ body:not(.dev) #consolePanel{display:none}
 .lvl{position:absolute;left:0;transform:translateY(-50%);pointer-events:auto;cursor:ns-resize;
   padding:2px 7px;border-radius:var(--r-sm);font-family:var(--f-mono);font-size:var(--fs-1);
   font-weight:600;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;
-  border:1px solid currentColor;background:rgba(0,0,0,.82);user-select:none;z-index:3}
+  border:1px solid currentColor;background:rgba(0,0,0,.82);user-select:none;z-index:3;
+  /* WITHOUT THIS THE DRAG CODE IS CORRECT AND NEVER RUNS. The browser decides
+     whether a touch gesture belongs to the page or to the element before any
+     handler is consulted, and vertical panning is its default answer — so a
+     finger on a price level scrolled the surface instead of moving the stop.
+     This is the whole reason the levels were mouse-only in practice. */
+  touch-action:none}
 .lvl:hover,.lvl.drag{background:currentColor}
 .lvl:hover span,.lvl.drag span{color:#000}
 .lvl-entry{color:var(--cyan)} .lvl-tp{color:var(--green)} .lvl-sl{color:var(--red-2)}
+/* A GRAB TARGET A THUMB CAN FIND. The visible pill is ~20px tall, which is
+   fine under a cursor and far under the ~44px a fingertip needs. The mark
+   stays exactly as it was; an invisible band is stretched around it, so
+   precision at the desk is unchanged and the phone gets something it can
+   actually catch. Set on the pseudo-element rather than by padding the pill,
+   because padding would move the text off the price it labels. */
+.lvl::after{content:'';position:absolute;left:0;right:-8px;top:50%;
+  transform:translateY(-50%);height:44px;pointer-events:auto}
+/* :hover cannot signal "grabbable" to a finger — there is no hover. The
+   pressed state is the only feedback touch gets that the handle was caught,
+   and without it a drag that has begun is indistinguishable from a tap that
+   missed. */
+.lvl.drag{box-shadow:0 0 0 3px rgba(255,255,255,.28);z-index:4}
+@media (pointer:coarse){
+  /* Fanned apart, because entry and stop routinely sit within a few pixels of
+     each other on a phone-sized price axis and then stack into one target
+     where the topmost wins — which is how you drag the stop believing you
+     have the entry. */
+  .lvl{padding:5px 9px;font-size:var(--fs-2)}
+  .lvl::after{height:52px;right:-14px}
+}
+
+/* THE NUDGE ROW under each level field. Four equal targets, full width, sized
+   for a thumb from the start rather than grown at a breakpoint — this is the
+   primary way a level gets set on a phone, not an accommodation. 44px is the
+   floor a fingertip needs; the desktop keeps them because a precise control
+   that is also easy to hit is not a compromise for a mouse. */
+.tk-nudge{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:-2px 0 var(--sm)}
+.tk-nudge button{min-height:44px;border:1px solid var(--border);background:var(--card-2);
+  color:var(--fg-2);font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;
+  letter-spacing:.04em;border-radius:var(--r-sm);cursor:pointer;
+  /* A repeated tap must not be read as a double-tap-to-zoom, which on a phone
+     would zoom the whole cockpit while the operator is stepping a stop. */
+  touch-action:manipulation;user-select:none}
+.tk-nudge button:hover{color:var(--fg);border-color:var(--fg-4)}
+.tk-nudge button:active{background:var(--accent);color:#000;border-color:var(--accent)}
 
 /* segmented controls */
 .seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}

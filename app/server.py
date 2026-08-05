@@ -61,6 +61,12 @@ STATIC = Path(__file__).resolve().parent / "static"
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
+#: How far a client-supplied arm timestamp may sit from this machine's clock.
+#: Wide enough for a phone that has not synced in a while and for a retry that
+#: waited out a cellular stall; far short of a value stale enough to name the
+#: wrong bar. See /api/manual/arm for why the caller gets to name it at all.
+ARM_CLOCK_SKEW_S = 120
+
 ALLOWED_USERS_FILE = Path(__file__).resolve().parent / "data" / "allowed-users.txt"
 
 
@@ -2149,6 +2155,37 @@ def manual_arm(payload: dict):
         raise HTTPException(400, "symbol required")
     if tf not in VALID_TFS:
         raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
+    # THE CALLER MAY NAME THE MOMENT, WITHIN REASON.
+    #
+    # `create_intent` builds its intent_id as `symbol|tf|MANUAL|created_at`, so
+    # a client that reuses one created_at across a retry produces an identical
+    # intent_id and an identical payload, which the content-hashed store
+    # collapses onto the row it already holds. That is what makes arming from a
+    # phone safe to retry: a request whose REPLY was lost can simply be sent
+    # again instead of the operator guessing whether it landed.
+    #
+    # But created_at is written into an append-only fact and is the moment the
+    # record will forever claim the plan was authored. A phone with a wrong
+    # clock — or a stale value replayed hours later — would stamp a false one,
+    # and nothing downstream could tell. So the caller may choose it only
+    # within sight of this machine's clock; outside that it is refused rather
+    # than silently corrected, because a corrected timestamp would break the
+    # very idempotency it was sent for.
+    now = int(time.time())
+    supplied = payload.get("created_at")
+    if supplied in (None, ""):
+        created_at = now
+    else:
+        try:
+            created_at = int(supplied)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "created_at must be a unix timestamp in seconds")
+        if abs(created_at - now) > ARM_CLOCK_SKEW_S:
+            raise HTTPException(
+                400,
+                f"created_at is {abs(created_at - now)}s from this machine's "
+                f"clock (limit {ARM_CLOCK_SKEW_S}s). Check the device's time; "
+                f"the moment a plan was authored is recorded permanently.")
     con = store.connect()
     try:
         try:
@@ -2157,7 +2194,7 @@ def manual_arm(payload: dict):
                 direction=str(payload.get("direction") or "").upper(),
                 entry=payload.get("entry"), tp=payload.get("tp"),
                 sl=payload.get("sl"),
-                created_at=int(payload.get("created_at") or time.time()),
+                created_at=created_at,
                 risk_usd=payload.get("risk_usd"),
                 leverage=payload.get("leverage") or 1,
                 trail_r=payload.get("trail_r"),

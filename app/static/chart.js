@@ -158,35 +158,106 @@ window.SSChart = (() => {
       el.className = 'lvl lvl-' + k;
       el.innerHTML = '<span></span>';
       el.style.display = 'none';
-      el.addEventListener('mousedown', e => startDrag(k, e));
+      el.addEventListener('pointerdown', e => startDrag(k, e));
       $('chartHandles').appendChild(el);
       handles[k] = el;
     }
     requestAnimationFrame(syncHandles);
   }
 
-  /* ---------- dragging levels ---------- */
+  /* ---------- dragging levels ----------
+
+     POINTER, not mouse. These were the last mouse-only handlers in the file;
+     every other listener is a click, which Android synthesises from a tap. A
+     finger produced no mousedown at all, so the three levels that define the
+     trade could be moved with a mouse and by nothing else — on the surface
+     whose entire job is planning that trade.
+
+     Three things a mouse never made us think about:
+
+     · CAPTURE. A cursor stays under the button it pressed; a fingertip is a
+       9mm contact patch that rolls and slides off a 3mm handle mid-gesture.
+       Without setPointerCapture the drag simply stops partway, leaving the
+       level wherever the finger happened to lose it — silently, and on a
+       control that decides where money stops.
+
+     · touch-action. The browser decides whether a gesture is yours or a
+       scroll BEFORE your handler sees it, and it decides scroll. `.lvl` gets
+       touch-action:none in ss.css; without it this code is correct and never
+       runs.
+
+     · pointercancel. A mouse-up always arrives. A touch can be taken away —
+       the system claims it for a gesture, the palm lands, a call comes in —
+       and then no pointerup is ever sent. The old `up` released the chart's
+       pan/zoom, so on that path the chart would have stayed frozen with no
+       way back short of reloading. Both endings release it now. */
+  const FLING_FACTOR = 3;      // one gesture may not change risk by more than this
   function startDrag(key, ev){
     if(levels[key] == null) return;
+    if(ev.button != null && ev.button > 0) return;      // right-click is not a drag
     ev.preventDefault();
-    handles[key].classList.add('drag');
-    // freeze the chart, or the drag pans the viewport underneath the cursor
+    const el = handles[key];
+    el.classList.add('drag');
+    // freeze the chart, or the drag pans the viewport underneath the pointer
     chart.applyOptions({handleScroll: false, handleScale: false});
     const box = $('chartBox').getBoundingClientRect();
+    const riskBefore = riskDistance();
+    /* Route every later event for this finger to the handle, so sliding off
+       it — or off the chart entirely — keeps dragging instead of dropping the
+       level where contact was lost. */
+    try{ el.setPointerCapture(ev.pointerId); }catch(_){ /* pre-capture browser */ }
+
     const move = e => {
+      if(e.pointerId !== ev.pointerId) return;          // a second finger is not this drag
       const p = series.coordinateToPrice(e.clientY - box.top);
       if(p == null || !isFinite(p) || p <= 0) return;
       levels[key] = p;
       modified = true;
       applyLevels(); recompute();
     };
-    const up = () => {
-      removeEventListener('mousemove', move);
-      handles[key].classList.remove('drag');
+    const end = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', end);
+      el.removeEventListener('pointercancel', end);
+      try{ el.releasePointerCapture(ev.pointerId); }catch(_){}
+      el.classList.remove('drag');
       chart.applyOptions({handleScroll: true, handleScale: true});
+      flagFling(riskBefore);
     };
-    addEventListener('mousemove', move);
-    addEventListener('mouseup', up, {once: true});
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  }
+
+  /* The distance the trade risks per unit — |entry - stop|, the same quantity
+     manual.risk_per_unit computes server-side. Read, not re-derived: it is
+     only ever compared with itself here, never shown. */
+  function riskDistance(){
+    if(levels.entry == null || levels.sl == null) return null;
+    return Math.abs(levels.entry - levels.sl);
+  }
+
+  /* A FLING IS ARITHMETICALLY VALID. The drag rejects impossible prices —
+     non-finite, zero, negative — and nothing else, so a finger that skids
+     across the chart and lands the stop 10% away produces a perfectly legal
+     trade: wider risk, smaller size, no complaint anywhere. On a mouse that
+     barely happens. On a phone, one pixel of finger travel is several ticks
+     and the gesture is exactly the one a bumpy train produces.
+
+     So it warns rather than blocks — the operator may genuinely want a much
+     wider stop, and a control that refuses a legitimate intent is worse than
+     one that asks. It says the factor, because "your risk tripled" is the
+     sentence that makes someone look. */
+  let flung = null;
+  function flagFling(before){
+    const after = riskDistance();
+    flung = null;
+    if(before && after && before > 0){
+      const factor = after / before;
+      if(factor > FLING_FACTOR || factor < 1 / FLING_FACTOR)
+        flung = {factor, wider: factor > 1};
+    }
+    refreshArm();
   }
 
   /* Place the grab tags at their prices. Called directly whenever a level
@@ -1531,6 +1602,53 @@ window.SSChart = (() => {
       }));
   }
 
+  /* Seconds in one bar, for each timeframe this app actually has. Only ever
+     used to answer "how old is too old to commit" — never to compute a price
+     or a time, where importer.TF_SECONDS stays the one authority.
+
+     THE SPELLINGS ARE THE POINT. These are engine/importer.py's exact keys:
+     '15m' is lower case and '1H', '4H', '1D', '1W' are upper. A first draft
+     here wrote them all lower case and fell back to 60 seconds for every one
+     that missed, so on a 4H chart the gate below fired at a minute of
+     staleness instead of four hours — Arm switched itself off, blaming a bar
+     length it had not actually used. It was caught by reading the sentence it
+     produced: "15 min — longer than one 4H bar" is arithmetic nobody would
+     write on purpose.
+
+     An unknown timeframe therefore returns null rather than a default, and
+     the caller says so out loud. A silent fallback here is a gate that is
+     either uselessly strict or quietly absent, and no way to tell which. */
+  const TF_S = {'15m': 900, '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800};
+  const barSeconds = t => Object.prototype.hasOwnProperty.call(TF_S, t) ? TF_S[t] : null;
+
+  /* The refusal sentence when the numbers are too old to size against, or ''
+     when they are current. Returns the words rather than a boolean so the one
+     caller that disables Arm and the one that explains why cannot disagree
+     about which condition fired. */
+  function staleForThisTimeframe(){
+    const h = (window.SSData && window.SSData.health) ? window.SSData.health() : null;
+    if(!h || h.state === 'ok') return '';
+    if(h.neverLoaded)
+      return 'Nothing has loaded yet, so there is no price to size this ' +
+             'against. Arm is off until the cockpit has data.';
+    if(h.staleMs == null) return '';
+    const barS = barSeconds(tf);
+    const mins = Math.round(h.staleMs / 60000);
+    const age = mins < 1 ? `${Math.round(h.staleMs / 1000)}s` : `${mins} min`;
+    if(barS == null)
+      // Audible, not silent. Refusing on an unrecognised timeframe is the safe
+      // side of the choice, and naming it is what gets it fixed.
+      return `The last good data is ${age} old and this build does not know ` +
+             `how long a ${tf} bar is, so it cannot judge whether that is ` +
+             `stale. Arm is off.`;
+    if(h.staleMs < barS * 1000) return '';
+    return h.state === 'offline'
+      ? `This device has not reached the PC for ${age} — longer than one ${tf} ` +
+        `bar. These prices are old, so Arm is off until it reconnects.`
+      : `The last good data is ${age} old — longer than one ${tf} bar. Arm is ` +
+        `off until the cockpit refreshes.`;
+  }
+
   function refreshArm(){
     const holding = !!enginePos;
     const btn = $('tkArm');
@@ -1577,7 +1695,17 @@ window.SSChart = (() => {
     // checked, so dragging a short's stop below its entry left Update live on
     // a ticket the maths had already called invalid — the server would refuse
     // it, but offering an impossible action is its own defect.
+    /* STALE PRICES MUST NOT SIZE A TRADE.
+       ssdata.js deliberately keeps the last good payload on screen when a
+       fetch fails, which is right for reading and wrong for committing: this
+       ticket sizes a position against a price, and on cellular that price can
+       be minutes old while every number still renders with full confidence.
+       One bar of the chosen timeframe is the threshold because it is the
+       resolution the operator chose to trade at — anything older and the bar
+       they are planning against may already have closed somewhere else. */
+    const stale = staleForThisTimeframe();
     btn.disabled = badScale ? true
+      : stale ? true
       : holding ? (!modified || !armable) : (!armable || !sym || !!dupe);
 
     /* The blocking reason, ON the control. Only ever set when Arm is actually
@@ -1589,7 +1717,14 @@ window.SSChart = (() => {
       const over = m && (m.notes || []).includes('NOTIONAL_EXCEEDS_BUYING_POWER');
       const hardBlock = m && m.blocks && m.blocks.length;
       let why = '', fixLabel = '', fixLev = null;
-      if(!holding && over && equity){
+      if(stale){
+        /* FIRST, ahead of every other reason. The others are verdicts about
+           the plan — margin, geometry, a resting duplicate — and every one of
+           them was computed against numbers this branch has just established
+           are out of date. Reporting a margin breach from stale prices sends
+           the operator to fix the wrong thing. */
+        why = stale;
+      } else if(!holding && over && equity){
         // The leverage that actually clears it, not merely "raise leverage":
         // at or above the venue cap there IS no fix and saying so is kinder
         // than pointing at a dial that cannot help.
@@ -1628,6 +1763,21 @@ window.SSChart = (() => {
         if(warnEl) warnEl.hidden = true;
       } else if(why){
         if(warnEl) warnEl.hidden = true;
+      }
+
+      /* The fling notice sits at the BOTTOM of that ladder. It is the only one
+         here that is not a refusal, so it must never displace a notice that
+         is: a stop the finger skidded is a worse trade, a plan that breaches
+         the risk budget is no trade at all. Shown only when nothing more
+         binding is already speaking. */
+      const flingEl = $('tkFling');
+      if(flingEl){
+        const speak = flung && !why && !dupe && !holding;
+        flingEl.hidden = !speak;
+        flingEl.textContent = speak
+          ? `That drag made the risk ${flung.factor.toFixed(1)}x ` +
+            `${flung.wider ? 'wider' : 'tighter'}. Check the stop before arming.`
+          : '';
       }
     }
     btn.title = holding
@@ -1841,12 +1991,20 @@ window.SSChart = (() => {
            receipt match. */
         const lastClose = candles.length ? candles[candles.length - 1].close : null;
         const away = lastClose ? (armedEntry - lastClose) / lastClose * 100 : null;
+        /* The stop's DISTANCE, not only its digits. The restatement already
+           says how far entry sits from market, and said nothing at all about
+           how far the stop sits from entry — which is the number a mis-drag
+           actually corrupts, and the one that decides the size. "stop
+           0.20063" reads as plausible at any distance; "1.8% away" is a plan
+           and "14% away" is a slip. */
+        const stopAway = armedEntry ? Math.abs(armedEntry - levels.sl) / armedEntry * 100 : null;
         const lines = [
           `${String(armedDir).toUpperCase()} ${sym} ${tf}`,
           `entry ${pf(armedEntry)}${away == null ? ''
             : Math.abs(away) < 0.05 ? ' · at market'
             : ` · ${Math.abs(away).toFixed(1)}% ${away > 0 ? 'above' : 'below'} market`}`,
-          `stop ${pf(levels.sl)}`,
+          `stop ${pf(levels.sl)}${stopAway == null ? ''
+            : ` · ${stopAway.toFixed(2)}% from entry`}`,
           `target ${pf(levels.tp)}`,
           `risking ${usd(riskUsd)}${cfg && cfg.max_leverage > 1 && leverage > 1
             ? ` at ${leverage}x` : ''}`,
@@ -1857,6 +2015,12 @@ window.SSChart = (() => {
         if(scalePlan)
           lines.push(`taking ${Math.round(scalePlan.fraction * 100)}% off at ` +
                      `${pf(scalePlan.price)} (+${scalePlan.atR}R)`);
+        // A flung level is restated where it cannot be scrolled past. The
+        // ticket already says it, but the ticket is what the operator has
+        // stopped reading by the time they reach for Arm.
+        if(flung)
+          lines.push('', `⚠ your last drag made the risk ${flung.factor.toFixed(1)}x ` +
+                         `${flung.wider ? 'wider' : 'tighter'}`);
         lines.push(
           '',
           'PAPER — this writes to your paper book. No real order is sent.');
@@ -1864,11 +2028,26 @@ window.SSChart = (() => {
       }
       btn.disabled = true;
       out.textContent = 'arming…';
+      /* ONE MOMENT, GENERATED ONCE. manual.create_intent builds its intent_id
+         as `symbol|tf|MANUAL|created_at`, and the endpoint already accepts a
+         created_at from the caller — it just was not being sent, so the
+         server stamped its own on every attempt and two taps became two
+         different intents. The engine caught that with _same_side_open, which
+         is why no duplicate was ever written, but "refused" is a poor answer
+         to a tap that actually worked.
+
+         Stamped here, before the request, and reused if it is ever retried:
+         the same created_at yields the same intent_id and an identical
+         payload, which the content-hashed store collapses to the one row it
+         already holds. The server clamps it against its own clock, so a phone
+         with a wrong time cannot stamp a false moment onto the record. */
+      const armAt = Math.floor(Date.now() / 1000);
       try{
         const r = await fetch('/api/manual/arm', {
           method: 'POST', headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             symbol: sym, tf: tf, direction: dir,
+            created_at: armAt,
             entry: levels.entry, tp: levels.tp, sl: levels.sl,
             leverage: leverage,
             // The trailing toggle was DECORATIVE — it showed an input and the
@@ -1889,7 +2068,17 @@ window.SSChart = (() => {
             risk_usd: isFinite(riskUsd) && riskUsd > 0 ? riskUsd : null})});
         const d = await r.json().catch(() => ({}));
         if(!r.ok){
-          out.textContent = 'refused — ' + (d.detail || ('HTTP ' + r.status));
+          /* A REFUSAL THAT IS REALLY A RECEIPT. The engine rejects a second
+             unresolved intent on the same market and side — correctly — but
+             on a phone the commonest way to meet that rule is tapping Arm
+             again because the first tap looked like it did nothing on a slow
+             connection. Reporting the operator's own successful trade back to
+             them as an error is how someone talks themselves into a third
+             tap. Say what is true: it landed. */
+          const detail = d.detail || ('HTTP ' + r.status);
+          out.textContent = /already have an unresolved/i.test(detail)
+            ? `your earlier tap landed — this is the trade you already have. ${detail}`
+            : 'refused — ' + detail;
           return;
         }
         const n = d.book ? d.book.n : 0;
@@ -1907,8 +2096,36 @@ window.SSChart = (() => {
           `armed on paper · ${armedDir} ${sym} ${tf} · entry ${pf(armedEntry)} · ` +
           `your book: ${n} settled, ${openN} open`;
       }catch(err){
-        // Never imply an order exists when the request never landed.
-        out.textContent = 'could not reach the server — nothing was armed';
+        /* THIS USED TO CLAIM SOMETHING IT CANNOT KNOW. fetch() rejects both
+           when the request never left and when it arrived, was recorded, and
+           the REPLY was lost — and those are indistinguishable from here.
+           "nothing was armed" is therefore a coin-flip stated as fact, on the
+           one screen where being wrong means the operator arms a second
+           position believing they have none. On loopback the ambiguous case
+           essentially never happens; on cellular it is ordinary.
+
+           So: do not assert. Go and look. /api/manual/book is a pure read —
+           unlike /api/manual/open and /api/manual/live, which call
+           manual.run() and record fills — so asking it costs the book
+           nothing. */
+        out.textContent = 'the reply never arrived — checking your book…';
+        try{
+          const book = await window.SSData.get('/api/manual/book', 0);
+          const open = (book && (book.open_intents || book.open || [])) || [];
+          const mine = open.filter(o =>
+            o && String(o.symbol) === sym && String(o.tf) === tf &&
+            String(o.direction).toUpperCase() === String(armedDir).toUpperCase());
+          out.textContent = mine.length
+            ? `it landed after all — ${armedDir} ${sym} ${tf} is on your book. ` +
+              `Nothing was armed twice.`
+            : 'the reply never arrived, and your book shows no such trade — ' +
+              'nothing was armed. Safe to try again.';
+        }catch(_){
+          // Still cannot reach it. Say exactly that, and no more.
+          out.textContent =
+            'the reply never arrived and your book is unreachable, so whether ' +
+            'this armed is UNKNOWN. Check Your trades before arming again.';
+        }
       }finally{
         refreshArm();
       }
@@ -1919,8 +2136,49 @@ window.SSChart = (() => {
         if(!isFinite(v) || v <= 0){ applyLevels(); return; }   // reject, redraw
         levels[key] = v;
         modified = true;
-        applyLevels(); recompute();
+        // A number typed on purpose answers the fling warning — the operator
+        // has now stated the level deliberately, in digits.
+        flung = null;
+        applyLevels(); recompute(); refreshArm();
       });
+    /* THE NUDGE EDITOR. Deliberately a first-class way to set a level, not a
+       fallback for when dragging fails — dragging is imprecise on a phone even
+       when it works perfectly, because the price axis is a few hundred pixels
+       tall and a fingertip covers several ticks of it.
+
+       Two units, because the operator thinks in both: a TICK is the smallest
+       move the price format can express, and 0.1R is a tenth of the distance
+       from entry to stop, which is the unit the risk is denominated in. R is
+       measured from the CURRENT geometry each press, so stepping the stop
+       makes later 0.1R presses smaller — that is correct, it is the same
+       shrinking distance the position size is computed from.
+
+       Delegated, so the three groups share one handler and a group added later
+       works without wiring. */
+    document.addEventListener('click', e => {
+      const b = e.target.closest && e.target.closest('.tk-nudge button');
+      if(!b) return;
+      const key = b.parentElement.dataset.k;
+      if(levels[key] == null) return;
+      const step = b.dataset.step;
+      const tick = Math.pow(10, -digits(levels[key]));
+      const r = riskDistance();
+      // No stop yet means no R to step by; the tick still works, and offering
+      // a button that silently does nothing is worse than one that is off.
+      const size = step.endsWith('r') ? (r ? r * 0.1 : 0) : tick;
+      if(!size) return;
+      const next = levels[key] + (step[0] === '-' ? -size : size);
+      if(!isFinite(next) || next <= 0) return;
+      // Land on the tick grid, or repeated 0.1R presses drift the level into
+      // precision the price format cannot even display.
+      levels[key] = Math.round(next / tick) * tick;
+      modified = true;
+      // A deliberate step answers the fling warning for the same reason a
+      // typed number does: the operator has now stated the level on purpose.
+      flung = null;
+      applyLevels(); recompute(); refreshArm();
+    });
+
     $('tkRisk').addEventListener('change', e => {
       const v = parseFloat(String(e.target.value).replace(/[$,]/g, ''));
       // Sizing THIS trade differently changes nothing else: not the engine
