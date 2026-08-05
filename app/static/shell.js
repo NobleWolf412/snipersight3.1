@@ -296,6 +296,9 @@
      rather than recomputing from a variable that is populated later in the
      cycle. See renderDisposition for what that cost. */
   let lastSplit = null;
+  /* What the shell's accent is FOR. See setAccentMode. */
+  let liveEnabled = false;
+  let engineExposed = false;
   /* The portfolio payload the Open Trades rows were built from. The copilot
      button needs the whole trade — direction, entry, stop, target — to compose
      its question, and putting six values on the button as data attributes
@@ -719,6 +722,43 @@
      region that re-announces "Nothing to take right now" twice a minute is a
      screen-reader user's definition of hostile. It sits first in the document,
      so it is read on arrival, which is when the answer is wanted. */
+  /* THE DYNAMIC ACCENT RULE, FINALLY CONNECTED.
+
+     ss.css declares three accents — idle green, paper amber, live red — and
+     shell.html wrote data-mode="idle" as a literal that nothing ever changed.
+     One hit across every .js, .py, .html and .css in the repo. The design
+     system was documented around a mechanism that had never fired, and a
+     comment in ss.css claimed "the primary button is amber while the book is
+     paper", describing behaviour the app did not have.
+
+     Wired to exposure, because that is what amber already means everywhere
+     else in this stylesheet: .deck-row.held, .ticket.managing, .tk-open and
+     .tkm-dot all use it for "your money is on this", and four independently
+     owned modules agree on it without a shared component. The shell now agrees
+     with them. Green is flat, amber is committed, and the accent answers one
+     question at a glance from any surface: is my money on the line.
+
+     Both books count. The engine's positions and the operator's hand-armed
+     orders are kept rigorously apart in the RECORD — a hand-picked trade must
+     never be read as engine edge — but they are not apart in the money, and
+     this rule is about the money. renderMineAside already makes the same
+     judgement in words: "Outside these limits: 79 hand-picked".
+
+     Red is a tripwire, not a state we expect. live_enabled is a hardcoded
+     False in server.py and there is no order-routing code behind it, so this
+     branch should never fire. It is wired anyway: if that constant ever flips,
+     every accent in the app turns red before a single order is sent, and
+     nobody has to remember to add the warning. */
+  function setAccentMode(){
+    const manualExposed =
+      (+MINE.open_risk_usd || 0) > 0 || (+MINE.pending_risk_usd || 0) > 0 ||
+      (MINE.open || []).length > 0;
+    const mode = liveEnabled ? 'live'
+               : (engineExposed || manualExposed) ? 'paper'
+               : 'idle';
+    if(document.body.dataset.mode !== mode) document.body.dataset.mode = mode;
+  }
+
   function renderDisposition(){
     const el = $('disposition');
     if(!el) return;
@@ -1403,6 +1443,7 @@ weighed in. Name the facts you used.`;
       return;
     }
     MINE = d || MINE;
+    setAccentMode();          // the operator's own orders are money too
     const rows = (d && d.open) || [];
     if(!rows.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
     panel.style.display = '';
@@ -1927,6 +1968,9 @@ weighed in. Name the facts you used.`;
     // fire-and-forget: the positions panel fetches a price per open trade, and
     // a slow venue must not hold up the equity numbers above it
     indexHeld(p);
+    engineExposed = (p.active_positions || []).length > 0 ||
+                    (p.pending_orders   || []).length > 0;
+    setAccentMode();
     renderRiskBudget(p);
     renderPositions(p).catch(() => {});
     // Your own book, on its own request — it resolves intents server-side and
@@ -2387,6 +2431,10 @@ weighed in. Name the facts you used.`;
   /* ---------- SCANNER SETUP: show the real sizing rules, not prose ---------- */
   async function loadRisk(){
     const c = await api('/api/trade-config');
+    /* The one place the UI learns whether real orders are possible. server.py
+       says outright: "The UI reads this rather than deciding for itself." */
+    liveEnabled = !!c.live_enabled;
+    setAccentMode();
     const pct = v => (v * 100).toFixed(v * 100 % 1 ? 1 : 0) + '%';
     const row = (k, v, note) => `<div><span class="k">${k}</span>` +
       `<span class="v">${v}${note ? ' <span style="color:var(--fg-4)">' + note + '</span>' : ''}</span></div>`;
