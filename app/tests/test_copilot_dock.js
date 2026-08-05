@@ -36,6 +36,14 @@ const HTML = S('static/shell.html');
 const SERVER = S('server.py');
 const ENGINE = S('engine/copilot.py');
 
+
+// Regexes built with chr(92) at authoring time so no tool between here and
+// disk can eat an escape -- this file has been bitten by that before.
+const SEND_SIG = new RegExp('async function send\\(([^)]*)\\)');
+const READS_BOX = new RegExp('const text = String\\(ta\\.value');
+const BLOCK_COMMENT = new RegExp('/\\*[\\s\\S]*?\\*/', 'g');
+const LINE_COMMENT  = new RegExp('^\\s*//.*$', 'gm');
+const SEND_CALL_WITH_ARG = new RegExp('[^\\w.]send\\(\\s*[^)\\s]', 'g');
 let passed = 0;
 function ok(name, fn) {
   try { fn(); console.log('  ok   ' + name); passed++; }
@@ -129,4 +137,43 @@ ok('the boundaries did not move', () => {
     'the model preference must stay the ONE key Settings also writes');
 });
 
+/* THE QUESTION THE OPERATOR TYPED, NOT THE EVENT THAT SENT IT.
+
+   send() took an `override` that shadowed the textarea, and #cpSend is bound
+   straight to it, so a click called send(PointerEvent), the override was
+   non-null, and the message posted to the model was the literal string
+   "[object PointerEvent]". Every click asked that; the box was never read.
+
+   It only ever half-broke, which is why it survived: Enter calls send() with
+   no argument and works perfectly, so the dock looked functional and only the
+   button was wrong.
+
+   The parameter was already dead when it broke. Suggestion chips used to call
+   send(theirText); 5bf8038 changed them to fill the textarea instead, on the
+   principle that the input belongs to the operator. After that nothing filled
+   `override` deliberately, and only the browser did.
+
+   The lesson is the assertion: a function bound directly to an event handler
+   must not take a first parameter it would trust. */
+ok('the send button asks what is in the box, not what clicked it', () => {
+  const sig = CP.match(SEND_SIG);
+  assert(sig, 'send() is gone or renamed');
+  assert(sig[1].trim() === '',
+    'send() takes a parameter again (' + sig[1].trim() + ') while #cpSend is ' +
+    'bound directly to it, so a click passes the PointerEvent as the question');
+  assert(READS_BOX.test(CP),
+    'send() no longer reads the textarea as the question');
+});
+
+ok('nothing calls send with an argument', () => {
+  // Comments stripped first. copilot.js explains this bug by NAMING the shape
+  // that caused it -- send(PointerEvent), send(theirText) -- and a scan that
+  // reads prose as code reports the explanation as the defect. The first run
+  // of this test did exactly that.
+  const code = CP.replace(BLOCK_COMMENT, ' ').replace(LINE_COMMENT, ' ');
+  const bad = code.match(SEND_CALL_WITH_ARG) || [];
+  assert(bad.length === 0,
+    'send() is called with an argument, which reintroduces the parameter ' +
+    'this test exists to keep absent: ' + bad.join(', '));
+});
 console.log('\n  ' + passed + ' passed');
