@@ -211,6 +211,15 @@
       `${n} ${n === 1 ? 'panel' : 'panels'} on this page could not refresh. ` +
       `${ageText(lastGoodAt)} Click for Diagnostics.`;
     $('healthChip').classList.add('clickable');
+    /* The chip is shed below 900px to make room in the top bar, which is fine
+       while it reads OK and wrong the moment it reads API DEGRADED. ssdata.js
+       deliberately keeps the last good numbers on screen when a fetch fails,
+       and its comment justifies that by saying THIS chip reports the staleness
+       in words — so hiding it turns a stated contract into stale prices with a
+       confident face. On loopback the fetch never fails and this never showed;
+       over a tunnel or cellular it fails constantly. The class overrides the
+       shed rule, so the chip disappears only while there is nothing wrong. */
+    $('healthChip').classList.add('degraded');
     console.warn('[shell] refresh failed:', detail);
   }
   $('healthChip').addEventListener('click', () => go('diagnostics'));
@@ -3202,7 +3211,10 @@ weighed in. Name the facts you used.`;
     if(failed.length) markDegraded(failed.map(f => f.reason).join('; '), failed.length);
     else {
       lastGoodAt = Date.now();                    // the age the chip reports when it next fails
-      if(degraded){ degraded = false; $('healthChip').classList.remove('clickable'); }
+      if(degraded){
+        degraded = false;
+        $('healthChip').classList.remove('clickable', 'degraded');
+      }
     }                                             // health orb is reset by loadHealth
   }
   refresh();

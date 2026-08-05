@@ -484,6 +484,11 @@ body{
 }
 @media (max-width:900px){
   #healthChip{display:none}
+  /* ...unless it has something to report. shell.js adds .degraded when a
+     refresh fails, and that is exactly the state ssdata.js is relying on this
+     chip to announce while it keeps the last good numbers on screen. Shedding
+     a status chip to save room is only free while the status is fine. */
+  #healthChip.degraded{display:inline-flex}
   #scanChip{width:auto;max-width:120px;flex:0 1 auto}
 }
 @media (max-width:640px){
@@ -644,18 +649,59 @@ body:not(.dev) #consolePanel{display:none}
    calc gets its own correction below rather than silently overshooting by the
    height of the rail. */
 @media (max-width:900px){
-  .shell{grid-template-columns:1fr;
+  /* minmax(0,1fr), not 1fr. A grid track's automatic minimum is min-content, so
+     a plain 1fr cannot shrink below the widest thing inside it — and the top
+     bar's min-content is about 674px. On a 400px phone the column resolved to
+     674, every child inherited it, the page scrolled sideways, and HALT sat off
+     the right edge: the one control that must never leave the screen, gone at
+     exactly the width where it is hardest to get back.
+
+     The zero minimum lets the track match the viewport; the rules below then
+     make the bar's contents actually fit it, rather than overflow silently. */
+  .shell{grid-template-columns:minmax(0,1fr);
     grid-template-rows:var(--topbar-h) auto 1fr var(--statusbar-h)}
+  .shell > *{min-width:0}
+
+  /* The bar tightens instead of overflowing: smaller gap and gutter, a smaller
+     mark, and chips that truncate rather than push. HALT is flex:none so it is
+     the one thing that never shrinks and never moves. */
+  .topbar{gap:var(--sm);padding:0 var(--sm)}
+  .topbar > *{min-width:0}
+  .topbar .chip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topbar .brand img{max-height:22px}
+  #btnHalt{flex:none}
+  /* The strip scrolls, and it says so. Five destinations need about 510px and
+     a phone gives 390, so Settings and Diagnostics sit off the right edge —
+     with the scrollbar suppressed there was nothing at all to indicate two of
+     the five surfaces existed. A slim visible bar is the honest hint: a fade
+     mask would dim the last item on the wider screens where everything fits,
+     which is a hint that lies half the time. */
   .nav{flex-direction:row;overflow-x:auto;gap:0;padding:0 var(--sm);
     border-right:0;border-bottom:1px solid var(--border-soft);
-    scrollbar-width:none}
-  .nav::-webkit-scrollbar{display:none}
+    scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+  .nav::-webkit-scrollbar{height:3px}
+  .nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:var(--r-pill)}
+  .nav::-webkit-scrollbar-track{background:transparent}
   .nav a{white-space:nowrap;padding:10px var(--md)}
   .nav-sep{display:none}
-  /* the chart leads and the ticket follows it, instead of competing for a
-     width neither can use */
+
+  /* The chart leads and the ticket follows it, instead of competing for a
+     width neither can use.
+
+     The height is viewport-relative, not 1fr. #s-chart.on is height:auto here
+     so the ticket can flow below the chart and the surface can scroll — but
+     that leaves the row with no definite height to resolve a fraction against,
+     so `minmax(260px,1fr)` collapsed straight to its 260px floor. A 915px phone
+     was giving 260px of chart on the surface whose own heading says the chart
+     owns the screen.
+
+     dvh rather than vh: on Android vh is the height with the browser chrome
+     retracted, so a vh-sized chart is taller than the space that actually
+     exists and pushes the ticket off the bottom. The vh line before it is the
+     fallback for engines without dvh. */
   .chart-main{grid-template-columns:1fr;
-    grid-template-rows:minmax(260px,1fr) auto}
+    grid-template-rows:minmax(0,58vh) auto;
+    grid-template-rows:minmax(0,58dvh) auto}
   #s-chart.on{height:auto;min-height:0}
 }
 
