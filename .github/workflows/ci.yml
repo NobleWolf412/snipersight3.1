@@ -15,6 +15,42 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install --upgrade pip fastapi uvicorn
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # pytest and an HTTP client for fastapi's TestClient are TEST
+      # dependencies, and their absence did not fail the run — it made two
+      # modules unimportable, which unittest reports as two errors among
+      # hundreds of dots. test_system_restart and test_ui_field_contract have
+      # therefore never executed here.
+      - run: python -m pip install --upgrade pip fastapi uvicorn pytest httpx
       - run: python -m compileall -q .
       - run: python -m unittest discover -s tests -v
+      # The JavaScript suites were not run here at all, while HARDENING.md
+      # said they were. ticket-math.js decides how big a trade is and
+      # re-implements venues.liquidation_price — it is the only thing proving
+      # the ticket and the engine agree about where a position dies, and it
+      # was landing on main unverified. They need no dependencies: assert,
+      # fs and path are built in.
+      #
+      # Globbed rather than listed. The listed form is how this drifted: the
+      # names were written when there were two suites, and the seventeen
+      # added since were never added here.
+      - name: JavaScript suites
+        # always(): these do not depend on the Python suite, and gating them on
+        # it means one red step hides the other's status entirely. That is not
+        # hypothetical — the Python suite is currently failing on Linux, so the
+        # run that first added this step reported nothing at all about the
+        # JavaScript side. The job still fails if either fails.
+        if: always()
+        run: |
+          shopt -s nullglob
+          files=(tests/test_*.js)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no JavaScript suites found — the glob or the layout changed"
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            echo "--- $f"
+            node "$f" || exit 1
+          done

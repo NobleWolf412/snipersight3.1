@@ -26,3 +26,6 @@ scratchpad/
 
 # API credentials — DPAPI ciphertext, never committed
 app/data/credentials.vault
+
+# Impeccable: keep the critique record, not machine-local live-mode state
+.impeccable/live/

@@ -48,6 +48,35 @@
   --f-display:'Share Tech Mono',ui-monospace,monospace;
   --f-body:'Inter',ui-sans-serif,system-ui,sans-serif;
   --f-mono:'JetBrains Mono',ui-monospace,monospace;
+
+  /* ── THE TYPE SCALE ──
+     Seven steps replacing nineteen ad-hoc values (9 / 9.5 / 10 / 10.5 / 11 /
+     11.5 / 12 / 12.5 / 13 / 13.5 / 14 / 15 / 16 / 17 / 19 / 20 / 22 / 26 / 32).
+     REDESIGN-PLAN §1 counted fourteen and called it "not a type scale; nothing
+     can be emphasised when everything differs". It had grown to nineteen.
+
+     In rem, deliberately. Every size in this file was px, so a reader who sets
+     a larger default text size in their browser got nothing at all — the one
+     accessibility control that costs the author no work was inert across the
+     whole app. rem restores it, and nothing here sets a font-size on html, so
+     1rem is whatever that reader chose.
+
+     --fs-1 is 11px, the floor. 348 elements rendered below it, 293 of them at
+     10px, most in uppercase with .18em tracking, which destroys word shape at
+     exactly the sizes that can least afford to lose it. Nothing shrank: every
+     old value maps up or stays, so density loosens slightly and no line that
+     used to fit now overflows for want of room.
+
+     Steps are ~1.13 through the dense band and open out at the display end.
+     Dense product UI wants a tight ratio; a metric and a page title are doing a
+     different job and can afford the jump. */
+  --fs-1:0.6875rem;   /* 11px — labels, chips, micro-metadata, table cells */
+  --fs-2:0.78125rem;  /* 12.5px — dense data, secondary text */
+  --fs-3:0.875rem;    /* 14px — body copy, panel headings */
+  --fs-4:1rem;        /* 16px — lead prose, the disposition line */
+  --fs-5:1.25rem;     /* 20px — sub-display */
+  --fs-6:1.625rem;    /* 26px — metrics */
+  --fs-7:2rem;        /* 32px — page titles */
   /* spacing + radii */
   --xs:4px; --sm:8px; --md:14px; --lg:18px; --xl:24px; --shell-x:28px;
   --r-sm:8px; --r-md:10px; --r-lg:12px; --r-xl:14px; --r-pill:999px;
@@ -75,7 +104,7 @@
 .skip-link{position:fixed;left:var(--shell-x);top:-60px;z-index:9500;
   padding:9px 14px;border-radius:var(--r-md);background:var(--card);
   border:1px solid var(--accent);color:var(--fg);font-family:var(--f-mono);
-  font-size:11px;text-decoration:none;transition:top .12s ease}
+  font-size:var(--fs-1);text-decoration:none;transition:top .12s ease}
 .skip-link:focus{top:10px}
 @media (prefers-reduced-motion: reduce){.skip-link{transition:none}}
 /* `hidden` must actually hide. The [hidden] default belongs to the user agent,
@@ -90,31 +119,76 @@
 html,body{height:100%}
 body{
   background:var(--bg);color:var(--fg-2);
-  font-family:var(--f-body);font-size:13px;line-height:1.55;
+  font-family:var(--f-body);font-size:var(--fs-3);line-height:1.55;
   overflow:hidden;-webkit-font-smoothing:antialiased;
 }
 
+/* ── KEYBOARD FOCUS, EVERYWHERE, BY DEFAULT ──
+
+   This file carried seventeen focus rules and none of them covered .btn, .nav a,
+   .seg button, .sym-row, or the nine .layers-pop buttons — the controls a
+   keyboard operator actually moves between. Four more rules actively removed the
+   ring with `outline:0`, and three of those governed #tkEntry, #tkTp and #tkSl:
+   the fields that set entry, target and stop. The only feedback for "you are
+   about to type a stop loss into this box" was a one-pixel border tint.
+
+   Declared as a floor rather than per-component, so a control added later is
+   focusable-visibly on the day it lands instead of the day someone notices. It
+   is :focus-visible, so a pointer user never sees it; only keyboard and
+   assistive navigation do.
+
+   :where() keeps specificity at zero, so any component that needs a different
+   ring (inset on a tab strip, tighter on a chip) overrides it with a plain
+   class selector and no !important. */
+:where(.btn, .nav a, .seg button, .sym-row, .layers-pop button,
+       button, [role="button"], a[href], summary,
+       input, select, textarea):focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+  border-radius:var(--r-sm);
+}
+
 /* ---------- type roles (six, not fourteen) ---------- */
-.t-page{font-family:var(--f-display);font-size:32px;line-height:1;letter-spacing:.2em;
-  text-transform:uppercase;color:var(--accent);text-shadow:0 0 18px rgba(var(--accent-rgb),.35)}
+.t-page{font-family:var(--f-display);font-size:var(--fs-7);line-height:1;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--accent)}
 /* Now a real <h2>. Every panel label was a styled <span>, so this app had one
    heading per surface and a screen reader could not navigate it at all. The
    size and weight are set explicitly rather than inherited, because an h2's
    defaults would have changed how all seventeen of them look. */
-.t-section{font-family:var(--f-display);font-size:13px;font-weight:400;
+.t-section{font-family:var(--f-display);font-size:var(--fs-3);font-weight:400;
   letter-spacing:.22em;margin:0;
-  text-transform:uppercase;color:var(--fg-3);display:flex;align-items:center;gap:var(--sm)}
-.t-metric{font-family:var(--f-display);font-size:26px;font-weight:800;line-height:1;
+  /* --fg-2, not --fg-3. Every panel heading rendered dimmer than the .chip
+     sitting next to it, so each panel's metadata outranked its own title and
+     the eye had nothing to climb. The chip drops a step to match. */
+  text-transform:uppercase;color:var(--fg-2);display:flex;align-items:center;gap:var(--sm)}
+.t-metric{font-family:var(--f-display);font-size:var(--fs-6);font-weight:800;line-height:1;
   letter-spacing:-.01em;color:var(--fg)}
-.t-label{font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.18em;
+.t-label{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.18em;
   text-transform:uppercase;color:var(--fg-4)}
-.t-mono{font-family:var(--f-mono);font-size:11.5px;font-variant-numeric:tabular-nums}
-.t-body{font-family:var(--f-body);font-size:13px;line-height:1.55;max-width:72ch}
+/* .t-label's prose sibling. The label style is right for two or three words and
+   wrong for a sentence: uppercase removes the ascender-and-descender shape that
+   makes a word recognisable without being spelled out, and .18em tracking pulls
+   the letters far enough apart that the eye stops grouping them. Applied to
+   sentences it was producing runs of 61, 103 and 165 characters set in tracked
+   uppercase — the refusal reasons and break-even notes on the surface whose
+   whole job is explaining why a number is what it is.
+
+   Same voice: same mono face, same muted colour, so it still reads as machine
+   annotation rather than body copy. It just keeps word shape. .era-band already
+   made this trade deliberately (see its comment below) and was the most legible
+   thing on Results. */
+.t-note{font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.01em;
+  line-height:1.5;color:var(--fg-3);max-width:72ch;text-transform:none}
+.t-mono{font-family:var(--f-mono);font-size:var(--fs-2);font-variant-numeric:tabular-nums}
+.t-body{font-family:var(--f-body);font-size:var(--fs-3);line-height:1.55;max-width:72ch}
 
 /* the pulsing dot that always precedes a section title */
+/* No animation. Ten of these breathed simultaneously on Command, on the very
+   keyframe .cp-msg.busy uses for "working", so a heading and a pending request
+   pulsed identically and neither meant anything. A heading is not an event.
+   pulse now belongs to things that are actually in progress. */
 .t-section::before{content:'';width:6px;height:6px;border-radius:50%;
-  background:var(--accent);box-shadow:0 0 8px rgba(var(--accent-rgb),.8);
-  animation:pulse 2.8s ease-in-out infinite;flex:none}
+  background:var(--accent);flex:none}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
 /* ---------- panel: scanlines as a 2-bit overlay, not a hero effect ---------- */
@@ -123,8 +197,11 @@ body{
 .panel::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:.35;
   background:repeating-linear-gradient(0deg,rgba(0,0,0,.20) 0 1px,transparent 1px 3px)}
 .panel>*{position:relative}
+/* A 1px border under a 24px zero-offset blur is a halo, not depth. The border
+   carries the emphasis; the shadow now has an offset and does what a shadow
+   does. */
 .panel-accent{border-color:rgba(var(--accent-rgb),.45);
-  box-shadow:0 0 0 1px rgba(var(--accent-rgb),.10), 0 0 24px -6px rgba(var(--accent-rgb),.35)}
+  box-shadow:0 2px 10px -4px rgba(0,0,0,.5)}
 .panel-head{display:flex;align-items:center;gap:var(--sm);padding:var(--md) var(--lg);
   border-bottom:1px solid var(--border-soft)}
 .panel-body{padding:var(--lg)}
@@ -141,13 +218,12 @@ body{
 
 /* ---------- chips ---------- */
 .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:var(--r-pill);
-  background:rgba(255,255,255,.04);color:var(--fg-2);
-  font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase}
+  background:rgba(255,255,255,.04);color:var(--fg-3);
+  font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.18em;text-transform:uppercase}
 .chip-accent{background:rgba(var(--accent-rgb),.10);color:var(--accent)}
 .chip-green{background:rgba(0,255,170,.10);color:var(--green)}
 .chip-red{background:rgba(248,113,113,.10);color:var(--red-2)}
 .chip-amber{background:rgba(255,194,102,.10);color:var(--amber)}
-.chip-cyan{background:rgba(34,211,238,.10);color:var(--cyan)}
 /* the health chip becomes a route to Diagnostics only while it has something
    to explain — a control that looks clickable at rest but is not lies twice */
 .chip.clickable{cursor:pointer;text-decoration:underline;text-underline-offset:3px}
@@ -165,7 +241,7 @@ body{
    for labels destroys word shape at sentence length. Neutral, not a warning —
    nothing is wrong when Results and Diagnostics disagree, it just needs saying.
    Same treatment on both surfaces so the two read as one statement. */
-.era-band{font-family:var(--f-body);font-size:12.5px;line-height:1.6;
+.era-band{font-family:var(--f-body);font-size:var(--fs-2);line-height:1.6;
   color:var(--fg-2);max-width:78ch;
   border-left:2px solid var(--border);padding:2px 0 2px var(--md);
   margin-bottom:var(--lg)}
@@ -180,7 +256,7 @@ body{
    list rather than a table, and table semantics would fight the button roles
    it already announces. */
 .data-table{width:100%;border-collapse:collapse}
-.data-table thead th{font-family:var(--f-mono);font-size:9px;font-weight:600;
+.data-table thead th{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;
   letter-spacing:.14em;text-transform:uppercase;color:var(--fg-4);
   padding:6px var(--sm);border-bottom:1px solid var(--border-soft);text-align:right}
 .data-table tbody th,.data-table td{padding:8px var(--sm);text-align:right;
@@ -194,7 +270,7 @@ body{
    regime as colour, detail in the title. Context, so quieter than everything
    that is actually the chart. The current timeframe gets the ring. */
 .ctx-ladder{display:inline-flex;gap:3px;align-items:center}
-.ctx-ladder .lx{font-family:var(--f-mono);font-size:9px;font-weight:600;
+.ctx-ladder .lx{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;
   letter-spacing:.08em;padding:2px 5px;border-radius:var(--r-sm);
   color:var(--bg);opacity:.8;cursor:help}
 .ctx-ladder .lx.on{outline:1px solid var(--fg-2);outline-offset:1px;opacity:1}
@@ -212,7 +288,7 @@ body{
    page; the essay is a click away for whoever actually wants it. */
 .fine-print{margin-top:var(--sm)}
 .fine-print summary{cursor:pointer;list-style:none;font-family:var(--f-mono);
-  font-size:10px;letter-spacing:.08em;color:var(--fg-4);
+  font-size:var(--fs-1);letter-spacing:.08em;color:var(--fg-4);
   text-decoration:underline dotted;text-underline-offset:3px}
 .fine-print summary::-webkit-details-marker{display:none}
 .fine-print summary:hover{color:var(--fg-2)}
@@ -227,7 +303,7 @@ body{
 .explainer-head{display:flex;align-items:baseline;gap:var(--md);flex-wrap:wrap;
   padding:var(--md) var(--lg);cursor:pointer;list-style:none}
 .explainer-head::-webkit-details-marker{display:none}
-.explainer-head::after{content:'▾';color:var(--fg-4);font-size:10px;
+.explainer-head::after{content:'▾';color:var(--fg-4);font-size:var(--fs-1);
   margin-left:auto;transition:transform .15s ease}
 .explainer[open] .explainer-head::after{transform:rotate(180deg)}
 .explainer-head:hover .t-section{color:var(--fg-2)}
@@ -237,10 +313,10 @@ body{
 .explainer-steps{margin:0 0 var(--md);padding-left:1.35em}
 .explainer-steps li{margin-bottom:var(--sm);padding-left:.2em}
 .explainer-steps li::marker{color:var(--accent);font-family:var(--f-mono);
-  font-size:11px}
+  font-size:var(--fs-1)}
 /* the "controlled by" pointer: this is what ties a step to a toggle below */
 .explainer-steps em{display:block;margin-top:3px;font-style:normal;
-  font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;
+  font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.1em;
   text-transform:uppercase;color:var(--fg-4)}
 @media (prefers-reduced-motion: reduce){
   .explainer-head::after{transition:none}
@@ -278,55 +354,71 @@ body{
   cursor:pointer;list-style:none}
 .issue-head::-webkit-details-marker{display:none}
 .issue-count{margin-left:auto;color:var(--fg-3)}
-.issue-head::after{content:'▾';color:var(--fg-4);font-size:10px;margin-left:var(--sm)}
+.issue-head::after{content:'▾';color:var(--fg-4);font-size:var(--fs-1);margin-left:var(--sm)}
 .issue[open] .issue-head::after{content:'▴'}
 .issue-head:hover{background:rgba(255,255,255,.02)}
 .issue-body{padding:0 var(--lg) var(--md);max-height:280px;overflow:auto}
 .issue-item{display:flex;gap:var(--md);align-items:baseline;padding:4px 0;
-  font-size:11.5px;line-height:1.5;border-top:1px dashed var(--border-soft)}
+  font-size:var(--fs-2);line-height:1.5;border-top:1px dashed var(--border-soft)}
 .issue-where{color:var(--fg-3);flex:none;min-width:11ch}
-.issue-detail{color:var(--fg-4);font-family:var(--f-body);font-size:12px}
+.issue-detail{color:var(--fg-4);font-family:var(--f-body);font-size:var(--fs-2)}
 /* a truncated list must say it is truncated, or the sample reads as the whole */
 .issue-more{color:var(--fg-4);font-style:italic}
 
 /* B5 — every action reports a result and a time. A control that changes nothing
    visible is indistinguishable from one that did not fire. */
-.scan-result{color:var(--fg-3);font-size:11px;margin-bottom:var(--md);
-  padding:6px 10px;border-radius:var(--r-md);background:rgba(255,255,255,.03);
-  border-left:2px solid var(--accent)}
-.scan-result.bad{color:var(--red-2);border-left-color:var(--red)}
+.scan-result{color:var(--fg-3);font-size:var(--fs-1);margin-bottom:var(--md);
+  padding:6px 10px;border-radius:var(--r-md);
+  /* Full border and a tint, not a side stripe. diagnostics-ui.css states the
+     house rule in its own header comment and this file was the counter-example. */
+  background:rgba(var(--accent-rgb),.06);border:1px solid rgba(var(--accent-rgb),.35)}
+.scan-result.bad{color:var(--red-2);background:rgba(255,100,100,.07);
+  border-color:rgba(255,100,100,.40)}
 
 /* A disabled control carries its reason INLINE. Hidden in a hover title, the
    explanation may as well not exist — and an unexplained dead button reads as
    an app that is arbitrary rather than one that is careful. */
 .locked-ctl{display:inline-flex;flex-direction:column;gap:2px;align-items:flex-start}
-.locked-ctl .locked-why{font-family:var(--f-mono);font-size:9px;
+.locked-ctl .locked-why{font-family:var(--f-mono);font-size:var(--fs-1);
   letter-spacing:.06em;color:var(--fg-4);max-width:22ch;line-height:1.3}
 
 /* One line above the deck saying what the deck is. Sits inside the panel so it
    cannot be read as belonging to the panel above it. */
 .deck-note{padding:var(--sm) var(--lg) var(--md);color:var(--fg-3);
-  font-size:12.5px;line-height:1.6;border-bottom:1px solid var(--border-soft)}
+  font-size:var(--fs-2);line-height:1.6;border-bottom:1px solid var(--border-soft)}
 .deck-note a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 
 /* ---------- buttons ---------- */
-.btn{font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.14em;
+.btn{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.14em;
   text-transform:uppercase;padding:9px 14px;border-radius:var(--r-md);cursor:pointer;
   background:rgba(255,255,255,.03);color:var(--fg-2);border:1px solid var(--border);
   transition:border-color .15s,color .15s,background .15s}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .btn:disabled:hover{border-color:var(--border);color:var(--fg-2)}
-/* the only 3D-pressable control in the system */
-.btn-cyan{background:linear-gradient(180deg,#164e63 0%,#0e3a4a 60%,#0a2d3a 100%);
-  color:#67e8f9;border-color:#164e63;box-shadow:0 1px 0 #22d3ee inset,0 2px 6px rgba(0,0,0,.5)}
-.btn-cyan:hover{color:#a5f3fc;border-color:#22d3ee}
-.btn-cyan:active{transform:translateY(1px);box-shadow:0 0 0 #000 inset}
+/* THE PRIMARY ACTION. Renamed from .btn-primary, which was a hardcoded cyan
+   gradient (#164e63 -> #0a2d3a with a #22d3ee inset) on every primary control:
+   Check now, Copilot, Got it, and the three Save-venue buttons. REDESIGN-PLAN
+   §1 named "cyan-on-black with glow" as the off-brand look the redesign existed
+   to remove, and it was still the most prominent colour in the app.
+
+   It now reads --accent, like everything else that signals state, which means
+   the primary button is amber while the book is paper and red while it is live.
+   The one control the operator reaches for first now agrees with the mode chip
+   instead of contradicting it in a colour the palette does not contain.
+
+   Still the only 3D-pressable control in the system: the inset highlight and
+   the 1px travel on :active are what make it read as the thing to press. */
+.btn-primary{background:rgba(var(--accent-rgb),.14);
+  color:var(--accent);border-color:rgba(var(--accent-rgb),.55);
+  box-shadow:0 1px 0 rgba(var(--accent-rgb),.35) inset,0 2px 6px rgba(0,0,0,.5)}
+.btn-primary:hover{background:rgba(var(--accent-rgb),.20);border-color:var(--accent)}
+.btn-primary:active{transform:translateY(1px);box-shadow:0 1px 3px rgba(0,0,0,.5) inset}
 .btn-amber{background:rgba(251,191,36,.10);color:var(--amber-2);border-color:rgba(251,191,36,.40)}
 .btn-amber:hover{border-color:var(--amber-2);color:var(--amber)}
 .btn-red{background:rgba(248,113,113,.10);color:var(--red-2);border-color:rgba(248,113,113,.35)}
 .btn-red:hover{border-color:var(--red);color:var(--red)}
-.btn-lg{font-size:13px;padding:12px 20px}
+.btn-lg{font-size:var(--fs-3);padding:12px 20px}
 
 /* ---------- metric tile ---------- */
 .tile{background:rgba(0,0,0,.4);border:1px solid var(--border-soft);border-radius:var(--r-lg);
@@ -337,7 +429,7 @@ body{
 /* The qualifier that travels WITH a headline number. A count whose meaning
    depends on what was excluded must carry that exclusion where it is read,
    not in a tooltip — the universe tile said 75 when 19 were tradeable. */
-.t-sub{font-family:var(--f-mono);font-size:10px;color:var(--fg-4);line-height:1.4}
+.t-sub{font-family:var(--f-mono);font-size:var(--fs-1);color:var(--fg-4);line-height:1.4}
 .t-sub:empty{display:none}
 
 /* ---------- glossary: every term explains itself ---------- */
@@ -351,9 +443,9 @@ body{
 #gloss{position:fixed;z-index:9000;max-width:640px;padding:10px 12px;border-radius:var(--r-md);
   background:var(--card);border:1px solid var(--accent);display:none;
   box-shadow:0 8px 30px rgba(0,0,0,.6)}
-#gloss .g-term{font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.18em;
+#gloss .g-term{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.18em;
   text-transform:uppercase;color:var(--accent);margin-bottom:5px}
-#gloss .g-def{font-family:var(--f-body);font-size:13px;line-height:1.5;color:var(--fg-2)}
+#gloss .g-def{font-family:var(--f-body);font-size:var(--fs-3);line-height:1.5;color:var(--fg-2)}
 
 /* ---------- app shell ---------- */
 /* --topbar-h/--statusbar-h are tokens because #s-chart.on subtracts BOTH of
@@ -362,9 +454,10 @@ body{
 .shell{display:grid;height:100vh;
   grid-template-rows:var(--topbar-h) 1fr var(--statusbar-h);
   grid-template-columns:186px 1fr}
+
 .topbar{grid-column:1/-1;display:flex;align-items:center;gap:var(--lg);padding:0 var(--shell-x);
   border-bottom:1px solid var(--border-soft);background:linear-gradient(180deg,var(--bg-2),var(--bg))}
-.brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-size:16px;
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-size:var(--fs-4);
   letter-spacing:.22em;color:var(--fg);text-transform:uppercase}
 .brand img{height:26px;width:auto;display:block}
 .topbar .spacer{margin-left:auto}
@@ -386,27 +479,29 @@ body{
    (at 900px HALT sat 86px off-screen; beta pass, 4 Aug 2026). Shed in order
    of expendability: the venue note and clock first, then the audit chip, then
    the scanner slot — its state lives on Command too. HALT never leaves. */
-@media (max-width:1020px){
+@media (max-width:1100px){
   #venueNote, #clock{display:none}
 }
-@media (max-width:780px){
+@media (max-width:900px){
   #healthChip{display:none}
   #scanChip{width:auto;max-width:120px;flex:0 1 auto}
 }
-@media (max-width:680px){
+@media (max-width:640px){
   #scanChip{display:none}
 }
 
 .nav{border-right:1px solid var(--border-soft);padding:var(--lg) 0;display:flex;flex-direction:column;gap:2px;
   background:linear-gradient(180deg,var(--bg-2),var(--bg))}
 .nav a{display:flex;align-items:center;gap:10px;padding:11px var(--lg);text-decoration:none;
-  font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;
+  font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.18em;text-transform:uppercase;
   color:var(--fg-3);border-left:2px solid transparent;transition:color .15s,background .15s}
 .nav a:hover{color:var(--fg-2);background:rgba(255,255,255,.02)}
 .nav a.on{color:var(--accent);border-left-color:var(--accent);background:rgba(var(--accent-rgb),.06)}
-.nav .nav-count{margin-left:auto;font-size:10px;color:var(--fg-4)}
+.nav .nav-count{margin-left:auto;font-size:var(--fs-1);color:var(--fg-4)}
 .nav a.on .nav-count{color:var(--accent)}
 .nav-sep{height:1px;background:var(--border-soft);margin:var(--md) var(--lg)}
+
+
 
 .stage{overflow:auto;padding:var(--xl) var(--shell-x)}
 .surface{display:none;animation:fade .18s ease-out}
@@ -427,11 +522,35 @@ body{
   }
 }
 .surface-head{display:flex;align-items:baseline;gap:var(--md);margin-bottom:var(--xl)}
-.surface-head p{color:var(--fg-4);font-family:var(--f-mono);font-size:10px;letter-spacing:.1em}
+.surface-head p{color:var(--fg-4);font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.1em}
+
+/* THE ANSWER LINE.
+
+   The only element on Command whose job is to be a conclusion rather than
+   evidence. It groups with the surface head, because it answers that head's
+   question, so the space above it is tight and the space below it is generous:
+   the panels underneath are supporting material, not a continuation of the
+   sentence. Everything on this surface used to sit at one interval, which is
+   how seven panels came to look equally important. */
+.surface-head:has(+ .disposition){margin-bottom:var(--sm)}
+.disposition{display:flex;align-items:baseline;gap:10px;
+  margin:0 0 var(--xl);max-width:68ch;
+  font-family:var(--f-body);font-size:var(--fs-4);line-height:1.5;color:var(--fg)}
+/* Tone is reinforcement and never the carrier. Every state names itself in
+   words ("Nothing to take right now", "The scanner is not running"), so a
+   reader who cannot see this dot loses nothing that the sentence did not
+   already say. */
+.disposition::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;
+  background:var(--fg-4);transform:translateY(-1px)}
+.disposition.go::before{background:var(--green)}
+.disposition.warn::before{background:var(--amber)}
+.disposition.bad::before{background:var(--red)}
+.disposition.bad{color:var(--red-2)}
+.disposition .skel{height:1.1em;width:38%}
 
 .statusbar{grid-column:1/-1;display:flex;align-items:center;gap:var(--lg);padding:0 var(--shell-x);
   border-top:1px solid var(--border-soft);background:var(--bg-2);
-  font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;color:var(--fg-4);text-transform:uppercase}
+  font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.12em;color:var(--fg-4);text-transform:uppercase}
 /* The overlay mounts are direct children of the `.shell` grid, so auto-placement
    seated them in row 3 — the status-bar row — and pushed .statusbar into an
    implicit fourth row. Measured: `56px 801.5px 26px 16.5px`, i.e. a status bar
@@ -439,7 +558,15 @@ body{
    stage row 16px shorter than #s-chart.on's calc() assumes, which is why the
    Chart surface scrolled exactly 16px at every viewport. They are mount points
    for fixed-position drawers and have no business occupying grid tracks. */
-.shell > #tracerRoot, .shell > #wizardRoot{position:absolute}
+/* #copilotRoot belongs in this list and was missing from it. While two stray
+   </div>s held these three mounts outside .shell entirely, none of them took a
+   grid track and the omission cost nothing. Closing the tree put all three back
+   where the markup always said they were, and the one left out of this rule
+   immediately took row 3 and pushed .statusbar into an implicit row 4:
+   measured `56px 801.5px 26px 16.5px`, a status bar rendering 16.5px against
+   its declared 26. .cp-dock is position:fixed, so the mount owes the grid
+   nothing. Any future drawer mount goes here on the day it is added. */
+.shell > #tracerRoot, .shell > #wizardRoot, .shell > #copilotRoot{position:absolute}
 
 .statusbar b{color:var(--fg-2);font-weight:600}
 /* the orb is a sized box, so its container has to be a flex line for it to
@@ -447,7 +574,7 @@ body{
 .statusbar .sb-item{display:inline-flex;align-items:center;gap:7px}
 .statusbar .sb-item:empty{display:none}
 .statusbar .sb-dev{background:none;border:0;cursor:pointer;color:var(--fg-4);
-  font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.12em;text-transform:uppercase;
   padding:0;margin-left:var(--lg)}
 .statusbar .sb-dev:hover{color:var(--fg-2)}
 .statusbar .sb-dev:focus-visible{outline:1px solid var(--accent);outline-offset:3px;border-radius:2px}
@@ -477,7 +604,7 @@ body:not(.dev) #consolePanel{display:none}
 
 /* backend console — the operator watching the engines think */
 #console{height:260px;overflow:auto;padding:var(--md) var(--lg);margin:0;
-  background:rgba(0,0,0,.45);color:var(--fg-3);font-size:11.5px;line-height:1.65;
+  background:rgba(0,0,0,.45);color:var(--fg-3);font-size:var(--fs-2);line-height:1.65;
   white-space:pre-wrap;word-break:break-word}
 #console .l-err{color:var(--red-2)}
 #console .l-warn{color:var(--amber)}
@@ -494,11 +621,43 @@ body:not(.dev) #consolePanel{display:none}
    pane needs it. Stating the question costs one line; not stating it left the
    operator to infer what this surface is for. */
 .chart-head{margin-bottom:0;flex:none;align-items:baseline}
-.chart-head .t-page{font-size:19px;letter-spacing:.16em}
+.chart-head .t-page{font-size:var(--fs-5);letter-spacing:.16em}
 .chart-top{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap;flex:none}
 .chart-main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 320px;
   gap:var(--md);min-height:0}
-@media(max-width:1180px){.chart-main{grid-template-columns:minmax(0,1fr) 268px}}
+@media(max-width:1180px){.chart-main{grid-template-columns:minmax(320px,1fr) 268px}}
+
+/* ── THE SHELL BELOW 900 ──
+
+   This grid had no media query at any width. Measured at a 510px viewport: the
+   rail still held its full 186px, taking 36% of the screen, .stage was 194px,
+   and #chartPane rendered 2px wide. At 780px the chart pane was 256px while its
+   own order ticket was 268px — on the surface whose whole job is the chart, the
+   chart was the narrower column.
+
+   900 is "tablet, or the app in a split pane" on the scale declared at the top
+   of this file, and a local tool run beside a terminal is the ordinary case,
+   not an edge one. The rail becomes a horizontal strip: same five destinations,
+   same order, scrollable rather than truncated.
+
+   The stage row is 1fr through a four-row template, so #s-chart.on's height
+   calc gets its own correction below rather than silently overshooting by the
+   height of the rail. */
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr;
+    grid-template-rows:var(--topbar-h) auto 1fr var(--statusbar-h)}
+  .nav{flex-direction:row;overflow-x:auto;gap:0;padding:0 var(--sm);
+    border-right:0;border-bottom:1px solid var(--border-soft);
+    scrollbar-width:none}
+  .nav::-webkit-scrollbar{display:none}
+  .nav a{white-space:nowrap;padding:10px var(--md)}
+  .nav-sep{display:none}
+  /* the chart leads and the ticket follows it, instead of competing for a
+     width neither can use */
+  .chart-main{grid-template-columns:1fr;
+    grid-template-rows:minmax(260px,1fr) auto}
+  #s-chart.on{height:auto;min-height:0}
+}
 
 .chart-pane{position:relative;min-width:0;overflow:hidden}
 /* scanlines belong on chrome, not over price data */
@@ -506,12 +665,12 @@ body:not(.dev) #consolePanel{display:none}
 #chartBox{position:absolute;inset:0}
 #chartHandles{position:absolute;inset:0;pointer-events:none}
 .chart-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-family:var(--f-mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+  font-family:var(--f-mono);font-size:var(--fs-2);letter-spacing:.16em;text-transform:uppercase;
   color:var(--fg-4);background:var(--bg);z-index:2}
 
 /* draggable level tags — the grab target, not decoration */
 .lvl{position:absolute;left:0;transform:translateY(-50%);pointer-events:auto;cursor:ns-resize;
-  padding:2px 7px;border-radius:var(--r-sm);font-family:var(--f-mono);font-size:10px;
+  padding:2px 7px;border-radius:var(--r-sm);font-family:var(--f-mono);font-size:var(--fs-1);
   font-weight:600;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;
   border:1px solid currentColor;background:rgba(0,0,0,.82);user-select:none;z-index:3}
 .lvl:hover,.lvl.drag{background:currentColor}
@@ -520,7 +679,7 @@ body:not(.dev) #consolePanel{display:none}
 
 /* segmented controls */
 .seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}
-.seg button{font-family:var(--f-mono);font-size:10px;font-weight:600;letter-spacing:.14em;
+.seg button{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.14em;
   text-transform:uppercase;padding:8px 11px;cursor:pointer;background:transparent;
   color:var(--fg-3);border:0;border-right:1px solid var(--border-soft)}
 .seg button:last-child{border-right:0}
@@ -563,7 +722,7 @@ body:not(.dev) #consolePanel{display:none}
   z-index:8000;display:flex;flex-direction:column;gap:var(--sm);pointer-events:none}
 .toast{pointer-events:auto;max-width:44ch;padding:9px 13px;border-radius:var(--r-md);
   border:1px solid var(--border);background:var(--card);color:var(--fg-2);
-  font-size:11.5px;line-height:1.5;box-shadow:0 8px 30px rgba(0,0,0,.55)}
+  font-size:var(--fs-2);line-height:1.5;box-shadow:0 8px 30px rgba(0,0,0,.55)}
 .toast-good{border-color:rgba(0,255,170,.4);color:var(--green)}
 .toast-warn{border-color:rgba(255,194,102,.4);color:var(--amber)}
 .toast-bad{border-color:rgba(248,113,113,.4);color:var(--red-2)}
@@ -575,7 +734,7 @@ body:not(.dev) #consolePanel{display:none}
 /* Why Arm is off, immediately beside Arm. Amber rather than red: this is a
    plan that needs changing, not an error that happened. */
 .tk-block{flex:1 1 100%;display:flex;align-items:center;gap:var(--md);
-  flex-wrap:wrap;font-family:var(--f-body);font-size:12.5px;line-height:1.45;
+  flex-wrap:wrap;font-family:var(--f-body);font-size:var(--fs-2);line-height:1.45;
   color:var(--amber)}
 .tk-block .btn{flex:none;border-color:rgba(255,194,102,.45);color:var(--amber)}
 .tk-block .btn:hover{border-color:var(--amber);color:var(--fg)}
@@ -617,10 +776,10 @@ body:not(.dev) #consolePanel{display:none}
    The title is narrowed too — at full size "ORDER TICKET" plus the source
    chip exceeded the 268px column and wrapped the head to two rows. */
 .ticket .panel-head{padding:6px var(--lg)}
-.ticket .panel-head .t-section{font-size:11px;letter-spacing:.14em}
+.ticket .panel-head .t-section{font-size:var(--fs-1);letter-spacing:.14em}
 /* rationale prose, slightly condensed: it is the one pane that is pure
    reading, and 12px Inter stays comfortably legible */
-.tk-why{font-size:12px;line-height:1.45}
+.tk-why{font-size:var(--fs-2);line-height:1.45}
 /* Label BESIDE the input, not above it. A stacked label spends a full line on
    one word; beside the input each price row is ~33px instead of ~56, which is
    the difference between the Trade pane fitting whole and it scrolling. Only
@@ -640,7 +799,7 @@ body:not(.dev) #consolePanel{display:none}
    One question per pane, so a control is either on screen in full or one
    labelled click away — never half-scrolled with nothing to say it is there. */
 .tk-tabs{display:flex;flex:none;margin:6px var(--lg) 0}
-.tk-tabs button{flex:1;font-family:var(--f-mono);font-size:9.5px;font-weight:600;
+.tk-tabs button{flex:1;font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;
   letter-spacing:.1em;text-transform:uppercase;padding:6px 4px;cursor:pointer;
   background:transparent;color:var(--fg-3);border:0;border-right:1px solid var(--border-soft)}
 .tk-tabs button:last-child{border-right:0}
@@ -650,23 +809,23 @@ body:not(.dev) #consolePanel{display:none}
 .tk-pane{display:none;flex-direction:column;gap:8px}
 .tk-pane.on{display:flex}
 
-
 /* The three numbers the decision rests on, in the display face so they read
    as the headline of the bar rather than three more stats. */
 .tk-key{display:flex;gap:var(--lg);align-items:flex-start;flex:none}
 .tk-key > div{display:flex;flex-direction:column;gap:2px;padding:0;min-width:0}
-.tk-key .k{font-family:var(--f-mono);font-size:9px;font-weight:600;letter-spacing:.12em;
+.tk-key .k{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.12em;
   text-transform:uppercase;color:var(--fg-4);line-height:1.3}
-.tk-key .v{font-family:var(--f-display);font-size:17px;font-weight:800;line-height:1.1;
+.tk-key .v{font-family:var(--f-display);font-size:var(--fs-4);font-weight:800;line-height:1.1;
   color:var(--fg);font-variant-numeric:tabular-nums}
 .tk-key .v.good{color:var(--green)}
 .tk-key .v.bad{color:var(--red-2)}
 .tk-key .v.warn{color:var(--amber)}
 .fld{display:flex;flex-direction:column;gap:5px}
 .fld input{background:rgba(0,0,0,.45);border:1px solid var(--border);border-radius:var(--r-md);
-  padding:9px 11px;color:var(--fg);font-family:var(--f-mono);font-size:13px;
+  padding:9px 11px;color:var(--fg);font-family:var(--f-mono);font-size:var(--fs-3);
   font-variant-numeric:tabular-nums;width:100%}
-.fld input:focus{outline:0;border-color:var(--accent)}
+.fld input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.fld input:focus{border-color:var(--accent)}
 .fld.bad input{border-color:var(--red)}
 .fld-row{display:flex;gap:var(--sm);align-items:stretch}
 .fld-row input{flex:1}
@@ -715,8 +874,8 @@ body:not(.dev) #consolePanel{display:none}
    which is the difference between the Numbers tab fitting at 1227x678 and
    scrolling. The contrast note on .tk-out .k below keeps it legible. */
 .tk-out div{display:flex;justify-content:space-between;align-items:baseline;gap:var(--sm);
-  font-family:var(--f-mono);font-size:11.5px;padding:2px 0}
-.tk-out .k{color:var(--fg-2);letter-spacing:.1em;text-transform:uppercase;font-size:10px;
+  font-family:var(--f-mono);font-size:var(--fs-2);padding:2px 0}
+.tk-out .k{color:var(--fg-2);letter-spacing:.1em;text-transform:uppercase;font-size:var(--fs-1);
   line-height:1.25}
 .tk-out .v{line-height:1.25}
 .tk-out .v{color:var(--fg);font-variant-numeric:tabular-nums}
@@ -729,23 +888,23 @@ body:not(.dev) #consolePanel{display:none}
    is being read before Arm is pressed. */
 .tk-warn{border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);
   border-radius:var(--r-md);padding:6px 9px;color:var(--red-2);
-  font-family:var(--f-mono);font-size:10.5px;line-height:1.45}
-.tk-why{color:var(--fg-3);font-size:12px}
+  font-family:var(--f-mono);font-size:var(--fs-1);line-height:1.45}
+.tk-why{color:var(--fg-3);font-size:var(--fs-2)}
 .tk-verdict{border-radius:var(--r-md);padding:8px 10px;margin-bottom:var(--md);
-  font-family:var(--f-mono);font-size:11px;line-height:1.6}
+  font-family:var(--f-mono);font-size:var(--fs-1);line-height:1.6}
 .tk-verdict b{letter-spacing:.12em}
 .tk-verdict.ok{background:rgba(0,255,170,.08);color:var(--green);border:1px solid rgba(0,255,170,.3)}
 .tk-verdict.warn{background:rgba(255,194,102,.08);color:var(--amber);border:1px solid rgba(255,194,102,.3)}
 .tk-verdict.bad{background:rgba(248,113,113,.08);color:var(--red-2);border:1px solid rgba(248,113,113,.35)}
-.tk-why em{color:var(--fg-4);font-style:normal;font-family:var(--f-mono);font-size:10px;
+.tk-why em{color:var(--fg-4);font-style:normal;font-family:var(--f-mono);font-size:var(--fs-1);
   letter-spacing:.16em;text-transform:uppercase;display:block;margin-bottom:3px}
 .tk-actions{display:flex;gap:var(--sm)}
 .tk-actions .btn{flex:1}
-.tk-lock{color:var(--fg-4);font-size:10px;line-height:1.6;text-align:center}
+.tk-lock{color:var(--fg-4);font-size:var(--fs-1);line-height:1.6;text-align:center}
 /* Outcome of an arm. Brighter than .tk-lock on purpose: the lock line is
    standing context an operator learns to ignore, this line is what just
    happened and is the only confirmation the action gives. */
-.tk-armed{color:var(--fg-2);font-size:11px;line-height:1.6;text-align:center;
+.tk-armed{color:var(--fg-2);font-size:var(--fs-1);line-height:1.6;text-align:center;
           min-height:1.6em}
 .tk-armed:empty{min-height:0}
 /* The open-position readout. Amber border because it is the one element on
@@ -754,7 +913,7 @@ body:not(.dev) #consolePanel{display:none}
    declaration was invalid at computed-value time and the colour silently
    inherited, making the at-stake line identical to the armed line it is
    meant to outrank. */
-.tk-open{color:var(--fg);font-size:11px;line-height:1.7;text-align:center;
+.tk-open{color:var(--fg);font-size:var(--fs-1);line-height:1.7;text-align:center;
          border:1px solid rgba(251,191,36,.35);border-radius:4px;
          padding:4px 6px;margin-bottom:4px}
 .tk-open:empty{display:none}
@@ -793,18 +952,18 @@ body:not(.dev) #consolePanel{display:none}
    who wants to check it before risking money on it. */
 .deck-story{margin-top:6px}
 .deck-story summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;
-  gap:6px;padding:3px 0;font-family:var(--f-mono);font-size:9.5px;font-weight:600;
+  gap:6px;padding:3px 0;font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;
   letter-spacing:.16em;text-transform:uppercase;color:var(--fg-4)}
 .deck-story summary::-webkit-details-marker{display:none}
-.deck-story summary::after{content:'▾';font-size:9px;transition:transform .15s ease}
+.deck-story summary::after{content:'▾';font-size:var(--fs-1);transition:transform .15s ease}
 .deck-story[open] summary::after{transform:rotate(180deg)}
 .deck-story summary:hover{color:var(--accent)}
 .deck-story summary:focus-visible{outline:1px solid var(--accent);outline-offset:2px;border-radius:2px}
 .why-rows{display:flex;flex-direction:column;gap:5px;padding:4px 0 2px}
 .why-row{display:grid;grid-template-columns:112px minmax(0,1fr);gap:var(--md);align-items:baseline}
-.why-k{font-family:var(--f-mono);font-size:9px;font-weight:600;letter-spacing:.16em;
+.why-k{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.16em;
   text-transform:uppercase;color:var(--fg-4)}
-.why-d{font-family:var(--f-body);font-size:12.5px;line-height:1.5;color:var(--fg-2)}
+.why-d{font-family:var(--f-body);font-size:var(--fs-2);line-height:1.5;color:var(--fg-2)}
 .deck-row.dead .why-d{color:var(--fg-4)}
 @media(max-width:900px){.why-row{grid-template-columns:1fr;gap:1px}}
 @media (prefers-reduced-motion: reduce){.deck-story summary::after{transition:none}}
@@ -820,10 +979,10 @@ body:not(.dev) #consolePanel{display:none}
 .budget-bar{height:6px;border-radius:var(--r-pill);background:rgba(255,255,255,.06);
   overflow:hidden}
 .budget-bar i{display:block;height:100%;border-radius:var(--r-pill);
-  background:var(--accent);transition:width .5s ease}
+  background:var(--accent)}
 .budget-bar i.warn{background:var(--amber)}
 .budget-bar i.bad{background:var(--red-2)}
-.budget-txt{font-family:var(--f-body);font-size:12.5px;color:var(--fg-3);line-height:1.4}
+.budget-txt{font-family:var(--f-body);font-size:var(--fs-2);color:var(--fg-3);line-height:1.4}
 @media(max-width:900px){.budget-grid{grid-template-columns:1fr}}
 @media (prefers-reduced-motion: reduce){.budget-bar i{transition:none}}
 
@@ -831,7 +990,7 @@ body:not(.dev) #consolePanel{display:none}
    it reads quieter than a live position without disappearing */
 .pos-row.pending{background:rgba(255,255,255,.015)}
 .pos-row.pending .pos-sym{color:var(--fg-2)}
-.pos-wait{font-family:var(--f-body);font-size:12.5px;color:var(--fg-3);
+.pos-wait{font-family:var(--f-body);font-size:var(--fs-2);color:var(--fg-3);
   line-height:1.45;margin-bottom:7px}
 .pos-wait b{color:var(--fg-2);font-weight:600;font-variant-numeric:tabular-nums}
 
@@ -842,10 +1001,10 @@ body:not(.dev) #consolePanel{display:none}
 .jnl-row{display:grid;grid-template-columns:150px minmax(0,1fr) 110px;gap:var(--lg);
   align-items:center;padding:11px var(--lg);border-bottom:1px solid var(--border-soft)}
 .jnl-row:last-child{border-bottom:0}
-.jnl-say{font-family:var(--f-body);font-size:13px;color:var(--fg-2);line-height:1.5}
+.jnl-say{font-family:var(--f-body);font-size:var(--fs-3);color:var(--fg-2);line-height:1.5}
 .jnl-say .warn{color:var(--amber)}
 .jnl-say .t-sub{display:block;margin-top:3px}
-.jnl-r{text-align:right;font-family:var(--f-display);font-size:17px;font-weight:800;
+.jnl-r{text-align:right;font-family:var(--f-display);font-size:var(--fs-4);font-weight:800;
   color:var(--fg-2);font-variant-numeric:tabular-nums}
 .jnl-row.up .jnl-r{color:var(--green)}
 .jnl-row.down .jnl-r{color:var(--red-2)}
@@ -862,7 +1021,7 @@ body:not(.dev) #consolePanel{display:none}
 .pos-row{display:grid;grid-template-columns:150px minmax(0,1fr) 128px;gap:var(--lg);
   align-items:center;padding:var(--md) var(--lg);border-bottom:1px solid var(--border-soft)}
 .pos-row:last-child{border-bottom:0}
-.pos-sym{font-family:var(--f-display);font-size:16px;letter-spacing:.08em;color:var(--fg)}
+.pos-sym{font-family:var(--f-display);font-size:var(--fs-4);letter-spacing:.08em;color:var(--fg)}
 /* The track is NEUTRAL. It was a red-to-green gradient over stop->target
    price space, which meant a 3:1 trade — whose entry sits at 25% from the
    stop end by construction — always painted its marker "in the red", and a
@@ -890,7 +1049,7 @@ body:not(.dev) #consolePanel{display:none}
    does not clear it either; --fg-2 is the first step that does. The token
    itself is left alone: it backs ~35 genuinely decorative rules. */
 .pos-ends{display:flex;justify-content:space-between;gap:var(--sm);
-  font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;color:var(--fg-2);
+  font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.08em;color:var(--fg-2);
   text-transform:uppercase;font-variant-numeric:tabular-nums}
 .pos-ends .now{color:var(--fg)}
 /* anything carrying data-trace opens the per-setup trace drawer */
@@ -900,11 +1059,11 @@ body:not(.dev) #consolePanel{display:none}
 /* the drawer is keyboard-reachable, so its focus must be visible */
 .traceable:focus-visible,.manageable:focus-visible{
   outline:1px solid var(--accent);outline-offset:-2px;border-radius:var(--r-sm)}
-.pos-r{text-align:right;font-family:var(--f-display);font-size:20px;font-weight:800;color:var(--fg)}
+.pos-r{text-align:right;font-family:var(--f-display);font-size:var(--fs-5);font-weight:800;color:var(--fg)}
 .pos-r.up{color:var(--green)} .pos-r.down{color:var(--red-2)}
 /* the dollars at risk on a live position — data, not decoration; see the
    contrast note on .pos-ends above */
-.pos-r .t-sub{display:block;font-family:var(--f-mono);font-size:10px;font-weight:400;
+.pos-r .t-sub{display:block;font-family:var(--f-mono);font-size:var(--fs-1);font-weight:400;
   color:var(--fg-2);margin-top:4px}
 @media(max-width:900px){
   .pos-row{grid-template-columns:1fr;gap:var(--sm)}
@@ -917,14 +1076,13 @@ body:not(.dev) #consolePanel{display:none}
 .radar-row{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:var(--lg);
   align-items:center;padding:12px var(--lg);border-bottom:1px solid var(--border-soft)}
 .radar-row:last-child{border-bottom:0}
-.radar-sym{font-family:var(--f-display);font-size:15px;letter-spacing:.08em;color:var(--fg-2)}
-.radar-say{font-family:var(--f-body);font-size:12.5px;color:var(--fg-3);margin-bottom:7px}
+.radar-sym{font-family:var(--f-display);font-size:var(--fs-4);letter-spacing:.08em;color:var(--fg-2)}
+.radar-say{font-family:var(--f-body);font-size:var(--fs-2);color:var(--fg-3);margin-bottom:7px}
 .radar-say b{color:var(--fg-2);font-weight:500}
 .radar-meter{height:4px;border-radius:var(--r-pill);background:rgba(255,255,255,.06);overflow:hidden}
 .radar-meter i{display:block;height:100%;border-radius:var(--r-pill);
-  background:linear-gradient(90deg,rgba(255,194,102,.25),var(--amber));
-  transition:width 1.2s ease}
-.radar-dist{text-align:right;font-family:var(--f-mono);font-size:12px;color:var(--amber);
+  background:linear-gradient(90deg,rgba(255,194,102,.25),var(--amber));}
+.radar-dist{text-align:right;font-family:var(--f-mono);font-size:var(--fs-2);color:var(--amber);
   font-variant-numeric:tabular-nums;min-width:64px}
 .radar-dist .t-sub{display:block;text-align:right}
 @media(max-width:900px){.radar-row{grid-template-columns:1fr;gap:var(--sm)}
@@ -940,7 +1098,7 @@ body:not(.dev) #consolePanel{display:none}
   margin-top:2px;cursor:pointer;flex:none}
 .set-row input:not([type=checkbox]){background:rgba(0,0,0,.45);border:1px solid var(--border);
   border-radius:var(--r-md);padding:6px 9px;color:var(--fg);font-family:var(--f-mono);
-  font-size:12px;flex:none}
+  font-size:var(--fs-2);flex:none}
 .set-row.changed{background:rgba(var(--accent-rgb),.05)}
 .set-row.changed .t-mono{color:var(--accent)}
 
@@ -950,15 +1108,14 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   letter-spacing:.2em;vertical-align:middle}
 
 .empty{padding:var(--xl);text-align:center;color:var(--fg-4);
-  font-family:var(--f-mono);font-size:11.5px;line-height:2}
+  font-family:var(--f-mono);font-size:var(--fs-2);line-height:2}
 .stub{border:1px dashed var(--border);border-radius:var(--r-lg);padding:var(--xl);
-  color:var(--fg-4);font-family:var(--f-mono);font-size:11.5px;line-height:1.9}
+  color:var(--fg-4);font-family:var(--f-mono);font-size:var(--fs-2);line-height:1.9}
 .stub b{color:var(--fg-3);font-weight:600}
 
 ::-webkit-scrollbar{width:9px;height:9px}
 ::-webkit-scrollbar-thumb{background:var(--card);border-radius:var(--r-pill)}
 ::-webkit-scrollbar-track{background:transparent}
-
 
 /* ---------- copilot drawer ---------- */
 .cp-scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60}
@@ -967,9 +1124,9 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   border-left:1px solid var(--border);box-shadow:-18px 0 40px rgba(0,0,0,.45)}
 .cp-head{display:flex;align-items:center;gap:8px;padding:10px 12px;
   border-bottom:1px solid var(--border-soft)}
-.cp-title{font-family:var(--f-display);font-size:13px;letter-spacing:.22em;
+.cp-title{font-family:var(--f-display);font-size:var(--fs-3);letter-spacing:.22em;
   text-transform:uppercase;color:var(--accent)}
-.cp-sub{font-family:var(--f-mono);font-size:9px;letter-spacing:.14em;
+.cp-sub{font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.14em;
   text-transform:uppercase;color:var(--fg-4);margin-right:auto}
 .cp-head select.btn{padding:3px 6px}
 .cp-chips{display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px;
@@ -981,28 +1138,28 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
    written on their behalf. Sits directly above the input it fills, and
    disappears once the conversation has started. */
 .cp-suggest{display:flex;flex-direction:column;gap:5px;padding:0 12px 10px}
-.cp-q{text-align:left;font-family:var(--f-body);font-size:12px;line-height:1.45;
+.cp-q{text-align:left;font-family:var(--f-body);font-size:var(--fs-2);line-height:1.45;
   color:var(--fg-2);background:rgba(255,255,255,.03);
   border:1px solid var(--border-soft);border-radius:var(--r-md);
   padding:7px 10px;cursor:pointer;transition:border-color .12s,color .12s}
 .cp-q:hover{color:var(--fg);border-color:var(--accent)}
 .cp-q:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 @media (prefers-reduced-motion:reduce){.cp-q{transition:none}}
-.cp-hint{font-family:var(--f-body);font-size:12.5px;line-height:1.6;
+.cp-hint{font-family:var(--f-body);font-size:var(--fs-2);line-height:1.6;
   color:var(--fg-3);max-width:40ch}
-.cp-msg{font-family:var(--f-body);font-size:12.5px;line-height:1.6;
+.cp-msg{font-family:var(--f-body);font-size:var(--fs-2);line-height:1.6;
   border-radius:10px;padding:8px 11px;white-space:pre-wrap;max-width:94%}
 .cp-msg.op{align-self:flex-end;background:rgba(var(--accent-rgb),.12);
   color:var(--fg)}
 .cp-msg.cp{align-self:flex-start;background:rgba(255,255,255,.05);color:var(--fg-2)}
 .cp-msg.err{align-self:flex-start;background:rgba(248,113,113,.10);color:var(--red-2);
-  font-family:var(--f-mono);font-size:11px}
+  font-family:var(--f-mono);font-size:var(--fs-1)}
 .cp-msg.busy{color:var(--fg-4);animation:pulse 1.6s ease-in-out infinite}
 .cp-input{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border-soft)}
 .cp-input textarea{flex:1;resize:none;background:rgba(0,0,0,.3);
   border:1px solid var(--border);border-radius:8px;color:var(--fg);
-  font-family:var(--f-body);font-size:12.5px;padding:7px 9px}
-.cp-foot{font-family:var(--f-mono);font-size:9.5px;letter-spacing:.1em;
+  font-family:var(--f-body);font-size:var(--fs-2);padding:7px 9px}
+.cp-foot{font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.1em;
   text-transform:uppercase;color:var(--fg-4);text-align:center;
   padding:6px 10px 9px}
 
@@ -1012,7 +1169,13 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
    R-multiple above them is the number the eye should land on first — these are
    what you do about it, not what it is. */
 .pos-acts{display:flex;gap:5px;justify-content:flex-end;margin-top:7px;flex-wrap:wrap}
-.pos-acts .btn{font-size:10px;padding:2px 8px;opacity:.8}
+/* WCAG 2.2 AA 2.5.8 wants 24x24 CSS pixels of target. These rendered 55x19,
+   and one of them is CLOSE on a live position — the most consequential button
+   in the row, sized below the floor because it sits in a dense list. The visible
+   mark stays small; the target grows around it, which is what the criterion
+   actually asks for. */
+.pos-acts .btn{font-size:var(--fs-1);padding:2px 8px;opacity:.8;
+  min-height:24px;display:inline-flex;align-items:center}
 .pos-acts .btn:hover{opacity:1}
 .pos-close{opacity:.75}
 .pos-close:hover{opacity:1}
@@ -1043,21 +1206,21 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .deck-row.held-sym{box-shadow:inset 3px 0 0 rgba(251,191,36,.35)}
 /* Spans every column and sits above the card's own five, so the sentence gets
    the full width instead of being crushed into the 120px symbol cell. */
-.deck-held{grid-column:1/-1;font-family:var(--f-mono);font-size:10px;font-weight:600;
+.deck-held{grid-column:1/-1;font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;
   letter-spacing:.14em;text-transform:uppercase;margin-bottom:2px;
   color:var(--amber-2);line-height:1.35;display:flex;align-items:center;gap:6px}
 .deck-held::before{content:'';width:5px;height:5px;border-radius:50%;flex:none;
   background:currentColor;box-shadow:0 0 7px currentColor}
 .deck-held.pend{color:var(--amber);opacity:.85}
 .deck-held.other{color:var(--fg-3);letter-spacing:.06em;text-transform:none;
-  font-size:10px}
+  font-size:var(--fs-1)}
 
 /* A setup the operator already took and closed. Not an opportunity and not
    exposure — it is history with a number attached, so it reads as neither
    amber (your money is on this) nor red (refused). */
 .deck-row.done{opacity:.72;box-shadow:inset 3px 0 0 var(--fg-4)}
 .deck-held.done{color:var(--fg-3);letter-spacing:.06em;text-transform:none;
-  font-size:10px}
+  font-size:var(--fs-1)}
 .deck-held.done::before{background:var(--fg-4);box-shadow:none}
 
 /* ---------- credentials: one card per venue ----------
@@ -1071,20 +1234,22 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .cred-head .chip{margin-left:auto}
 .cred-field{display:flex;flex-direction:column;gap:4px;margin-bottom:var(--sm)}
 .cred-field input{flex:1;background:rgba(0,0,0,.5);border:1px solid var(--border);
-  border-radius:var(--r-md);padding:7px 10px;color:var(--fg);font-size:12px;
+  border-radius:var(--r-md);padding:7px 10px;color:var(--fg);font-size:var(--fs-2);
   min-width:0}
-.cred-field input:focus{outline:0;border-color:var(--accent)}
+.cred-field input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cred-field input:focus{border-color:var(--accent)}
 .cred-eye{flex:none;min-width:62px}
-.cred-scope{font-size:12px;color:var(--fg-3);margin:var(--sm) 0;max-width:64ch}
+.cred-scope{font-size:var(--fs-2);color:var(--fg-3);margin:var(--sm) 0;max-width:64ch}
 .cred-actions{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap}
-.cred-result{color:var(--fg-3);font-size:11px}
+.cred-result{color:var(--fg-3);font-size:var(--fs-1)}
 
 /* ---------- Rules: what you can change vs what the engine reports ----------
    Inputs and static readouts looked nearly identical, so a number you cannot
    edit invited clicks and a setting you can edit read as a label. */
 .set-row input:not([type=checkbox]),.set-row input[type=checkbox]{
   outline:1px solid transparent}
-.readonly-block{border-left:2px solid var(--border);padding-left:var(--md)}
+.readonly-block{border:1px solid var(--border-soft);border-radius:var(--r-md);
+  background:rgba(255,255,255,.02);padding:var(--sm) var(--md)}
 .readonly-block .t-label::after{content:' · reported';color:var(--fg-4);
   letter-spacing:.08em}
 
@@ -1093,7 +1258,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .dirty-banner{position:sticky;bottom:0;z-index:20;display:flex;align-items:center;
   gap:var(--md);flex-wrap:wrap;margin-top:var(--md);padding:10px var(--md);
   border:1px solid rgba(255,194,102,.45);border-radius:var(--r-lg);
-  background:oklch(0.22 0.02 80 / 0.96);color:var(--amber);font-size:12.5px;
+  background:oklch(0.22 0.02 80 / 0.96);color:var(--amber);font-size:var(--fs-2);
   line-height:1.45}
 .dirty-banner .spacer{margin-left:auto}
 .dirty-banner[hidden]{display:none}
@@ -1104,7 +1269,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 
 /* Equity-curve hover/keyboard readout. Reserves its line whether or not
    anything is pointed at — the panel must not jump when the cursor enters. */
-.eq-hover{min-height:16px;font-size:11.5px;color:var(--fg-2);margin-top:6px}
+.eq-hover{min-height:16px;font-size:var(--fs-2);color:var(--fg-2);margin-top:6px}
 .eq-hover b{color:var(--fg)}
 .eq-hover .up{color:var(--green)}
 .eq-hover .down{color:var(--red-2)}
@@ -1120,15 +1285,28 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .pack-cols > .panel{break-inside:avoid;margin:0 0 var(--md)}
 @media(max-width:900px){.pack-cols{column-count:1}}
 
+/* Diagnostics: a compact status readout beside the surface's main list.
+
+   These two were in .pack-cols, which needs several panels to balance against
+   each other. With two — 174px and 1065px — column balancing has nothing to
+   work with, and the short one reserved a full half-width column with ~890px
+   of nothing beneath it.
+
+   align-items:start is the whole point: the status panel keeps its own height
+   instead of stretching to match a neighbour six times taller. */
+.diag-status-row{display:grid;gap:var(--md);align-items:start;
+  grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:900px){.diag-status-row{grid-template-columns:1fr}}
+
 /* One plain sentence above a dense block, saying what it is and how to read
    it. Prose font on purpose: these panels are walls of monospace figures, and
    a summary set in the same face as the data is not read as a summary. Sits
    between the head and the body so it cannot be mistaken for a caption on any
    one number. */
-.panel-sub{font-family:var(--f-body);font-size:12.5px;line-height:1.5;
+.panel-sub{font-family:var(--f-body);font-size:var(--fs-2);line-height:1.5;
   color:var(--fg-3);margin:0;padding:var(--sm) var(--lg) 0;max-width:78ch}
 .panel-sub + .panel-body{padding-top:var(--md)}
-@media(max-width:640px){.panel-sub{font-size:12px}}
+@media(max-width:640px){.panel-sub{font-size:var(--fs-2)}}
 
 /* Your book, beside the engine's. Same row grammar as .pos-row on purpose —
    an open trade is an open trade — with a left edge that says whose plan it
@@ -1137,7 +1315,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .pos-row.mine{border-left:2px solid var(--accent)}
 .mine-cancel{margin-top:6px;color:var(--fg-3)}
 .mine-cancel:hover:not(:disabled){color:var(--red-2);border-color:var(--red-2)}
-.budget-aside{font-family:var(--f-body);font-size:12.5px;line-height:1.5;
+.budget-aside{font-family:var(--f-body);font-size:var(--fs-2);line-height:1.5;
   color:var(--fg-3);margin:0;padding:0 var(--lg) var(--md);max-width:78ch}
 .budget-aside b{color:var(--amber)}
 
@@ -1150,8 +1328,8 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   border-radius:var(--r-md);padding:5px 12px;cursor:pointer;min-width:170px;
   text-align:left;color:var(--fg)}
 .sym-btn:hover{border-color:var(--accent)}
-.sym-btn b{font-family:var(--f-display);font-size:14px;letter-spacing:.06em}
-.sym-btn i{font-style:normal;font-family:var(--f-mono);font-size:9.5px;
+.sym-btn b{font-family:var(--f-display);font-size:var(--fs-3);letter-spacing:.06em}
+.sym-btn i{font-style:normal;font-family:var(--f-mono);font-size:var(--fs-1);
   letter-spacing:.08em;color:var(--fg-3)}
 .sym-btn.shadow i{color:var(--amber)}
 .sym-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:60;
@@ -1159,16 +1337,17 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   background:var(--card);border:1px solid var(--accent);
   border-radius:var(--r-lg);box-shadow:0 16px 40px rgba(0,0,0,.55);overflow:hidden}
 .sym-pop input{margin:8px;background:rgba(0,0,0,.5);border:1px solid var(--border);
-  border-radius:var(--r-md);padding:7px 10px;color:var(--fg);font-size:12px}
-.sym-pop input:focus{outline:0;border-color:var(--accent)}
+  border-radius:var(--r-md);padding:7px 10px;color:var(--fg);font-size:var(--fs-2)}
+.sym-pop input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sym-pop input:focus{border-color:var(--accent)}
 .sym-list{overflow-y:auto;padding-bottom:6px}
-.sym-group{font-family:var(--f-mono);font-size:9.5px;letter-spacing:.16em;
+.sym-group{font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.16em;
   text-transform:uppercase;color:var(--fg-4);padding:8px 12px 3px}
 .sym-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
   width:100%;padding:6px 12px;background:none;border:0;cursor:pointer;
   color:var(--fg-2);text-align:left}
-.sym-row b{font-family:var(--f-mono);font-size:12px;letter-spacing:.05em;color:var(--fg)}
-.sym-row i{font-style:normal;font-family:var(--f-mono);font-size:10px;color:var(--fg-4)}
+.sym-row b{font-family:var(--f-mono);font-size:var(--fs-2);letter-spacing:.05em;color:var(--fg)}
+.sym-row i{font-style:normal;font-family:var(--f-mono);font-size:var(--fs-1);color:var(--fg-4)}
 .sym-row:hover,.sym-row.hl{background:rgba(255,255,255,.05)}
 .sym-row.on b{color:var(--accent)}
 
@@ -1187,7 +1366,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   box-shadow:0 16px 40px rgba(0,0,0,.55);padding:6px;gap:2px}
 .layers-pop button{display:flex;align-items:center;gap:8px;background:none;border:0;
   border-radius:var(--r-md);padding:7px 10px;cursor:pointer;color:var(--fg-3);
-  font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-align:left}
+  font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.08em;text-align:left}
 .layers-pop button::before{content:'';width:12px;height:12px;flex:none;
   border:1px solid var(--border);border-radius:3px;background:transparent}
 .layers-pop button.on{color:var(--fg)}
@@ -1211,7 +1390,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   background:linear-gradient(180deg,rgba(var(--accent-rgb),.05),transparent)}
 .firstrun .t-body{max-width:64ch;margin:var(--sm) 0 var(--md)}
 .fr-steps{margin:0 0 var(--md);padding-left:1.15rem;max-width:64ch;
-  color:var(--fg-2);font-size:13px;line-height:1.6}
+  color:var(--fg-2);font-size:var(--fs-3);line-height:1.6}
 .fr-steps li{margin-bottom:5px}
 .fr-steps b{color:var(--fg)}
 .fr-acts{display:flex;gap:var(--sm);flex-wrap:wrap}
@@ -1221,7 +1400,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
    above it got a fixed width too. Hidden below 1100px — it is the first thing
    worth losing, because the price chip already carries the close. */
 .c-ohlc{position:absolute;top:6px;left:10px;z-index:2;pointer-events:none;
-  font-size:10px;color:var(--fg-3);font-variant-numeric:tabular-nums;
+  font-size:var(--fs-1);color:var(--fg-3);font-variant-numeric:tabular-nums;
   white-space:nowrap;letter-spacing:.02em;
   /* over candles, so it needs its own ground to stay readable */
   background:rgba(7,11,16,.72);padding:2px 6px;border-radius:var(--r-sm)}
@@ -1231,7 +1410,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 /* "Looked at, not taken" — the line between what you can act on and what the
    engine merely examined. Without it, a refused four-day-old setup sat in the
    slot where advice goes and read as advice. */
-.deck-divider{font-family:var(--f-mono);font-size:9.5px;letter-spacing:.18em;
+.deck-divider{font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.18em;
   text-transform:uppercase;color:var(--fg-4);padding:12px var(--lg) 6px;
   border-top:1px solid var(--border-soft);margin-top:var(--sm)}
 
@@ -1240,7 +1419,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .gate-row{padding:9px 0;border-bottom:1px solid var(--border-soft)}
 .gate-row:last-of-type{border-bottom:0}
 .gate-head{display:flex;align-items:baseline;gap:8px;
-  font-family:var(--f-mono);font-size:11px}
+  font-family:var(--f-mono);font-size:var(--fs-1)}
 .gate-mark{color:var(--fg-4);width:10px;flex:none}
 .gate-row.ok .gate-mark{color:var(--green)}
 .gate-label{color:var(--fg-2)}
@@ -1249,18 +1428,17 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   white-space:nowrap}
 .gate-bar{height:3px;background:var(--bg-2);border-radius:2px;margin:6px 0 5px;
   overflow:hidden}
-.gate-bar i{display:block;height:100%;background:var(--amber);border-radius:2px;
-  transition:width .4s ease}
+.gate-bar i{display:block;height:100%;background:var(--amber);border-radius:2px;}
 .gate-row.ok .gate-bar i{background:var(--green)}
 @media (prefers-reduced-motion:reduce){.gate-bar i{transition:none}}
-.gate-note{font-size:11px;color:var(--fg-3);line-height:1.55;max-width:52ch}
+.gate-note{font-size:var(--fs-1);color:var(--fg-3);line-height:1.55;max-width:52ch}
 /* The build gate, stated apart from the evidence gate on purpose: the
    operator moves one by trading and cannot move the other at all. */
 .gate-foot{margin-top:11px;padding-top:9px;border-top:1px solid var(--border-soft);
-  font-size:11px;color:var(--fg-4);line-height:1.55;max-width:52ch}
+  font-size:var(--fs-1);color:var(--fg-4);line-height:1.55;max-width:52ch}
 
 /* journal rows: the reason line and the signed R bar */
-.jnl-why{font-family:var(--f-mono);font-size:10px;letter-spacing:.05em;
+.jnl-why{font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.05em;
   color:var(--fg-3);margin-top:3px;max-width:46ch;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
 .dir-up{color:var(--green)}.dir-dn{color:var(--red-2)}
@@ -1280,8 +1458,8 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   box-shadow:-14px 0 34px rgba(0,0,0,.45)}
 .cp-dock .cp-head{display:flex;align-items:center;gap:8px;padding:10px 12px;
   border-bottom:1px solid var(--border-soft)}
-.cp-dock .cp-title{font-family:var(--f-display);font-size:14px;letter-spacing:.08em}
-.cp-dock .cp-sub{font-family:var(--f-mono);font-size:9px;letter-spacing:.1em;
+.cp-dock .cp-title{font-family:var(--f-display);font-size:var(--fs-3);letter-spacing:.08em}
+.cp-dock .cp-sub{font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.1em;
   color:var(--fg-4);margin-right:auto}
 .cp-dock .cp-chips{padding:8px 12px 0;display:flex;gap:6px;flex-wrap:wrap}
 .cp-dock .cp-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;
@@ -1289,12 +1467,13 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .cp-dock .cp-input{display:flex;gap:8px;padding:10px 12px;
   border-top:1px solid var(--border-soft)}
 .cp-dock textarea{flex:1;background:rgba(0,0,0,.5);border:1px solid var(--border);
-  border-radius:var(--r-md);padding:8px 10px;color:var(--fg);font-size:12.5px;
+  border-radius:var(--r-md);padding:8px 10px;color:var(--fg);font-size:var(--fs-2);
   resize:none}
-.cp-dock textarea:focus{outline:0;border-color:var(--accent)}
-.cp-dock .cp-foot{font-family:var(--f-mono);font-size:9px;letter-spacing:.08em;
+.cp-dock textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cp-dock textarea:focus{border-color:var(--accent)}
+.cp-dock .cp-foot{font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.08em;
   color:var(--fg-4);padding:6px 12px 10px;text-align:center}
-.fail-diag{font-size:9px;padding:2px 8px}
+.fail-diag{font-size:var(--fs-1);padding:2px 8px}
 
 /* ═══ THE ACTIVE-TRADE BAND ═══
    Sits at the top of the ticket only while a position is open. Amber, like
@@ -1303,23 +1482,23 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
    state rather than four coincidences. */
 .tk-manage{margin:0 0 var(--md);padding:var(--md);border-radius:var(--r-md);
   border:1px solid rgba(251,191,36,.35);background:rgba(251,191,36,.06)}
-.tkm-head{font-family:var(--f-mono);font-size:11px;color:var(--fg-2);
+.tkm-head{font-family:var(--f-mono);font-size:var(--fs-1);color:var(--fg-2);
   display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .tkm-head b{color:var(--amber-2);letter-spacing:.06em}
 .tkm-dot{width:6px;height:6px;border-radius:50%;background:var(--amber-2);
   box-shadow:0 0 8px rgba(251,191,36,.9);flex:none;
   animation:pulse 2.8s ease-in-out infinite}
-.tkm-r{margin-left:auto;font-family:var(--f-display);font-size:15px;
+.tkm-r{margin-left:auto;font-family:var(--f-display);font-size:var(--fs-4);
   font-weight:800;color:var(--fg)}
 .tkm-r.up{color:var(--green)} .tkm-r.down{color:var(--red-2)}
 .tkm-acts{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
-.tkm-acts .btn{font-size:10px;padding:3px 9px;
+.tkm-acts .btn{font-size:var(--fs-1);padding:3px 9px;
   border-color:rgba(251,191,36,.4);color:var(--amber-2)}
 .tkm-acts .btn:hover{border-color:var(--amber-2);color:var(--amber)}
 /* Not an error, so not red: it is the honest answer to "what can I do", which
    on a trade that has not moved yet is "nothing that helps". */
-.tkm-none{margin-top:8px;font-size:10.5px;color:var(--fg-3);line-height:1.45}
-.tkm-foot{margin-top:8px;font-family:var(--f-mono);font-size:9.5px;
+.tkm-none{margin-top:8px;font-size:var(--fs-1);color:var(--fg-3);line-height:1.45}
+.tkm-foot{margin-top:8px;font-family:var(--f-mono);font-size:var(--fs-1);
   letter-spacing:.06em;text-transform:uppercase;color:var(--fg-4)}
 .tkm-foot b{color:var(--fg-3)}
 
@@ -1329,27 +1508,27 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
    stays; this is the part an operator reads. */
 .dx-sum{margin:var(--md) 0;padding:var(--md);border-radius:var(--r-md);
   border:1px solid var(--border-soft);background:rgba(255,255,255,.03)}
-.dx-sum-head{font-family:var(--f-mono);font-size:12px;color:var(--fg-2);
+.dx-sum-head{font-family:var(--f-mono);font-size:var(--fs-2);color:var(--fg-2);
   letter-spacing:.04em}
 .dx-sum-head b{color:var(--fg);font-weight:600}
 /* The engine's own sentence. Prose, because it is one. */
-.dx-sum-why{margin-top:7px;font-family:var(--f-body);font-size:12.5px;
+.dx-sum-why{margin-top:7px;font-family:var(--f-body);font-size:var(--fs-2);
   line-height:1.5;color:var(--fg-2);max-width:64ch}
-.dx-sum-nums{margin-top:8px;font-family:var(--f-mono);font-size:11px;
+.dx-sum-nums{margin-top:8px;font-family:var(--f-mono);font-size:var(--fs-1);
   color:var(--fg-3);font-variant-numeric:tabular-nums}
 
 /* A check that failed or warned explains the trade; it is not buried. */
 .dx-flagged{margin:var(--md) 0}
-.dx-flagged-t{font-family:var(--f-mono);font-size:10px;font-weight:600;
+.dx-flagged-t{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;
   letter-spacing:.16em;text-transform:uppercase;color:var(--amber-2);
   margin-bottom:6px}
 
 .dx-all{margin-top:var(--md);border-top:1px solid var(--border-soft);
   padding-top:var(--sm)}
-.dx-all>summary{cursor:pointer;font-family:var(--f-mono);font-size:10px;
+.dx-all>summary{cursor:pointer;font-family:var(--f-mono);font-size:var(--fs-1);
   font-weight:600;letter-spacing:.16em;text-transform:uppercase;
   color:var(--fg-3);padding:4px 0;list-style:none}
 .dx-all>summary::-webkit-details-marker{display:none}
-.dx-all>summary::before{content:"B8  ";color:var(--fg-4)}
-.dx-all[open]>summary::before{content:"BE  "}
+.dx-all>summary::before{content:"▸  ";color:var(--fg-4)}
+.dx-all[open]>summary::before{content:"▾  "}
 .dx-all>summary:hover{color:var(--fg-2)}

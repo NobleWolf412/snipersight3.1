@@ -224,8 +224,30 @@ ok('hidden hides globally, not just inside the ticket', () => {
 });
 
 ok('overlay mounts do not occupy shell grid rows', () => {
-  assert(/\.shell > #tracerRoot, \.shell > #wizardRoot\{position:absolute\}/.test(CSS),
-    'auto-placed mounts pushed the status bar into an implicit fourth row');
+  /* Was pinned to the literal selector `.shell > #tracerRoot, .shell >
+     #wizardRoot{position:absolute}`. #copilotRoot was added to the markup later
+     and never to that rule, and this test could not notice, because the string
+     it asserted was still present and still correct — it just no longer covered
+     every mount. The omission stayed invisible while two stray </div>s held all
+     three mounts outside .shell, where none of them took a grid track. Closing
+     the tree made #copilotRoot take row 3 and squeeze .statusbar to 16.5px.
+
+     So: enumerate the mounts from the markup and require the rule to cover each
+     one. A mount added tomorrow fails this the day it lands, which a hardcoded
+     selector cannot do. */
+  /* Only the mounts that are DIRECT children of .shell matter. #weatherRoot,
+     #edgeRoot and the diagnostics roots live inside a surface and belong in
+     normal flow. The drawer mounts are the ones between </main> and the status
+     bar, which is the whole of .shell that is neither chrome nor stage. */
+  const tail = HTML.slice(HTML.indexOf('</main>'), HTML.indexOf('<footer class="statusbar"'));
+  const mounts = [...tail.matchAll(/<div id="(\w*Root)"/g)].map(m => m[1]);
+  assert(mounts.length >= 3, `expected the drawer mounts in shell.html, found ${mounts}`);
+  const rule = (CSS.match(/^\.shell > #\w+Root[^{]*\{position:absolute\}/m) || [''])[0];
+  assert(rule, 'no position:absolute rule for the .shell drawer mounts');
+  const missing = mounts.filter(id => !rule.includes('#' + id));
+  assert(missing.length === 0,
+    `${missing.join(', ')} mount(s) auto-place into the shell grid and push the ` +
+    'status bar into an implicit fourth row');
 });
 
 ok('chrome heights are tokens, shared by the grid and the chart calc', () => {
@@ -522,10 +544,10 @@ ok('the engine sentence does not repeat the levels line', () => {
   assert.ok(/\/\^\(TP\|SL\|R:R\)/.test(TRACER), 'TP and R:R are dropped from why');
 });
 ok('no control character survives where a regex escape was meant', () => {
-  // /^(TP|SL|R:R)/ and humanProse's epoch bounds each held a literal 0x08
+  // /^(TP|SL|R:R)\b/ and humanProse's epoch bounds each held a literal 0x08
   // backspace instead of backslash-b, so neither could ever match. Two of the
   // three predated this change and had silently disabled epoch formatting.
-  assert.ok(!/[ --]/.test(TRACER),
+  assert.ok(!/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(TRACER),
             'a stray control byte is an unmatchable regex, and invisible');
 });
 

@@ -44,7 +44,14 @@
   function go(name){
     name = SURFACE_ALIASES[name] || name;
     document.querySelectorAll('.surface').forEach(s => s.classList.toggle('on', s.id === 's' + '-' + name));
-    document.querySelectorAll('.nav a').forEach(a => a.classList.toggle('on', a.dataset.s === name));
+    document.querySelectorAll('.nav a').forEach(a => {
+      const here = a.dataset.s === name;
+      a.classList.toggle('on', here);
+      /* The rail showed the current surface with a colour and nothing else.
+         aria-current is how that fact reaches anyone not reading the colour. */
+      if(here) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    });
     if(location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
     // The chart cannot size itself while its surface is display:none, so it is
     // told when it becomes visible rather than measuring a 0x0 box at load.
@@ -214,6 +221,9 @@
      re-fetching them there would be a second request for data this function
      already holds — and could disagree with what is on screen. */
   let lastOverview = null;
+  // The budget's binding stop, so the disposition line can quote it rather than
+  // recompute it. Written by renderRiskBudget, read by renderDisposition.
+  let lastConstraint = null;
   /* The portfolio payload the Open Trades rows were built from. The copilot
      button needs the whole trade — direction, entry, stop, target — to compose
      its question, and putting six values on the button as data attributes
@@ -378,8 +388,14 @@
        sitting here counting down an expiry that no longer applies. */
     SSState.put('overview', o);
     const active = SSState.deck();
-    $('mSetups').textContent = active.length;
-    $('nCommand').textContent = active.length || '';
+    /* Actionable only. A nav badge reading 3 that leads to "nothing to take" is
+       a false alarm, and it was firing on every refused setup in the window. */
+    const split = deckSplit(active);
+    $('mSetups').textContent = split.ordered.length;
+    $('mSetupsSub').textContent = split.passed.length
+      ? `${split.passed.length} examined, not taken` : '';
+    $('nCommand').textContent = split.ordered.length || '';
+    renderDisposition();
 
     /* Scanner state, said as what it means for a trade rather than as a
        progress report on a backend loop.
@@ -587,17 +603,22 @@
     return '<div class="empty">no setups right now' + body + '</div>';
   }
 
-  function renderDeck(setups, funnel){
-    lastDeckArgs = [setups, funnel];
-    const el = $('deck');
-    if(!setups.length){
-      el.innerHTML = deckEmptyHtml(funnel);
-      deckRows.clear();          // the differ's nodes went with that innerHTML
-      return;
-    }
+  /* ONE AUTHORITY FOR "HOW MANY SETUPS".
+
+     This split used to live inside renderDeck, so the deck was the only reader
+     that knew a REJECTED or expired setup is not something you can act on. The
+     Active-setups tile counted the raw payload and read 3 directly above a deck
+     headline that read "no setups right now" — both true under different
+     definitions of the word, on one screen, which is the definition of a UI
+     that cannot be trusted on a number.
+
+     Every reader of that count now calls this: the tile, the nav badge, the
+     disposition line, and the deck itself. The convention is one authority per
+     number, and this is that authority. */
+  function deckSplit(setups){
     const expiry = s => s.expires_at_ts || Infinity;   // no expiry -> sorts last
-    const best = new Map();            // symbol -> the one expiring soonest
-    for(const s of setups){
+    const best = new Map();            // token -> the one expiring soonest
+    for(const s of setups || []){
       /* Keyed by TOKEN, not by symbol. The header promises "One per token"
          and the deck was showing PF_UNIUSD and UNIUSDT — the same coin on two
          venues — as two near-identical cards, because a venue prefix or a
@@ -609,6 +630,62 @@
     }
     const now = Date.now() / 1000;
     const all = [...best.values()].sort((a, b) => expiry(a) - expiry(b));
+    const spent = s => (s.risk && s.risk.decision === 'REJECTED')
+                    || (s.expires_at_ts && s.expires_at_ts <= now);
+    return { all, ordered: all.filter(s => !spent(s)), passed: all.filter(spent) };
+  }
+
+  /* THE ONE LINE THAT ANSWERS THE SURFACE'S OWN QUESTION.
+
+     Reads only, and re-derives nothing: deckSplit() owns the counts,
+     bindingConstraint() owns the stop, and the scanner's own liveness flag owns
+     whether any of it is current. If this line is ever wrong, one of those
+     three is wrong and every panel below it is wrong in the same way, which is
+     the point. A summary with its own arithmetic is a second opinion.
+
+     Not an aria-live region on purpose. It repaints on a 30s poll, and a live
+     region that re-announces "Nothing to take right now" twice a minute is a
+     screen-reader user's definition of hostile. It sits first in the document,
+     so it is read on arrival, which is when the answer is wanted. */
+  function renderDisposition(){
+    const el = $('disposition');
+    if(!el) return;
+    if(!lastOverview) return;              // still loading: keep the skeleton
+    const sc = lastOverview.scanner || {};
+    const split = deckSplit(lastDeckArgs ? lastDeckArgs[0] : []);
+    const stop = lastConstraint && lastConstraint.blocked ? lastConstraint : null;
+    const n = split.ordered.length, refused = split.passed.length;
+
+    let tone = '', text;
+    if(sc.alive === false){
+      /* Degraded paths are audible. Saying "nothing to take" in the same voice
+         whether the market is quiet or the scanner is dead uses one sentence
+         for two opposite situations, and the operator cannot tell them apart. */
+      tone = 'bad';
+      text = 'The scanner is not running, so nothing is being watched. Diagnostics names the failing check.';
+    } else if(n && stop){
+      tone = 'warn';
+      text = `${n} ${n === 1 ? 'setup is' : 'setups are'} ready, but ${stop.clause}.`;
+    } else if(n){
+      tone = 'go';
+      text = `${n} ${n === 1 ? 'setup' : 'setups'} ready to review, in the deck below.`;
+    } else {
+      text = 'Nothing to take right now.';
+      if(refused) text += ` ${refused} ${refused === 1 ? 'was' : 'were'} examined and refused.`;
+      if(stop) text += ` Also, ${stop.clause}.`;
+    }
+    el.className = 'disposition' + (tone ? ' ' + tone : '');
+    el.textContent = text;
+  }
+
+  function renderDeck(setups, funnel){
+    lastDeckArgs = [setups, funnel];
+    const el = $('deck');
+    if(!setups.length){
+      el.innerHTML = deckEmptyHtml(funnel);
+      deckRows.clear();          // the differ's nodes went with that innerHTML
+      return;
+    }
 
     /* ACTIONABLE FIRST, AND NEVER A DEAD CARD ALONE.
 
@@ -623,10 +700,7 @@
        to "why did nothing fire", which is why the funnel exists. It is
        demoted, and when it is ALL there is, the honest empty state leads and
        the refusals follow it under a heading that says what they are. */
-    const spent = s => (s.risk && s.risk.decision === 'REJECTED')
-                    || (s.expires_at_ts && s.expires_at_ts <= now);
-    const ordered = all.filter(s => !spent(s));
-    const passed = all.filter(spent);
+    const { ordered, passed } = deckSplit(setups);
 
     /* Keyed diff, because the next click on this surface opens an order ticket.
        This deck used to be replaced wholesale via `innerHTML` every 30s: every
@@ -1154,7 +1228,7 @@ weighed in. Name the facts you used.`;
           <div class="pos-acts">
             <button class="btn" data-trace="${esc(t.setup_id || '')}"
               title="what this trade had to pass before it was taken — the zone, the confirmation, and every check">Reasons</button>
-            <button class="btn btn-cyan" data-ask="${esc(t.setup_id || '')}"
+            <button class="btn btn-primary" data-ask="${esc(t.setup_id || '')}"
               data-asksym="${esc(t.symbol)}" data-asktf="${esc(t.tf)}"
               title="ask the copilot to read this open trade and recommend hold, tighten or close — runs on your Claude plan">Copilot</button>
             <button class="btn pos-close" data-close-sid="${esc(t.setup_id || '')}"
@@ -1196,7 +1270,7 @@ weighed in. Name the facts you used.`;
           <div class="pos-acts">
             <button class="btn" data-trace="${esc(t.setup_id || '')}"
               title="what this trade had to pass before it was taken — the zone, the confirmation, and every check">Reasons</button>
-            <button class="btn btn-cyan" data-ask="${esc(t.setup_id || '')}"
+            <button class="btn btn-primary" data-ask="${esc(t.setup_id || '')}"
               data-asksym="${esc(t.symbol)}" data-asktf="${esc(t.tf)}"
               title="ask the copilot whether this resting order still makes sense — runs on your Claude plan">Copilot</button>
           </div></div>
@@ -1476,13 +1550,34 @@ weighed in. Name the facts you used.`;
 
     // The binding constraint, named. Order matters: the hardest stop first.
     const chip = $('budgetChip');
-    let label, tone;
-    if(lossCap > 0 && lost >= lossCap){ label = 'halted for today'; tone = 'chip-red'; }
-    else if(slotCap > 0 && slots >= slotCap){ label = 'no slots free'; tone = 'chip-amber'; }
-    else if(openCap > 0 && openRisk >= openCap){ label = 'risk budget spent'; tone = 'chip-amber'; }
-    else { label = 'room for another trade'; tone = 'chip-green'; }
-    chip.textContent = label;
-    chip.className = 'chip ' + tone;
+    const c = lastConstraint = bindingConstraint(
+      { lost, lossCap, slots, slotCap, openRisk, openCap });
+    chip.textContent = c.label;
+    chip.className = 'chip ' + c.tone;
+    renderDisposition();
+  }
+
+  /* ONE AUTHORITY FOR "CAN I TAKE A TRADE".
+
+     Extracted from the budget chip so the disposition line at the top of
+     Command states the same stop, in the same words, as the panel four hundred
+     pixels below it. Order matters: the hardest stop first, because an operator
+     who is halted for the day does not care that slots are also full. */
+  function bindingConstraint({ lost, lossCap, slots, slotCap, openRisk, openCap }){
+    /* `label` is the chip's two or three words. `clause` is the same fact in a
+       form that can be read inside a sentence, because "there is no slots free"
+       is what you get when a chip label is pasted into prose. */
+    if(lossCap > 0 && lost >= lossCap)
+      return { label: 'halted for today', clause: 'trading is halted for today',
+               tone: 'chip-red', blocked: true };
+    if(slotCap > 0 && slots >= slotCap)
+      return { label: 'no slots free', clause: 'every position slot is full',
+               tone: 'chip-amber', blocked: true };
+    if(openCap > 0 && openRisk >= openCap)
+      return { label: 'risk budget spent', clause: 'the open-risk budget is spent',
+               tone: 'chip-amber', blocked: true };
+    return { label: 'room for another trade', clause: 'there is room for another trade',
+             tone: 'chip-green', blocked: false };
   }
 
   /* ---------- the trade journal + daily scoreboard ----------
@@ -2374,7 +2469,7 @@ weighed in. Name the facts you used.`;
 
     const halted = !!setValues.halted;
     $('btnHalt').textContent = halted ? 'HALTED' : 'HALT';
-    $('btnHalt').className = 'btn ' + (halted ? 'btn-cyan' : 'btn-red');
+    $('btnHalt').className = 'btn ' + (halted ? 'btn-primary' : 'btn-red');
     $('btnHalt').title = halted
       ? 'new entries are blocked — click to resume'
       : 'stop sizing new entries (open positions still settle)';
@@ -2662,7 +2757,7 @@ weighed in. Name the facts you used.`;
         }).join('')}
         <p class="cred-scope t-body">${esc(scope)}</p>
         <div class="cred-actions">
-          <button class="btn btn-cyan" type="button" data-credsaveall="${esc(v)}">Save ${esc(nice)}</button>
+          <button class="btn btn-primary" type="button" data-credsaveall="${esc(v)}">Save ${esc(nice)}</button>
           <button class="btn" type="button" data-credtest="${esc(v)}">Test connection</button>
           <span class="t-mono cred-result" data-credresult="${esc(v)}"></span>
         </div>

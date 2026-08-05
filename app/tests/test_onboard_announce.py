@@ -60,7 +60,7 @@ class AnnounceOnce(unittest.TestCase):
 
     def _refresh_n(self, n):
         for _ in range(n):
-            live._last_universe_refresh = 0          # what a restart looks like
+            live._last_universe_refresh = None       # what a restart looks like
             live.refresh_universe(None, self.log)
 
     def test_a_permanently_warming_symbol_is_announced_once(self):
