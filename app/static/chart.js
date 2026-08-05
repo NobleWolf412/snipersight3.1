@@ -1646,15 +1646,24 @@ window.SSChart = (() => {
      hold"), but refusing at the last click means the operator planned an
      impossible trade for as long as the ticket was open — the beta pass sat
      in SHORT on a Coinbase chart with the ticket earnestly critiquing the
-     stop geometry of a trade the venue cannot take. Dead button, reason under
-     the finger, same sentence the server would use. */
+     stop geometry of a trade the venue cannot take. Dead button, reason beside
+     it, same sentence the server would use.
+
+     The reason used to live ONLY in the button's title. A mouse reveals that;
+     a finger has no hover, so on a phone the control was dead and silent —
+     the operator gets a button that does nothing and no account of why. The
+     text now goes on the surface, which is the pattern this ticket already
+     follows for its live-orders lock. The title stays for the pointer. */
   function setLock(){
     const sb = document.querySelector('#tkDir [data-d="SHORT"]');
+    const why = $('tkDirWhy');
     if(sb){
       const can = !cfg || !cfg.venue || cfg.venue.allow_shorts !== false;
-      sb.disabled = !can;
-      sb.title = can ? ''
+      const reason = can ? ''
         : `${cfg.venue.key} is spot — cannot sell what it does not hold`;
+      sb.disabled = !can;
+      sb.title = reason;
+      if(why){ why.textContent = reason; why.hidden = can; }
       if(!can && dir === 'SHORT') setDir('LONG');
     }
     refreshArm();

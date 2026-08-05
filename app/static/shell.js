@@ -79,6 +79,35 @@
   }
   document.querySelectorAll('.nav a').forEach(a =>
     a.addEventListener('click', e => { e.preventDefault(); go(a.dataset.s); }));
+
+  /* THE STRIP SAYS WHEN IT HAS MORE. Measured at 412px, Diagnostics sits at
+     370-504px — off the edge, with two of the five surfaces undiscoverable.
+     ss.css answers that with a slim always-visible scrollbar and argues,
+     rightly, against a fade: a fade would dim the last item on the wider
+     screens where everything already fits, which is a hint that lies half the
+     time.
+
+     But a ::-webkit-scrollbar does not render at rest on a touch device — it
+     is an overlay that appears while scrolling and then goes away, so on the
+     one device that needed the hint there is none. The class below is the
+     version that cannot lie: it is set only when the strip genuinely has more
+     than it can show, so the fade never appears on a screen where everything
+     fits. Measured, not guessed at, and re-measured on resize and rotate. */
+  const navEl = document.querySelector('.nav');
+  if(navEl){
+    const markScrollable = () => {
+      const more = navEl.scrollWidth - navEl.clientWidth;
+      navEl.classList.toggle('scrollable', more > 2);
+      // and drop the hint once they have actually reached the end
+      navEl.classList.toggle('scrolled-end',
+        more > 2 && navEl.scrollLeft >= more - 2);
+    };
+    markScrollable();
+    navEl.addEventListener('scroll', markScrollable, {passive: true});
+    addEventListener('resize', markScrollable);
+    // fonts land after first paint and change the measurement
+    if(document.fonts && document.fonts.ready) document.fonts.ready.then(markScrollable);
+  }
   // delegated: a figure rendered later still becomes a door
   document.addEventListener('click', e => {
     const j = e.target.closest && e.target.closest('[data-jump]');

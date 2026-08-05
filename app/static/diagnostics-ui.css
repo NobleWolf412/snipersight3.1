@@ -743,3 +743,13 @@ body.dx-funnel-live #dFunnel { display: none; }
   text-overflow:ellipsis;white-space:nowrap}
 .fail-row.dim .fail-err{color:var(--fg-3)}
 .fail-meta{font-family:var(--f-mono);font-size:var(--fs-1);color:var(--fg-4);white-space:nowrap}
+/* Five columns with a 52 + 200 floor plus four gaps and two gutters — about
+   328px before the error text gets a pixel, and .fail-err is nowrap with an
+   ellipsis, so on a phone the row degrades to a kind, a truncated subject and
+   three dots. This is the list Diagnostics LEADS with; "what is failing right
+   now" is the one thing worth reading on a small screen. Stack it, and let the
+   error text wrap instead of ellipsing, because the message is the content. */
+@media(max-width:900px){
+  .fail-row{grid-template-columns:1fr;gap:4px;padding:10px 14px}
+  .fail-err{white-space:normal;overflow:visible;text-overflow:clip}
+}

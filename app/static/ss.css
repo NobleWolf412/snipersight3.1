@@ -265,6 +265,19 @@ body{
 .data-table tbody th{color:var(--fg-2)}
 .data-table tr > *:first-child{text-align:left;padding-left:var(--lg)}
 .data-table tr > *:last-child{padding-right:var(--lg)}
+/* A wide table SCROLLS on a phone rather than wrapping every cell. Four
+   numeric columns re-wrapped into two lines each is not a table any more —
+   the eye cannot run down a column that is not a column. Measured at 412px
+   the table wanted 285px inside a 167px panel, and .panel is overflow-x:hidden,
+   so the right-hand columns were not merely cramped, they were unreachable.
+
+   The scroller is the unclassed div the tables are already built into, matched
+   with :has() so none of the seven build sites needs a wrapper added. Where
+   :has() is unsupported the rule simply does not apply and nothing regresses. */
+@media(max-width:900px){
+  .panel div:has(> .data-table){overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .data-table{min-width:max-content}
+}
 
 /* The context ladder — /api/context on the chart. One cell per timeframe,
    regime as colour, detail in the title. Context, so quieter than everything
@@ -606,6 +619,13 @@ body:not(.dev) #consolePanel{display:none}
 .cols-3{grid-template-columns:repeat(3,1fr)}
 .cols-4{grid-template-columns:repeat(4,1fr)}
 @media(max-width:1100px){.cols-4{grid-template-columns:repeat(2,1fr)}.cols-3{grid-template-columns:repeat(2,1fr)}}
+/* .cols-2 got no rule while .cols-3 and .cols-4 got one on the line above —
+   the same miss as .deck-row, and measurable: at a 412px viewport it held two
+   166.5px columns and BOTH children reported scrollWidth past their box. It
+   carries the two four-column performance tables on Results and the two
+   Diagnostics panels, so a four-column table was living in 167px.
+   One column below 900, where .cols-3 and .cols-4 are already down to two. */
+@media(max-width:900px){.cols-2,.cols-3,.cols-4{grid-template-columns:1fr}}
 
 /* backend console — the operator watching the engines think */
 #console{height:260px;overflow:auto;padding:var(--md) var(--lg);margin:0;
@@ -692,6 +712,16 @@ body:not(.dev) #consolePanel{display:none}
   .nav::-webkit-scrollbar-track{background:transparent}
   .nav a{white-space:nowrap;padding:10px var(--md)}
   .nav-sep{display:none}
+  /* ...and the fade, which shell.js only turns on when the strip actually has
+     more than it can show, so it never dims a last item that already fits.
+     A ::-webkit-scrollbar is an overlay on touch: it appears while scrolling
+     and then vanishes, which is no hint at all on the one device that needed
+     one. Faded out again at the far right, where there is nothing more to
+     promise. */
+  .nav.scrollable{
+    -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent);
+    mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent)}
+  .nav.scrollable.scrolled-end{-webkit-mask-image:none;mask-image:none}
 
   /* The chart leads and the ticket follows it, instead of competing for a
      width neither can use.
@@ -979,6 +1009,17 @@ body:not(.dev) #consolePanel{display:none}
 .deck-row{display:grid;grid-template-columns:120px 92px 1fr 150px auto;
   gap:var(--md);align-items:center;padding:var(--md) var(--lg);
   border-bottom:1px solid var(--border-soft)}
+/* Every sibling row collapses at 900 — .jnl-row, .pos-row, .radar-row,
+   .budget-grid — and the deck was simply missed, which is why it survived the
+   responsive pass: its neighbours all looked done. It is the worst one to
+   miss. 120 + 92 + 150 plus three gaps and two gutters is a 454px floor asked
+   to fit 356px, and the track that gives is the `1fr` carrying the engine's
+   REASONING — the sentence explaining why the setup exists, on the first thing
+   the operator looks at, crushed to nothing on the surface whose whole job is
+   to justify a trade. */
+@media(max-width:900px){
+  .deck-row{grid-template-columns:1fr;gap:var(--sm)}
+}
 
 /* An expired setup fades where it stands and holds its slot for the duration,
    so the rows below it do not jump up into a cursor already on its way down. */
@@ -1233,7 +1274,21 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .pos-acts .btn:hover{opacity:1}
 .pos-close{opacity:.75}
 .pos-close:hover{opacity:1}
-@media (max-width:900px){ .pos-acts{justify-content:flex-start} }
+/* 24 is the WCAG floor for a pointer. Android's own guidance is 48dp, and the
+   difference is not pedantry: a fingertip is about 9mm of contact against a
+   3mm mark, and the row it sits in is dense, so the neighbouring target is the
+   thing you hit. One of these three is CLOSE on a live position — the most
+   consequential button on the surface, and the one whose mis-tap costs money.
+   The visible mark still stays small; only the target grows, and the row gets
+   room for it because .pos-row is one column at this width anyway. */
+@media (max-width:900px){
+  .pos-acts{justify-content:flex-start;gap:var(--sm);margin-top:var(--md)}
+  .pos-acts .btn{min-height:48px;padding:0 var(--md);font-size:var(--fs-2);opacity:1}
+  /* CLOSE gets the width too: on a phone it is reached with the thumb that is
+     also holding the device, and a 48px square in a row of three is still a
+     small target for that thumb. */
+  .pos-acts .pos-close{flex:1 1 100%;justify-content:center;opacity:1}
+}
 
 /* MANAGING A LIVE POSITION. The ticket is the same controls doing a different
    job — money already at stake rather than a plan being drawn — so the panel

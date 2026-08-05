@@ -388,6 +388,12 @@
             <button data-d="LONG" type="button" aria-pressed="true">Long</button
             ><button data-d="SHORT" type="button" aria-pressed="false">Short</button>
           </div>
+          <!-- Why Short is dead, in text rather than in a tooltip. The reason
+               was written into the button's title, which a mouse reveals and a
+               finger cannot, so on a phone the control was simply dead with no
+               explanation offered. chart.js writes this and hides it when
+               shorts are allowed. -->
+          <div class="t-mono tk-lock" id="tkDirWhy" hidden></div>
 
           <div class="seg tk-tabs" id="tkTabs">
             <button data-p="trade" class="on" type="button" aria-pressed="true">Trade</button>
