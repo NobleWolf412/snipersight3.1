@@ -89,6 +89,19 @@ and it is a **bug gate, not a style gate**: no formatting rule is on, and none
 should be added. Warnings do not fail; `eslint.config.mjs` names every
 reporting-only rule and what is still outstanding under each.
 
+`no-redeclare` is the second one, and it caught a live defect on the linter's
+first run: `shell.js` held **two** functions named `renderScoreboard`, one for
+Command's today tile and one for the Results scoreboard. Declarations hoist, so
+the later won and the earlier had never run. Nothing errored, both call sites
+resolved to something real, and the only symptom was the "Closed today" tile
+showing an em-dash beside a Results panel reporting 7 trades from the same
+journal. The JS suites cannot see this by construction: they pin which helper
+is called and which token appears, and neither question distinguishes two
+functions sharing a name.
+
+Run it with the suites, not occasionally. After the first `npm ci` it is
+`npx eslint .` and about a second.
+
 `ticket-math.js` decides how big a trade is and re-implements
 `venues.liquidation_price`. It is the only thing proving the ticket and the
 engine agree about where a position dies.
