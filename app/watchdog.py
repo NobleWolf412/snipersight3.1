@@ -648,7 +648,20 @@ def main():
     # Only the scanner gets its stderr captured: it is the process whose exits
     # needed explaining, it runs under -X utf8 so the capture is clean, and
     # uvicorn demonstrably cannot tolerate the same treatment.
-    live = Child("live-scanner", [py, "-X", "utf8", "live.py"],
+    # -u, and it is the difference between a diagnosable death and a guess.
+    #
+    # This child's stderr is redirected to a FILE, and Python block-buffers a
+    # non-tty stderr. A process killed externally never flushes, so everything
+    # since the last 4KB boundary dies with it — and `_last_error()` then
+    # reports whatever happened to be flushed as "last output", which reads
+    # exactly like the place it died.
+    #
+    # That artefact has cost real time: 39 exits appeared to end at
+    # `UNIVERSE onboarded PF_SPCXXUSD`, and one run lived 331 seconds while
+    # logging only two lines. Neither was a clue about the crash; both were the
+    # buffer. Unbuffered, the last line in the file IS the last thing that
+    # happened, and the next death can be read instead of inferred.
+    live = Child("live-scanner", [py, "-X", "utf8", "-u", "live.py"],
                  notify_restart=True, capture_stderr=True)
     server = Child("api-server", [py, "-m", "uvicorn", "server:app",
                                   "--port", "8422", "--host", "127.0.0.1"])
