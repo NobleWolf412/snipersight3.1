@@ -43,16 +43,6 @@ jobs:
       - run: python -m pip install --upgrade pip fastapi uvicorn pytest httpx
       - run: python -m compileall -q .
       - run: python -m unittest discover -s tests -v
-      # The JavaScript suites were not run here at all, while HARDENING.md
-      # said they were. ticket-math.js decides how big a trade is and
-      # re-implements venues.liquidation_price — it is the only thing proving
-      # the ticket and the engine agree about where a position dies, and it
-      # was landing on main unverified. They need no dependencies: assert,
-      # fs and path are built in.
-      #
-      # Globbed rather than listed. The listed form is how this drifted: the
-      # names were written when there were two suites, and the seventeen
-      # added since were never added here.
       # The one defect class neither the suites nor `node --check` can see: a
       # name that is READ but never bound. That is legal JavaScript which
       # throws the first time the line runs, so it ships whenever the line
@@ -77,6 +67,16 @@ jobs:
           npm ci
           npx eslint .
 
+      # The JavaScript suites were not run here at all, while HARDENING.md
+      # said they were. ticket-math.js decides how big a trade is and
+      # re-implements venues.liquidation_price — it is the only thing proving
+      # the ticket and the engine agree about where a position dies, and it
+      # was landing on main unverified. They need no dependencies: assert,
+      # fs and path are built in.
+      #
+      # Globbed rather than listed. The listed form is how this drifted: the
+      # names were written when there were two suites, and the seventeen
+      # added since were never added here.
       - name: JavaScript suites
         # always(): these do not depend on the Python suite, and gating them on
         # it means one red step hides the other's status entirely. That is not
