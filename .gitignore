@@ -15,6 +15,10 @@ __pycache__/
 .venv/
 venv/
 
+# Node — the linter's install tree only. `app/package-lock.json` IS committed:
+# CI runs `npm ci`, which requires it and installs exactly what is pinned there.
+node_modules/
+
 # OS / editor
 .DS_Store
 Thumbs.db

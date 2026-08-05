@@ -69,6 +69,7 @@ cd app
 python -m unittest discover -s tests     # what CI runs
 python -m pytest tests -q                # same suite, quicker to read
 for f in tests/test_*.js; do node "$f"; done
+npm ci && npx eslint .                   # first run only needs the npm ci
 ```
 
 `pytest` also works from the repo root (`python -m pytest app/tests -q`); the
@@ -78,6 +79,15 @@ The JavaScript suites assert against the **text of the static files**, not a
 rendered DOM — they pin contracts (which helper is called, which token, which
 field), so a passing JS suite means the source still says what it should, not
 that the page works. Confirm behaviour in the running app as well.
+
+**The linter is there for the gap that leaves.** A name read but never bound is
+legal JavaScript that throws only when the line runs, so no text assertion and
+no `node --check` can see it — `renderDeck` passed a `now` that did not exist,
+the Setup Deck dropped every row under its own heading, and the suite stayed
+green. `no-undef` catches exactly that. It is the repo's only npm dependency
+and it is a **bug gate, not a style gate**: no formatting rule is on, and none
+should be added. Warnings do not fail; `eslint.config.mjs` names every
+reporting-only rule and what is still outstanding under each.
 
 `ticket-math.js` decides how big a trade is and re-implements
 `venues.liquidation_price`. It is the only thing proving the ticket and the

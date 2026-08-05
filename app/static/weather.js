@@ -93,10 +93,25 @@
         `<span class="tfk">${esc(t.tf)}</span>` +
         `<span class="reg ${TONE[t.regime] || 'r-none'}">${esc(t.label)}</span></div>`;
     }).join('');
+    /* NOT role="button" on the row. The row holds glossary terms, and
+       glossary.js makes every one of them a focus stop — ARIA forbids focusable
+       descendants inside a button role, so a screen reader computed this row's
+       whole contents as the button's name ("DOGE 1D Bear weakening 4H Bear
+       weakening -> Pullback shorts are live ...") and the terms inside it
+       announced as buttons within a button.
+
+       Worse for a keyboard: the row's Enter/Space handler called r.click() on
+       the ROW, so pressing Enter while focused on a nested term both toggled
+       the row and fired the glossary.
+
+       Same shape as the fix on .pos-row. The row stays clickable for a pointer,
+       which is the affordance the handler below is written for; the symbol cell
+       becomes the real disclosure button and carries aria-expanded. A native
+       button gets Enter and Space for free, so the keydown handler goes. */
     return `<div class="wx-row wx-data tier-${s.tier}${s.live ? ' live' : ''}` +
-      `${open.has(s.symbol) ? ' open' : ''}" data-sym="${esc(s.symbol)}"` +
-      ` role="button" tabindex="0" aria-expanded="${open.has(s.symbol)}">` +
-      `<div class="wx-sym" title="${esc(s.symbol)}"><span>${esc(shortName(s.symbol))}</span></div>` +
+      `${open.has(s.symbol) ? ' open' : ''}" data-sym="${esc(s.symbol)}">` +
+      `<button class="wx-sym wx-toggle" title="${esc(s.symbol)}"` +
+      ` aria-expanded="${open.has(s.symbol)}"><span>${esc(shortName(s.symbol))}</span></button>` +
       cells +
       `<div class="wx-mean"><span class="wx-arrow" aria-hidden="true">&rarr;</span>` +
       `<span>${teach(s.meaning)}</span></div>` +
@@ -321,8 +336,11 @@
     </div>`;
   }
 
-  /* Rows expand on click and on Enter/Space, so the reason is reachable
-     without a mouse and without a hover-only tooltip. */
+  /* Rows expand on click anywhere, and by keyboard through .wx-toggle — the
+     symbol cell, which is a real <button> and therefore gets Enter and Space
+     from the platform. The hand-rolled keydown handler that used to live here
+     fired r.click() on the ROW, so Enter on a nested glossary term toggled the
+     row as well as opening the definition. */
   root.addEventListener('click', e => {
     const r = e.target.closest('.wx-data');
     if (!r || e.target.closest('.term')) return;   // let the glossary have its own taps
@@ -330,14 +348,9 @@
     const now = !open.has(sym);
     if (now) open.add(sym); else open.delete(sym);
     r.classList.toggle('open', now);
-    r.setAttribute('aria-expanded', String(now));
-  });
-  root.addEventListener('keydown', e => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const r = e.target.closest('.wx-data');
-    if (!r) return;
-    e.preventDefault();
-    r.click();
+    // the state lives on the control that announces it, not on the container
+    const t = r.querySelector('.wx-toggle');
+    if (t) t.setAttribute('aria-expanded', String(now));
   });
 
 

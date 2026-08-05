@@ -47,6 +47,24 @@
   let booted = false;
   function go(name){
     name = SURFACE_ALIASES[name] || name;
+    /* THE SKIP LINK POINTED AT A SECTION ID AND EMPTIED THE APP.
+
+       shell.html's skip link is href="#s-command" — the id of the <section>,
+       which is what an in-page link must target to move focus. The router
+       reads the same hash as a surface NAME, so go('s-command') looked for
+       '#s-s-command', matched nothing, and turned every surface and every rail
+       item off: stage text 10,734 characters to 0, with no message and no way
+       back except clicking the rail.
+
+       It was the FIRST tab stop on the page. The one control an
+       accessibility-dependent reader reaches before anything else destroyed
+       the view, and the same held for any bookmarked or mistyped hash.
+
+       Two guards, because they fix different halves. Stripping the prefix lets
+       the section id and the surface name be the same link. Refusing to land
+       nowhere means no hash can ever empty the stage again, whatever it says. */
+    if(name.startsWith('s-')) name = name.slice(2);
+    if(!document.getElementById('s-' + name)) name = 'command';
     document.querySelectorAll('.surface').forEach(s => s.classList.toggle('on', s.id === 's' + '-' + name));
     document.querySelectorAll('.nav a').forEach(a => {
       const here = a.dataset.s === name;
@@ -864,6 +882,26 @@
         '<div class="deck-divider">Looked at, not taken</div>');
     }
 
+    /* SECONDS, because that is what the row's two clocks compare against.
+       `foundAgo` subtracts `market_time` and `expiresIn` subtracts
+       `expires_at_ts`, both epoch seconds off the fact — in milliseconds every
+       setup would read as found 56 years ago and long expired.
+
+       It was missing entirely. `deckRowInner(s, now)` was extracted into its
+       own function without a binding for `now` in this scope, so the first row
+       threw `ReferenceError: now is not defined` and the forEach died there.
+       Read ONCE outside the loop rather than per row: every row on one render
+       should date itself from the same instant, or two rows a millisecond apart
+       can print different minute counts from the same paint.
+
+       What it looked like is why it survived: the divider above is inserted
+       BEFORE this loop, so the deck printed "Looked at, not taken" and then
+       nothing under it, while the tile beside it said "4 examined, not taken".
+       An empty deck, not a broken one — and the loop only runs when there is
+       something to show, so every test with an empty deck passed. It also
+       rejected loadOverview() on every cycle, which is what put API DEGRADED in
+       the top bar with all five Command endpoints answering 200. */
+    const now = Date.now() / 1000;
     const seen = new Set();
     ordered.concat(passed).forEach(s => {
       const key = s.symbol;
@@ -1307,16 +1345,28 @@
        everything below is one it is not. Same device as the Deck's
        "Looked at, not taken", for the same reason: without it the far rows sit
        in the slot where actionable things go. */
-    let drewDivider = false;
-    box.innerHTML = warn + rows.map(r => {
+    /* THE OUT-OF-RANGE ROWS FOLD AWAY.
+
+       This panel was 3,341px of a 5,072px surface at 1440, and 73% of it at
+       412 — two thirds of the surface that asks "what should I do right now?"
+       spent on markets the engine has explicitly disowned. Twenty of the
+       twenty-eight rows rendered below the divider, each repeating the same
+       130-character sentence about the ATR bound, so the panel said the same
+       thing twenty times in the slot where actionable things go.
+
+       Nothing is hidden and nothing is dropped: the summary carries the count,
+       the reason is stated once for the group instead of once per row, and one
+       click restores every row exactly as before. The <details> pattern is the
+       one this app already uses at .wx-details, .explainer and .issue.
+
+       The in-range rows are untouched. They are the ones the engine is
+       actually considering, and they were never the volume problem. */
+    const inRange = rows.filter(r => r.engine_reach !== 'OUT_OF_RANGE');
+    const beyond  = rows.filter(r => r.engine_reach === 'OUT_OF_RANGE');
+    const bound = parseFloat(max) || 3;
+
+    const rowHtml = (r, withSay) => {
       const dist = parseFloat(r.distance_atr);
-      let divider = '';
-      if(!drewDivider && r.engine_reach === 'OUT_OF_RANGE'){
-        drewDivider = true;
-        const n = rows.filter(x => x.engine_reach === 'OUT_OF_RANGE').length;
-        divider = `<div class="deck-divider">Beyond the ${esc(String(prox))} ATR the engine looks — ${n} market${n === 1 ? '' : 's'}</div>`;
-      }
-      const bound = parseFloat(max) || 3;
       const fill = isNaN(dist) ? 10 : Math.max(8, Math.min(96, (1 - dist / bound) * 100));
       const say = (NEAR_SAY[r.engine_reach] || NEAR_SAY.OUT_OF_RANGE)(r, prox);
       /* basis[0] is draft.py's own sentence for the zone it anchored on —
@@ -1338,21 +1388,36 @@
          sitting there it wrapped to two lines on every one of 23 rows and
          pushed the row to 110px tall. Same crush the Deck's reasoning column
          took: a label narrower than its own content is not a label. */
-      return `${divider}<div class="radar-row">
+      return `<div class="radar-row">
         <div>
           <div class="radar-sym">${esc(String(r.symbol).replace('-USD', ''))}</div>
           <div class="t-label" style="margin-top:3px">${esc(r.tf)} · ${r.direction === 'LONG' ? 'long' : 'short'} side</div>
         </div>
         <div>
           <div style="margin-bottom:6px"><span class="chip ${say[1]}">${esc(say[0])}</span></div>
-          <div class="radar-say">${esc(say[2])}</div>
+          ${withSay ? `<div class="radar-say">${esc(say[2])}</div>` : ''}
           <div class="t-label" style="margin-bottom:7px;color:var(--fg-4)">${esc(zone)}</div>
           <div class="radar-meter"><i style="width:${fill.toFixed(0)}%"></i></div>
         </div>
         <div class="radar-dist">${isNaN(dist) ? '—' : dist.toFixed(2)}<span class="t-sub">ATR away</span>
           <button class="btn" style="margin-top:6px" data-nsym="${esc(r.symbol)}" data-ntf="${esc(r.tf)}">Chart</button></div>
       </div>`;
-    }).join('');
+    };
+
+    /* The group's shared sentence, printed once. Every OUT_OF_RANGE row
+       returned the identical string from NEAR_SAY, so it was rendered once per
+       row and read as noise by the third repetition. */
+    const beyondSay = beyond.length
+      ? (NEAR_SAY.OUT_OF_RANGE(beyond[0], prox) || [])[2] || '' : '';
+
+    box.innerHTML = warn
+      + inRange.map(r => rowHtml(r, true)).join('')
+      + (beyond.length ? `<details class="near-beyond">
+          <summary class="deck-divider">Beyond the ${esc(String(prox))} ATR the engine looks — ${
+            beyond.length} market${beyond.length === 1 ? '' : 's'}</summary>
+          <div class="near-beyond-say t-note">${esc(beyondSay)}</div>
+          ${beyond.map(r => rowHtml(r, false)).join('')}
+        </details>` : '');
     box.querySelectorAll('button[data-nsym]').forEach(b =>
       b.addEventListener('click', () => {
         go('chart');
@@ -1440,12 +1505,23 @@ weighed in. Name the facts you used.`;
          clicking a live position is asking. They want to see it, and to be
          able to act on it. The trace keeps its own control, so nothing is
          lost; it just stops being the thing a whole-row click does. */
+      /* NOT role="button". ARIA forbids focusable descendants inside a button
+         role, and this row holds three real ones — Reasons, Copilot, and Close,
+         the control that ends a live position. A screen reader computed the
+         row's entire contents as the button's accessible name ("ADA short 4H
+         reversal stop 0.20063 now 0.18910 ... Reasons Copilot Close") and
+         buried the close control inside it.
+
+         The row stays clickable for a pointer, which is the affordance the
+         comment above argues for. The keyboard path is the symbol itself: one
+         real button, named for what it opens, in the tab order once. */
       return `<div class="pos-row manageable" data-manage="${esc(t.symbol)}"
-        data-managetf="${esc(t.tf)}"
-        tabindex="0" role="button"
-        title="open this trade on the chart — drag the stop or target and press Update trade">
+        data-managetf="${esc(t.tf)}">
         <div>
-          <div class="pos-sym">${esc(tokenOf(t.symbol))}</div>
+          <button class="pos-sym pos-open" data-manage="${esc(t.symbol)}"
+            data-managetf="${esc(t.tf)}"
+            title="open this trade on the chart — drag the stop or target and press Update trade"
+            >${esc(tokenOf(t.symbol))}</button>
           <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
             esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
         </div>
@@ -1492,12 +1568,15 @@ weighed in. Name the facts you used.`;
       // Same rule as a filled row: the click shows you the trade. An unfilled
       // order cannot be managed on the chart, so it gets no Update path — but
       // "let me look at it" is the same request either way.
+      /* Same as the filled row: not role="button", because this one nests
+         Reasons and Copilot. The symbol carries the keyboard path. */
       return `<div class="pos-row pending manageable" data-manage="${esc(t.symbol)}"
-        data-managetf="${esc(t.tf)}"
-        tabindex="0" role="button"
-        title="open this order on the chart">
+        data-managetf="${esc(t.tf)}">
         <div>
-          <div class="pos-sym">${esc(tokenOf(t.symbol))}</div>
+          <button class="pos-sym pos-open" data-manage="${esc(t.symbol)}"
+            data-managetf="${esc(t.tf)}"
+            title="open this order on the chart"
+            >${esc(tokenOf(t.symbol))}</button>
           <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
             esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
         </div>
@@ -1896,7 +1975,19 @@ weighed in. Name the facts you used.`;
       // exists; the bare regime only as the fallback.
       const reason = j.why ? plainReason(j.why)
         : (j.regime ? String(j.regime).replace('_', ' ').toLowerCase() : '');
-      return `<div class="jnl-row${flat ? '' : up ? ' up' : ' down'}">
+      /* WHAT IT PAID, not just what it lost. `r_gross` and `costs_r` have been
+         in this payload all along and reached no surface, so a stop-out read
+         "risked $197 · -$219" and left the operator to wonder which number was
+         wrong. Neither is: a stop loses 1R of PRICE, and the round trip is
+         charged on top. Shown whenever costs are material. */
+      const costR = Number(j.costs_r);
+      const costTxt = isFinite(costR) && costR > 0.004
+        ? `${Math.abs(Number(j.r_gross)).toFixed(2)}R ${
+            Number(j.r_gross) < 0 ? 'loss' : 'gain'} + ${costR.toFixed(2)}R costs`
+        : '';
+      return `<div class="jnl-row jnl-open${flat ? '' : up ? ' up' : ' down'}"
+        data-jsid="${esc(j.setup_id || '')}" tabindex="0" role="button"
+        title="open this trade on the chart — the bars it happened on, with entry and exit marked">
         <div>
           <div class="t-mono" style="font-size:13px;color:var(--fg)">${
             j.direction === 'LONG' ? '<span class="dir-up">▲</span>' : '<span class="dir-dn">▼</span>'} ${
@@ -1912,7 +2003,7 @@ weighed in. Name the facts you used.`;
                separator ("Jul 30 ·  · risked $195"). Any future absent field
                now degrades to one fewer clause instead of a visible gap. -->
           <div class="t-sub">${[when, heldText(j.holding_hours),
-            'risked ' + money(j.risk_usd)].filter(Boolean).join(' · ')}</div>
+            'risked ' + money(j.risk_usd), costTxt].filter(Boolean).join(' · ')}</div>
         </div>
         <div class="jnl-r">${rr(j.r_multiple)}
           <span class="t-sub">${signedMoney(j.pnl_usd)}</span>
@@ -1920,6 +2011,31 @@ weighed in. Name the facts you used.`;
             style="width:${barW.toFixed(1)}%;${barR >= 0 ? 'left:50%' : 'right:50%'}"></i></span></div>
       </div>`;
     }).join('');
+  }
+
+  /* A settled trade opens on the bars it happened on. Results could tell you a
+     trade lost 1.11R and not show you where price went — the obvious next
+     question, and the surface had no answer to it. Delegated once, because the
+     rows are rebuilt on every refresh. */
+  if(!$('journal').dataset.openWired){
+    $('journal').dataset.openWired = '1';
+    const openTrade = row => {
+      const t = lastJournal.find(x => x.setup_id === row.dataset.jsid);
+      if(!t || !window.SSChart) return;
+      go('chart');
+      SSChart.open(t.symbol, t.tf, {trade: t});
+    };
+    $('journal').addEventListener('click', e => {
+      const r = e.target.closest('[data-jsid]');
+      if(r && r.dataset.jsid) openTrade(r);
+    });
+    $('journal').addEventListener('keydown', e => {
+      if(e.key !== 'Enter' && e.key !== ' ') return;
+      const r = e.target.closest('[data-jsid]');
+      if(!r || !r.dataset.jsid) return;
+      e.preventDefault();
+      openTrade(r);
+    });
   }
 
   function renderScoreboard(journal){
