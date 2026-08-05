@@ -1350,6 +1350,6 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   font-weight:600;letter-spacing:.16em;text-transform:uppercase;
   color:var(--fg-3);padding:4px 0;list-style:none}
 .dx-all>summary::-webkit-details-marker{display:none}
-.dx-all>summary::before{content:"\25B8  ";color:var(--fg-4)}
-.dx-all[open]>summary::before{content:"\25BE  "}
+.dx-all>summary::before{content:"B8  ";color:var(--fg-4)}
+.dx-all[open]>summary::before{content:"BE  "}
 .dx-all>summary:hover{color:var(--fg-2)}
