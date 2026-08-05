@@ -200,9 +200,20 @@ ok('the trace drawer speaks plainly and does not re-expose rank', () => {
 /* ---------- reachability ---------- */
 
 ok('trace rows are focusable and operable by keyboard', () => {
+  /* Was pinned to tabindex="0" role="button" appearing twice — the exact
+     pattern the position and pending rows have now DROPPED, because ARIA
+     forbids focusable descendants inside a button role and each row nested
+     Reasons, Copilot and (when filled) Close. A screen reader computed the
+     row's whole contents as the button name and buried the close control in it.
+
+     The property is unchanged and still asserted: both rows are reachable and
+     operable by keyboard. They just do it with a real <button> on the symbol
+     instead of a div wearing a role. */
   assert(JS.includes('function activatable'), 'one helper, not per-element retrofits');
-  assert((JS.match(/tabindex="0" role="button"/g) || []).length >= 2,
-    'position and pending rows must be focusable');
+  assert((JS.match(/class="pos-sym pos-open"/g) || []).length >= 2,
+    'position and pending rows must expose a real keyboard control');
+  assert(!/tabindex="0" role="button"[\s\S]{0,900}?pos-acts/.test(JS),
+    'a row with nested action buttons must not itself be role="button"');
   assert(/keydown/.test(JS) && /e\.key !== 'Enter' && e\.key !== ' '/.test(JS));
   assert(CSS.includes('.traceable:focus-visible'), 'focus must be visible');
 });

@@ -2456,14 +2456,14 @@ window.SSChart = (() => {
       if(!rows.length) continue;
       html += `<div class="sym-group">${label} (${rows.length})</div>` +
         rows.map(s => { n++; return `<button class="sym-row${s.symbol === sym ? ' on' : ''}"
-          role="option" data-sym="${s.symbol}">
+          data-sym="${s.symbol}">
           <b>${s.symbol}</b><i>${s.venue ? venueName(s.venue) : ''}</i></button>`; }).join('');
     }
     const known = new Set(PICK_GROUPS.map(g => g[0]));
     const rest = allSymbols.filter(s => !known.has(s.state) && hit(s));
     if(rest.length)
       html += `<div class="sym-group">other (${rest.length})</div>` +
-        rest.map(s => `<button class="sym-row" role="option" data-sym="${s.symbol}">
+        rest.map(s => `<button class="sym-row" data-sym="${s.symbol}">
           <b>${s.symbol}</b><i>${s.venue ? venueName(s.venue) : ''}</i></button>`).join('');
     $('cSymList').innerHTML = html ||
       '<div class="sym-group">nothing matches</div>';

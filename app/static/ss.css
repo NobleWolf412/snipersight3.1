@@ -1251,6 +1251,28 @@ body:not(.dev) #consolePanel{display:none}
   align-items:center;padding:var(--md) var(--lg);border-bottom:1px solid var(--border-soft)}
 .pos-row:last-child{border-bottom:0}
 .pos-sym{font-family:var(--f-display);font-size:var(--fs-4);letter-spacing:.08em;color:var(--fg)}
+/* The symbol became a real button when .pos-row stopped being role="button" —
+   ARIA forbids focusable descendants inside a button role, and the row held
+   three. It looks exactly as it did as a div; it is simply now the one thing a
+   keyboard reaches to open the trade, instead of the whole row announcing
+   itself as a button whose name was its entire contents. */
+.pos-open{background:none;border:0;padding:0;cursor:pointer;text-align:left;
+  display:block;font:inherit;font-family:var(--f-display);font-size:var(--fs-4);
+  letter-spacing:.08em;color:var(--fg)}
+.pos-open:hover{color:var(--accent)}
+
+/* The out-of-range half of "At a level", folded. The summary IS the divider —
+   same class, so the boundary reads exactly as it did when twenty rows sat
+   open beneath it, and the marker is the only thing that changes. */
+.near-beyond{border-top:1px solid var(--border-soft);margin-top:var(--sm)}
+.near-beyond > summary{cursor:pointer;list-style:none;display:flex;
+  align-items:center;gap:var(--sm)}
+.near-beyond > summary::-webkit-details-marker{display:none}
+.near-beyond > summary::before{content:"▸";color:var(--fg-4);flex:none;
+  transition:transform .15s}
+.near-beyond[open] > summary::before{content:"▾"}
+.near-beyond > summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.near-beyond-say{padding:0 var(--lg) var(--sm)}
 /* The track is NEUTRAL. It was a red-to-green gradient over stop->target
    price space, which meant a 3:1 trade — whose entry sits at 25% from the
    stop end by construction — always painted its marker "in the red", and a

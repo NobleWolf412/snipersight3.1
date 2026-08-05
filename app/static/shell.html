@@ -318,7 +318,16 @@
           <div class="sym-pop" id="cSymPop" hidden>
             <input id="cSymSearch" type="search" autocomplete="off"
                    placeholder="search 80+ pairs" aria-label="Search symbols">
-            <div class="sym-list" id="cSymList" role="listbox"></div>
+            <!-- role="group", not role="listbox". A listbox promises arrow-key
+                 traversal and an aria-selected option; this had 85 focusable
+                 <button> children, aria-selected on none of them, no
+                 aria-activedescendant and no roving tabindex, so the promise
+                 was never kept. shell.html:390 already removed role="tablist"
+                 from the ticket panes for exactly this reason: a role that
+                 announces a behaviour the widget does not have is worse than
+                 no role, because the reader stops looking for the behaviour
+                 that IS there. These are plain buttons, and now they say so. -->
+            <div class="sym-list" id="cSymList" role="group" aria-label="Symbols"></div>
           </div>
         </div>
         <div class="seg" id="cTfs">
