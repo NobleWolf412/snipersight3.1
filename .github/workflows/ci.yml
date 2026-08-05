@@ -32,6 +32,12 @@ jobs:
       # names were written when there were two suites, and the seventeen
       # added since were never added here.
       - name: JavaScript suites
+        # always(): these do not depend on the Python suite, and gating them on
+        # it means one red step hides the other's status entirely. That is not
+        # hypothetical — the Python suite is currently failing on Linux, so the
+        # run that first added this step reported nothing at all about the
+        # JavaScript side. The job still fails if either fails.
+        if: always()
         run: |
           shopt -s nullglob
           files=(tests/test_*.js)
