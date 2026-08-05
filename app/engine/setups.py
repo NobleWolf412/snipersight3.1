@@ -45,13 +45,34 @@ SETUP_VERSION = "setup-v0.17-draft"
 # the obvious question can be settled with data instead of taste: does looking
 # up the whole ladder beat looking up one rung?
 #
-# THEY MUST NEVER BOTH BE PROMOTED. `docs/SPEC-confirmed-entry.md` §1.4 makes
-# redundancy an axis of the promotion criterion (|Pearson r| < 0.70 against
-# every promoted factor, one factor per information category) precisely so that
-# "what is the higher timeframe doing" cannot be counted twice. Whichever wins
-# that comparison, the loser is deleted rather than left as advice — a
-# correlated pair left in place is how the prior project got 26 factors that
-# were five.
+# ANSWERED 2026-08-04, on the outcome-edge axis of the promotion criterion
+# (|r| against realised R, judged on the ±1.96/√n noise floor). Both readings
+# built from the SAME regime facts through the SAME as-of discipline, so the
+# only variable is how many rungs are consulted:
+#
+#                            trend replay (n=2824)      live book (n=498)
+#     whole ladder    r=+0.0417 vs ±0.0375  CLEARS   r=-0.0699 vs ±0.0904  no
+#     one rung        r=+0.0010 vs ±0.0386  no       r=-0.0608 vs ±0.0923  no
+#     one rung as recorded                           r=-0.0351 vs ±0.0923  no
+#     bucket spread   0.1947 R vs 0.0055 R           0.5206 R vs 0.3102 R
+#     fire rate       96.8% vs 91.3%                 94.4% vs 90.6%
+#
+# THE WHOLE LADDER WINS. On the only book large enough to decide anything it
+# is the single reading in this codebase that clears its own noise floor, and
+# the one-rung reading separates that book's outcomes by 0.0055 R across all
+# three of its buckets — which is nothing at all. The ladder also fires more
+# often, because a missing rung no longer blanks the reading: it consults the
+# ones above it instead. That is the S39/S53 1W blind spot fixed structurally
+# rather than by backfilling data.
+#
+# AND THEY ARE NOT REDUNDANT, which was the expected result and is not what
+# happened: r=0.5575 on the live book and 0.5717 on trend, both under the 0.70
+# bar, agreeing on only 57.8% / 52.6% of trades. So the case for retiring
+# `confluence.htf_*` is NOT that it duplicates the ladder. It is that it does
+# not work. Kept for now because `factorstats` graded it and `entrystats` pins
+# it, and removing a field that historical readers depend on is its own change
+# with its own blast radius — but it is not a candidate for a gate, and only
+# one of these two may ever become one.
 # v0.16: WHY text writes prices with magnitude-scaled decimals (`_fp`, chart.js
 # `digits()` exactly) instead of a flat .2f, which rendered every sub-dollar
 # zone as a degenerate range — ENA's journal read "supply zone 0.09-0.09", and

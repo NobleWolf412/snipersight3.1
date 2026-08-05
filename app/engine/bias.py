@@ -33,6 +33,22 @@ spot S53 closed for `htf_regime` by demoting TIER_BY_TF["1W"]. Measured on
 the live store at regime-v0.12: 1W regime exists for 32 symbols, 1D for 37,
 and every rung is populated. Regime is the reading that can actually answer.
 
+THE WHOLE CHAIN, NOT ONE RUNG, and that is measured rather than assumed. Both
+readings were built from the same regime facts under the same as-of rule and
+scored on the outcome-edge axis (|r| against realised R vs the ±1.96/√n noise
+floor). On the trend book — 2,824 trades, the only sample here large enough to
+decide anything — the ladder clears its floor (r=+0.0417 vs ±0.0375) and the
+one-rung reading does not (r=+0.0010 vs ±0.0386), separating its three buckets
+by 0.0055 R, which is nothing. The ladder also fires more often (96.8% vs
+91.3%): a missing rung no longer blanks the reading, because the rungs above
+it are still there to consult. That is the 1W blind spot fixed by structure
+instead of by backfilling weekly history.
+
+They are NOT redundant, which is worth stating because the opposite was
+expected: r=0.5575 on the live book, 0.5717 on trend, both under the 0.70
+bar, agreeing on barely half the trades. Two different questions, and the
+one-rung version is the one that does not answer.
+
 THE FIVE STATES, and MIXED is the one that earns its place. A bearish daily
 sitting over a bullish 4H is the case a trader actually asks about, and the
 honest answer is that the rungs disagree — not whichever one a tie-break
