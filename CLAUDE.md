@@ -109,15 +109,30 @@ from the newest mtime under `static/`, so hand-editing them changes nothing and
 asserting on the numbers on disk tests a value that is never served.
 `test_default_cockpit_route.py` pins the real behaviour.
 
-**Scripted edits and regex escapes.** Writing `\b` into a file through a patch
-script can land a literal `0x08` byte instead of the two characters. The result
-passes `node --check`, matches on a served-file diff and reads correctly in the
-source, while the regex silently never matches. Check bytes after any scripted
-edit that contains an escape:
+**Scripted edits and escapes.** Writing an escape into a file through a patch
+script can land the byte it denotes instead of the characters that spell it.
+`\b` becomes a literal `0x08`. A CSS `\25B8` gets read as C octal and becomes
+`0x15` followed by the leftover text `B8`. The result passes `node --check`,
+matches on a served-file diff and reads correctly in the source, so nothing
+announces it. What breaks depends on where it lands — a regex that silently
+never matches, or a `content:` rule that paints the leftover hex on screen.
+
+Searching will not surface it; it hides it. On a directory traversal ripgrep
+classifies the file as binary and skips it with no message at all, and `grep
+-r` prints `Binary file ... matches` with the line suppressed. Handed the path
+explicitly, ripgrep reads it as text either way, so a targeted check looks
+fine while a broad one silently loses the file.
+
+Scan bytes after any scripted edit containing an escape. Counting `0x08` alone
+misses most of them — `0x0b` and `0x0c` in particular fall in the range most
+filters skip. From the repo root:
 
 ```
-python -c "raw=open('static/tracer.js','rb').read(); print(raw.count(b'\x08'))"
+python -c "import pathlib;bad=lambda r:[i for i,b in enumerate(r) if b<32 and b not in (9,10,13)];[print(p,bad(p.read_bytes())[:8]) for p in pathlib.Path('app').rglob('*') if p.suffix in {'.js','.py','.css','.html'} and bad(p.read_bytes())]"
 ```
+
+Silence is a pass. At `c30f031` it printed two files and nine bytes, fixed in
+`216c819` and `84aa15c`.
 
 **Verifying in the browser.** The preview pane cannot screenshot while hidden —
 drive the page with `javascript_tool` instead. Chart price lines are drawn on a
