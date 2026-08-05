@@ -24,8 +24,8 @@ engine you changed, and bump those too.
 """
 import unittest
 
-from engine import (breakout, cooldowns, cycles, execsim, venues, liquidity, ma,
-                    manual, momentum, ranges, regime,
+from engine import (bias, breakout, cooldowns, cycles, execsim, venues,
+                    liquidity, ma, manual, momentum, ranges, regime,
                     risk, scalein, setups, structure, swings, volatility,
                     volume, zones, trend)
 
@@ -51,6 +51,12 @@ LOCKED = {
     # because a version that only starts being tracked once something reads it
     # is a version whose early facts nobody can place.
     "trend": trend.TREND_VERSION,
+    # The shared top-down layer. It writes NO facts of its own and still gets a
+    # version, for the reason `cycles` does: it decides the content of facts
+    # other engines write, so a rule change here changes their payloads while
+    # every version constant they import stays put. That is the cascade in its
+    # most invisible form and it is exactly what this file exists to catch.
+    "bias": bias.BIAS_VERSION,
     "venues": venues.VENUES_VERSION,
     # Observational satellite with no consumers — locked anyway, because
     # "nothing reads it" is exactly how it went dead unnoticed for 21 hours.
@@ -138,7 +144,21 @@ EXPECTED = {
     "risk": "risk-v0.19-draft",
     "scale": "scale-v0.14-draft",
     "cooldown": "cooldown-v0.8-draft",
-    "breakout": "breakout-v0.4-draft",
+    # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
+    # every setup they emit. No rule changed in either and no trade differs —
+    # both policies are ALLOW everywhere — but the payload does, and a payload
+    # change under a live tag is two generations under one label.
+    #
+    # NOTHING DOWNSTREAM MOVES, and the reason is worth stating rather than
+    # inferring from the absence: neither engine has consumers. `execsim` and
+    # `risk` read SETUP_VERSION and SCALE_VERSION only, so no exec fact, no
+    # equity curve and no cooldown series changes. `setup` does not move
+    # either: it now imports the ladder from `bias` instead of defining it, and
+    # the values are identical, so every setup payload is byte-for-byte what it
+    # was. The day `setups.py` starts recording a bias block — step 3 of the
+    # plan — that stops being true and setup/exec/risk/scale/cooldown all move
+    # together.
+    "breakout": "breakout-v0.5-draft",
     # trend-v0.1: NEW ENGINE, measured and not enabled. It arrives because
     # grading the MA against the book found LONG x ABOVE = 0 and
     # SHORT x BELOW = 0 across all 477 closed trades — both shipped playbooks
@@ -147,7 +167,14 @@ EXPECTED = {
     # trend-*), but it sits downstream of `ma` and `swing`: it computes the
     # ribbon with ma.ema / ma.sma and takes targets from INTERMEDIATE+ swings,
     # so both appear in its CONSUMERS entries and a bump to either moves this.
-    "trend": "trend-v0.1-draft",
+    "trend": "trend-v0.2-draft",
+    # bias-v0.1: NEW SHARED LAYER, record-only. It arrives because three
+    # engines answered "does the higher timeframe matter" three different ways
+    # — scalein gates hard, setups records and ignores, trend did not look at
+    # all — and none of those three answers was chosen by measurement. It reads
+    # `regime` and `structure` facts and writes none of its own, so it is
+    # downstream of both and upstream of every playbook that records it.
+    "bias": "bias-v0.1-draft",
     "venues": "venues-v0.2-draft",
     "cycles": "cycles-v0.2-draft",
     # manual-v0.2: partial exits. The one bump on this line with NO cascade, and
@@ -197,10 +224,18 @@ CONSUMERS = {
     # structure: setup and breakout both read structure facts.
     "swing": ("structure", "zone", "liquidity", "ranges", "momentum",
               "setup", "breakout", "trend"),
-    "structure": ("regime", "scale", "setup", "breakout"),
+    "structure": ("regime", "scale", "setup", "breakout", "bias"),
     "zone": ("setup",),
     "liquidity": ("setup",),
-    "regime": ("setup",),
+    "regime": ("setup", "bias"),
+    # The bias layer's consumers are the playbooks that RECORD its reading.
+    # `setup` is listed on CODE-level terms only for now — it imports the
+    # ladder constant, and identical values mean its facts did not change —
+    # but the entry is here rather than added later because the moment step 3
+    # lands and setups records a bias block, the coupling becomes a fact-level
+    # one and this map must already have said so. A consumer added in the same
+    # commit as the bump it was supposed to warn about warns nobody.
+    "bias": ("trend", "breakout", "setup"),
     "setup": ("exec", "risk", "scale"),
     "exec": ("risk", "scale", "cooldown"),
     "cooldown": ("risk",),

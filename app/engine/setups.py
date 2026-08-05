@@ -22,6 +22,7 @@ import json
 from decimal import Decimal
 
 from . import store
+from .bias import LADDER as HTF_LADDER      # noqa: F401  (re-export; see below)
 from .swings import compute_atr, quote_ticks, SWING_VERSION
 from .zones import ZONE_VERSION
 from .liquidity import LIQ_VERSION
@@ -184,10 +185,12 @@ MAX_TARGET_R = Decimal(3)
 ENTRY_MODEL = "MAKER_THEN_MARKET"
 MAKER_OFFSET_R = Decimal("0.10")
 MAKER_WAIT_BARS = 2
-# The higher timeframe each timeframe defers to, for the HTF-alignment factor.
-# scalein.py already encodes the principle — "the higher timeframe GATES the
-# lower" — it was simply never applied to the primary entry.
-HTF_LADDER = {"15m": "1H", "1H": "4H", "4H": "1D", "1D": "1W", "1W": None}
+# The higher timeframe each timeframe defers to. THE LADDER NOW LIVES IN
+# `engine/bias.py` and is imported above under this name, which every existing
+# reader (server.py, this module) keeps using. Two copies of one ladder is the
+# same disease as two copies of one fill model — they agree until one moves.
+# The values are unchanged by that move, so no setup fact differs and this
+# version does not bump; see tests/test_version_cascade.py.
 # D1 — premium/discount. Where price sits between the most recent opposing
 # INTERMEDIATE+ swings, 0 = at the low, 100 = at the high. Cheap, and genuinely
 # ORTHOGONAL to everything else recorded here: buying a demand zone in the lower

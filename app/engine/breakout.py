@@ -35,7 +35,7 @@ evidence rather than shipped on plausibility.
 import json
 from decimal import Decimal
 
-from . import costs, store
+from . import bias, costs, store
 from .liquidity import LIQ_VERSION
 from .regime import REGIME_VERSION
 from .runlog import RunRecorder
@@ -45,7 +45,30 @@ from .setups import (CONFIRM_MAX_BARS, ENTRY_MAX_BARS, ENTRY_MODEL, GOOD_RR,
 from .structure import STRUCTURE_VERSION
 from .swings import SWING_VERSION, compute_atr, quote_ticks
 
-BREAKOUT_VERSION = "breakout-v0.4-draft"
+BREAKOUT_VERSION = "breakout-v0.5-draft"
+# v0.5: records the TOP-DOWN BIAS BLOCK on every setup. No rule changed and no
+# trade differs — `BIAS_POLICY` is ALLOW everywhere. The version moves because
+# the payload does.
+#
+# This engine is the reason the bias layer is a SHARED module rather than a
+# field on the trend playbook. It was ungraded on arrival and stayed that way
+# (n=55, -0.076 R, CI [-0.545, +0.426] on 2026-07-30 — indistinguishable from
+# zero), and a retest trade has an obvious top-down question of its own: a
+# broken level that holds is worth more in the direction the rungs above are
+# already going. Recording it here costs nothing and means the question is
+# answerable for this cohort the day anyone asks, instead of needing a version
+# bump and a re-run first.
+
+#: What this playbook does about each bias alignment. RECORD-ONLY in v0.5 —
+#: every state ALLOWs. See engine/bias.py for the vocabulary and for why
+#: UNKNOWN may never be anything but ALLOW.
+BIAS_POLICY = bias.validate_policy({
+    "WITH": "ALLOW",
+    "AGAINST": "ALLOW",
+    "MIXED": "ALLOW",
+    "FLAT": "ALLOW",
+    "UNKNOWN": "ALLOW",
+}, who="breakout.BIAS_POLICY")
 # v0.4: cascade from structure-v0.12 (same-bar pivot pairs no longer shadow
 # each other in the break series this engine trades from).
 # v0.3: cascade from swing-v0.9 and structure-v0.11. Targets come from
@@ -88,9 +111,12 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             "min_rr": str(MIN_RR), "max_target_r": str(MAX_TARGET_R),
             "entry_model": ENTRY_MODEL,
             "cost_profile": profile.payload(),
+            "bias_policy": dict(BIAS_POLICY),
             "inputs": {"structure": STRUCTURE_VERSION, "swing": SWING_VERSION,
-                       "regime": REGIME_VERSION, "liquidity": LIQ_VERSION},
+                       "regime": REGIME_VERSION, "liquidity": LIQ_VERSION,
+                       **bias.inputs()},
         })
+        bias_src = bias.load(con, symbol, tf)
 
         breaks = []
         for r in store.get_facts(con, symbol, tf, "structure", STRUCTURE_VERSION):
@@ -216,6 +242,9 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                         f"retest {ci - i0} bars later · confirmed by a close back "
                         f"{'above' if direction == 'LONG' else 'below'} it · "
                         f"R:R {rr}"),
+                # Top-down annotation, read as-of `bct` — a setup may only know
+                # the rungs that had already confirmed when it triggered.
+                "bias": bias_src.check(direction, bct, tf_seconds, BIAS_POLICY),
                 "manifest_hash": manifest_hash,
                 "cost_manifest_hash": cost_manifest_hash,
                 "armed": False, "armed_at": bct,

@@ -57,12 +57,28 @@ for the same reason:
 
 So this changes WHERE a trade comes from, not HOW it is executed or sized.
 
-**MEASURED AND NOT ENABLED.** It emits setup facts under its own version, which
-neither `execsim` nor `risk` queries, so it trades nothing — the same
-structural isolation that keeps `breakout` out of the book. It ships switched
-off, it accumulates a sample, and it earns a place only by clearing the same
-bar every other factor here has failed: an interval above zero. Shipping it on
-plausibility is exactly what this codebase refuses to do.
+**MEASURED AND NOT ENABLED — and the gate has now been RUN.** It emits setup
+facts under its own version, which neither `execsim` nor `risk` queries, so it
+trades nothing: the same structural isolation that keeps `breakout` out of the
+book. The bar was an interval above zero. It did not clear it, and this is not
+the usual "indistinguishable from zero" verdict:
+
+    TREND_CONTINUATION   n=2816   -0.1500 R   CI [-0.214, -0.086]   P(>0) 0.0%
+    win 29.1%   PF 0.82   -422.5 R total        (2026-08-04, calibrated harness)
+
+The interval sits ENTIRELY BELOW zero. Working the payoff back out of those
+numbers, the average win is ~2.0x the average loss, so the bracket geometry is
+doing its job — break-even at 2:1 needs a 33.3% hit rate and this gets 29.1%.
+It is a coherent strategy whose entries are about four points short of what its
+own geometry requires, consistently, across 2,816 trades.
+
+So it STAYS not enabled, and it keeps earning its place anyway: the AGREES
+trades it records are still the only evidence that can grade a trend-following
+factor at all, and "buying strength loses ~0.15 R a go in this universe" is
+itself the first real finding about it. An engine can be worth running and not
+worth trading. Executing it would put -422 R into the book to learn something
+the harness already computed for free — see the v0.2 note for what that
+measurement made unanswerable, and what v0.2 records so it stops being so.
 
 Usage (from app/):
   python -m engine.trend BTCUSDT 1H
@@ -70,7 +86,7 @@ Usage (from app/):
 import json
 from decimal import Decimal
 
-from . import costs, ma, store
+from . import bias, costs, ma, store
 from .ma import MA_VERSION
 from .setups import (ENTRY_MAX_BARS, ENTRY_MODEL, MAKER_OFFSET_R,
                      MAKER_WAIT_BARS, MAX_TARGET_R, MIN_RR,
@@ -79,7 +95,56 @@ from .setups import (ENTRY_MAX_BARS, ENTRY_MODEL, MAKER_OFFSET_R,
 from .runlog import RunRecorder
 from .swings import SWING_VERSION, compute_atr, quote_ticks
 
-TREND_VERSION = "trend-v0.1-draft"
+TREND_VERSION = "trend-v0.2-draft"
+# v0.2: records the TOP-DOWN BIAS BLOCK on every setup. No rule changed and no
+# trade differs — `BIAS_POLICY` below is ALLOW everywhere, so nothing is
+# filtered. The version moves because the payload does, and a payload change
+# under a live tag is how two generations end up under one label.
+#
+# It exists because v0.1 could not answer the question its own losses raise.
+# Graded through the calibrated harness on 2026-08-04: n=2,816, -0.1500 R,
+# CI [-0.214, -0.086], P(>0) 0.0% — the interval sits ENTIRELY BELOW zero, so
+# unlike every other factor measured this week this one is not
+# "indistinguishable from zero", it is a loss. The obvious next question is
+# whether the losers are the trades taken against the timeframes above them —
+# and v0.1 recorded no higher-timeframe field of any kind, so that question was
+# unanswerable from its own facts. 2,977 setups that cannot be interrogated.
+# Recording first and grading second is the only order that fixes it.
+
+#: What this playbook does about each bias alignment. RECORD-ONLY in v0.2:
+#: every state ALLOWs, so the reading is written and nothing is filtered.
+#: The values flip only where the replay shows filtering beats not filtering,
+#: per playbook — see docs/SPEC-confirmed-entry.md §1.4 for the bar a factor
+#: clears before it may gate.
+#:
+#: When it does flip, the shape this one wants is now MEASURED rather than
+#: assumed. Graded 2026-08-04 by re-reading all 2,823 replayed trades as-of
+#: through `bias` and asking what each policy would have kept:
+#:
+#:     WITH      n= 732   -0.0245 R        best bucket
+#:     MIXED     n= 425   -0.0624 R
+#:     FLAT      n= 832   -0.2172 R        P(>0) 0.0%
+#:     AGAINST   n= 744   -0.2191 R        P(>0) 0.0%
+#:
+#:     unfiltered  -0.1498 R   CI [-0.213, -0.087]   n=2823
+#:     only-WITH   -0.0639 R   CI [-0.182, +0.058]   n= 822   +0.086 R/trade
+#:
+#: Filtering to WITH is worth +0.086 R/trade here and moves this playbook off
+#: an interval entirely below zero — from proven-losing to unproven. It is NOT
+#: an edge and this does not become enabled on it. Note that FLAT is as bad as
+#: AGAINST: a continuation trade needs the rungs above to be going somewhere,
+#: and "nothing trending above" fails it just as hard as "trending against".
+#:
+#: The same filter costs the live counter-move book -0.109 R/trade, which is
+#: the whole case for policy being per-playbook data rather than one global
+#: rule. See engine/bias.py for the full table.
+BIAS_POLICY = bias.validate_policy({
+    "WITH": "ALLOW",
+    "AGAINST": "ALLOW",
+    "MIXED": "ALLOW",
+    "FLAT": "ALLOW",
+    "UNKNOWN": "ALLOW",
+}, who="trend.BIAS_POLICY")
 
 #: How near the fast average counts as a pullback. Wider than the break
 #: tolerance on purpose: a trend pullback that only grazes the average is not
@@ -177,11 +242,20 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             "entry_model": ENTRY_MODEL,
             "ribbon": [[n, k, p] for n, k, p in ma.RIBBON],
             "cost_profile": profile.payload(),
-            # No `regime` input, deliberately — see the docstring. `ma` is
-            # listed because this computes the ribbon with ma's functions, so
-            # an ma rule change is a rule change here.
-            "inputs": {"ma": MA_VERSION, "swing": SWING_VERSION},
+            "bias_policy": dict(BIAS_POLICY),
+            # The TRIGGER still takes no `regime` input — see the docstring;
+            # coupling the entry to a regime label would invalidate every setup
+            # here on a regime bump for reasons unrelated to the trade. The
+            # bias block is different in kind: it is an ANNOTATION recorded
+            # alongside the setup, never consulted to decide it, so `regime`
+            # enters through `bias` as an input to what this fact SAYS rather
+            # than to what it DOES. The day BIAS_POLICY stops being ALLOW
+            # everywhere, that distinction ends and this comment must change
+            # with it.
+            "inputs": {"ma": MA_VERSION, "swing": SWING_VERSION,
+                       **bias.inputs()},
         })
+        bias_src = bias.load(con, symbol, tf)
 
         tier_swings = {"HIGH": [], "LOW": []}
         for r in store.get_facts(con, symbol, tf, "swing", SWING_VERSION):
@@ -322,6 +396,9 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                         f"{'' if bars_pulling == 1 else 's'} and closed back "
                         f"{'above' if want == 'LONG' else 'below'} the ribbon "
                         f"· R:R {rr}"),
+                # Top-down annotation. Read as-of `bct` so a setup can only
+                # know the rungs that had already confirmed when it triggered.
+                "bias": bias_src.check(want, bct, tf_seconds, BIAS_POLICY),
                 "manifest_hash": manifest_hash,
                 "cost_manifest_hash": cost_manifest_hash,
                 "armed": False, "armed_at": bct,
