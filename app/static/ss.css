@@ -665,6 +665,14 @@ body:not(.dev) #consolePanel{display:none}
   /* The bar tightens instead of overflowing: smaller gap and gutter, a smaller
      mark, and chips that truncate rather than push. HALT is flex:none so it is
      the one thing that never shrinks and never moves. */
+  /* Panel heads wrap instead of pushing their chip off the edge. The head is a
+     flex row with the chip on margin-left:auto, so once heading plus chip
+     exceed the width the chip travels past the right edge rather than moving
+     down — and .panel-head is overflow:visible, so nothing clips it and nothing
+     scrolls to it. Setup Telemetry's chip sat at 406-457px in a 412px viewport,
+     reading "no data" to nobody. */
+  .panel-head{flex-wrap:wrap;row-gap:var(--xs)}
+
   .topbar{gap:var(--sm);padding:0 var(--sm)}
   .topbar > *{min-width:0}
   .topbar .chip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
