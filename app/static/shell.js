@@ -1693,9 +1693,15 @@ weighed in. Name the facts you used.`;
     const id = btn.getAttribute('data-cancel');
     const row = (MINE.open || []).find(r => r.intent_id === id);
     const what = row ? `${tokenOf(row.symbol)} ${row.tf} ${row.direction.toLowerCase()} at ${px(+row.entry)}` : 'this order';
-    if(!confirm(`Cancel ${what}?\n\nIt has not filled, so nothing has been ` +
-                `risked and nothing is recorded as a loss. The cancellation ` +
-                `itself is kept, so your book still says what happened to it.`)) return;
+    if(!await SSConfirm({
+      title: 'Cancel this order?',
+      lead: what,
+      rows: ['It has not filled, so nothing has been risked and nothing is ' +
+             'recorded as a loss.',
+             'The cancellation itself is kept, so your book still says what ' +
+             'happened to it.'],
+      confirmLabel: 'Cancel the order'
+    })) return;
     btn.disabled = true;
     try{
       const r = await fetch('/api/manual/cancel', {
@@ -2005,11 +2011,16 @@ weighed in. Name the facts you used.`;
               `entry ${pos.entry}`,
               r0 == null ? 'result so far unknown'
                          : `closing at ${r0 >= 0 ? '+' : ''}${r0}R`,
-              '',
-              'This ends the trade on your paper book now, at the last closed',
-              "bar. The engine's own simulation of the setup carries on.",
             ];
-            if(!confirm('Close this position?\n\n' + lines.join('\n'))) return;
+            if(!await SSConfirm({
+              title: 'Close this position?',
+              rows: lines,
+              note: 'This ends the trade on your paper book now, at the last ' +
+                    "closed bar. The engine's own simulation of the setup " +
+                    'carries on.',
+              confirmLabel: 'Close it',
+              tone: 'danger'
+            })) return;
           }
 
           const was = c.textContent;
@@ -2952,20 +2963,27 @@ weighed in. Name the facts you used.`;
       .filter(k => (specOf(k) || {}).class === 'BEHAVIOURAL');
     if(behavioural.length){
       const names = behavioural.map(settingLabel).join(', ');
-      if(!confirm(
-        `Apply these rule changes?\n\n${names}\n\n` +
-        'This starts a NEW forward window: your existing record is kept but ' +
-        'stops accumulating, because a record spanning two configurations ' +
-        'cannot tell you which one produced which result.\n\n' +
-        'Nothing is deleted.')) return;
+      if(!await SSConfirm({
+        title: 'Apply these rule changes?',
+        lead: names,
+        rows: ['This starts a NEW forward window: your existing record is kept ' +
+               'but stops accumulating, because a record spanning two ' +
+               'configurations cannot tell you which one produced which result.'],
+        note: 'Nothing is deleted.',
+        confirmLabel: 'Apply and start a new window'
+      })) return;
     }
     b.disabled = true; b.textContent = 'Applying…';
     try{
       const d = await applySettings(changes, 'scanner setup');
       setPending = {};
       await refresh();
-      if(d.baseline) alert('New forward window started (baseline #' + d.baseline.id +
-        ').\nYour previous record is retained, but stops accumulating.');
+      /* A result, not a decision. alert() blocked the page for a fact the
+         operator can do nothing about; toast is where every other outcome in
+         this app reports, and it is the aria-live region a screen reader is
+         already listening to. */
+      if(d.baseline) toast('New forward window started (baseline #' + d.baseline.id +
+        '). Your previous record is retained, but stops accumulating.', 'ok');
     }catch(err){ markDegraded(String(err)); }
     b.textContent = 'Apply';
     syncSettingInputs(); patchSettingsState();
@@ -2977,8 +2995,14 @@ weighed in. Name the facts you used.`;
 
   $('btnHalt').addEventListener('click', async e => {
     const b = e.currentTarget, halting = !setValues.halted;
-    if(halting && !confirm('Halt the scanner?\n\nNo NEW entries will be sized. ' +
-        'Open positions still settle — refusing to close a position is not safety.')) return;
+    if(halting && !await SSConfirm({
+      title: 'Halt the scanner?',
+      rows: ['No NEW entries will be sized.',
+             'Open positions still settle — refusing to close a position is ' +
+             'not safety.'],
+      confirmLabel: 'Halt',
+      tone: 'danger'
+    })) return;
     b.disabled = true;
     try{
       await applySettings({halted: halting}, halting ? 'operator halt' : 'operator resume');
@@ -3201,7 +3225,7 @@ weighed in. Name the facts you used.`;
       if(input) input.value = '';        // never leave a secret in the DOM
       window.SSData.invalidate('/api/credentials');
       await loadCredentials();
-    }catch(err){ alert('Could not save credential: ' + err.message); }
+    }catch(err){ toast('Could not save credential: ' + err.message, 'bad'); }
   });
 
   /* where candidates die, stage by stage — the operator's debugging view */

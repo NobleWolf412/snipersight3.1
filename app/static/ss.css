@@ -118,6 +118,59 @@
 [data-mode="live"] {--accent:var(--red);  --accent-rgb:255,100,100}
 [data-mode="idle"] {--accent:var(--green);--accent-rgb:0,255,170}
 
+/* ---------- the confirmation at the money ----------
+
+   Arm, Close, Cancel, Halt and Apply were native window.confirm(). The words
+   were already the best in the product; the box was system chrome in a system
+   font, with no way to give "$201 at risk" more weight than "4H", and on some
+   mobile platforms a truncated body — which would cut the flung-level warning
+   chart.js deliberately puts last so it cannot be scrolled past.
+
+   Same shape as the wizard's .dx-modal so the app has one dialog language, but
+   its own rules: that stylesheet is lazy-loaded when funnel/tracer/wizard mount,
+   and the confirmation on the money path must not race a fetch to render. */
+.ssc-wrap{position:fixed;inset:0;z-index:9000;display:flex;
+  align-items:center;justify-content:center;padding:var(--lg)}
+.ssc-scrim{position:absolute;inset:0;background:rgba(0,0,0,.62)}
+.ssc-box{position:relative;width:min(520px,100%);max-height:min(86vh,860px);
+  display:flex;flex-direction:column;
+  background:var(--bg-2);border:1px solid var(--border);
+  border-radius:var(--r-xl);box-shadow:0 30px 80px rgba(0,0,0,.6);
+  animation:sscLift .18s cubic-bezier(.22,.9,.3,1)}
+.ssc-box.danger{border-color:rgba(255,100,100,.5)}
+@keyframes sscLift{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion: reduce){.ssc-box{animation:none}}
+
+.ssc-head{padding:var(--md) var(--lg);border-bottom:1px solid var(--border-soft);flex:none}
+.ssc-title{font-family:var(--f-display);font-size:var(--fs-4);letter-spacing:.18em;
+  text-transform:uppercase;color:var(--fg)}
+.ssc-body{overflow:auto;padding:var(--lg);font-family:var(--f-mono);font-size:var(--fs-1)}
+.ssc-lead{font-family:var(--f-mono);font-size:var(--fs-2);color:var(--fg);
+  letter-spacing:.06em;margin-bottom:var(--sm)}
+/* The deciding number, at the scale the decision deserves. In a text dialog it
+   was one line among eleven, in the same weight as the timeframe. */
+.ssc-emph{font-family:var(--f-display);font-size:var(--fs-6);line-height:1.1;
+  color:var(--accent);margin:var(--sm) 0 var(--md)}
+.ssc-row{display:flex;gap:var(--md);padding:3px 0;align-items:baseline}
+.ssc-k{color:var(--fg-4);min-width:11ch;flex:none}
+.ssc-v{color:var(--fg-2);font-variant-numeric:tabular-nums}
+.ssc-line{color:var(--fg-2);padding:3px 0;line-height:1.5}
+.ssc-gap{height:var(--sm)}
+/* The one thing that must survive a truncated body, so it is styled to be seen
+   rather than positioned to be reached. */
+.ssc-warn{margin-top:var(--md);padding:var(--sm) var(--md);
+  border:1px solid rgba(255,194,102,.4);border-radius:var(--r-md);
+  background:rgba(255,194,102,.08);color:var(--amber);line-height:1.5}
+.ssc-foot{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap;
+  padding:var(--md) var(--lg);border-top:1px solid var(--border-soft);flex:none}
+.ssc-note{flex:1 1 200px;font-family:var(--f-mono);font-size:var(--fs-1);
+  color:var(--fg-3);line-height:1.4}
+@media(max-width:640px){
+  .ssc-wrap{padding:0;align-items:flex-end}
+  .ssc-box{width:100%;max-height:92vh;border-radius:var(--r-xl) var(--r-xl) 0 0}
+  .ssc-foot .btn{flex:1 1 auto}
+}
+
 *{box-sizing:border-box;margin:0;padding:0}
 /* Off-screen until focused, then the first thing a keyboard reaches. */
 .skip-link{position:fixed;left:var(--shell-x);top:-60px;z-index:9500;

@@ -2038,33 +2038,46 @@ window.SSChart = (() => {
            0.20063" reads as plausible at any distance; "1.8% away" is a plan
            and "14% away" is a slip. */
         const stopAway = armedEntry ? Math.abs(armedEntry - levels.sl) / armedEntry * 100 : null;
+        /* `key: value`, so the dialog lays them out as a table and the deciding
+           figure can be lifted out of the list entirely. Same strings, one
+           separator changed. */
         const lines = [
-          `${String(armedDir).toUpperCase()} ${sym} ${tf}`,
-          `entry ${pf(armedEntry)}${away == null ? ''
+          `entry: ${pf(armedEntry)}${away == null ? ''
             : Math.abs(away) < 0.05 ? ' · at market'
             : ` · ${Math.abs(away).toFixed(1)}% ${away > 0 ? 'above' : 'below'} market`}`,
-          `stop ${pf(levels.sl)}${stopAway == null ? ''
+          `stop: ${pf(levels.sl)}${stopAway == null ? ''
             : ` · ${stopAway.toFixed(2)}% from entry`}`,
-          `target ${pf(levels.tp)}`,
-          `risking ${usd(riskUsd)}${cfg && cfg.max_leverage > 1 && leverage > 1
-            ? ` at ${leverage}x` : ''}`,
+          `target: ${pf(levels.tp)}`,
         ];
         // The rung belongs in the restatement for the same reason the levels
         // do: it changes what the trade settles for, and the last word before
         // committing should be the action's own terms.
         if(scalePlan)
-          lines.push(`taking ${Math.round(scalePlan.fraction * 100)}% off at ` +
+          lines.push(`scale-out: ${Math.round(scalePlan.fraction * 100)}% off at ` +
                      `${pf(scalePlan.price)} (+${scalePlan.atR}R)`);
         // A flung level is restated where it cannot be scrolled past. The
         // ticket already says it, but the ticket is what the operator has
         // stopped reading by the time they reach for Arm.
-        if(flung)
-          lines.push('', `⚠ your last drag made the risk ${flung.factor.toFixed(1)}x ` +
-                         `${flung.wider ? 'wider' : 'tighter'}`);
-        lines.push(
-          '',
-          'PAPER — this writes to your paper book. No real order is sent.');
-        if(!confirm('Arm this trade?\n\n' + lines.join('\n'))) return;
+        /* The flung-level warning was pushed LAST so it could not be scrolled
+           past. In a native dialog that was the only lever available, and on a
+           platform that truncates the body it failed anyway. It is now a
+           bordered block above the buttons: it cannot be cut without cutting
+           the buttons with it. */
+        const flungWarn = flung
+          ? `Your last drag made the risk ${flung.factor.toFixed(1)}x ` +
+            `${flung.wider ? 'wider' : 'tighter'}.`
+          : '';
+        if(!await SSConfirm({
+          title: 'Arm this trade?',
+          lead: `${String(armedDir).toUpperCase()} ${sym} ${tf}`,
+          // the figure a mis-drag corrupts, at the scale the decision deserves
+          emphasis: `risking ${usd(riskUsd)}${cfg && cfg.max_leverage > 1 && leverage > 1
+            ? ` at ${leverage}x` : ''}`,
+          rows: lines,
+          warn: flungWarn,
+          note: 'PAPER — this writes to your paper book. No real order is sent.',
+          confirmLabel: 'Arm (paper)'
+        })) return;
       }
       btn.disabled = true;
       out.textContent = 'arming…';

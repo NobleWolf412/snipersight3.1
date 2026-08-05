@@ -1002,6 +1002,9 @@
 <script defer src="/static/ssdata.js?v=20"></script>
 <script defer src="/static/ticket-math.js?v=20"></script>
 <script defer src="/static/glossary.js?v=20"></script>
+<!-- Before chart.js and shell.js: both call SSConfirm at their commit points,
+     and defer scripts run in document order. -->
+<script defer src="/static/confirm-dialog.js?v=20"></script>
 <script defer src="/static/chart.js?v=20"></script>
 <!-- funnel.js FIRST: it owns the plain-language reason dictionary that
      shell.js reads on its very first render. Deferred scripts execute in
