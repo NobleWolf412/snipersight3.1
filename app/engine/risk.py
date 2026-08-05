@@ -23,7 +23,12 @@ from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.19-draft"
+RISK_VERSION = "risk-v0.20-draft"
+# v0.20: cascade from setup-v0.17 / exec-v0.21 / cooldown-v0.9 (the top-down
+# bias block upstream). No sizing rule changed and this engine does not read
+# `bias`; it replays the whole account from setup and exec facts, so a new
+# generation of those is a new equity curve and a new set of decisions even
+# when every rule is identical. Leaving the tag put is the S37/S40 defect.
 # v0.19: cascade from setup-v0.16 / exec-v0.20 / cooldown-v0.8
 # (magnitude-scaled WHY prices upstream).
 # v0.18: cascade from setup-v0.15 / exec-v0.19 / cooldown-v0.7 (the same-bar

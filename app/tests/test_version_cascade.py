@@ -122,7 +122,16 @@ EXPECTED = {
     # fact, so the same candidates re-derived under v0.15 would have appended
     # near-duplicates. setup_id is version-scoped, and the trading tail
     # (exec / risk / scale / cooldown) reads the new book, so all four move.
-    "setup": "setup-v0.16-draft",
+    # setup-v0.17 + the whole trading tail: VALIDATED setups now carry the
+    # top-down bias block from `engine/bias.py`. No strategy rule changed, no
+    # trade differs (the policy is ALLOW everywhere) and nothing downstream
+    # READS the block — but `setup_id` is version-scoped and the payload moved,
+    # so every exec/order fact of this generation joins to a v0.17 plan.
+    # CONSUMERS["setup"] is ("exec", "risk", "scale") and CONSUMERS["exec"]
+    # adds "cooldown": risk replays the account from these facts, scalein only
+    # adds to a position the simulator says is open, and cooldowns are derived
+    # purely from recorded exits. All five move together.
+    "setup": "setup-v0.17-draft",
     # S50 cascade. exec-v0.13 -> v0.14 corrected the MAKER_THEN_MARKET crossing
     # leg, which booked a market fill at the PLAN's price — two bars stale, and
     # outside the fill bar's own [low, high] on 78 of 95 crossed orders, never
@@ -140,10 +149,10 @@ EXPECTED = {
     # are derived purely from recorded exits. All four move together.
     # scale ALSO changed on its own account — its economics gate now prices the
     # add on the add's own venue instead of the process-wide Coinbase default.
-    "exec": "exec-v0.20-draft",
-    "risk": "risk-v0.19-draft",
-    "scale": "scale-v0.14-draft",
-    "cooldown": "cooldown-v0.8-draft",
+    "exec": "exec-v0.21-draft",
+    "risk": "risk-v0.20-draft",
+    "scale": "scale-v0.15-draft",
+    "cooldown": "cooldown-v0.9-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
     # every setup they emit. No rule changed in either and no trade differs —
     # both policies are ALLOW everywhere — but the payload does, and a payload

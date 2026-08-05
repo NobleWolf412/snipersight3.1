@@ -20,7 +20,15 @@ from .setups import SETUP_VERSION
 from .swings import compute_atr
 from .runlog import RunRecorder
 
-EXEC_VERSION = "exec-v0.20-draft"
+EXEC_VERSION = "exec-v0.21-draft"
+# v0.21: cascade from setup-v0.17 (VALIDATED setups carry the top-down bias
+# block). The simulator executes whatever setups exist; a new setup generation
+# is a new order flow, the same reason as v0.18/v0.19/v0.20. NOTHING HERE READS
+# `bias` and no fill, cost or exit changed — the trades are the same trades.
+# The tag still moves, because `setup_id` is version-scoped, so every order and
+# exec fact this pass writes joins to a v0.17 plan and a consumer that mixed
+# them with v0.16 rows would be double-counting the same setups under two
+# generations. That is the S37/v0.14 defect and the version is what prevents it.
 # v0.20: cascade from setup-v0.16 (magnitude-scaled WHY prices upstream). The
 # simulator executes whatever setups exist; a new setup generation is a new
 # order flow.

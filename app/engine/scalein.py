@@ -28,7 +28,17 @@ from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.14-draft"
+SCALE_VERSION = "scale-v0.15-draft"
+# v0.15: cascade from setup-v0.17 / exec-v0.21 (the top-down bias block
+# upstream). Parents are SETUP_VERSION setups and an add is only placed against
+# a position exec says is open, so both input generations moved under it.
+#
+# Its adds carry NO bias block of their own, deliberately, and it is named in
+# `tests/test_bias.py` PENDING with this reason: an add inherits its parent's
+# bracket and already answers to the strictest higher-timeframe rule in the
+# system — no add exists without an open 4H/1D parent in the same direction. A
+# second policy here would be a second authority over one question, which is
+# the thing `engine/bias.py` was written to stop.
 # v0.14: cascade from setup-v0.16 / exec-v0.20 (magnitude-scaled WHY prices
 # upstream) — and the add's own WHY takes the same fix: the BOS price printed
 # at a flat .2f, which on a sub-dollar symbol reads "BOS at 0.09".

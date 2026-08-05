@@ -21,7 +21,7 @@ Every setup carries a plain-language WHY assembled from the facts it used (§8).
 import json
 from decimal import Decimal
 
-from . import store
+from . import bias, store
 from .bias import LADDER as HTF_LADDER      # noqa: F401  (re-export; see below)
 from .swings import compute_atr, quote_ticks, SWING_VERSION
 from .zones import ZONE_VERSION
@@ -30,7 +30,28 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.16-draft"
+SETUP_VERSION = "setup-v0.17-draft"
+# v0.17: VALIDATED setups now carry the TOP-DOWN BIAS BLOCK (`engine/bias.py`).
+# No strategy rule changed and no trade differs — `BIAS_POLICY` below is ALLOW
+# everywhere — but the payload does, and a payload change under a live tag is
+# two generations under one label. The whole trading tail moves with it:
+# exec-v0.21 / risk-v0.20 / scale-v0.15 / cooldown-v0.9.
+#
+# TWO READINGS OF THE HIGHER TIMEFRAME NOW SIT ON ONE FACT, and that is
+# deliberate for exactly one version. `confluence.htf_*` is the ONE-RUNG
+# reading this engine has always computed and the only confluence factor ever
+# measured above the noise floor; `bias` is the WHOLE-LADDER reading, which can
+# say MIXED and which the other playbooks share. They are kept side by side so
+# the obvious question can be settled with data instead of taste: does looking
+# up the whole ladder beat looking up one rung?
+#
+# THEY MUST NEVER BOTH BE PROMOTED. `docs/SPEC-confirmed-entry.md` §1.4 makes
+# redundancy an axis of the promotion criterion (|Pearson r| < 0.70 against
+# every promoted factor, one factor per information category) precisely so that
+# "what is the higher timeframe doing" cannot be counted twice. Whichever wins
+# that comparison, the loser is deleted rather than left as advice — a
+# correlated pair left in place is how the prior project got 26 factors that
+# were five.
 # v0.16: WHY text writes prices with magnitude-scaled decimals (`_fp`, chart.js
 # `digits()` exactly) instead of a flat .2f, which rendered every sub-dollar
 # zone as a degenerate range — ENA's journal read "supply zone 0.09-0.09", and
@@ -199,6 +220,34 @@ MAKER_WAIT_BARS = 2
 # location-within-range; zone strength measures the quality of a level, not
 # where that level sits.
 PD_LOOKBACK_SWINGS = 6
+
+#: What the live playbooks do about each bias alignment. RECORD-ONLY in v0.17:
+#: every state ALLOWs, so not one trade differs from v0.16.
+#:
+#: The values here are the ones with the most riding on them, and the grade
+#: says they should be approached with suspicion rather than enthusiasm.
+#: Measured 2026-08-04 over the 498 recorded trades, re-read as-of:
+#:
+#:     AGAINST   n=126   +0.2755 R   P(>0) 94.5%      the BEST bucket
+#:     FLAT      n=162   +0.0251 R
+#:     WITH      n=116   -0.0736 R
+#:     MIXED     n= 66   -0.2452 R
+#:
+#: Filtering this book to WITH costs -0.109 R/trade. Both playbooks here enter
+#: COUNTER-MOVE — REVERSAL fades an extreme, PULLBACK buys a dip — so a higher
+#: timeframe trending hard in the trade's direction means the move is already
+#: extended, and the book says so. The continuation playbook wants the exact
+#: opposite policy (+0.086 R/trade filtering to WITH); see engine/bias.py.
+#:
+#: So the plausible rule is the one that loses money here. That is the whole
+#: reason this ships as ALLOW and gets graded rather than shipping as a gate.
+BIAS_POLICY = bias.validate_policy({
+    "WITH": "ALLOW",
+    "AGAINST": "ALLOW",
+    "MIXED": "ALLOW",
+    "FLAT": "ALLOW",
+    "UNKNOWN": "ALLOW",
+}, who="setups.BIAS_POLICY")
 # D2 — HTF composite. `factorstats` measured htf_regime_aligned,
 # htf_align_strength and htf_regime_conviction as one cluster (r up to 0.93):
 # three names for "what is the higher timeframe doing". They are collapsed to a
@@ -461,8 +510,10 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             "maker_wait_bars": MAKER_WAIT_BARS,
             "enabled_strategies": sorted(enabled),
             "cost_profile": profile.payload(),
+            "bias_policy": dict(BIAS_POLICY),
             "inputs": {"swing": SWING_VERSION, "zone": ZONE_VERSION,
-                       "liquidity": LIQ_VERSION, "regime": REGIME_VERSION},
+                       "liquidity": LIQ_VERSION, "regime": REGIME_VERSION,
+                       **bias.inputs()},
         }
         manifest_hash = store.record_manifest(con, "strategy", strategy_manifest)
         cost_manifest_hash = costs.record(con, profile)
@@ -470,6 +521,12 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         ts_index = {c["open_ts"]: i for i, c in enumerate(candles)}
         atr = compute_atr(candles)
         ticks = quote_ticks(candles)
+
+        # The whole-ladder reading, loaded once. The one-rung `htf_regime_at`
+        # below stays as it is: it is what `factorstats` graded and what
+        # `entrystats` pins, and replacing it in the same change that
+        # introduces its rival would leave nothing to compare against.
+        bias_src = bias.load(con, symbol, tf)
 
         regimes = []
         for r in store.get_facts(con, symbol, tf, "regime", REGIME_VERSION):
@@ -1073,6 +1130,13 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                        "confirmed_bar_ts": cb["open_ts"],
                        "confirm_bars_waited": ci - i0,
                        "confluence": conf,
+                       # The whole-ladder reading, as-of the confirming close.
+                       # On VALIDATED only: this is the moment the trade exists,
+                       # and it is where a gate would act. A FORMING fact arms
+                       # earlier and its reading can differ, so carrying one
+                       # there would record a bias no decision was ever made on.
+                       "bias": bias_src.check(direction, bct, tf_seconds,
+                                              BIAS_POLICY),
                        "reversal_evidence": rev_ev,
                        "manifest_hash": manifest_hash,
                        "cost_manifest_hash": cost_manifest_hash,

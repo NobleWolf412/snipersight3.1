@@ -219,14 +219,12 @@ class PlaybookRoster(unittest.TestCase):
     #: with the reason. Emptying this is step 3 of the plan; anything NEW
     #: appearing in it is a playbook that skipped the decision.
     PENDING = {
-        # Live book. Wiring it changes setup payloads, which cascades through
-        # exec / risk / scale / cooldown — a real bump, taken deliberately in
-        # its own change rather than smuggled into the record-only one.
-        "setups",
         # Its adds inherit the parent's bracket and already answer to the
         # strictest HTF rule in the system (no add without an open 4H/1D
         # parent in the direction), so a second policy here would be a second
-        # authority over the same question.
+        # authority over the same question. Recorded in scalein.py's version
+        # note as well, so the reason travels with the code and not only with
+        # this set.
         "scalein",
     }
 
@@ -266,9 +264,11 @@ class PlaybookRoster(unittest.TestCase):
                         f"with the reason.")
 
     def test_the_wired_playbooks_are_record_only_for_now(self):
-        """Step 1 must not change a single trade. If a policy here stops being
-        ALLOW everywhere, that is step 4 and it needs its own grade."""
-        for mod in (trend, breakout):
+        """Recording must not change a single trade. If a policy here stops
+        being ALLOW everywhere, that is enforcement and it needs its own grade
+        — per playbook, because the grade says the two kinds want opposite
+        answers (bias.py holds the table)."""
+        for mod in (setups, trend, breakout):
             with self.subTest(playbook=mod.__name__):
                 self.assertEqual(set(mod.BIAS_POLICY.values()), {"ALLOW"})
 
