@@ -1789,3 +1789,11 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .dx-all>summary::before{content:"▸  ";color:var(--fg-4)}
 .dx-all[open]>summary::before{content:"▾  "}
 .dx-all>summary:hover{color:var(--fg-2)}
+
+/* A settled trade is a door to the bars it happened on. Same affordance as the
+   open-trade rows, so the two lists behave alike rather than one of them being
+   inert for no reason the reader can see. */
+.jnl-row.jnl-open{cursor:pointer}
+.jnl-row.jnl-open:hover{background:rgba(255,255,255,.03)}
+.jnl-row.jnl-open:focus-visible{outline:1px solid var(--accent);outline-offset:-2px;
+  border-radius:var(--r-sm)}

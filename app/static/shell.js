@@ -1896,7 +1896,19 @@ weighed in. Name the facts you used.`;
       // exists; the bare regime only as the fallback.
       const reason = j.why ? plainReason(j.why)
         : (j.regime ? String(j.regime).replace('_', ' ').toLowerCase() : '');
-      return `<div class="jnl-row${flat ? '' : up ? ' up' : ' down'}">
+      /* WHAT IT PAID, not just what it lost. `r_gross` and `costs_r` have been
+         in this payload all along and reached no surface, so a stop-out read
+         "risked $197 · -$219" and left the operator to wonder which number was
+         wrong. Neither is: a stop loses 1R of PRICE, and the round trip is
+         charged on top. Shown whenever costs are material. */
+      const costR = Number(j.costs_r);
+      const costTxt = isFinite(costR) && costR > 0.004
+        ? `${Math.abs(Number(j.r_gross)).toFixed(2)}R ${
+            Number(j.r_gross) < 0 ? 'loss' : 'gain'} + ${costR.toFixed(2)}R costs`
+        : '';
+      return `<div class="jnl-row jnl-open${flat ? '' : up ? ' up' : ' down'}"
+        data-jsid="${esc(j.setup_id || '')}" tabindex="0" role="button"
+        title="open this trade on the chart — the bars it happened on, with entry and exit marked">
         <div>
           <div class="t-mono" style="font-size:13px;color:var(--fg)">${
             j.direction === 'LONG' ? '<span class="dir-up">▲</span>' : '<span class="dir-dn">▼</span>'} ${
@@ -1920,6 +1932,31 @@ weighed in. Name the facts you used.`;
             style="width:${barW.toFixed(1)}%;${barR >= 0 ? 'left:50%' : 'right:50%'}"></i></span></div>
       </div>`;
     }).join('');
+  }
+
+  /* A settled trade opens on the bars it happened on. Results could tell you a
+     trade lost 1.11R and not show you where price went — the obvious next
+     question, and the surface had no answer to it. Delegated once, because the
+     rows are rebuilt on every refresh. */
+  if(!$('journal').dataset.openWired){
+    $('journal').dataset.openWired = '1';
+    const openTrade = row => {
+      const t = lastJournal.find(x => x.setup_id === row.dataset.jsid);
+      if(!t || !window.SSChart) return;
+      go('chart');
+      SSChart.open(t.symbol, t.tf, {trade: t});
+    };
+    $('journal').addEventListener('click', e => {
+      const r = e.target.closest('[data-jsid]');
+      if(r && r.dataset.jsid) openTrade(r);
+    });
+    $('journal').addEventListener('keydown', e => {
+      if(e.key !== 'Enter' && e.key !== ' ') return;
+      const r = e.target.closest('[data-jsid]');
+      if(!r || !r.dataset.jsid) return;
+      e.preventDefault();
+      openTrade(r);
+    });
   }
 
   function renderScoreboard(journal){
