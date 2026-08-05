@@ -435,6 +435,168 @@ class Child:
         self.start()
 
 
+ALERT_INTERVAL_SEC = 60           # how often the queue is drained
+HEARTBEAT_INTERVAL_SEC = 300      # how often the outside world hears from us
+SCANNER_DARK_AFTER_S = 300        # heartbeat age that means "it stopped"
+
+
+def alert_tick(state: dict, live, warmup: bool = False) -> dict:
+    """Find what the operator would want to know, queue it, and send the queue.
+
+    This is the ONLY sender. The scanner queues; nothing else in the system
+    opens a socket to announce anything, because notification work in the scan
+    loop is what killed it — 254s to death against 1055s and 13 clean cycles
+    with it off.
+
+    Three sources, and the split is deliberate:
+
+      · The kill switch and a resolved trade of the operator's own are read
+        straight from the fact store, because they have no equivalent of the
+        scanner's announce() gate and nothing else was ever going to notice
+        them. The kill switch has fired 23 times and been silent every one.
+
+      · The scanner going dark is read from its heartbeat file, which already
+        existed and which nothing acted on.
+
+      · Setups arrive already queued, from inside announce()'s baseline and
+        staleness filter. Re-deriving that filter here would be a second
+        authority on "is this worth announcing", and the first one is right.
+
+    NEVER from `exec` or `order`: that is the shadow simulation, 100-400 events
+    a day for trades nobody placed.
+    """
+    now = time.monotonic()
+    if not warmup and now - state.get("at", 0.0) < ALERT_INTERVAL_SEC:
+        return state
+    state = dict(state)
+    state["at"] = now
+
+    try:
+        sys.path.insert(0, str(APP))
+        import notify
+        from engine import store
+    except Exception as e:
+        log(f"alerts: import skip ({e})")
+        return state
+
+    try:
+        con = store.connect()
+    except Exception as e:
+        log(f"alerts: store unreachable ({e})")
+        return state
+    try:
+        # On the first tick, note where the store already is and announce
+        # nothing before it. Without this a fresh supervisor introduces itself
+        # by replaying the whole book — the same failure the audit warmup and
+        # announce()'s baseline filter each exist to prevent.
+        if state.get("last_id") is None:
+            state["last_id"] = con.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM facts").fetchone()[0]
+            return state
+
+        rows = con.execute(
+            "SELECT id, symbol, tf, kind, payload FROM facts "
+            "WHERE id > ? AND kind IN ('risk', 'manual_exec') ORDER BY id",
+            (state["last_id"],)).fetchall()
+        for fid, sym, tf, kind, payload in rows:
+            state["last_id"] = max(state["last_id"], fid)
+            try:
+                p = json.loads(payload)
+            except Exception:
+                continue
+
+            if kind == "risk" and p.get("event") == "KILL_SWITCH":
+                # KEYED WITHOUT THE MONEY, AND NOT RE-DERIVED.
+                #
+                # The risk engine replays the whole book on every run. Three
+                # records for the halt of 2026-07-30 carry daily_pnl -675.66,
+                # -678.13 and -678.85: same event, three numbers, because the
+                # figure is recomputed. A key containing it turns every replay
+                # into a fresh alarm.
+                #
+                # The payload already states its own `day`, so that is what is
+                # used — reading the engine's answer rather than deriving a
+                # second one from a timestamp. A first draft keyed off
+                # baseline_started_at instead, which is constant across a whole
+                # baseline: all 23 kill-switch facts collapsed to 2 alerts, so
+                # a halt on Monday and another on Thursday would have shared
+                # one. There are 15 distinct days in there.
+                day = p.get("day") or "unknown-day"
+                notify.enqueue(
+                    f"killswitch|{p.get('baseline_id')}|{day}",
+                    "⛔ Daily loss limit — trading halted",
+                    f"{p.get('reason') or 'kill switch tripped'} · "
+                    f"day {day} · equity {p.get('equity', '?')} · "
+                    f"limit {p.get('loss_limit_usd', '?')}",
+                    notify.LOUD)
+
+            elif kind == "manual_exec":
+                # The operator's OWN trade reaching its end. Their book, their
+                # money-shaped decision — the one outcome in the store that is
+                # about them rather than about the engine's simulation.
+                outcome = str(p.get("outcome") or "")
+                if outcome and outcome != "OPEN":
+                    notify.enqueue(
+                        f"mytrade|{p.get('intent_id')}|{outcome}",
+                        f"◆ Your {p.get('direction', '')} {sym} {tf} — {outcome}",
+                        f"{p.get('r_multiple', '?')}R"
+                        f"{'' if p.get('exit_price') is None else ' at ' + str(p['exit_price'])}",
+                        notify.LOUD)
+    except Exception as e:
+        log(f"alerts: scan failed ({e})")
+    finally:
+        con.close()
+
+    # THE SCANNER GOING DARK. Its heartbeat file already existed and nothing
+    # read it. Keyed to the minute it went quiet so a scanner that stays down
+    # says so once rather than every tick.
+    try:
+        hb = json.loads((APP / "data" / "heartbeat.json").read_text(encoding="utf-8"))
+        # The field is `ts`. A first draft read `at`, got None, and would have
+        # announced "scanner has stopped" on every tick from a scanner that was
+        # running perfectly — a false alarm at 3am being the exact opposite of
+        # what this is for. An unrecognised shape therefore says so and alerts
+        # nothing, because a monitor that cannot read its input must not be
+        # trusted to declare a failure.
+        beat = hb.get("ts")
+        if beat is None:
+            log("alerts: heartbeat.json has no 'ts' field — cannot judge "
+                "whether the scanner is alive, so not alerting on it")
+            raise KeyError("ts")
+        age = int(time.time()) - int(beat)
+        if age > SCANNER_DARK_AFTER_S:
+            notify.enqueue(
+                f"dark|{int(time.time()) // 600}",
+                "⚠ Scanner has stopped",
+                f"no heartbeat for {age // 60} minutes — the cockpit is "
+                f"showing whatever it last knew",
+                notify.LOUD)
+    except FileNotFoundError:
+        pass                      # never started; the restart alert covers it
+    except KeyError:
+        pass                      # already logged above
+    except Exception as e:
+        log(f"alerts: heartbeat read failed ({e})")
+
+    try:
+        sent = notify.deliver_pending(log=log)
+        if sent.get("failed"):
+            log(f"alerts: {sent['failed']} could not be delivered")
+    except Exception as e:
+        log(f"alerts: delivery failed ({e})")
+
+    # A heartbeat this machine sends OUT, to something that alarms when it
+    # stops. Nothing running here can report this machine's own death, and the
+    # watchdog's log shows eight starts against one clean stop.
+    if time.monotonic() - state.get("hb_at", 0.0) >= HEARTBEAT_INTERVAL_SEC:
+        state["hb_at"] = time.monotonic()
+        try:
+            notify.heartbeat(log=log)
+        except Exception:
+            pass
+    return state
+
+
 def main():
     # single-instance lock
     lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -466,6 +628,10 @@ def main():
     # Warmup: seed prior counts so a first-tick QUARANTINE reading is not
     # misread as a climb-from-0 (Auditor FIND-2, 2026-07-26).
     audit_state: dict = audit_tick({"counts": {}, "at": 0.0}, live, warmup=True)
+    # Seeded with the ids already in the store, so a fresh supervisor does not
+    # announce the whole existing book on its first tick. Same reasoning as the
+    # audit warmup above, and the same failure it prevents.
+    alert_state: dict = alert_tick({"at": 0.0}, live, warmup=True)
     misses = 0
     try:
         while True:
@@ -489,6 +655,11 @@ def main():
                 misses = 0
             if time.monotonic() - audit_state.get("at", 0.0) >= AUDIT_INTERVAL_SEC:
                 audit_state = audit_tick(audit_state, live)
+            # THE ONLY PLACE ALERTS ARE SENT. The scanner decides what is worth
+            # announcing and queues it; this loop does the talking, because
+            # notification work from the scan loop is what killed it — 254s to
+            # death against 1055s and 13 clean cycles with it off.
+            alert_state = alert_tick(alert_state, live)
             time.sleep(10)
     finally:
         # Reached only on an orderly stop. A hard kill of this process skips it

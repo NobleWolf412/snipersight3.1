@@ -34,10 +34,19 @@ class AnnounceOnce(unittest.TestCase):
     def setUp(self):
         self.calls = []
         self._toast = notify.toast
+        self._enqueue = notify.enqueue
         self._ingest = live.ingest
         self._refresh = live.universe.refresh
         self._repair = live.repair_short_history
-        notify.toast = lambda t, m: (self.calls.append(t), True)[1]
+        # The scanner QUEUES now instead of toasting: sending from the scan
+        # loop is what killed it, so delivery moved to the watchdog tick. The
+        # question this suite asks is unchanged — is a warming symbol announced
+        # ONCE, or on every refresh and every restart — so it follows the call
+        # to where the announcement is now made. toast stays patched as well,
+        # so a regression that puts a PowerShell spawn back in this path shows
+        # up here rather than in a scanner that dies overnight.
+        notify.enqueue = lambda k, t, m, p=None: (self.calls.append(t), True)[1]
+        notify.toast = lambda t, m: (self.calls.append("TOAST:" + t), True)[1]
 
         class FakeIngest:
             @staticmethod
@@ -53,6 +62,7 @@ class AnnounceOnce(unittest.TestCase):
 
     def tearDown(self):
         notify.toast = self._toast
+        notify.enqueue = self._enqueue
         live.ingest = self._ingest
         live.universe.refresh = self._refresh
         live.repair_short_history = self._repair
@@ -96,6 +106,17 @@ class AnnounceOnce(unittest.TestCase):
             "source": "unavailable", "warming": []}
         self._refresh_n(2)
         self.assertEqual(self.calls, [])
+
+    def test_the_scanner_never_spawns_a_process_to_announce(self):
+        """The measured cause of 191 scanner deaths: each toast spawned a
+        PowerShell process, and the onboarding burst fires one per warming
+        symbol. 254s to death with toasts on, 1055s and 13 clean cycles with
+        them off. The announcement must reach the queue, never the console."""
+        self._refresh_n(2)
+        self.assertTrue(self.calls, "nothing was announced at all")
+        self.assertFalse([c for c in self.calls if c.startswith("TOAST:")],
+                         "the scanner is toasting again — that is the path "
+                         "that killed it")
 
 
 if __name__ == "__main__":

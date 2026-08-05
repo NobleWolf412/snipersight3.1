@@ -1,0 +1,39 @@
+{
+  "_readme": [
+    "Copy this file to app/data/alerts.json to turn on phone alerts. It lives",
+    "here rather than beside the app because app/data/ is gitignored, and a",
+    "template nobody can find is a feature nobody switches on. Until you copy",
+    "it, the",
+    "only destination is the Windows toast on this machine, and everything else",
+    "is recorded and waits. That default is deliberate: an alert names your",
+    "symbol, your direction and your P&L, so sending it anywhere off this PC",
+    "hands that to somebody else's server. That is your call to make.",
+    "",
+    "ntfy.sh needs no account. Pick a LONG random topic and treat it as a",
+    "password — anyone who knows the topic can read every alert you send to it.",
+    "Install the ntfy app on the phone and subscribe to the same topic.",
+    "",
+    "loud_only:true withholds the quiet channel from that sink. Worth using:",
+    "drift alerts run 13-44 a day against 2-8 setup announcements and land in",
+    "every hour including overnight, and the code that raises them calls them",
+    "awareness rather than something to act on. Three alerts you can act on,",
+    "buried under thirty you cannot, is the failure this avoids.",
+    "",
+    "heartbeat_url is checked every 5 minutes and is the only alert that can",
+    "survive this machine dying. Nothing running here can report its own death",
+    "— point it at a service that alarms when the pings STOP (healthchecks.io",
+    "and cronitor both have free tiers) and that is the one that reaches you",
+    "when the PC is the thing that failed."
+  ],
+
+  "sinks": [
+    {
+      "name": "phone",
+      "type": "ntfy",
+      "url": "https://ntfy.sh/CHANGE-ME-to-a-long-random-topic",
+      "loud_only": true
+    }
+  ],
+
+  "heartbeat_url": ""
+}

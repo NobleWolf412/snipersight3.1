@@ -210,8 +210,14 @@ def refresh_universe(con, log, beat=None):
                 # in the startup burst where that fires once per warming symbol.
                 if sym not in _announced_warming:
                     _announced_warming.add(sym)
-                    notify.toast("＋ New symbol added",
-                                 f"{sym} joined the scan universe")
+                    # QUIET, and queued rather than spawned. Onboarding is
+                    # awareness, not something to act on, and it fires once per
+                    # warming symbol in the startup burst — which is exactly
+                    # where the scanner's remaining deaths sat.
+                    notify.enqueue(f"onboard|{sym}",
+                                   "＋ New symbol added",
+                                   f"{sym} joined the scan universe",
+                                   notify.QUIET)
             except Exception as e:
                 log.warning(f"onboard failed for {sym}: {e}")
         if r["warming"]:
@@ -330,8 +336,15 @@ def check_drift(con, log, threshold=DRIFT_ALERT_PCT, dry=False):
                                        "ref_age_s": ref_age,
                                        "drift_pct": f"{drift:.2f}"})
             con.commit()
-            if not notify.toast(title, msg):
-                log.warning("TOAST DELIVERY FAILED for drift alert")
+            # QUIET. Drift runs 13-44 a day against 2-8 setup announcements,
+            # lands in every hour including overnight, and the code around it
+            # describes it as awareness rather than something to act on. Same
+            # channel as a fired setup and the three that matter are buried
+            # under thirty that do not. Keyed per symbol per day so a repeated
+            # reading of the same drift does not re-buzz.
+            notify.enqueue(
+                f"drift|{sym}|{time.strftime('%Y-%m-%d', time.gmtime(now))}",
+                title, msg, notify.QUIET)
         except Exception as e:
             log.warning(f"drift check failed for {sym}: {e}")
 
@@ -503,10 +516,23 @@ def announce(sym: str, tf: str, p: dict, log):
         msg = (f"entry {float(p['entry']):,.2f} · TP {float(p['tp']):,.2f} · "
                f"SL {float(p['sl']):,.2f} · R:R {p['rr']}")
     log.info(f"SETUP FIRED {title} | {msg}")
-    if not notify.toast(title, msg):
-        # loud-fallback rule: a degraded path must never degrade silently
-        log.warning(f"TOAST DELIVERY FAILED for {title} — signal exists only "
-                    f"in this log and the UI feed; check notification settings")
+    # ENQUEUED, NOT SENT. The filtering above is what makes this alert worth
+    # trusting — the baseline window and the how-late-is-too-late gate — so the
+    # decision has to be made here, in the scanner. The DELIVERY must not be:
+    # notification work from this loop is what killed the scanner, 254s to
+    # death against 1055s and 13 clean cycles with it off, and that is why the
+    # supervisor still starts this process with toasts disabled.
+    #
+    # enqueue() writes one row to a small local SQLite file and returns. No
+    # socket, no subprocess — neither of the two things that have ever taken
+    # this loop down. The watchdog drains the queue on its own tick.
+    #
+    # The key is the setup's own id plus its state, so the same setup moving
+    # FORMING -> VALIDATED still announces once for each, and a re-derivation
+    # of either announces neither.
+    if not notify.enqueue(f"setup|{p.get('setup_id') or (sym + '|' + tf)}|{p['state']}",
+                          title, msg, notify.LOUD):
+        log.info(f"already announced, not re-queued: {title}")
 
 
 def main():

@@ -1,11 +1,66 @@
-"""Windows toast notifications — no third-party modules, pure PowerShell WinRT.
+"""Alerts: one entry point, several destinations, and a queue between them.
 
-Falls back to console output if the toast pipeline fails (e.g. non-Windows).
+WHY A QUEUE AND NOT A FUNCTION CALL.
+
+Two constraints pull in opposite directions.
+
+The scanner is the only place that knows a setup is worth announcing. Its gate
+in `live.py` filters on the active baseline and on how late the setup is, and
+without it a notifier fires years of backfilled history — that is not
+hypothetical, it toasted 87 historical setups in one cycle on 2026-07-29, the
+most recent of them dated 2025-01.
+
+And the scanner is the one place that must not do the sending. Notification
+work from the scan loop killed it, repeatedly and measurably: 254s to death
+with toasts on, against 1055s and 13 clean cycles with them off. The cause is
+recorded below — a shared console delivering an uncatchable kill — and two
+rounds of process-isolation flags did not fully settle it.
+
+So the scanner DECIDES and the watchdog SENDS. `enqueue()` writes a row and
+returns; `deliver_pending()` runs on the watchdog's own tick and does the
+network I/O. The scan loop never waits on a socket, and the alert still
+inherits the gate that makes it trustworthy.
+
+DEDUPLICATION IS THE PRIMARY KEY. The risk engine replays the whole book on
+every run, so one halted day in July produced eight kill-switch records with
+differing P&L. The event key must therefore be built from what IDENTIFIES the
+event — symbol, day, baseline — and never from a figure that varies across
+re-derivation. Insert-or-ignore then does the rest: a replayed fact meets a row
+that already exists and nothing is sent.
+
+THE QUEUE IS NOT IN THE FACT STORE, deliberately. "I told the operator about
+this" is bookkeeping about a notification, not a fact about the market, and the
+fact store is append-only, content-hashed and versioned for evidence. Its own
+file keeps a delivery retry from ever looking like a research record.
+
+REMOTE DELIVERY IS OFF UNTIL CONFIGURED. Sending trade alerts anywhere off this
+machine publishes the operator's positions to a third party; that is their
+decision to make, not a default to inherit. With no config file the only sink
+is the local toast, and everything else is recorded and waits.
 """
+import json
+import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
+
+APP = Path(__file__).resolve().parent
+QUEUE_DB = APP / "data" / "notifications.db"
+CONFIG = APP / "data" / "alerts.json"
+
+#: Priorities. `loud` is what the operator acts on — a setup fired, the kill
+#: switch tripped, their own trade closed: about three a day. `quiet` is
+#: awareness — drift, onboarding, restarts — which runs 13-44 a day and lands
+#: in every hour including overnight. Burying three actionable alerts under
+#: thirty unactionable ones is the failure this exists to avoid, so a sink can
+#: subscribe to loud only.
+LOUD = "loud"
+QUIET = "quiet"
 
 PS_TEMPLATE = r"""
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
@@ -66,11 +121,15 @@ CREATE_NEW_PROCESS_GROUP = 0x00000200
 def toast(title: str, msg: str) -> bool:
     """Show a Windows toast. Returns whether the toast pipeline reported success.
 
-    SNIPERSIGHT_NO_TOAST=1 turns the whole path into a no-op — correct for a
+    SNIPERSIGHT_NO_TOAST=1 turns THIS SINK into a no-op — correct for a
     headless run, where a desktop notification has nobody to notify, and the
     switch that made the failure above bisectable in the first place.
+
+    The flag is checked here and nowhere higher up, and that placement is the
+    whole point. Moved into the shared entry point it would silence every
+    destination in the scanner — which runs with the flag set — and ship an
+    alert system that is mute on day one and looks like a delivery bug.
     """
-    import os
     if os.environ.get("SNIPERSIGHT_NO_TOAST") == "1":
         return False
     script = (PS_TEMPLATE
@@ -99,3 +158,175 @@ def toast(title: str, msg: str) -> bool:
                 Path(path).unlink(missing_ok=True)
             except Exception:
                 pass          # a leftover temp file is not worth an exception
+
+
+# ─────────────────────────────────────────────────────────── the queue ──
+
+def _queue():
+    QUEUE_DB.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(QUEUE_DB, timeout=5)
+    con.execute("""CREATE TABLE IF NOT EXISTS notifications(
+        event_key TEXT PRIMARY KEY,
+        queued_at INTEGER NOT NULL,
+        priority  TEXT NOT NULL,
+        title     TEXT NOT NULL,
+        msg       TEXT NOT NULL,
+        sent_at   INTEGER,
+        outcome   TEXT)""")
+    con.commit()
+    return con
+
+
+def enqueue(event_key: str, title: str, msg: str, priority: str = LOUD) -> bool:
+    """Record that something happened. Returns True if this is the first time.
+
+    Cheap and local: one INSERT OR IGNORE against a small SQLite file. Safe to
+    call from the scan loop precisely because it touches no socket and spawns
+    no process — the two things that have killed the scanner.
+
+    `event_key` must identify the EVENT and nothing else. Include the symbol,
+    the day and the baseline; never a P&L figure or anything else the engines
+    re-derive, or a replay will look like a new event and buzz again.
+    """
+    try:
+        con = _queue()
+        try:
+            cur = con.execute(
+                "INSERT OR IGNORE INTO notifications"
+                "(event_key, queued_at, priority, title, msg) VALUES (?,?,?,?,?)",
+                (event_key, int(time.time()), priority, title, msg))
+            con.commit()
+            return cur.rowcount > 0
+        finally:
+            con.close()
+    except Exception:
+        # A notification must never be able to take down its caller. That is
+        # the founding rule of this module and it applies to its own storage.
+        return False
+
+
+def config() -> dict:
+    """Remote destinations, or {} when the operator has not set any up.
+
+    Absent file means local toast only. That default is deliberate: an alert
+    carries the operator's symbol, direction and P&L, and sending it anywhere
+    off this machine hands that to a third party. Opting in is their call.
+    """
+    try:
+        return json.loads(CONFIG.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _post(url: str, body: str, headers: dict, timeout: float = 8.0) -> str:
+    req = urllib.request.Request(url, data=body.encode("utf-8"),
+                                 headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return f"http {r.status}"
+
+
+def _send_remote(sink: dict, title: str, msg: str, priority: str) -> str:
+    """One remote destination. Returns a short outcome string for the record.
+
+    Two shapes cover what a solo operator actually reaches for: `ntfy` (POST
+    the text, topic in the URL) and `webhook` (POST JSON). Telegram is a
+    webhook with a URL that already carries the token, so it needs no case of
+    its own.
+    """
+    kind = str(sink.get("type") or "webhook").lower()
+    url = str(sink.get("url") or "")
+    if not url:
+        return "no url"
+    if sink.get("loud_only") and priority != LOUD:
+        return "skipped (quiet)"
+    if kind == "ntfy":
+        return _post(url, f"{title}\n{msg}",
+                     {"Title": title.encode("ascii", "ignore").decode() or "SniperSight",
+                      "Priority": "high" if priority == LOUD else "low",
+                      "Content-Type": "text/plain; charset=utf-8"})
+    return _post(url, json.dumps({"title": title, "message": msg,
+                                  "priority": priority}),
+                 {"Content-Type": "application/json"})
+
+
+def deliver_pending(limit: int = 20, log=None) -> dict:
+    """Send what is queued. Call this from the WATCHDOG tick, never the scanner.
+
+    Every send is attempted independently and a failure marks the row rather
+    than raising — an unreachable phone must not stop the local toast, and
+    neither must stop the supervisor. Rows are marked sent even when every sink
+    failed, with the reason recorded: retrying a notification forever means a
+    phone that comes back online after a night buzzes for a night of events,
+    which is worse than missing them.
+    """
+    out = {"sent": 0, "failed": 0, "sinks": len(config().get("sinks") or [])}
+    try:
+        con = _queue()
+    except Exception:
+        return out
+    try:
+        rows = con.execute(
+            "SELECT event_key, priority, title, msg FROM notifications "
+            "WHERE sent_at IS NULL ORDER BY queued_at LIMIT ?", (limit,)).fetchall()
+        for key, priority, title, msg in rows:
+            outcomes = []
+            try:
+                outcomes.append("toast=" + ("ok" if toast(title, msg) else "no"))
+            except Exception as exc:
+                outcomes.append(f"toast=error({type(exc).__name__})")
+            for sink in (config().get("sinks") or []):
+                name = sink.get("name") or sink.get("type") or "remote"
+                try:
+                    outcomes.append(f"{name}=" + _send_remote(sink, title, msg, priority))
+                except Exception as exc:
+                    outcomes.append(f"{name}=error({type(exc).__name__})")
+            verdict = ", ".join(outcomes)
+            ok = any("=ok" in o or "=http 2" in o for o in outcomes)
+            out["sent" if ok else "failed"] += 1
+            con.execute("UPDATE notifications SET sent_at=?, outcome=? "
+                        "WHERE event_key=?", (int(time.time()), verdict, key))
+            # A degraded path must never degrade silently.
+            if log and not ok:
+                log(f"alert not delivered: {title} | {verdict}")
+        con.commit()
+    except Exception:
+        pass
+    finally:
+        con.close()
+    return out
+
+
+def heartbeat(log=None) -> str:
+    """Tell an OUTSIDE service this machine is still alive.
+
+    A heartbeat emitted by the watchdog cannot report the watchdog's own death,
+    and its log records eight starts against one clean stop. The check that
+    matters is therefore one the operator's phone hears about when it STOPS —
+    a scheduled ping to a service that alarms on absence. Configured or
+    skipped; there is no local fallback, because a local fallback would be the
+    same machine vouching for itself again.
+    """
+    url = str(config().get("heartbeat_url") or "")
+    if not url:
+        return "not configured"
+    try:
+        with urllib.request.urlopen(url, timeout=8) as r:
+            return f"http {r.status}"
+    except Exception as exc:
+        if log:
+            log(f"heartbeat failed: {type(exc).__name__}")
+        return f"error({type(exc).__name__})"
+
+
+def event(event_key: str, title: str, msg: str, priority: str = LOUD,
+          deliver: bool = False, log=None) -> bool:
+    """Queue an alert, and optionally send it now.
+
+    `deliver=False` is the default and is what the scanner uses: record it and
+    let the watchdog do the talking. `deliver=True` is for callers that already
+    ARE the watchdog.
+    """
+    fresh = enqueue(event_key, title, msg, priority)
+    if fresh and deliver:
+        deliver_pending(log=log)
+    return fresh
