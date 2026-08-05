@@ -15,7 +15,19 @@ const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
 
-const S = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+/* Newlines normalised on read. This repo is core.autocrlf=true with no
+   .gitattributes, so git stores LF and materialises CRLF in the working tree on
+   every checkout. Assertions here slice between multi-line anchors written with
+   a bare \n, which match a file a previous tool wrote as LF and never match the
+   same file after git checks it out — indexOf returns -1, String.slice(a, -1)
+   silently runs to the end of the file, and the slice sweeps in code the
+   assertion was written to prove absent. That failure looks like a real
+   regression in copilot.js and is not one.
+
+   Every other file this suite reads gets the same treatment, because the bug is
+   in comparing bytes to a hardcoded newline, not in any one file. */
+const S = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')
+                 .replace(/\r\n/g, '\n');
 const CP = S('static/copilot.js');
 const CHART = S('static/chart.js');
 const FUNNEL = S('static/funnel.js');
