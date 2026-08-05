@@ -40,6 +40,15 @@
   font-family: var(--f-mono); font-size:var(--fs-2); letter-spacing: .04em;
   color: var(--fg); min-width: 0; }
 .wx-sym span{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The symbol cell became a real <button> when the row stopped being
+   role="button" — the row held focusable glossary terms, which ARIA forbids
+   inside a button role. It looks exactly as it did as a div; it is simply the
+   one thing a keyboard reaches to expand the row, and it carries the
+   aria-expanded state the row used to claim. */
+.wx-toggle{ background: none; border: 0; cursor: pointer; font: inherit;
+  font-family: var(--f-mono); font-size:var(--fs-2); letter-spacing: .04em;
+  color: var(--fg); text-align: left; width: 100%; }
+.wx-toggle:hover{ color: var(--accent); }
 
 /* ---- one timeframe ----
    The 2px rule under each cell is the engine's own higher-timeframe agreement

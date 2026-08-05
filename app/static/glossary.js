@@ -150,6 +150,17 @@ window.GLOSSARY = {
     cards.forEach(card => {
       const seen = new Set();
       card.querySelectorAll('.term[data-t]').forEach(t => {
+        /* A term inside another term is always wrong: it puts role="button"
+           inside role="button", so the outer word's accessible name swallows
+           the inner one and a keyboard reaches two stops for one phrase. It
+           happens when a glossary definition is itself run through SSTeach.
+           The inner one loses the affordance and keeps the word. */
+        if(t.parentElement && t.parentElement.closest('.term')){
+          t.removeAttribute('data-t');
+          t.classList.remove('term');
+          t.classList.add('term-plain');
+          return;
+        }
         const k = t.dataset.t;
         if(!seen.has(k)){ seen.add(k); return; }
         // demote: keep the word, drop the affordance
