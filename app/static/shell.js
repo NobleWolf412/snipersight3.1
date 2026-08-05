@@ -864,6 +864,26 @@
         '<div class="deck-divider">Looked at, not taken</div>');
     }
 
+    /* SECONDS, because that is what the row's two clocks compare against.
+       `foundAgo` subtracts `market_time` and `expiresIn` subtracts
+       `expires_at_ts`, both epoch seconds off the fact — in milliseconds every
+       setup would read as found 56 years ago and long expired.
+
+       It was missing entirely. `deckRowInner(s, now)` was extracted into its
+       own function without a binding for `now` in this scope, so the first row
+       threw `ReferenceError: now is not defined` and the forEach died there.
+       Read ONCE outside the loop rather than per row: every row on one render
+       should date itself from the same instant, or two rows a millisecond apart
+       can print different minute counts from the same paint.
+
+       What it looked like is why it survived: the divider above is inserted
+       BEFORE this loop, so the deck printed "Looked at, not taken" and then
+       nothing under it, while the tile beside it said "4 examined, not taken".
+       An empty deck, not a broken one — and the loop only runs when there is
+       something to show, so every test with an empty deck passed. It also
+       rejected loadOverview() on every cycle, which is what put API DEGRADED in
+       the top bar with all five Command endpoints answering 200. */
+    const now = Date.now() / 1000;
     const seen = new Set();
     ordered.concat(passed).forEach(s => {
       const key = s.symbol;
