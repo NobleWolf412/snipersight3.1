@@ -20,11 +20,11 @@ jobs:
       #
       # Their breaking changes were checked against this workflow rather than
       # assumed harmless: setup-node v5 caches automatically when package.json
-      # names a packageManager, and this repo tracks no package.json or
-      # lockfile at all, so there is nothing for it to detect; setup-python v7
-      # drops the pip-install input, unused here; checkout v7 refuses fork
-      # checkouts for pull_request_target and workflow_run, and this workflow
-      # triggers on neither.
+      # names a packageManager, and app/package.json deliberately does not name
+      # one, so there is still nothing for it to detect; setup-python v7 drops
+      # the pip-install input, unused here; checkout v7 refuses fork checkouts
+      # for pull_request_target and workflow_run, and this workflow triggers on
+      # neither.
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
@@ -53,6 +53,30 @@ jobs:
       # Globbed rather than listed. The listed form is how this drifted: the
       # names were written when there were two suites, and the seventeen
       # added since were never added here.
+      # The one defect class neither the suites nor `node --check` can see: a
+      # name that is READ but never bound. That is legal JavaScript which
+      # throws the first time the line runs, so it ships whenever the line
+      # sits in a branch that only executes with real data — `renderDeck`
+      # called `deckRowInner(s, now)` with no `now` in scope, the Setup Deck
+      # dropped every row under its own heading, and the whole JS suite stayed
+      # green. Checked against the revision that shipped it (4cd5965): this
+      # step exits 1 with `'now' is not defined`.
+      #
+      # It is the repo's first npm dependency, and the only one — eslint plus
+      # its own core-rules package, no plugins, no shared configs. `npm ci`
+      # rather than `npm install`: it installs exactly what app/package-lock
+      # .json pins and fails if the two disagree, so CI cannot drift onto a
+      # version nobody chose.
+      #
+      # Warnings do not fail this step, by design; eslint.config.mjs names
+      # every rule that is reporting-only and every instance still outstanding
+      # under it. Errors do fail it.
+      - name: Lint
+        if: always()
+        run: |
+          npm ci
+          npx eslint .
+
       - name: JavaScript suites
         # always(): these do not depend on the Python suite, and gating them on
         # it means one red step hides the other's status entirely. That is not
