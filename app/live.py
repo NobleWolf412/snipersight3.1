@@ -585,17 +585,34 @@ def main():
             # checkpoint cannot reset the log while a reader holds a snapshot,
             # and this loop holds one for most of a ~300s cycle; here, between
             # cycles, is the only place it can land cleanly.
+            # BREADCRUMBS ACROSS THE GAP BETWEEN CYCLES.
+            #
+            # 356 exits, rc=1, never through Python — no atexit, no signal, no
+            # faulthandler dump across 178 starts. Until stderr was unbuffered
+            # the last line was whatever happened to be flushed, so every run
+            # looked as though it stopped at startup. Unbuffered, the picture
+            # changed: the scanner completes its cycles and dies in the quiet
+            # afterwards.
+            #
+            # This is the only stretch of that quiet with any work in it — a
+            # WAL checkpoint against a 2.6GB store — and it was invisible
+            # unless it moved frames. Each step now says it happened, so the
+            # next exit lands between two known points instead of somewhere in
+            # a five-minute silence.
+            log.info("cycle done — checkpointing WAL")
             ck = store.checkpoint_wal(con, log)
-            if ck.get("frames"):
-                log.debug(f"wal checkpoint busy={ck['busy']} "
-                          f"{ck['checkpointed']}/{ck['frames']} frames")
+            log.info(f"WAL checkpoint returned busy={ck.get('busy')} "
+                     f"{ck.get('checkpointed')}/{ck.get('frames')} frames")
         except Exception as e:
             log.error(f"live cycle failed: {e}")
         if args.once:
             break
         # Aligned, not blind: the nap ends at the drift heartbeat or just past
         # the next candle boundary, whichever is sooner — see next_wake.
-        time.sleep(next_wake(time.time()))
+        nap = next_wake(time.time())
+        log.info(f"sleeping {nap:.1f}s until the next wake")
+        time.sleep(nap)
+        log.info("awake")
     con.close()
 
 

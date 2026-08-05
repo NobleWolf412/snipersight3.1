@@ -16,6 +16,7 @@ Two constraints share the nap, and both are pinned here:
     90s; both hold because next_wake is capped, by construction
 """
 import inspect
+import re
 import unittest
 
 import live
@@ -98,10 +99,39 @@ class NextWakeMath(unittest.TestCase):
 
 class TheLoopWearsIt(unittest.TestCase):
     def test_main_sleeps_through_next_wake(self):
+        """The nap must be COMPUTED, never a constant.
+
+        This asserted the literal `time.sleep(next_wake(`, which is one
+        spelling of that rather than the property. The loop now names the
+        interval before sleeping it — `nap = next_wake(...)` then
+        `time.sleep(nap)` — so the duration can be logged, which is what turned
+        a five-minute silence between cycles into something readable. The
+        literal check failed on a change that kept the guarantee exactly.
+
+        So: the argument to sleep has to trace back to next_wake, and it must
+        not be a bare number or the poll constant. Same strength, one fewer
+        assumption about how it is written.
+        """
         src = inspect.getsource(live.main)
-        self.assertIn("time.sleep(next_wake(", src,
-                      "the loop has gone back to a blind tick")
-        self.assertNotIn("time.sleep(POLL_SECONDS)", src)
+        self.assertIn("next_wake(", src,
+                      "the loop no longer computes its wake at all")
+        slept = re.findall(r"time\.sleep\(([^)]*)\)", src)
+        self.assertTrue(slept, "the loop does not sleep")
+        for arg in slept:
+            arg = arg.strip()
+            self.assertFalse(
+                re.fullmatch(r"[\d.]+", arg) or arg == "POLL_SECONDS",
+                f"the loop has gone back to a blind tick: time.sleep({arg})")
+            self.assertTrue(
+                arg.startswith("next_wake(") or re.fullmatch(r"\w+", arg),
+                f"time.sleep({arg}) is not fed by next_wake")
+        # and whatever local it sleeps on must be assigned from next_wake
+        for arg in (a.strip() for a in slept):
+            if re.fullmatch(r"\w+", arg):
+                self.assertRegex(
+                    src, rf"{arg}\s*=\s*next_wake\(",
+                    f"time.sleep({arg}) sleeps on a value that never came "
+                    f"from next_wake")
 
     def test_the_pass_logs_its_boundary_lag(self):
         """The buffer is a modelled constant until production logs argue
