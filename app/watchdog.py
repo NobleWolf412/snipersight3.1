@@ -65,11 +65,37 @@ def log(msg: str):
         pass
 
 
-def toast(title: str, msg: str):
+def toast(title: str, msg: str, key: str | None = None):
+    """Announce something, WITHOUT spawning anything.
+
+    THE RESTART LOOP THIS ENDS. This function used to call notify.toast(),
+    which spawns PowerShell. The supervisor's three call sites include one on
+    every scanner restart, so the sequence was:
+
+        scanner dies -> watchdog toasts about it -> PowerShell spawns ->
+        the spawn reaches the supervisor's children and kills the new
+        scanner -> watchdog toasts about it -> ...
+
+    It feeds itself, which is why the log holds 356 scanner exits, all rc=1,
+    all `NOT ended by this supervisor`, and 176 starts with ZERO exit notes in
+    live-exit.log — no atexit, no signal handler, no faulthandler dump. That
+    combination means the process was never allowed to run Python on the way
+    out: an uncatchable console control event, exactly the mechanism notify.py
+    documents for the original 191 deaths. The clustering fits too, and so do
+    the quiet spells: with nothing to announce, nothing spawns, and it runs for
+    hours.
+
+    So the supervisor no longer spawns. It queues, and delivery happens through
+    the sink system, where the toast sink is off by default and the phone is an
+    HTTP POST that cannot do this.
+    """
     try:
         sys.path.insert(0, str(APP))
         import notify
-        notify.toast(title, msg)
+        # Keyed so a supervisor stuck in a bad patch reports it once rather
+        # than once per tick. Falls back to a per-minute bucket.
+        notify.enqueue(key or f"watchdog|{title}|{int(time.time()) // 60}",
+                       title, msg, notify.LOUD)
     except Exception:
         pass
 
@@ -428,8 +454,13 @@ class Child:
                 + (f" — last output: {why}" if why else ""))
             self.killed_by_us = None
             if self.notify_restart:
+                # Keyed to the exiting pid: one announcement per death, not one
+                # per tick. This is the call site that closed the loop — it
+                # fires on every restart, and announcing a restart used to be
+                # enough to cause the next one.
                 toast("⚠ SniperSight scanner restarted",
-                      f"{self.name} exited (rc={rc}) — auto-recovered, check watchdog.log")
+                      f"{self.name} exited (rc={rc}) — auto-recovered, check watchdog.log",
+                      key=f"restart|{self.name}|{self.proc.pid}")
             time.sleep(self.backoff)
             self.backoff = min(self.backoff * 2, 300)
         self.start()

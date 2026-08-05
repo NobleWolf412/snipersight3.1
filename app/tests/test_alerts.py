@@ -15,6 +15,7 @@ Everything here runs against a scratch queue. Nothing sends.
 """
 import json
 import os
+import re
 import tempfile
 import time
 import unittest
@@ -220,6 +221,54 @@ class TheToastSinkIsOffUntilAskedFor(QueueCase):
             notify.enqueue(f"k{i}", "t", "m")
         first = notify.deliver_pending()
         self.assertEqual(first["sent"] + first["failed"], notify.DELIVER_PER_TICK)
+
+
+class TheSupervisorNeverSpawnsToAnnounce(unittest.TestCase):
+    """The restart loop, and why it ran for 356 exits.
+
+    watchdog.toast() called notify.toast(), which spawns PowerShell. One of its
+    three call sites fires on EVERY scanner restart, so:
+
+        scanner dies -> watchdog announces it -> PowerShell spawns -> the spawn
+        reaches the supervisor's children and kills the new scanner -> watchdog
+        announces it -> ...
+
+    Self-sustaining. The evidence it left: 356 scanner exits, every one rc=1 and
+    `NOT ended by this supervisor`, against 176 starts in live-exit.log with
+    ZERO exit notes — no atexit, no signal handler, no faulthandler dump. The
+    process never ran Python on the way out, which is an uncatchable console
+    control event, the same mechanism notify.py documents for the original 191
+    deaths. It also explains the quiet spells: nothing to announce, nothing
+    spawns, and it runs for hours.
+
+    The supervisor queues now. Delivery is somebody else's tick, and the sink
+    that spawns is off by default.
+    """
+
+    def test_the_watchdog_does_not_call_the_spawning_sink(self):
+        src = (Path(__file__).resolve().parents[1] / "watchdog.py").read_text(
+            encoding="utf-8")
+        # Mentions inside comments and docstrings are the record of WHY; a call
+        # is the defect. Strip both, then look for the call.
+        code = re.sub(r'"""[\s\S]*?"""', "", src)
+        code = "\n".join(l for l in code.splitlines()
+                         if not l.strip().startswith("#"))
+        offenders = [i + 1 for i, l in enumerate(code.splitlines())
+                     if "notify.toast(" in l]
+        # a bare boolean, not assertNotIn: the container here is the whole
+        # supervisor and dumping it buries the one line that matters
+        self.assertFalse(
+            offenders,
+            f"watchdog.py calls notify.toast() at line(s) {offenders} — the "
+            f"supervisor is spawning PowerShell to announce something again, "
+            f"which is the restart loop this test exists to keep closed")
+
+    def test_the_restart_announcement_is_keyed_per_death(self):
+        """Not per tick. A supervisor in a bad patch must report a restart
+        once, or the announcement becomes its own source of restarts."""
+        src = (Path(__file__).resolve().parents[1] / "watchdog.py").read_text(
+            encoding="utf-8")
+        self.assertIn('key=f"restart|{self.name}|{self.proc.pid}"', src)
 
 
 class TheShadowBookIsNeverAnnounced(unittest.TestCase):
