@@ -12,7 +12,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Response
-from fastapi.responses import HTMLResponse
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from engine import registry, store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
@@ -51,6 +52,46 @@ KIND_VERSIONS = {"swing": swings.SWING_VERSION,
 
 app = FastAPI(title="SniperSight", version="0.1-draft")
 STATIC = Path(__file__).resolve().parent / "static"
+
+# Responses compress before they leave. Loopback made this look pointless; a
+# phone on cellular is the case that pays for it. Measured 4 Aug 2026 on this
+# store: overview 8x, setup-telemetry 10x, pipeline-health 29x. The floor keeps
+# small JSON uncompressed, where the header costs more than the saving.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+@app.middleware("http")
+async def _reject_cross_site_api(request, call_next):
+    """Refuse /api/* requests a *different site* caused the browser to make.
+
+    Twelve endpoints write. Four of them took their arguments from the query
+    string — `/api/system/restart`, `/api/analyse`, `/api/baseline/reset`,
+    `/api/scan` — and a POST with no body is exactly what a plain HTML form
+    sends, so any page the operator happened to visit could fire them at
+    localhost:8422. The browser blocks the attacker from READING the reply; it
+    does not block the request, and the side effect has already happened by
+    then. `/api/baseline/reset` is the one that hurts: it is undoable only by
+    editing the database by hand.
+
+    Guarding here rather than per endpoint is deliberate. It covers all twelve
+    POSTs plus the two GET handlers that call `manual.run()` and therefore
+    write fills — a per-endpoint body change would have left those open — and
+    it needs no edit to the ~17 fetch() call sites, which matters while other
+    sessions are editing those files.
+
+    `Sec-Fetch-Site` is set by the browser and cannot be forged by page script.
+    Absent means the caller is not a browser (curl, the test client, the
+    watchdog's health poll), which is not the case CSRF describes, so those
+    pass. `none` is a typed address or a bookmark. Everything the app itself
+    requests is `same-origin`.
+    """
+    if request.url.path.startswith("/api/"):
+        site = request.headers.get("sec-fetch-site")
+        if site is not None and site not in ("same-origin", "none"):
+            return JSONResponse(
+                {"detail": f"cross-site request to {request.url.path} refused"},
+                status_code=403)
+    return await call_next(request)
 
 VALID_TFS = set(importer.TF_SECONDS)
 
@@ -2480,10 +2521,19 @@ def baseline_status():
 
 
 @app.post("/api/baseline/reset")
-def reset_baseline(confirm: bool = False):
-    """Start a clean paper window. Historical facts and candles are retained."""
-    if not confirm:
-        raise HTTPException(400, "confirm=true is required; no data will be deleted")
+def reset_baseline(payload: dict):
+    """Start a clean paper window. Historical facts and candles are retained.
+
+    The confirmation moved out of the query string and into a JSON body on
+    4 Aug 2026, belt-and-braces behind `_reject_cross_site_api`. This is the
+    one endpoint here whose effect cannot be undone from the app, so it gets
+    the second lock: a plain HTML form cannot produce a body FastAPI will
+    parse as JSON, so a form POST is refused at validation before any handler
+    runs — even if the browser ever stops sending `Sec-Fetch-Site`.
+    """
+    if not payload.get("confirm"):
+        raise HTTPException(400, 'a JSON body {"confirm": true} is required; '
+                                 "no data will be deleted")
     con = store.connect()
     try:
         baseline = store.start_baseline(
@@ -2637,6 +2687,31 @@ def _asset_version() -> str:
     newest = max((p.stat().st_mtime_ns for p in STATIC.rglob("*")
                   if p.is_file()), default=0)
     return str(newest // 1_000_000_000)
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def manifest():
+    """What makes the phone treat this as an app rather than a page.
+
+    Served from the ROOT, not from the /static mount, for two reasons: the
+    media type has to be `application/manifest+json` and StaticFiles guesses
+    it from the extension (Windows does not always register `.webmanifest`),
+    and a manifest at the root cannot argue with its own `scope: "/"`.
+
+    Deliberately NO service worker accompanies this. Chrome has not required
+    one to install since v108, and the only thing a worker could usefully
+    cache here is /static/* — which is exactly what `_NoCacheStatic` exists to
+    prevent. That class is documented against a real failure: a cached
+    cockpit.js running against a fresh cockpit.html bound a DOM id that no
+    longer existed and silently killed a drawer. A service worker would
+    reintroduce that, persistently, on a device the operator cannot open
+    devtools on. The API must never be cached either — /api/manual/open and
+    /api/manual/live call manual.run(), so they write fills; a replay queue
+    over those would resolve trades nobody authored.
+    """
+    return FileResponse(STATIC / "manifest.webmanifest",
+                        media_type="application/manifest+json",
+                        headers=NO_CACHE)
 
 
 @app.get("/")
