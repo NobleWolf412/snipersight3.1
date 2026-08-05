@@ -10,6 +10,7 @@ Three regressions are pinned here, all measured on the live store 2026-07-29:
   · every price fetch was hard-wired to Coinbase, so once the traded universe
     became Phemex perps the monitor was 100% blind and merely noisy about it.
 """
+import inspect
 import json
 import sqlite3
 import tempfile
@@ -19,7 +20,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import live
-from engine import marketdata, phemex, store
+from engine import (breakout, execsim, marketdata, phemex, scalein, setups,
+                    store, trend)
 
 
 class _Log:
@@ -50,33 +52,35 @@ class TempStore(unittest.TestCase):
 class TestAnnounceRecency(TempStore):
     """cycle() must announce events, not rows."""
 
-    def _setup_fact(self, *, tf, confirmed_at, state="VALIDATED"):
+    def _setup_fact(self, *, tf, confirmed_at, state="VALIDATED",
+                    version=None, strategy="PULLBACK"):
+        """A setup fact under a TRADED version by default.
+
+        The version is a parameter rather than a constant because it is now
+        load-bearing: `announceable` only surfaces engines the book actually
+        trades, so a fixture pinned to an invented tag would test the filter
+        against a case that can never occur and miss the one that did.
+        """
+        version = version or setups.SETUP_VERSION
         store.insert_fact(
             self.con, symbol="BTCUSDT", tf=tf, kind="setup",
             market_time=confirmed_at, confirmed_at=confirmed_at,
-            algo_version="setup-test", payload={
-                "setup_id": f"BTCUSDT|{tf}|PULLBACK|{confirmed_at}",
-                "state": state, "strategy": "PULLBACK", "direction": "LONG",
+            algo_version=version, payload={
+                "setup_id": f"BTCUSDT|{tf}|{strategy}|{confirmed_at}",
+                "state": state, "strategy": strategy, "direction": "LONG",
                 "entry": "100", "sl": "99", "tp": "104", "rr": "4", "rank": 50})
         self.con.commit()
 
     def _fired(self, now):
-        """Drive the real filter in cycle() without the network stages."""
-        before = 0
+        """Drive THE filter — the real one, not a copy of it.
+
+        This used to re-implement the gates inline, and that is precisely how
+        the not-enabled-engine defect survived a passing suite: the mirror had
+        no version gate, so it could not fail when the code needed one. A test
+        that restates the logic it is testing proves the restatement.
+        """
         baseline_start = store.get_active_baseline(self.con)["started_at"]
-        out = []
-        for sym, tf, conf, pl in self.con.execute(
-                "SELECT symbol, tf, confirmed_at, payload FROM facts "
-                "WHERE id>? AND kind='setup'", (before,)).fetchall():
-            p = json.loads(pl)
-            if p["state"] not in live.ANNOUNCE_STATES:
-                continue
-            if conf < baseline_start:
-                continue
-            if now - conf > live.ANNOUNCE_MAX_BARS * live.importer.TF_SECONDS[tf]:
-                continue
-            out.append((sym, tf, p))
-        return out
+        return live.announceable(self.con, 0, now, baseline_start)
 
     def test_backfilled_history_is_not_announced(self):
         now = int(time.time())
@@ -105,6 +109,72 @@ class TestAnnounceRecency(TempStore):
         self._setup_fact(tf="1D", confirmed_at=now - 3 * 3600)
         fired = self._fired(now)
         self.assertEqual([tf for _, tf, _ in fired], ["1D"])
+
+
+class TestOnlyTradedEnginesAnnounce(TempStore):
+    """A toast claims something is ACTIONABLE. An engine that trades nothing
+    can never produce one.
+
+    The defect, measured on the live scanner log 2026-08-05: 17 alerts reading
+    `SETUP FIRED ◉ TREND_CONTINUATION SHORT — GIGGLEUSDT 15m`, for a playbook
+    whose own docstring opens by saying it trades nothing and whose grade is
+    -0.1500 R over 2,816 trades with the interval ENTIRELY below zero. The
+    announce query asked for `kind='setup'` and every engine that writes one
+    landed in it. The gates it did have were about time and state; none was
+    about which engine.
+    """
+
+    def _fact(self, version, strategy, now):
+        store.insert_fact(
+            self.con, symbol="BTCUSDT", tf="1H", kind="setup",
+            market_time=now - 60, confirmed_at=now - 60,
+            algo_version=version, payload={
+                "setup_id": f"BTCUSDT|1H|{strategy}|{now}|{version}",
+                "state": "VALIDATED", "strategy": strategy,
+                "direction": "LONG", "entry": "100", "sl": "99", "tp": "104",
+                "rr": "4", "rank": 0})
+        self.con.commit()
+
+    def _fired(self, now):
+        return live.announceable(
+            self.con, 0, now, store.get_active_baseline(self.con)["started_at"])
+
+    def test_the_not_enabled_playbooks_never_announce(self):
+        now = int(time.time())
+        store.start_baseline(self.con, started_at=now - 86400)
+        self._fact(trend.TREND_VERSION, "TREND_CONTINUATION", now)
+        self._fact(breakout.BREAKOUT_VERSION, "BREAKOUT_RETEST", now)
+        self.assertEqual(
+            self._fired(now), [],
+            "an engine that execsim does not execute must never toast — the "
+            "operator would be alerted to trade something ungraded")
+
+    def test_the_traded_playbooks_still_announce(self):
+        """The gate must not silence the book it exists to protect."""
+        now = int(time.time())
+        store.start_baseline(self.con, started_at=now - 86400)
+        self._fact(setups.SETUP_VERSION, "REVERSAL", now)
+        self.assertEqual(len(self._fired(now)), 1)
+
+    def test_the_gate_is_the_simulators_own_definition(self):
+        """One authority. If execsim starts executing a new plan source, the
+        notifier follows in the same commit rather than a version later."""
+        self.assertEqual(set(execsim.plan_versions()),
+                         {setups.SETUP_VERSION, scalein.SCALE_VERSION})
+        src = inspect.getsource(live.announceable)
+        self.assertIn("plan_versions", src)
+
+    def test_suppression_is_audible(self):
+        """A notifier that swallows silently is indistinguishable from a quiet
+        market, and this codebase treats a silent fallback as a bug."""
+        now = int(time.time())
+        store.start_baseline(self.con, started_at=now - 86400)
+        self._fact(trend.TREND_VERSION, "TREND_CONTINUATION", now)
+        log = _Log()
+        live.announceable(self.con, 0, now,
+                          store.get_active_baseline(self.con)["started_at"], log)
+        self.assertTrue(log.saw("not-enabled engines"),
+                        "dropping an alert must be counted where it can be read")
 
 
 class TestDriftStaleness(TempStore):

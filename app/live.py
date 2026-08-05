@@ -484,12 +484,49 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     #   · at most ANNOUNCE_MAX_BARS late for its OWN timeframe — a 1D setup
     #     confirmed three months ago is history no matter which window it is in
     baseline_start = store.get_active_baseline(con)["started_at"]
-    fired, historical, stale = [], 0, 0
-    for sym_, tf_, conf_, pl in con.execute(
-            "SELECT symbol, tf, confirmed_at, payload FROM facts "
+    fired = announceable(con, before, now, baseline_start, log)
+    return new_candles, fired
+
+
+def announceable(con, before: int, now: int, baseline_start: int, log=None):
+    """Which new setup facts deserve to interrupt the operator. THE filter.
+
+    Extracted from `cycle()` because its only test re-implemented it inline,
+    which is how the defect below survived: a test that mirrors the code cannot
+    fail when the code needs a rule the mirror does not have. `test_
+    notifications.py` now drives this function, so the copy is gone.
+
+    FOUR GATES, and the first one was missing entirely until 2026-08-05:
+
+      · WHICH ENGINE. Only versions in `execsim.plan_versions()` — the setups
+        the book actually trades. The query is `kind='setup'` and every engine
+        that writes one landed in it, including the two that are MEASURED AND
+        NOT ENABLED. The operator was toasted 17 times to take
+        TREND_CONTINUATION trades: a playbook whose own grade is -0.1500 R over
+        2,816 trades with the interval ENTIRELY below zero. `trend.py` says in
+        its first line that it trades nothing; the alert path had never been
+        told. An engine can be worth running and not worth trading, and the
+        notifier is the one surface where that distinction is the whole point.
+      · STATE — FORMING or VALIDATED, not every lifecycle row.
+      · INSIDE THE BASELINE — onboarding a symbol backfills years of candles
+        and the engines re-derive every setup those years contained; 87 of them
+        toasted in one cycle on 2026-07-29, newest dated 2025-01.
+      · NOT TOO LATE for its own timeframe.
+
+    Suppression is never silent: every drop is counted and logged, so the
+    operator can tell a quiet market from a notifier that swallowed everything.
+    """
+    from engine.execsim import plan_versions
+    traded = set(plan_versions())
+    fired, historical, stale, not_traded = [], 0, 0, 0
+    for sym_, tf_, conf_, ver_, pl in con.execute(
+            "SELECT symbol, tf, confirmed_at, algo_version, payload FROM facts "
             "WHERE id>? AND kind='setup'", (before,)).fetchall():
         p = json.loads(pl)
         if p["state"] not in ANNOUNCE_STATES:
+            continue
+        if ver_ not in traded:
+            not_traded += 1
             continue
         if conf_ < baseline_start:
             historical += 1
@@ -498,12 +535,11 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
             stale += 1
             continue
         fired.append((sym_, tf_, p))
-    # Suppression is never silent: the operator must be able to tell "quiet
-    # market" from "the notifier swallowed everything".
-    if historical or stale:
-        log.info(f"announce filter: {len(fired)} live, {historical} pre-baseline, "
-                 f"{stale} too old to be actionable (all still recorded as facts)")
-    return new_candles, fired
+    if log and (historical or stale or not_traded):
+        log.info(f"announce filter: {len(fired)} live, {not_traded} from "
+                 f"not-enabled engines, {historical} pre-baseline, {stale} too "
+                 f"old to be actionable (all still recorded as facts)")
+    return fired
 
 
 def announce(sym: str, tf: str, p: dict, log):
