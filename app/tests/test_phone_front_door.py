@@ -13,12 +13,15 @@ refusing; the second just quietly stops offering to install.
 """
 import json
 import os
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 import server
+from engine import ma, store, swings
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 
@@ -225,44 +228,137 @@ class FactsWindowTests(unittest.TestCase):
     table — not to a count of facts, which would cut a different depth for
     every kind and leave the swings reaching further back than the moving
     averages beneath them.
+
+    THE STORE IS SEEDED HERE, deliberately. These tests used to ask the
+    developer's live database for BTCUSDT 1H and assert against whatever came
+    back, which meant they only worked on a machine that happened to hold that
+    series. On an empty store the endpoint correctly answers `unbounded` —
+    there are no candles, so there is no window — and the windowing assertion
+    failed while two of its siblings passed on nothing at all. A test whose
+    verdict depends on which checkout it runs from is not testing the endpoint.
     """
 
+    BARS = 1500                 # what the chart draws; chart.js pins the same number
+    OLDER = 300                 # history BEHIND the window, so there is something to drop
+    HOUR = 3600
+    T0 = 1_699_999_200          # an exact hour boundary
+
     def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        db = Path(self.tmp.name) / "facts-window.db"
+        connect = store.connect              # bind before patching
+        con = connect(db)
+        self._seed(con)
+        con.close()
+        patcher = patch("server.store.connect", side_effect=lambda: connect(db))
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.client = TestClient(server.app)
+
+    def _seed(self, con):
+        """BARS + OLDER hourly candles, and facts spread across all of them.
+
+        Two densities on purpose: swings every 20 bars, moving averages every
+        6. The window is a bound on BARS, so both kinds must be cut at the same
+        POINT IN TIME — an implementation that bounded by a count of facts
+        would cut them at different depths and this fixture would show it.
+        """
+        n = self.BARS + self.OLDER
+        self.cutoff = self.T0 + self.OLDER * self.HOUR
+        con.executemany(
+            "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+            [("BTCUSDT", "1H", self.T0 + i * self.HOUR, "100", "101", "99",
+              "100", "1", "test", self.T0) for i in range(n)])
+        for i in range(0, n, 20):
+            ts = self.T0 + i * self.HOUR
+            store.insert_fact(
+                con, symbol="BTCUSDT", tf="1H", kind="swing", market_time=ts,
+                # a pivot is not knowable until the bars after it have closed
+                confirmed_at=ts + 3 * self.HOUR,
+                algo_version=swings.SWING_VERSION,
+                payload={"type": "HIGH" if i % 40 else "LOW", "tier": "MICRO",
+                         "price": "100", "bar_open_ts": ts, "atr": "1"})
+        for i in range(0, n, 6):
+            ts = self.T0 + i * self.HOUR
+            store.insert_fact(
+                con, symbol="BTCUSDT", tf="1H", kind="ma", market_time=ts,
+                confirmed_at=ts + self.HOUR,
+                algo_version=ma.MA_VERSION,
+                payload={"stack": "BULL", "position": "ABOVE", "close": "100",
+                         "bar_index": i})
+        con.commit()
+
+    def _get(self, kind, bars=None):
+        url = f"/api/facts?kind={kind}&symbol=BTCUSDT&tf=1H"
+        if bars is not None:
+            url += f"&bars={bars}"
+        r = self.client.get(url)
+        self.assertEqual(r.status_code, 200)
+        return r
+
+    def test_the_fixture_reaches_further_back_than_the_window(self):
+        """The property that made the old version of this suite dishonest.
+
+        If the store holds fewer bars than the window asks for, every
+        assertion below still passes — on nothing. This one fails loudly
+        instead."""
+        full = self._get("ma").json()
+        self.assertTrue(full, "no facts were seeded")
+        self.assertLess(full[0]["market_time"], self.cutoff,
+                        "nothing sits behind the window, so the tests that "
+                        "check what gets dropped have nothing to drop")
 
     def test_the_default_is_still_unbounded(self):
         """Changing the default would silently truncate every existing caller.
         The bound is opt-in and the header says so."""
-        r = self.client.get("/api/facts?kind=swing&symbol=BTCUSDT&tf=1H")
-        self.assertEqual(r.status_code, 200)
+        r = self._get("swing")
         self.assertEqual(r.headers.get("X-Facts-Window"), "unbounded")
 
     def test_a_windowed_request_says_what_it_dropped(self):
         """No silent caps. A caller that asked for a window it did not get has
         to be able to find out without counting rows and guessing."""
-        r = self.client.get("/api/facts?kind=swing&symbol=BTCUSDT&tf=1H&bars=1500")
-        self.assertEqual(r.status_code, 200)
+        r = self._get("swing", self.BARS)
         window = r.headers.get("X-Facts-Window", "")
-        self.assertIn("bars=1500", window)
+        self.assertIn(f"from={self.cutoff}", window)
+        self.assertIn(f"bars={self.BARS}", window)
         self.assertIn("kept=", window)
         self.assertIn("older_dropped=", window)
+        # and the two counts have to account for the whole unbounded answer,
+        # or the header is admitting to less than it cut
+        field = dict(p.split("=") for p in window.split())
+        self.assertGreater(int(field["older_dropped"]), 0)
+        self.assertEqual(int(field["kept"]), len(r.json()))
+        self.assertEqual(int(field["kept"]) + int(field["older_dropped"]),
+                         len(self._get("swing").json()))
 
     def test_the_window_never_returns_more_than_unbounded(self):
-        full = self.client.get("/api/facts?kind=swing&symbol=BTCUSDT&tf=1H").json()
-        win = self.client.get("/api/facts?kind=swing&symbol=BTCUSDT&tf=1H&bars=1500").json()
-        self.assertLessEqual(len(win), len(full))
+        full = self._get("swing").json()
+        win = self._get("swing", self.BARS).json()
+        self.assertLess(len(win), len(full))
 
     def test_the_window_keeps_the_RECENT_end(self):
         """The end of the chart the operator is looking at, and the end that
         bears on the next decision."""
-        full = self.client.get("/api/facts?kind=ma&symbol=BTCUSDT&tf=1H").json()
-        win = self.client.get("/api/facts?kind=ma&symbol=BTCUSDT&tf=1H&bars=1500").json()
-        if not full or not win or len(win) == len(full):
-            self.skipTest("this store holds no history older than 1500 bars here")
+        full = self._get("ma").json()
+        win = self._get("ma", self.BARS).json()
+        self.assertLess(len(win), len(full), "nothing was bounded")
         self.assertEqual(win[-1]["market_time"], full[-1]["market_time"],
                          "the newest fact was dropped — the window cut the "
                          "wrong end")
         self.assertGreater(win[0]["market_time"], full[0]["market_time"])
+        self.assertGreaterEqual(win[0]["market_time"], self.cutoff)
+
+    def test_both_kinds_are_cut_at_the_same_point_in_time(self):
+        """`bars` is a bound on BARS, not on facts. The swings are seeded a
+        third as densely as the moving averages, so an implementation that
+        counted facts would leave one of them reaching further back than the
+        other and the chart would draw structure whose evidence was trimmed."""
+        oldest = [self._get(kind, self.BARS).json()[0]["market_time"]
+                  for kind in ("swing", "ma")]
+        for kind, first in zip(("swing", "ma"), oldest):
+            self.assertGreaterEqual(first, self.cutoff, kind)
+            self.assertLess(first, self.cutoff + 20 * self.HOUR, kind)
 
     def test_the_chart_asks_for_the_same_window_it_draws(self):
         """Two numbers for 'how much chart is there' would drift, and the
