@@ -753,3 +753,19 @@ body.dx-funnel-live #dFunnel { display: none; }
   .fail-row{grid-template-columns:1fr;gap:4px;padding:10px 14px}
   .fail-err{white-space:normal;overflow:visible;text-overflow:clip}
 }
+
+/* ── WHAT THE DEVELOPER TOGGLE GATES IN THIS DRAWER ──
+   The status-bar toggle used to reveal exactly one panel, the backend console,
+   and an operator pressed it and could not tell what had changed. These are the
+   rest of the raw internals, and they are raw: a composite database key, the
+   per-stage fact chips (cost_manifest_hash, implied_leverage, equity_at), and
+   the failure-attribution line that reads "no failure to attribute · expected
+   attrition". Every one of them is a developer chasing a fact, not a trader
+   asking why they are in a trade.
+
+   Hidden by DEFAULT and restored by the toggle, which is the way round that
+   matches who opens this: "Reasons" on an open trade is a trader's click.
+   Nothing is removed — the drawer keeps every rung of the ladder either way. */
+body:not(.dev) .dx-copyid,
+body:not(.dev) .dx-tfacts,
+body:not(.dev) .dx-verdict-owner{display:none}

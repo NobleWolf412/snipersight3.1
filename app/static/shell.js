@@ -47,6 +47,24 @@
   let booted = false;
   function go(name){
     name = SURFACE_ALIASES[name] || name;
+    /* THE SKIP LINK POINTED AT A SECTION ID AND EMPTIED THE APP.
+
+       shell.html's skip link is href="#s-command" — the id of the <section>,
+       which is what an in-page link must target to move focus. The router
+       reads the same hash as a surface NAME, so go('s-command') looked for
+       '#s-s-command', matched nothing, and turned every surface and every rail
+       item off: stage text 10,734 characters to 0, with no message and no way
+       back except clicking the rail.
+
+       It was the FIRST tab stop on the page. The one control an
+       accessibility-dependent reader reaches before anything else destroyed
+       the view, and the same held for any bookmarked or mistyped hash.
+
+       Two guards, because they fix different halves. Stripping the prefix lets
+       the section id and the surface name be the same link. Refusing to land
+       nowhere means no hash can ever empty the stage again, whatever it says. */
+    if(name.startsWith('s-')) name = name.slice(2);
+    if(!document.getElementById('s-' + name)) name = 'command';
     document.querySelectorAll('.surface').forEach(s => s.classList.toggle('on', s.id === 's' + '-' + name));
     document.querySelectorAll('.nav a').forEach(a => {
       const here = a.dataset.s === name;
@@ -292,6 +310,13 @@
   // The budget's binding stop, so the disposition line can quote it rather than
   // recompute it. Written by renderRiskBudget, read by renderDisposition.
   let lastConstraint = null;
+  /* The deck split the tile computed, so the disposition quotes the SAME object
+     rather than recomputing from a variable that is populated later in the
+     cycle. See renderDisposition for what that cost. */
+  let lastSplit = null;
+  /* What the shell's accent is FOR. See setAccentMode. */
+  let liveEnabled = false;
+  let engineExposed = false;
   /* The portfolio payload the Open Trades rows were built from. The copilot
      button needs the whole trade — direction, entry, stop, target — to compose
      its question, and putting six values on the button as data attributes
@@ -458,7 +483,7 @@
     const active = SSState.deck();
     /* Actionable only. A nav badge reading 3 that leads to "nothing to take" is
        a false alarm, and it was firing on every refused setup in the window. */
-    const split = deckSplit(active);
+    const split = lastSplit = deckSplit(active);
     $('mSetups').textContent = split.ordered.length;
     $('mSetupsSub').textContent = split.passed.length
       ? `${split.passed.length} examined, not taken` : '';
@@ -715,12 +740,63 @@
      region that re-announces "Nothing to take right now" twice a minute is a
      screen-reader user's definition of hostile. It sits first in the document,
      so it is read on arrival, which is when the answer is wanted. */
+  /* THE DYNAMIC ACCENT RULE, FINALLY CONNECTED.
+
+     ss.css declares three accents — idle green, paper amber, live red — and
+     shell.html wrote data-mode="idle" as a literal that nothing ever changed.
+     One hit across every .js, .py, .html and .css in the repo. The design
+     system was documented around a mechanism that had never fired, and a
+     comment in ss.css claimed "the primary button is amber while the book is
+     paper", describing behaviour the app did not have.
+
+     Wired to exposure, because that is what amber already means everywhere
+     else in this stylesheet: .deck-row.held, .ticket.managing, .tk-open and
+     .tkm-dot all use it for "your money is on this", and four independently
+     owned modules agree on it without a shared component. The shell now agrees
+     with them. Green is flat, amber is committed, and the accent answers one
+     question at a glance from any surface: is my money on the line.
+
+     Both books count. The engine's positions and the operator's hand-armed
+     orders are kept rigorously apart in the RECORD — a hand-picked trade must
+     never be read as engine edge — but they are not apart in the money, and
+     this rule is about the money. renderMineAside already makes the same
+     judgement in words: "Outside these limits: 79 hand-picked".
+
+     Red is a tripwire, not a state we expect. live_enabled is a hardcoded
+     False in server.py and there is no order-routing code behind it, so this
+     branch should never fire. It is wired anyway: if that constant ever flips,
+     every accent in the app turns red before a single order is sent, and
+     nobody has to remember to add the warning. */
+  function setAccentMode(){
+    const manualExposed =
+      (+MINE.open_risk_usd || 0) > 0 || (+MINE.pending_risk_usd || 0) > 0 ||
+      (MINE.open || []).length > 0;
+    const mode = liveEnabled ? 'live'
+               : (engineExposed || manualExposed) ? 'paper'
+               : 'idle';
+    if(document.body.dataset.mode !== mode) document.body.dataset.mode = mode;
+  }
+
   function renderDisposition(){
     const el = $('disposition');
     if(!el) return;
     if(!lastOverview) return;              // still loading: keep the skeleton
+    /* Wait for the split rather than guessing at it. This read
+       deckSplit(lastDeckArgs ? lastDeckArgs[0] : []), and lastDeckArgs is set
+       by renderDeck, which the overview handler calls AFTER this function — so
+       on first paint the split was empty, refused counted 0, and the line
+       omitted its refusal clause while the tile forty pixels below already read
+       "3 examined, not taken". It corrected on the next poll, which means it
+       was wrong for the first thirty seconds and right after: wrong during the
+       twenty-second check, which is one of the three session shapes this
+       surface exists to serve, and right for the two that would have caught it.
+
+       Now it quotes the very object the tile rendered from, and holds the
+       skeleton until there is one. A shared authority is only shared if every
+       reader reads the same instance. */
+    if(!lastSplit) return;
     const sc = lastOverview.scanner || {};
-    const split = deckSplit(lastDeckArgs ? lastDeckArgs[0] : []);
+    const split = lastSplit;
     const stop = lastConstraint && lastConstraint.blocked ? lastConstraint : null;
     const n = split.ordered.length, refused = split.passed.length;
 
@@ -1185,6 +1261,154 @@
       }));
   }
 
+  /* At a level: where price is standing near structure, across every tradeable
+     market at once.
+
+     DESCRIPTIVE, NOT PRESCRIPTIVE, and the row shape enforces it. The endpoint
+     returns a full bracket per row — it is the same draft.for_symbol() the
+     ticket calls — and this deliberately renders only the zone and the
+     distance. An entry, a stop and a target laid out in a Command-tab row read
+     as advice no matter what the heading says, which is the exact misreading
+     that made this panel necessary: a bracket drawn on a chart the engine had
+     never looked at was taken for the engine's own plan. The numbers are one
+     click away on the chart, where the ticket says whose plan they are.
+
+     `engine_reach` comes from the payload rather than being recomputed from
+     distance here. The bounds it is derived from (setups.PROX_ATR,
+     FORMING_TFS) are the engine's, and a second copy in the client is a second
+     answer waiting to drift. */
+  const NEAR_SAY = {
+    AT_ZONE: () =>
+      ['in the zone now', 'chip-accent',
+       'Price is inside the zone. If the engine takes it, it arrives on the Deck above.'],
+    IN_RANGE: () =>
+      ['engine is watching', 'chip-accent',
+       'Near enough that the engine is considering this zone. It becomes a setup ' +
+       'only if a strategy covers the conditions, and most do not.'],
+    NO_FORMING_ON_TF: (r) =>
+      ['waits for price', 'chip-amber',
+       `Near, but the engine does not plan ahead on ${r.tf} — it only acts once ` +
+       'price actually reaches the zone.'],
+    OUT_OF_RANGE: (r, prox) =>
+      ['engine is not looking', 'chip-amber',
+       `Further out than the ${prox} ATR the engine looks. It is not considering ` +
+       'this zone; anything the chart draws here is the chart\'s, not the engine\'s.'],
+  };
+
+  function renderNear(d){
+    const panel = $('nearPanel'), box = $('near');
+    const rows = (d && d.rows) || [];
+    if(!rows.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
+    panel.style.display = '';
+    const c = d.counts || {};
+    const prox = d.prox_atr, max = d.max_distance_atr;
+    $('nearCount').textContent = `${c.in_engine_range || 0} of ${rows.length} in range`;
+    /* Says what was scanned and what was left out, in the panel rather than in
+       a tooltip. A list that cannot say what it excluded reads as a complete
+       one, and the shadow half is 11 of the 30 symbols the universe carries. */
+    $('nearLede').textContent =
+      `${c.symbols} tradeable markets across ${(d.timeframes || []).length} timeframes. ` +
+      `${rows.length} are within ${max} ATR of a live zone, ` +
+      `${c.in_engine_range || 0} of them inside the ${prox} ATR the engine itself looks at. ` +
+      `${c.shadow_excluded} shadow symbols are not listed — the risk authority will not size them.`;
+    /* Degraded loudly (§4): a market whose structure could not be read is
+       MISSING from this list, and silence would read as "price is not near a
+       level there" — the strongest possible wrong answer. */
+    const warn = (d.warnings || []).length
+      ? `<div class="deck-divider" style="color:var(--amber)">${esc(d.warnings.length +
+          ' market(s) could not be read and are missing from this list')}</div>`
+      : '';
+    /* The line the panel exists to draw, drawn once instead of only being
+       spelled out 23 times in chips. Rows are sorted by distance, so the
+       engine's own bound is a single clean boundary in the list — everything
+       above it is a zone the engine is at least close enough to consider,
+       everything below is one it is not. Same device as the Deck's
+       "Looked at, not taken", for the same reason: without it the far rows sit
+       in the slot where actionable things go. */
+    /* THE OUT-OF-RANGE ROWS FOLD AWAY.
+
+       This panel was 3,341px of a 5,072px surface at 1440, and 73% of it at
+       412 — two thirds of the surface that asks "what should I do right now?"
+       spent on markets the engine has explicitly disowned. Twenty of the
+       twenty-eight rows rendered below the divider, each repeating the same
+       130-character sentence about the ATR bound, so the panel said the same
+       thing twenty times in the slot where actionable things go.
+
+       Nothing is hidden and nothing is dropped: the summary carries the count,
+       the reason is stated once for the group instead of once per row, and one
+       click restores every row exactly as before. The <details> pattern is the
+       one this app already uses at .wx-details, .explainer and .issue.
+
+       The in-range rows are untouched. They are the ones the engine is
+       actually considering, and they were never the volume problem. */
+    const inRange = rows.filter(r => r.engine_reach !== 'OUT_OF_RANGE');
+    const beyond  = rows.filter(r => r.engine_reach === 'OUT_OF_RANGE');
+    const bound = parseFloat(max) || 3;
+
+    const rowHtml = (r, withSay) => {
+      const dist = parseFloat(r.distance_atr);
+      const fill = isNaN(dist) ? 10 : Math.max(8, Math.min(96, (1 - dist / bound) * 100));
+      const say = (NEAR_SAY[r.engine_reach] || NEAR_SAY.OUT_OF_RANGE)(r, prox);
+      /* basis[0] is draft.py's own sentence for the zone it anchored on —
+         type, bounds, state and strength. The WORDS are lifted rather than
+         reworded: it is the one authority on what this row is standing at.
+
+         Only the price range is reformatted, and only through px() — the
+         shared formatter every other panel prices through. Zone bounds come
+         off a Decimal and arrive full length ("7.156–7.8689580900"), which is
+         ten digits of noise on a surface read between bars. Both sides go
+         through px together so one cannot end up with a thousands separator
+         while the other does not. A wording change in draft.py makes this
+         match nothing and the sentence renders as it does today — the
+         degradation is a longer number, never a broken row. */
+      const zone = ((r.basis || [])[0] || 'a live zone')
+        .replace(/([\d.]+)–([\d.]+)/, (m, a, b) => `${px(a)}–${px(b)}`);
+      /* The reach chip lives in the WIDE column, not beside the timeframe.
+         Its natural width is ~144px and the identity column is 150px, so
+         sitting there it wrapped to two lines on every one of 23 rows and
+         pushed the row to 110px tall. Same crush the Deck's reasoning column
+         took: a label narrower than its own content is not a label. */
+      return `<div class="radar-row">
+        <div>
+          <div class="radar-sym">${esc(String(r.symbol).replace('-USD', ''))}</div>
+          <div class="t-label" style="margin-top:3px">${esc(r.tf)} · ${r.direction === 'LONG' ? 'long' : 'short'} side</div>
+        </div>
+        <div>
+          <div style="margin-bottom:6px"><span class="chip ${say[1]}">${esc(say[0])}</span></div>
+          ${withSay ? `<div class="radar-say">${esc(say[2])}</div>` : ''}
+          <div class="t-label" style="margin-bottom:7px;color:var(--fg-4)">${esc(zone)}</div>
+          <div class="radar-meter"><i style="width:${fill.toFixed(0)}%"></i></div>
+        </div>
+        <div class="radar-dist">${isNaN(dist) ? '—' : dist.toFixed(2)}<span class="t-sub">ATR away</span>
+          <button class="btn" style="margin-top:6px" data-nsym="${esc(r.symbol)}" data-ntf="${esc(r.tf)}">Chart</button></div>
+      </div>`;
+    };
+
+    /* The group's shared sentence, printed once. Every OUT_OF_RANGE row
+       returned the identical string from NEAR_SAY, so it was rendered once per
+       row and read as noise by the third repetition. */
+    const beyondSay = beyond.length
+      ? (NEAR_SAY.OUT_OF_RANGE(beyond[0], prox) || [])[2] || '' : '';
+
+    box.innerHTML = warn
+      + inRange.map(r => rowHtml(r, true)).join('')
+      + (beyond.length ? `<details class="near-beyond">
+          <summary class="deck-divider">Beyond the ${esc(String(prox))} ATR the engine looks — ${
+            beyond.length} market${beyond.length === 1 ? '' : 's'}</summary>
+          <div class="near-beyond-say t-note">${esc(beyondSay)}</div>
+          ${beyond.map(r => rowHtml(r, false)).join('')}
+        </details>` : '');
+    box.querySelectorAll('button[data-nsym]').forEach(b =>
+      b.addEventListener('click', () => {
+        go('chart');
+        if(window.SSChart) SSChart.open(b.dataset.nsym, b.dataset.ntf);
+      }));
+  }
+
+  async function loadNearLevels(){
+    renderNear(await api('/api/near-levels'));
+  }
+
   /* Open trades, drawn on the surface that asks what to do next.
 
      `active_positions` has been in the portfolio payload the whole time and
@@ -1261,12 +1485,23 @@ weighed in. Name the facts you used.`;
          clicking a live position is asking. They want to see it, and to be
          able to act on it. The trace keeps its own control, so nothing is
          lost; it just stops being the thing a whole-row click does. */
+      /* NOT role="button". ARIA forbids focusable descendants inside a button
+         role, and this row holds three real ones — Reasons, Copilot, and Close,
+         the control that ends a live position. A screen reader computed the
+         row's entire contents as the button's accessible name ("ADA short 4H
+         reversal stop 0.20063 now 0.18910 ... Reasons Copilot Close") and
+         buried the close control inside it.
+
+         The row stays clickable for a pointer, which is the affordance the
+         comment above argues for. The keyboard path is the symbol itself: one
+         real button, named for what it opens, in the tab order once. */
       return `<div class="pos-row manageable" data-manage="${esc(t.symbol)}"
-        data-managetf="${esc(t.tf)}"
-        tabindex="0" role="button"
-        title="open this trade on the chart — drag the stop or target and press Update trade">
+        data-managetf="${esc(t.tf)}">
         <div>
-          <div class="pos-sym">${esc(tokenOf(t.symbol))}</div>
+          <button class="pos-sym pos-open" data-manage="${esc(t.symbol)}"
+            data-managetf="${esc(t.tf)}"
+            title="open this trade on the chart — drag the stop or target and press Update trade"
+            >${esc(tokenOf(t.symbol))}</button>
           <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
             esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
         </div>
@@ -1313,12 +1548,15 @@ weighed in. Name the facts you used.`;
       // Same rule as a filled row: the click shows you the trade. An unfilled
       // order cannot be managed on the chart, so it gets no Update path — but
       // "let me look at it" is the same request either way.
+      /* Same as the filled row: not role="button", because this one nests
+         Reasons and Copilot. The symbol carries the keyboard path. */
       return `<div class="pos-row pending manageable" data-manage="${esc(t.symbol)}"
-        data-managetf="${esc(t.tf)}"
-        tabindex="0" role="button"
-        title="open this order on the chart">
+        data-managetf="${esc(t.tf)}">
         <div>
-          <div class="pos-sym">${esc(tokenOf(t.symbol))}</div>
+          <button class="pos-sym pos-open" data-manage="${esc(t.symbol)}"
+            data-managetf="${esc(t.tf)}"
+            title="open this order on the chart"
+            >${esc(tokenOf(t.symbol))}</button>
           <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
             esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
         </div>
@@ -1385,6 +1623,7 @@ weighed in. Name the facts you used.`;
       return;
     }
     MINE = d || MINE;
+    setAccentMode();          // the operator's own orders are money too
     const rows = (d && d.open) || [];
     if(!rows.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
     panel.style.display = '';
@@ -1513,9 +1752,15 @@ weighed in. Name the facts you used.`;
     const id = btn.getAttribute('data-cancel');
     const row = (MINE.open || []).find(r => r.intent_id === id);
     const what = row ? `${tokenOf(row.symbol)} ${row.tf} ${row.direction.toLowerCase()} at ${px(+row.entry)}` : 'this order';
-    if(!confirm(`Cancel ${what}?\n\nIt has not filled, so nothing has been ` +
-                `risked and nothing is recorded as a loss. The cancellation ` +
-                `itself is kept, so your book still says what happened to it.`)) return;
+    if(!await SSConfirm({
+      title: 'Cancel this order?',
+      lead: what,
+      rows: ['It has not filled, so nothing has been risked and nothing is ' +
+             'recorded as a loss.',
+             'The cancellation itself is kept, so your book still says what ' +
+             'happened to it.'],
+      confirmLabel: 'Cancel the order'
+    })) return;
     btn.disabled = true;
     try{
       const r = await fetch('/api/manual/cancel', {
@@ -1710,7 +1955,19 @@ weighed in. Name the facts you used.`;
       // exists; the bare regime only as the fallback.
       const reason = j.why ? plainReason(j.why)
         : (j.regime ? String(j.regime).replace('_', ' ').toLowerCase() : '');
-      return `<div class="jnl-row${flat ? '' : up ? ' up' : ' down'}">
+      /* WHAT IT PAID, not just what it lost. `r_gross` and `costs_r` have been
+         in this payload all along and reached no surface, so a stop-out read
+         "risked $197 · -$219" and left the operator to wonder which number was
+         wrong. Neither is: a stop loses 1R of PRICE, and the round trip is
+         charged on top. Shown whenever costs are material. */
+      const costR = Number(j.costs_r);
+      const costTxt = isFinite(costR) && costR > 0.004
+        ? `${Math.abs(Number(j.r_gross)).toFixed(2)}R ${
+            Number(j.r_gross) < 0 ? 'loss' : 'gain'} + ${costR.toFixed(2)}R costs`
+        : '';
+      return `<div class="jnl-row jnl-open${flat ? '' : up ? ' up' : ' down'}"
+        data-jsid="${esc(j.setup_id || '')}" tabindex="0" role="button"
+        title="open this trade on the chart — the bars it happened on, with entry and exit marked">
         <div>
           <div class="t-mono" style="font-size:13px;color:var(--fg)">${
             j.direction === 'LONG' ? '<span class="dir-up">▲</span>' : '<span class="dir-dn">▼</span>'} ${
@@ -1726,7 +1983,7 @@ weighed in. Name the facts you used.`;
                separator ("Jul 30 ·  · risked $195"). Any future absent field
                now degrades to one fewer clause instead of a visible gap. -->
           <div class="t-sub">${[when, heldText(j.holding_hours),
-            'risked ' + money(j.risk_usd)].filter(Boolean).join(' · ')}</div>
+            'risked ' + money(j.risk_usd), costTxt].filter(Boolean).join(' · ')}</div>
         </div>
         <div class="jnl-r">${rr(j.r_multiple)}
           <span class="t-sub">${signedMoney(j.pnl_usd)}</span>
@@ -1734,6 +1991,31 @@ weighed in. Name the facts you used.`;
             style="width:${barW.toFixed(1)}%;${barR >= 0 ? 'left:50%' : 'right:50%'}"></i></span></div>
       </div>`;
     }).join('');
+  }
+
+  /* A settled trade opens on the bars it happened on. Results could tell you a
+     trade lost 1.11R and not show you where price went — the obvious next
+     question, and the surface had no answer to it. Delegated once, because the
+     rows are rebuilt on every refresh. */
+  if(!$('journal').dataset.openWired){
+    $('journal').dataset.openWired = '1';
+    const openTrade = row => {
+      const t = lastJournal.find(x => x.setup_id === row.dataset.jsid);
+      if(!t || !window.SSChart) return;
+      go('chart');
+      SSChart.open(t.symbol, t.tf, {trade: t});
+    };
+    $('journal').addEventListener('click', e => {
+      const r = e.target.closest('[data-jsid]');
+      if(r && r.dataset.jsid) openTrade(r);
+    });
+    $('journal').addEventListener('keydown', e => {
+      if(e.key !== 'Enter' && e.key !== ' ') return;
+      const r = e.target.closest('[data-jsid]');
+      if(!r || !r.dataset.jsid) return;
+      e.preventDefault();
+      openTrade(r);
+    });
   }
 
   function renderScoreboard(journal){
@@ -1825,11 +2107,16 @@ weighed in. Name the facts you used.`;
               `entry ${pos.entry}`,
               r0 == null ? 'result so far unknown'
                          : `closing at ${r0 >= 0 ? '+' : ''}${r0}R`,
-              '',
-              'This ends the trade on your paper book now, at the last closed',
-              "bar. The engine's own simulation of the setup carries on.",
             ];
-            if(!confirm('Close this position?\n\n' + lines.join('\n'))) return;
+            if(!await SSConfirm({
+              title: 'Close this position?',
+              rows: lines,
+              note: 'This ends the trade on your paper book now, at the last ' +
+                    "closed bar. The engine's own simulation of the setup " +
+                    'carries on.',
+              confirmLabel: 'Close it',
+              tone: 'danger'
+            })) return;
           }
 
           const was = c.textContent;
@@ -1909,6 +2196,9 @@ weighed in. Name the facts you used.`;
     // fire-and-forget: the positions panel fetches a price per open trade, and
     // a slow venue must not hold up the equity numbers above it
     indexHeld(p);
+    engineExposed = (p.active_positions || []).length > 0 ||
+                    (p.pending_orders   || []).length > 0;
+    setAccentMode();
     renderRiskBudget(p);
     renderPositions(p).catch(() => {});
     // Your own book, on its own request — it resolves intents server-side and
@@ -2369,6 +2659,10 @@ weighed in. Name the facts you used.`;
   /* ---------- SCANNER SETUP: show the real sizing rules, not prose ---------- */
   async function loadRisk(){
     const c = await api('/api/trade-config');
+    /* The one place the UI learns whether real orders are possible. server.py
+       says outright: "The UI reads this rather than deciding for itself." */
+    liveEnabled = !!c.live_enabled;
+    setAccentMode();
     const pct = v => (v * 100).toFixed(v * 100 % 1 ? 1 : 0) + '%';
     const row = (k, v, note) => `<div><span class="k">${k}</span>` +
       `<span class="v">${v}${note ? ' <span style="color:var(--fg-4)">' + note + '</span>' : ''}</span></div>`;
@@ -2765,20 +3059,27 @@ weighed in. Name the facts you used.`;
       .filter(k => (specOf(k) || {}).class === 'BEHAVIOURAL');
     if(behavioural.length){
       const names = behavioural.map(settingLabel).join(', ');
-      if(!confirm(
-        `Apply these rule changes?\n\n${names}\n\n` +
-        'This starts a NEW forward window: your existing record is kept but ' +
-        'stops accumulating, because a record spanning two configurations ' +
-        'cannot tell you which one produced which result.\n\n' +
-        'Nothing is deleted.')) return;
+      if(!await SSConfirm({
+        title: 'Apply these rule changes?',
+        lead: names,
+        rows: ['This starts a NEW forward window: your existing record is kept ' +
+               'but stops accumulating, because a record spanning two ' +
+               'configurations cannot tell you which one produced which result.'],
+        note: 'Nothing is deleted.',
+        confirmLabel: 'Apply and start a new window'
+      })) return;
     }
     b.disabled = true; b.textContent = 'Applying…';
     try{
       const d = await applySettings(changes, 'scanner setup');
       setPending = {};
       await refresh();
-      if(d.baseline) alert('New forward window started (baseline #' + d.baseline.id +
-        ').\nYour previous record is retained, but stops accumulating.');
+      /* A result, not a decision. alert() blocked the page for a fact the
+         operator can do nothing about; toast is where every other outcome in
+         this app reports, and it is the aria-live region a screen reader is
+         already listening to. */
+      if(d.baseline) toast('New forward window started (baseline #' + d.baseline.id +
+        '). Your previous record is retained, but stops accumulating.', 'ok');
     }catch(err){ markDegraded(String(err)); }
     b.textContent = 'Apply';
     syncSettingInputs(); patchSettingsState();
@@ -2790,8 +3091,14 @@ weighed in. Name the facts you used.`;
 
   $('btnHalt').addEventListener('click', async e => {
     const b = e.currentTarget, halting = !setValues.halted;
-    if(halting && !confirm('Halt the scanner?\n\nNo NEW entries will be sized. ' +
-        'Open positions still settle — refusing to close a position is not safety.')) return;
+    if(halting && !await SSConfirm({
+      title: 'Halt the scanner?',
+      rows: ['No NEW entries will be sized.',
+             'Open positions still settle — refusing to close a position is ' +
+             'not safety.'],
+      confirmLabel: 'Halt',
+      tone: 'danger'
+    })) return;
     b.disabled = true;
     try{
       await applySettings({halted: halting}, halting ? 'operator halt' : 'operator resume');
@@ -3014,7 +3321,7 @@ weighed in. Name the facts you used.`;
       if(input) input.value = '';        // never leave a secret in the DOM
       window.SSData.invalidate('/api/credentials');
       await loadCredentials();
-    }catch(err){ alert('Could not save credential: ' + err.message); }
+    }catch(err){ toast('Could not save credential: ' + err.message, 'bad'); }
   });
 
   /* where candidates die, stage by stage — the operator's debugging view */
@@ -3268,12 +3575,23 @@ weighed in. Name the facts you used.`;
     b.disabled = false; b.textContent = was;
   });
 
-  /* ---------- developer mode ----------
-     Diagnostics is the surface that asks whether the machine is telling the
-     truth. That is a real question and a necessary surface — but it is a
-     developer's question, and it was sitting in the rail between Rules and
-     Learn where the first thing a new reader clicked showed them
-     `ohlc invariant failure` and a log tail. It is opt-in now.
+  /* ---------- developer detail ----------
+     What this gates: the live server log at the foot of Diagnostics, AND the
+     raw internals inside a setup trace — the composite id behind `copy id`,
+     the per-stage fact chips, and the failure-attribution line. The CSS lives
+     with each of them (ss.css, diagnostics-ui.css) and keys off `body.dev`;
+     this function only owns the class, the label and the preference.
+
+     It began as one panel. It used to gate that whole surface — Diagnostics sat in the
+     rail between Rules and Learn, so the first thing a new reader clicked
+     showed them `ohlc invariant failure` and a log tail — but the surface is a
+     public tab now and only the console stayed behind the switch. The name and
+     the comment kept the old scope for a while after the behaviour shrank,
+     which is how an operator came to press it and find nothing changed.
+
+     The id (`devToggle`) and the storage key (`ss.devMode`) are deliberately
+     NOT renamed: the id is referenced elsewhere and the key holds a preference
+     that would silently reset for everyone who has one.
 
      The preference survives a reload, and turning it off while standing on
      Diagnostics moves you somewhere that still exists rather than leaving a
@@ -3281,14 +3599,41 @@ weighed in. Name the facts you used.`;
   const DEV_KEY = 'ss.devMode';
   const readDev = () => { try{ return localStorage.getItem(DEV_KEY) === '1'; }
                           catch(e){ return false; } };
-  function setDev(on){
+  function setDev(on, jump){
     // On BODY: the console panel sits on the stage, outside .shell, so a
     // .shell-scoped class could never reach it and the gate was decorative.
     document.body.classList.toggle('dev', on);
     const b = $('devToggle');
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.textContent = on ? 'Developer mode · on' : 'Developer mode';
+    /* "Developer mode" is a promise this control stopped keeping. It once
+       gated the whole Diagnostics surface; Diagnostics is a nav tab now and
+       the single rule left is `body:not(.dev) #consolePanel{display:none}`.
+       One panel is not a mode, and a label that overstates its scope leaves
+       the operator hunting for changes that were never going to happen. */
+    b.textContent = on ? 'Developer detail · on' : 'Developer detail';
+    b.title = on
+      ? 'raw internals are showing: backend console, and fact-level detail in a trace'
+      : 'show raw internals: the backend console, and the fact-level detail in a trace';
     try{ localStorage.setItem(DEV_KEY, on ? '1' : '0'); }catch(e){}
+    /* Turning it ON goes to the thing that was just turned on. This button
+       lives in the status bar, on every surface; the panel it reveals is the
+       last one on Diagnostics. Pressing it from anywhere else changed nothing
+       visible, which is indistinguishable from a control that does not work.
+       Reuses the existing pendingJump path rather than scrolling here, so
+       there stays one implementation of "go there and show me".
+
+       Only on the way ON, and never at boot — a preference restored on load
+       must not hijack the route the operator actually asked for. */
+    /* ...but not out from under an open trace drawer. That drawer is one of
+       the things this toggle now changes, so someone pressing it while reading
+       one is asking to see MORE OF WHAT IS IN FRONT OF THEM — routing them to
+       Diagnostics would throw away the thing they were looking at to show them
+       a different thing they were not. */
+    const reading = document.querySelector('.dx-drawer');
+    if(on && jump && !reading){
+      pendingJump = 'consolePanel';
+      go('diagnostics');
+    }
     /* This used to bounce #diagnostics to Command, from the era when the
        WHOLE surface was dev-gated. The surface is a public nav tab now and
        this only gates the console panel — but setDev runs at boot, so the
@@ -3297,7 +3642,7 @@ weighed in. Name the facts you used.`;
   }
   setDev(readDev());
   $('devToggle').addEventListener('click',
-    () => setDev(!document.body.classList.contains('dev')));
+    () => setDev(!document.body.classList.contains('dev'), true));
 
   /* ---------- refresh loop ---------- */
   /* WHICH SURFACE EACH LOADER IS FOR.
@@ -3319,6 +3664,10 @@ weighed in. Name the facts you used.`;
     [null,          () => loadHealth()],        // top-bar health chip
     ['command',     () => loadOverview()],
     ['command',     () => loadRisk()],
+    // Command-only, deliberately: the sweep costs ~1.7s across 95 symbol/tf
+    // pairs and there is no reason to pay it while the operator is reading
+    // Results.
+    ['command',     () => loadNearLevels()],
     ['settings',    () => loadSettings()],
     ['settings',    () => loadCredentials()],
     ['results',     () => loadPerformance()],
@@ -3350,6 +3699,52 @@ weighed in. Name the facts you used.`;
       }
     }                                             // health orb is reset by loadHealth
   }
+  /* HOVER IS NOT A DELIVERY MECHANISM.
+
+     Nine elements carried an explanation over 60 characters in a title and
+     nothing else: no role, no tabindex, no aria. A title is revealed by a mouse
+     pointer and by nothing else — not a finger, not the Tab key, not a screen
+     reader — and this app now ships a phone manifest and standalone icons, so
+     the pointer is no longer the assumed input.
+
+     The two longest were prose and are now visible text in Settings. The rest
+     are status chips in bars with no room to spare, so they keep the tooltip
+     and gain the two attributes that make it reachable: a tab stop, and a
+     description the assistive layer can read. Same pattern glossary.js already
+     applies to .term, generalised — so a future chip earns it by carrying a
+     long title, not by someone remembering.
+
+     aria-description, not aria-label: a label REPLACES the accessible name,
+     which on a chip reading "DEGRADED" would swallow the word the operator
+     needs. glossary.js:170 records that bug being found the hard way. */
+  function reachableTitles(root){
+    (root || document).querySelectorAll('[title]:not([data-titlefix])').forEach(el => {
+      const t = el.getAttribute('title') || '';
+      if(t.length <= 60) return;
+      if(!el.matches('a[href],button,input,select,textarea,[tabindex]')) el.tabIndex = 0;
+      if(!el.hasAttribute('aria-description') && !el.hasAttribute('aria-label'))
+        el.setAttribute('aria-description', t);
+      el.dataset.titlefix = '1';
+    });
+  }
+  reachableTitles();
+  /* Observed, not polled. Titles are written by eight renderers across five
+     files at times this module does not control — a position row appears the
+     moment the portfolio poll lands, and on a timer it would sit unreachable
+     until the next sweep. The observer is debounced and only ever adds two
+     attributes, and it skips anything already stamped, so it cannot loop. */
+  {
+    let pending = 0;
+    const obs = new MutationObserver(() => {
+      clearTimeout(pending);
+      pending = setTimeout(() => reachableTitles(), 250);
+    });
+    obs.observe(document.body, {
+      subtree: true, childList: true,
+      attributes: true, attributeFilter: ['title']
+    });
+  }
+
   refresh();
   booted = true;
   setInterval(refresh, 30000);

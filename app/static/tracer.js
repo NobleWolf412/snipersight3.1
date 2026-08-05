@@ -241,7 +241,10 @@
     };
     const all = t.stages || [];
     const notable = all.filter(s => s.status === 'fail' || s.status === 'warn');
-    const stages = all.map(stageHtml).join('');
+    // NOT `all.map(stageHtml)` — Array.map passes (element, INDEX, array), so
+    // the index landed in `compact` and every stage after the first silently
+    // lost its fact chips. Eight of nine, invisible unless you counted them.
+    const stages = all.map(s => stageHtml(s)).join('');
 
     paint(shell(
       esc(String(t.symbol || '').replace('-USD', '')) + ' · ' + esc(t.tf || ''),

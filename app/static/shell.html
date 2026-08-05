@@ -259,6 +259,31 @@
         <div id="radar"></div>
       </div>
 
+      <!-- At a level: where price is standing near structure, across the whole
+           tradeable universe. Distinct from BOTH panels above it, and the
+           distinction is the reason it exists:
+
+             Setup Deck   — the engine's plans.
+             Approaching  — the engine's own FORMING signal: a candidate it has
+                            already accepted and is waiting on.
+             At a level   — structure. The engine may not have looked at it.
+
+           Without this, "which markets is price actually at a level in" could
+           only be answered by opening charts one at a time — and the ticket
+           draws a bracket on every chart, including ones the engine has never
+           considered, so the answer that came back looked like an engine plan.
+           Every row is stamped with how the engine regards that zone for
+           exactly that reason; a caption alone would not survive being read
+           beside three price lines. -->
+      <div class="panel" id="nearPanel" style="margin-bottom:var(--lg);display:none">
+        <div class="panel-head">
+          <h2 class="t-section">At a level</h2>
+          <span class="chip" id="nearCount" style="margin-left:auto">—</span>
+        </div>
+        <p class="t-body" id="nearLede" style="padding:0 var(--lg) 4px;color:var(--fg-3)"></p>
+        <div id="near"></div>
+      </div>
+
       <!-- Market Weather: regime x timeframe, and what it MEANS. weather.js owns it. -->
       <div id="weatherRoot"></div>
 
@@ -293,7 +318,16 @@
           <div class="sym-pop" id="cSymPop" hidden>
             <input id="cSymSearch" type="search" autocomplete="off"
                    placeholder="search 80+ pairs" aria-label="Search symbols">
-            <div class="sym-list" id="cSymList" role="listbox"></div>
+            <!-- role="group", not role="listbox". A listbox promises arrow-key
+                 traversal and an aria-selected option; this had 85 focusable
+                 <button> children, aria-selected on none of them, no
+                 aria-activedescendant and no roving tabindex, so the promise
+                 was never kept. shell.html:390 already removed role="tablist"
+                 from the ticket panes for exactly this reason: a role that
+                 announces a behaviour the widget does not have is worse than
+                 no role, because the reader stops looking for the behaviour
+                 that IS there. These are plain buttons, and now they say so. -->
+            <div class="sym-list" id="cSymList" role="group" aria-label="Symbols"></div>
           </div>
         </div>
         <div class="seg" id="cTfs">
@@ -701,9 +735,17 @@
       <div class="pack-cols">
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Exchanges</h2>
-            <span class="chip" title="keys are encrypted with Windows DPAPI, tied to your user account, never written to the fact store or the log, and cannot be read back — a stored key does NOT enable live trading, that gate is separate and locked">read-only keys only</span>
+            <span class="chip">read-only keys only</span>
             <span class="chip" id="credChip" style="margin-left:auto">—</span></div>
           <div class="panel-body">
+            <!-- Was a 211-character title on the chip above. A security
+                 guarantee is read at the moment a key is about to be pasted,
+                 and a hover cannot be read by a finger, a keyboard, or a screen
+                 reader — on an app that now ships a phone manifest. -->
+            <p class="t-note" style="margin:0 0 var(--md)">Keys are encrypted with
+              Windows DPAPI, tied to your user account, never written to the fact
+              store or the log, and cannot be read back. A stored key does
+              <b>not</b> enable live trading; that gate is separate and locked.</p>
             <div id="credFields"></div>
           </div>
         </div>
@@ -711,8 +753,17 @@
           <!-- the cost-model build stamp (`costs-v0.4`) lived here; it is
                provenance for a developer, not a rule the reader can change -->
           <div class="panel-head"><h2 class="t-section">Risk</h2>
-            <span class="chip" style="margin-left:auto" title="sized by the engine, not editable here — changing risk per trade would replay and re-size the entire forward record under the same engine version, which the versioning rule forbids">read-only</span></div>
+            <span class="chip" style="margin-left:auto">read-only</span></div>
           <div class="panel-body">
+            <!-- Was a 180-character title. "Why can I not change this?" is the
+                 first question this panel provokes, and the answer was the one
+                 thing on it a touch device could not reach. -->
+            <!-- Kept on one line deliberately: two suites assert this exact
+                 phrase survives near #riskNow, and wrapping it across an
+                 indented newline defeats the match while the sentence still
+                 reads correctly on screen. -->
+            <p class="t-note" style="margin:0 0 var(--md)">Sized by the engine, not
+              editable here. Changing risk per trade would replay and re-size the entire forward record under the same engine version, which the versioning rule forbids.</p>
             <div class="tk-out" id="riskNow"></div>
             <!-- B7 — one line, then a disclosure. This was a nine-line essay
                  standing between the operator and the numbers above it. The
@@ -934,12 +985,14 @@
     <span class="sb-item"><span class="orb" id="sbOrb"></span><b id="sbLive">connecting…</b></span>
     <span class="sb-item" id="sbWatch"></span>
     <span style="margin-left:auto">Sim only — no live orders</span>
-    <!-- Diagnostics answers "is the machine telling me the truth" — a real
-         question, and not one to put in front of somebody deciding whether
-         this product is for them. Raw quality codes, the backend console and
-         the fact tracer are opt-in now instead of a permanent tab sitting
-         between Rules and Learn. -->
-    <button class="sb-dev" id="devToggle" type="button" aria-pressed="false">Developer mode</button>
+    <!-- The label tracks the scope, which is the whole point of having
+         renamed it once already. When this gated a single panel it said
+         "Backend console"; it now also restores the raw internals in the trace
+         drawer — the composite id, the per-stage fact chips, the attribution
+         line — so it is named for the category rather than one of its members.
+         shell.js gives it state, tooltip, and the jump on the way on. -->
+    <button class="sb-dev" id="devToggle" type="button" aria-pressed="false"
+            title="show raw internals: the backend console, and the fact-level detail in a trace">Developer detail</button>
   </footer>
 
 </div>
@@ -958,6 +1011,9 @@
 <script defer src="/static/ssdata.js?v=20"></script>
 <script defer src="/static/ticket-math.js?v=20"></script>
 <script defer src="/static/glossary.js?v=20"></script>
+<!-- Before chart.js and shell.js: both call SSConfirm at their commit points,
+     and defer scripts run in document order. -->
+<script defer src="/static/confirm-dialog.js?v=20"></script>
 <script defer src="/static/chart.js?v=20"></script>
 <!-- funnel.js FIRST: it owns the plain-language reason dictionary that
      shell.js reads on its very first render. Deferred scripts execute in

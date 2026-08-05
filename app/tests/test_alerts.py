@@ -149,6 +149,29 @@ class RemoteDeliveryIsOffUntilAskedFor(QueueCase):
         self.assertEqual(notify._send_remote(sink, "t", "m", notify.QUIET),
                          "skipped (quiet)")
 
+    def test_ntfy_sends_the_title_once_with_its_symbol(self):
+        """The header form sends Title: in an HTTP header, and headers are
+        ASCII — so the one glyph that distinguishes a kill switch from a setup
+        at a glance was stripped, and putting the title in the body to
+        compensate made the phone show it twice. JSON publish carries UTF-8 and
+        keeps the fields apart."""
+        sent = {}
+        real = notify._post
+        notify._post = lambda url, body, headers, timeout=8.0: (
+            sent.update(url=url, body=json.loads(body), headers=headers), "http 200")[1]
+        try:
+            notify._send_remote({"type": "ntfy", "url": "https://ntfy.sh/mytopic"},
+                                "⛔ Daily loss limit", "equity 9321.15", notify.LOUD)
+        finally:
+            notify._post = real
+        self.assertEqual(sent["body"]["topic"], "mytopic")
+        self.assertEqual(sent["body"]["title"], "⛔ Daily loss limit",
+                         "the symbol was stripped from the title again")
+        self.assertEqual(sent["body"]["message"], "equity 9321.15")
+        self.assertNotIn(sent["body"]["title"], sent["body"]["message"],
+                         "the title is repeated inside the body")
+        self.assertIn("json", sent["headers"]["Content-Type"])
+
     def test_delivery_records_the_outcome_rather_than_raising(self):
         """An unreachable phone must not stop the local toast, and neither
         must stop the supervisor."""
@@ -269,6 +292,39 @@ class TheSupervisorNeverSpawnsToAnnounce(unittest.TestCase):
         src = (Path(__file__).resolve().parents[1] / "watchdog.py").read_text(
             encoding="utf-8")
         self.assertIn('key=f"restart|{self.name}|{self.proc.pid}"', src)
+
+
+class TheHeartbeatAssertsTheStack(unittest.TestCase):
+    """Silence is the signal, so the ping must mean more than "I am running".
+
+    The supervisor is the one component whose survival proves the least — its
+    entire job is to outlive the others. A heartbeat sent merely because the
+    watchdog loop is executing would tell an outside monitor "all good" while
+    the scanner had been dark for an hour, which is the exact hour the operator
+    needed to hear about.
+    """
+
+    def test_the_ping_is_withheld_when_the_scanner_is_dark(self):
+        src = (Path(__file__).resolve().parents[1] / "watchdog.py").read_text(
+            encoding="utf-8")
+        body = src.split("def alert_tick")[1].split("\ndef main")[0]
+        self.assertIn("if scanner_dark:", body,
+                      "the heartbeat no longer checks whether the scanner is alive")
+        # and the check has to come BEFORE the send, not decorate it afterwards
+        self.assertLess(body.index("if scanner_dark:"), body.index("notify.heartbeat("),
+                        "the heartbeat fires before the dark check is consulted")
+
+    def test_an_unreadable_heartbeat_file_does_not_claim_health(self):
+        """A monitor that cannot read its input must not declare either
+        verdict — and specifically must not tell the outside world it is fine.
+        `scanner_dark` starts False, so this pins that the unreadable path is
+        reached only after the flag exists."""
+        src = (Path(__file__).resolve().parents[1] / "watchdog.py").read_text(
+            encoding="utf-8")
+        body = src.split("def alert_tick")[1].split("\ndef main")[0]
+        self.assertLess(body.index("scanner_dark = False"),
+                        body.index("heartbeat.json"),
+                        "scanner_dark is not initialised before the file is read")
 
 
 class TheShadowBookIsNeverAnnounced(unittest.TestCase):

@@ -94,10 +94,82 @@
      Media queries cannot read a custom property, so these are documented
      here and written literally at each @media. Use one of these four. */
 }
-/* Dynamic Accent Rule: the whole shell restates its accent by mode. */
+/* Dynamic Accent Rule: the whole shell restates its accent by mode.
+
+   These three rules existed for months and never fired. shell.html wrote
+   data-mode="idle" as a literal and nothing in the repo ever changed it — one
+   hit across every .js, .py, .html and .css — so the design system was
+   documented around a mechanism that had never run, and the comment below
+   claimed the button goes amber on paper while it was permanently green.
+
+   setAccentMode() in shell.js is the authority now, and the mode is EXPOSURE,
+   not which book is selected:
+
+     idle   flat. Nothing of yours is in the market.
+     paper  an engine position, a pending order, or one of your own hand-armed
+            orders is live. Amber already means "your money is on this" in
+            .deck-row.held, .ticket.managing, .tk-open and .tkm-dot; the shell
+            now agrees with the four components that got there first.
+     live   real order submission is possible. server.py hardcodes live_enabled
+            to False and no order-routing code exists behind it, so this should
+            never fire. It is wired as a tripwire: if that constant flips, every
+            accent in the app turns red before an order is sent. */
 [data-mode="paper"]{--accent:var(--amber);--accent-rgb:255,194,102}
 [data-mode="live"] {--accent:var(--red);  --accent-rgb:255,100,100}
 [data-mode="idle"] {--accent:var(--green);--accent-rgb:0,255,170}
+
+/* ---------- the confirmation at the money ----------
+
+   Arm, Close, Cancel, Halt and Apply were native window.confirm(). The words
+   were already the best in the product; the box was system chrome in a system
+   font, with no way to give "$201 at risk" more weight than "4H", and on some
+   mobile platforms a truncated body — which would cut the flung-level warning
+   chart.js deliberately puts last so it cannot be scrolled past.
+
+   Same shape as the wizard's .dx-modal so the app has one dialog language, but
+   its own rules: that stylesheet is lazy-loaded when funnel/tracer/wizard mount,
+   and the confirmation on the money path must not race a fetch to render. */
+.ssc-wrap{position:fixed;inset:0;z-index:9000;display:flex;
+  align-items:center;justify-content:center;padding:var(--lg)}
+.ssc-scrim{position:absolute;inset:0;background:rgba(0,0,0,.62)}
+.ssc-box{position:relative;width:min(520px,100%);max-height:min(86vh,860px);
+  display:flex;flex-direction:column;
+  background:var(--bg-2);border:1px solid var(--border);
+  border-radius:var(--r-xl);box-shadow:0 30px 80px rgba(0,0,0,.6);
+  animation:sscLift .18s cubic-bezier(.22,.9,.3,1)}
+.ssc-box.danger{border-color:rgba(255,100,100,.5)}
+@keyframes sscLift{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion: reduce){.ssc-box{animation:none}}
+
+.ssc-head{padding:var(--md) var(--lg);border-bottom:1px solid var(--border-soft);flex:none}
+.ssc-title{font-family:var(--f-display);font-size:var(--fs-4);letter-spacing:.18em;
+  text-transform:uppercase;color:var(--fg)}
+.ssc-body{overflow:auto;padding:var(--lg);font-family:var(--f-mono);font-size:var(--fs-1)}
+.ssc-lead{font-family:var(--f-mono);font-size:var(--fs-2);color:var(--fg);
+  letter-spacing:.06em;margin-bottom:var(--sm)}
+/* The deciding number, at the scale the decision deserves. In a text dialog it
+   was one line among eleven, in the same weight as the timeframe. */
+.ssc-emph{font-family:var(--f-display);font-size:var(--fs-6);line-height:1.1;
+  color:var(--accent);margin:var(--sm) 0 var(--md)}
+.ssc-row{display:flex;gap:var(--md);padding:3px 0;align-items:baseline}
+.ssc-k{color:var(--fg-4);min-width:11ch;flex:none}
+.ssc-v{color:var(--fg-2);font-variant-numeric:tabular-nums}
+.ssc-line{color:var(--fg-2);padding:3px 0;line-height:1.5}
+.ssc-gap{height:var(--sm)}
+/* The one thing that must survive a truncated body, so it is styled to be seen
+   rather than positioned to be reached. */
+.ssc-warn{margin-top:var(--md);padding:var(--sm) var(--md);
+  border:1px solid rgba(255,194,102,.4);border-radius:var(--r-md);
+  background:rgba(255,194,102,.08);color:var(--amber);line-height:1.5}
+.ssc-foot{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap;
+  padding:var(--md) var(--lg);border-top:1px solid var(--border-soft);flex:none}
+.ssc-note{flex:1 1 200px;font-family:var(--f-mono);font-size:var(--fs-1);
+  color:var(--fg-3);line-height:1.4}
+@media(max-width:640px){
+  .ssc-wrap{padding:0;align-items:flex-end}
+  .ssc-box{width:100%;max-height:92vh;border-radius:var(--r-xl) var(--r-xl) 0 0}
+  .ssc-foot .btn{flex:1 1 auto}
+}
 
 *{box-sizing:border-box;margin:0;padding:0}
 /* Off-screen until focused, then the first thing a keyboard reaches. */
@@ -271,11 +343,21 @@ body{
    the table wanted 285px inside a 167px panel, and .panel is overflow-x:hidden,
    so the right-hand columns were not merely cramped, they were unreachable.
 
-   The scroller is the unclassed div the tables are already built into, matched
-   with :has() so none of the seven build sites needs a wrapper added. Where
-   :has() is unsupported the rule simply does not apply and nothing regresses. */
+   The scroller is the element the tables are already built into, matched with
+   :has() so none of the seven build sites needs a wrapper added. Where :has()
+   is unsupported the rule simply does not apply and nothing regresses.
+
+   :is(div,details), not div. Two of the six tables on Results scrolled and four
+   did not, and the four were the ones notTakenBlock() builds — it returns a
+   <details> with the table as a direct child, so a selector naming `div` never
+   matched them. Measured at 412px: 473px of table in a 345px box, inside a
+   .panel that is overflow:hidden, with no scrollbar and no pan. Ninety pixels
+   of every row in the untaken and shadow breakdowns were simply unreachable,
+   while the two tables beside them worked. Any future container earns the
+   scroller by holding a .data-table, not by being the right tag. */
 @media(max-width:900px){
-  .panel div:has(> .data-table){overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .panel :is(div,details):has(> .data-table){
+    overflow-x:auto;-webkit-overflow-scrolling:touch}
   .data-table{min-width:max-content}
 }
 
@@ -1169,6 +1251,28 @@ body:not(.dev) #consolePanel{display:none}
   align-items:center;padding:var(--md) var(--lg);border-bottom:1px solid var(--border-soft)}
 .pos-row:last-child{border-bottom:0}
 .pos-sym{font-family:var(--f-display);font-size:var(--fs-4);letter-spacing:.08em;color:var(--fg)}
+/* The symbol became a real button when .pos-row stopped being role="button" —
+   ARIA forbids focusable descendants inside a button role, and the row held
+   three. It looks exactly as it did as a div; it is simply now the one thing a
+   keyboard reaches to open the trade, instead of the whole row announcing
+   itself as a button whose name was its entire contents. */
+.pos-open{background:none;border:0;padding:0;cursor:pointer;text-align:left;
+  display:block;font:inherit;font-family:var(--f-display);font-size:var(--fs-4);
+  letter-spacing:.08em;color:var(--fg)}
+.pos-open:hover{color:var(--accent)}
+
+/* The out-of-range half of "At a level", folded. The summary IS the divider —
+   same class, so the boundary reads exactly as it did when twenty rows sat
+   open beneath it, and the marker is the only thing that changes. */
+.near-beyond{border-top:1px solid var(--border-soft);margin-top:var(--sm)}
+.near-beyond > summary{cursor:pointer;list-style:none;display:flex;
+  align-items:center;gap:var(--sm)}
+.near-beyond > summary::-webkit-details-marker{display:none}
+.near-beyond > summary::before{content:"▸";color:var(--fg-4);flex:none;
+  transition:transform .15s}
+.near-beyond[open] > summary::before{content:"▾"}
+.near-beyond > summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.near-beyond-say{padding:0 var(--lg) var(--sm)}
 /* The track is NEUTRAL. It was a red-to-green gradient over stop->target
    price space, which meant a 3:1 trade — whose entry sits at 25% from the
    stop end by construction — always painted its marker "in the red", and a
@@ -1707,3 +1811,11 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .dx-all>summary::before{content:"▸  ";color:var(--fg-4)}
 .dx-all[open]>summary::before{content:"▾  "}
 .dx-all>summary:hover{color:var(--fg-2)}
+
+/* A settled trade is a door to the bars it happened on. Same affordance as the
+   open-trade rows, so the two lists behave alike rather than one of them being
+   inert for no reason the reader can see. */
+.jnl-row.jnl-open{cursor:pointer}
+.jnl-row.jnl-open:hover{background:rgba(255,255,255,.03)}
+.jnl-row.jnl-open:focus-visible{outline:1px solid var(--accent);outline-offset:-2px;
+  border-radius:var(--r-sm)}

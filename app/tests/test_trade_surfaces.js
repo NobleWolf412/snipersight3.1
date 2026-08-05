@@ -200,9 +200,20 @@ ok('the trace drawer speaks plainly and does not re-expose rank', () => {
 /* ---------- reachability ---------- */
 
 ok('trace rows are focusable and operable by keyboard', () => {
+  /* Was pinned to tabindex="0" role="button" appearing twice — the exact
+     pattern the position and pending rows have now DROPPED, because ARIA
+     forbids focusable descendants inside a button role and each row nested
+     Reasons, Copilot and (when filled) Close. A screen reader computed the
+     row's whole contents as the button name and buried the close control in it.
+
+     The property is unchanged and still asserted: both rows are reachable and
+     operable by keyboard. They just do it with a real <button> on the symbol
+     instead of a div wearing a role. */
   assert(JS.includes('function activatable'), 'one helper, not per-element retrofits');
-  assert((JS.match(/tabindex="0" role="button"/g) || []).length >= 2,
-    'position and pending rows must be focusable');
+  assert((JS.match(/class="pos-sym pos-open"/g) || []).length >= 2,
+    'position and pending rows must expose a real keyboard control');
+  assert(!/tabindex="0" role="button"[\s\S]{0,900}?pos-acts/.test(JS),
+    'a row with nested action buttons must not itself be role="button"');
   assert(/keydown/.test(JS) && /e\.key !== 'Enter' && e\.key !== ' '/.test(JS));
   assert(CSS.includes('.traceable:focus-visible'), 'focus must be visible');
 });
@@ -549,6 +560,132 @@ ok('no control character survives where a regex escape was meant', () => {
   // three predated this change and had silently disabled epoch formatting.
   assert.ok(!/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(TRACER),
             'a stray control byte is an unmatchable regex, and invisible');
+});
+
+
+/* THE STATUS-BAR TOGGLE. It said "Developer mode" from when it gated the whole
+   Diagnostics surface. Diagnostics is a nav tab now and one rule is left —
+   body:not(.dev) #consolePanel — so pressing it from any other surface changed
+   nothing visible, which reads as a broken control. */
+console.log('backend console toggle');
+// Slice, not a multi-line regex literal: a JS regex cannot span lines, and the
+// two previous attempts in this file died on exactly that.
+const setDevBody = (() => {
+  const i = JS.indexOf('function setDev(on, jump)');
+  if(i < 0) return '';
+  // To the end of the function, not a fixed byte count: the body grew past a
+  // 1800-char window when the toggle gained a second thing to gate, and the
+  // assertions below started passing vacuously on a truncated slice.
+  // Bound by the next declaration, not a byte count: the body grew past
+  // an 1800-char window when the toggle gained a second thing to gate,
+  // and these assertions started passing vacuously on a truncated slice.
+  const end = JS.indexOf('function ', i + 10);
+  return end < 0 ? JS.slice(i) : JS.slice(i, end);
+})();
+ok('it is named for the one thing it reveals', () => {
+  // The label tracks the scope. One panel -> "Backend console"; that plus the
+  // raw internals in a trace -> the category, not one of its members.
+  assert.ok(/Developer detail/.test(HTML), 'the markup ships the honest label');
+  assert.ok(!/>Developer mode</.test(HTML), 'the vague original is gone');
+  assert.ok(JS.includes('Developer detail · on'), 'and it says when it is on');
+});
+ok('turning it on goes to the panel it just revealed', () => {
+  assert.ok(setDevBody, 'setDev(on, jump) not found');
+  assert.ok(setDevBody.includes("pendingJump = 'consolePanel'"), 'reuses the one jump path');
+  assert.ok(setDevBody.includes("go('diagnostics')"));
+});
+ok('it never hijacks the route at boot, or on the way off', () => {
+  assert.ok(setDevBody.includes('if(on && jump && !reading)'),
+            'all three conditions, not any one of them');
+  assert.ok(JS.includes('setDev(readDev());'), 'boot passes no jump');
+  assert.ok(JS.includes("setDev(!document.body.classList.contains('dev'), true)"),
+            'only the click asks to jump');
+});
+ok('the id and the storage key are unchanged', () => {
+  // Renaming either would break references and silently reset the preference
+  // for everyone who already has one. The label is the part that was wrong.
+  assert.ok(/id="devToggle"/.test(HTML));
+  assert.ok(JS.includes("DEV_KEY = 'ss.devMode'"));
+});
+
+
+ok('it gates the raw internals in a trace, not just the console', () => {
+  const DXCSS = S('diagnostics-ui.css');
+  for(const sel of ['.dx-copyid', '.dx-tfacts', '.dx-verdict-owner'])
+    assert.ok(DXCSS.includes('body:not(.dev) ' + sel),
+              sel + ' must be developer-gated');
+  assert.ok(CSS.includes('body:not(.dev) #consolePanel'), 'and still the console');
+});
+ok('it does not route you away from a trace you are reading', () => {
+  // The drawer is one of the things this toggle changes; pressing it there
+  // asks for more of what is on screen, not for a different screen.
+  assert.ok(setDevBody.includes("document.querySelector('.dx-drawer')"));
+  assert.ok(setDevBody.includes('if(on && jump && !reading)'));
+});
+ok('every stage keeps its facts — map passes the INDEX', () => {
+  // `all.map(stageHtml)` fed the array index into `compact`, so eight of nine
+  // stages silently lost their fact chips. Only the first, at index 0, kept
+  // them; nothing errored and the drawer looked plausible.
+  // Strip comments first. The fix's own comment quotes the broken form, so a
+  // naive search matches the explanation and fails on correct code.
+  // String.fromCharCode(10) rather than a backslash-n literal: three separate
+  // escapes written into this repo through patch scripts have landed as the
+  // BYTE they denote instead of the characters that spell it.
+  const NL = String.fromCharCode(10);
+  const code = TRACER.split(NL).filter(l => {
+    const t = l.trim();
+    return t && !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
+  }).join(NL);
+  assert.ok(!code.includes('all.map(stageHtml)'),
+            'never pass a multi-arg function straight to map');
+  assert.ok(TRACER.includes('all.map(s => stageHtml(s))'));
+});
+
+
+/* RESULTS: what a trade paid, and where price went. A stop-out read
+   "risked $197 · -$219" and left the operator to work out which number was
+   wrong. Neither is: a stop loses 1R of PRICE and the round trip is charged on
+   top of it. r_gross and costs_r were in the payload and reached no surface. */
+console.log('results: costs, and the bars it happened on');
+ok('a row says what the costs were, not just the net', () => {
+  assert.ok(JS.includes('const costR = Number(j.costs_r)'), 'costs_r must be read');
+  assert.ok(/R costs/.test(JS), 'and named on the row');
+  assert.ok(JS.includes('j.r_gross'), 'against the gross, which is the 1R part');
+  // Hidden when immaterial rather than printing "+0.00R costs" on every row.
+  assert.ok(/costR > 0\.004/.test(JS));
+});
+ok('a settled trade opens on the bars it happened on', () => {
+  assert.ok(/data-jsid=/.test(JS), 'rows carry their setup id');
+  assert.ok(/jnl-open/.test(JS) && CSS.includes('.jnl-row.jnl-open'),
+            'and look clickable');
+  assert.ok(JS.includes("SSChart.open(t.symbol, t.tf, {trade: t})"),
+            'the whole trade goes to the chart, not just the symbol');
+  assert.ok(JS.includes("go('chart')"), 'and it navigates');
+});
+ok('the chart draws it as CLOSED, never as a ticket', () => {
+  assert.ok(/function drawClosedTrade\(\)/.test(CHART));
+  assert.ok(CHART.includes("'CLOSED · IN AT'"));
+  assert.ok(/CLOSED · OUT \(/.test(CHART));
+  // A settled trade cannot be armed; dressing it as a plan would invite that.
+  const f = CHART.slice(CHART.indexOf('function drawClosedTrade()'),
+                        CHART.indexOf('function candle_index_at'));
+  assert.ok(!/levels\.|pickSetup|armable/.test(f), 'it must not touch the ticket');
+});
+ok('it moves the view to WHEN, not just what', () => {
+  assert.ok(/candle_index_at\(t\.ts\)/.test(CHART));
+  assert.ok(/setVisibleLogicalRange/.test(CHART));
+  // Landing on the newest bars would float the lines over unrelated price.
+  assert.ok(/i - Math\.floor\(span \* 0\.6\)/.test(CHART));
+});
+ok('a trade older than the loaded candles leaves the view alone', () => {
+  const f = CHART.slice(CHART.indexOf('function candle_index_at'),
+                        CHART.indexOf('function candle_index_at') + 600);
+  assert.ok(/best = null/.test(f), 'null rather than a bar that is not the one');
+  assert.ok(/if\(i != null\)/.test(CHART), 'and the caller checks it');
+});
+ok('the overlay clears so it cannot haunt the next chart', () => {
+  assert.ok(/for\(const l of tradeLines\)/.test(CHART));
+  assert.ok(/pendingTrade = null/.test(CHART));
 });
 
 console.log(`  ${passed} passed`);

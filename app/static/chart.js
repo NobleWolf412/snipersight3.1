@@ -33,6 +33,8 @@ window.SSChart = (() => {
   let openPos = [];                           // open manual trades on this chart
   let enginePos = null;                       // the ENGINE's open trade here, if any
   let posLines = [];                          // their price lines, redrawn per load
+  let tradeLines = [];                        // a CLOSED trade, opened from Results
+  let pendingTrade = null;                    // ...the one waiting to be drawn
   let modified = false;
   // Per-trade risk. Null means "use the engine default". Deliberately reset on
   // every setup load: an override is a decision about ONE trade, and carrying
@@ -962,6 +964,7 @@ window.SSChart = (() => {
     drawOverlays();
     pickSetup(!!(opts && opts.keepTicket));
     drawPosition();
+    drawClosedTrade();
     loadedAt = Date.now();
     showFreshness();
 
@@ -995,6 +998,56 @@ window.SSChart = (() => {
       // six-labels-for-three-prices defect with a fourth price added.
       .concat((p.partials_planned || []).map(r => r.price))
       .map(v => parseFloat(v)).filter(v => isFinite(v));
+  }
+
+  /* A SETTLED TRADE, on the bars it happened on. Two lines and a jump to the
+     right part of history — deliberately not the ticket: this trade is over,
+     nothing about it can be armed, and dressing it as a plan would invite
+     exactly that. Cleared on the next load, so it never haunts another chart. */
+  function drawClosedTrade(){
+    for(const l of tradeLines){ try{ series.removePriceLine(l); }catch(e){} }
+    tradeLines = [];
+    const t = pendingTrade;
+    pendingTrade = null;
+    if(!t || !candles.length) return;
+    const entry = parseFloat(t.entry), exit = parseFloat(t.exit_price);
+    const won = (t.r_multiple || 0) > 0;
+    const outWord = String(t.outcome || '').toUpperCase() === 'TP' ? 'TARGET'
+                  : String(t.outcome || '').toUpperCase() === 'SL' ? 'STOP'
+                  : String(t.outcome || 'EXIT').toUpperCase();
+    for(const [price, colour, title] of [
+        [entry, '#94a3b8', 'CLOSED · IN AT'],
+        [exit,  won ? '#4ade80' : '#f87171', 'CLOSED · OUT (' + outWord + ')']]){
+      if(!isFinite(price)) continue;
+      tradeLines.push(series.createPriceLine({
+        price, color: colour, lineWidth: 1, lineStyle: 2,
+        axisLabelVisible: true, title}));
+    }
+    /* Move to WHEN it happened. Landing on the newest 120 bars would show the
+       lines floating over price that has nothing to do with the trade — the
+       exact misreading this is meant to prevent. */
+    if(t.ts){
+      const i = candle_index_at(t.ts);
+      if(i != null){
+        const span = Math.min(candles.length, VISIBLE_BARS);
+        const from = Math.max(0, i - Math.floor(span * 0.6));
+        chart.timeScale().setVisibleLogicalRange(
+          {from, to: Math.min(candles.length + 4, from + span)});
+      }
+    }
+  }
+
+  /* Nearest bar at or before a timestamp, or null when the trade predates the
+     candles we hold — in which case the view is left where it was rather than
+     scrolled to a bar that is not the one. */
+  function candle_index_at(ts){
+    let lo = 0, hi = candles.length - 1, best = null;
+    while(lo <= hi){
+      const mid = (lo + hi) >> 1;
+      if(candles[mid].time <= ts){ best = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    return best;
   }
 
   function drawPosition(){
@@ -2038,33 +2091,46 @@ window.SSChart = (() => {
            0.20063" reads as plausible at any distance; "1.8% away" is a plan
            and "14% away" is a slip. */
         const stopAway = armedEntry ? Math.abs(armedEntry - levels.sl) / armedEntry * 100 : null;
+        /* `key: value`, so the dialog lays them out as a table and the deciding
+           figure can be lifted out of the list entirely. Same strings, one
+           separator changed. */
         const lines = [
-          `${String(armedDir).toUpperCase()} ${sym} ${tf}`,
-          `entry ${pf(armedEntry)}${away == null ? ''
+          `entry: ${pf(armedEntry)}${away == null ? ''
             : Math.abs(away) < 0.05 ? ' · at market'
             : ` · ${Math.abs(away).toFixed(1)}% ${away > 0 ? 'above' : 'below'} market`}`,
-          `stop ${pf(levels.sl)}${stopAway == null ? ''
+          `stop: ${pf(levels.sl)}${stopAway == null ? ''
             : ` · ${stopAway.toFixed(2)}% from entry`}`,
-          `target ${pf(levels.tp)}`,
-          `risking ${usd(riskUsd)}${cfg && cfg.max_leverage > 1 && leverage > 1
-            ? ` at ${leverage}x` : ''}`,
+          `target: ${pf(levels.tp)}`,
         ];
         // The rung belongs in the restatement for the same reason the levels
         // do: it changes what the trade settles for, and the last word before
         // committing should be the action's own terms.
         if(scalePlan)
-          lines.push(`taking ${Math.round(scalePlan.fraction * 100)}% off at ` +
+          lines.push(`scale-out: ${Math.round(scalePlan.fraction * 100)}% off at ` +
                      `${pf(scalePlan.price)} (+${scalePlan.atR}R)`);
         // A flung level is restated where it cannot be scrolled past. The
         // ticket already says it, but the ticket is what the operator has
         // stopped reading by the time they reach for Arm.
-        if(flung)
-          lines.push('', `⚠ your last drag made the risk ${flung.factor.toFixed(1)}x ` +
-                         `${flung.wider ? 'wider' : 'tighter'}`);
-        lines.push(
-          '',
-          'PAPER — this writes to your paper book. No real order is sent.');
-        if(!confirm('Arm this trade?\n\n' + lines.join('\n'))) return;
+        /* The flung-level warning was pushed LAST so it could not be scrolled
+           past. In a native dialog that was the only lever available, and on a
+           platform that truncates the body it failed anyway. It is now a
+           bordered block above the buttons: it cannot be cut without cutting
+           the buttons with it. */
+        const flungWarn = flung
+          ? `Your last drag made the risk ${flung.factor.toFixed(1)}x ` +
+            `${flung.wider ? 'wider' : 'tighter'}.`
+          : '';
+        if(!await SSConfirm({
+          title: 'Arm this trade?',
+          lead: `${String(armedDir).toUpperCase()} ${sym} ${tf}`,
+          // the figure a mis-drag corrupts, at the scale the decision deserves
+          emphasis: `risking ${usd(riskUsd)}${cfg && cfg.max_leverage > 1 && leverage > 1
+            ? ` at ${leverage}x` : ''}`,
+          rows: lines,
+          warn: flungWarn,
+          note: 'PAPER — this writes to your paper book. No real order is sent.',
+          confirmLabel: 'Arm (paper)'
+        })) return;
       }
       btn.disabled = true;
       out.textContent = 'arming…';
@@ -2390,14 +2456,14 @@ window.SSChart = (() => {
       if(!rows.length) continue;
       html += `<div class="sym-group">${label} (${rows.length})</div>` +
         rows.map(s => { n++; return `<button class="sym-row${s.symbol === sym ? ' on' : ''}"
-          role="option" data-sym="${s.symbol}">
+          data-sym="${s.symbol}">
           <b>${s.symbol}</b><i>${s.venue ? venueName(s.venue) : ''}</i></button>`; }).join('');
     }
     const known = new Set(PICK_GROUPS.map(g => g[0]));
     const rest = allSymbols.filter(s => !known.has(s.state) && hit(s));
     if(rest.length)
       html += `<div class="sym-group">other (${rest.length})</div>` +
-        rest.map(s => `<button class="sym-row" role="option" data-sym="${s.symbol}">
+        rest.map(s => `<button class="sym-row" data-sym="${s.symbol}">
           <b>${s.symbol}</b><i>${s.venue ? venueName(s.venue) : ''}</i></button>`).join('');
     $('cSymList').innerHTML = html ||
       '<div class="sym-group">nothing matches</div>';
@@ -2429,7 +2495,12 @@ window.SSChart = (() => {
 
 
   /* open(symbol, timeframe) — the deck's "Open chart" entry point */
-  async function open(s, t){
+  /* opts.trade — a settled trade from the Results journal. Results could say
+     a trade lost 1.11R and not show you the bars it lost them on; "where did
+     price actually go" was a question the surface raised and could not answer.
+     Held rather than drawn here, because load() clears the chart. */
+  async function open(s, t, opts){
+    pendingTrade = (opts && opts.trade) || null;
     sym = s; if(t) tf = t;
     boot();
     document.querySelectorAll('#cTfs button').forEach(b =>

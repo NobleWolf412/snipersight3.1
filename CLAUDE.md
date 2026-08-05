@@ -168,8 +168,20 @@ python -c "import pathlib;bad=lambda r:[i for i,b in enumerate(r) if b<32 and b 
 Silence is a pass. At `c30f031` it printed two files and nine bytes, fixed in
 `216c819` and `84aa15c`.
 
-**Verifying in the browser.** The preview pane cannot screenshot while hidden —
-drive the page with `javascript_tool` instead. Chart price lines are drawn on a
+**Verifying in the browser.** The hidden preview pane does not composite, and
+three separate things follow from that, each of which looks exactly like a bug
+in the code under test: it cannot screenshot, `requestAnimationFrame` **never
+fires**, and `scrollIntoView({behavior:'smooth'})` never animates. Anything the
+app defers to rAF — `go()` defers its scroll-to-panel that way — appears simply
+not to happen. Shim both before concluding anything:
+
+```js
+window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 0);
+window.matchMedia = q => /reduce/.test(q) ? {matches: true, addListener(){},
+  removeListener(){}, addEventListener(){}, removeEventListener(){}} : real(q);
+```
+
+Drive the page with `javascript_tool` rather than screenshots. Chart price lines are drawn on a
 canvas and their labels are not in the DOM; to read them, wrap
 `createPriceLine` on the series prototype before triggering a redraw. The
 portfolio polls every 30s, which collides with the 30s tool timeout, so poll in

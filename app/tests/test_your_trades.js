@@ -141,10 +141,17 @@ ok('the disclosure changes nothing about what the engine will size', () => {
 /* ─────────────────────────── cancelling ─────────────────────────── */
 
 ok('cancel confirms, and says what it does and does not do', () => {
+  /* Was pinned to the literal confirm(`Cancel ${what}?`) call. The five
+     high-stakes commits moved off window.confirm onto SSConfirm, so a selector
+     naming the native function failed while every property it guarded still
+     held. Assert the properties: this action asks first, and it says what is
+     and is not at stake. */
   assert(/data-cancel/.test(SHELL), 'no cancel control');
-  assert(/confirm\(`Cancel \$\{what\}\?/.test(SHELL), 'an irreversible-looking action with no confirm');
-  assert(/nothing has been ` \+\s*`risked/.test(SHELL),
-    'the confirm must say nothing is at stake on an unfilled order');
+  const asks = /SSConfirm\(\{[\s\S]{0,400}?Cancel this order\?/.test(SHELL)
+            || /confirm\(`Cancel /.test(SHELL);
+  assert(asks, 'an irreversible-looking action with no confirmation');
+  assert(/nothing has been risked/.test(SHELL),
+    'the confirmation must say nothing is at stake on an unfilled order');
 });
 
 ok('a cancelled order is recorded, never deleted', () => {
@@ -278,7 +285,10 @@ ok('a rung the engine would refuse disables Arm rather than being sent', () => {
 });
 
 ok('the confirm restates the rung before it commits', () => {
-  assert(/taking \$\{Math\.round\(scalePlan\.fraction \* 100\)\}% off at/.test(CHART),
+  /* The label moved from "taking N% off at" to "scale-out: N% off at" when the
+     dialog gained key/value rows. What matters is that the rung is restated at
+     all, in the action's own terms, before it commits. */
+  assert(/\$\{Math\.round\(scalePlan\.fraction \* 100\)\}% off at/.test(CHART),
     'the last word before an irreversible-feeling action should be its own terms');
 });
 

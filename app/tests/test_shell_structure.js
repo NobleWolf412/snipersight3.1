@@ -7,7 +7,7 @@
    highlighted the destination and the stage stayed empty: no error, no message,
    no route back. Dead with them: the number-key shortcuts for those two
    surfaces, the permanent "Sim only — no live orders" statement in the status
-   bar, the Developer mode toggle, Decision Provenance, and every cross-surface
+   bar, the Backend console toggle, Decision Provenance, and every cross-surface
    pointer the UI writes ("Settings → Going live", "full book in Diagnostics").
 
    The whole JS suite ran green through all of it, because these suites assert

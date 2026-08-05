@@ -240,10 +240,24 @@ def _send_remote(sink: dict, title: str, msg: str, priority: str) -> str:
     if sink.get("loud_only") and priority != LOUD:
         return "skipped (quiet)"
     if kind == "ntfy":
-        return _post(url, f"{title}\n{msg}",
-                     {"Title": title.encode("ascii", "ignore").decode() or "SniperSight",
-                      "Priority": "high" if priority == LOUD else "low",
-                      "Content-Type": "text/plain; charset=utf-8"})
+        """ntfy's JSON publish, not the header form.
+
+        The header form sends the title in a `Title:` header, and HTTP headers
+        are ASCII — so `⛔ Daily loss limit` arrives as `Daily loss limit` with
+        the one glyph that distinguishes it at a glance stripped out. Putting
+        the title in the body to compensate is what the first version did, and
+        the phone then showed the title twice.
+
+        JSON publish carries UTF-8 properly and separates the two fields, so
+        the title is the title once, with its symbol.
+        """
+        base, _, topic = url.rstrip("/").rpartition("/")
+        if not topic:
+            return "no topic in url"
+        return _post(base or url,
+                     json.dumps({"topic": topic, "title": title, "message": msg,
+                                 "priority": 4 if priority == LOUD else 2}),
+                     {"Content-Type": "application/json; charset=utf-8"})
     return _post(url, json.dumps({"title": title, "message": msg,
                                   "priority": priority}),
                  {"Content-Type": "application/json"})
