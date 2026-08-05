@@ -16,6 +16,10 @@ window.SSChart = (() => {
   const $ = id => document.getElementById(id);
 
   let chart = null, series = null, booted = false, visible = false;
+  // How many markers the narrow-screen cap held back on the last paint. Zero
+  // on desktop and whenever nothing was dropped. Read by the introspection
+  // hook so a hidden marker is a question with an answer.
+  let lastMarkerDrop = 0;
   let sym = null, tf = '4H';
   let candles = [], facts = {}, setup = null;
   // `base` is whatever this chart started from — the engine's setup, or levels
@@ -847,11 +851,21 @@ window.SSChart = (() => {
     if(painted !== sym + '|' + tf)
       clearChart('Loading ' + sym + ' · ' + tf + '…');
     const seq = ++loadSeq;
-    const q = k => api(`/api/facts?kind=${k}&symbol=${sym}&tf=${tf}`);
+    /* ONE NUMBER FOR "how much chart is there". The candle request and every
+       fact request quote the same window, so a marker can never be drawn from
+       evidence outside the bars on screen — and, more to the point, evidence
+       outside those bars is never sent. /api/facts had no limit clause at
+       all: it returned every fact ever written for the symbol and timeframe,
+       forever, and the chart discarded everything older than its oldest
+       candle. Measured for BTCUSDT 4H: swing 134KB and ma 131KB alone, about
+       half a megabyte across the kinds, to draw markers over 1500 bars.
+       Invisible on loopback; most of the page weight on a phone. */
+    const BARS = 1500;
+    const q = k => api(`/api/facts?kind=${k}&symbol=${sym}&tf=${tf}&bars=${BARS}`);
     let res;
     try{
       res = await Promise.all([
-        api(`/api/candles?symbol=${sym}&tf=${tf}&limit=1500`),
+        api(`/api/candles?symbol=${sym}&tf=${tf}&limit=${BARS}`),
         q('swing'), q('structure'), q('zone'), q('liquidity'),
         q('regime'), q('setup'), q('cycle'), q('risk')]);
       // The draft is fetched, never computed here. Composing a bracket out of
@@ -1317,7 +1331,31 @@ window.SSChart = (() => {
     if(overlays.signals) markers.push(...shown);
 
     markers.sort((a, b) => a.time - b.time);
-    series.setMarkers(markers);
+    /* A PHONE CANNOT DRAW ALL OF THEM AND SHOULD NOT TRY.
+       Every layer contributes markers and only the signals layer was ever
+       bounded; swings, structure, sweeps and cycles are as many as the window
+       holds. On a desktop that is dense but legible. On a 412px screen the
+       glyphs overlap into a smear, and every one of them is re-laid-out on
+       each frame of a pinch, which is where the judder comes from.
+
+       The cap keeps the MOST RECENT, because that is the end of the chart the
+       operator is looking at and the end that bears on the next decision.
+       Dropping is never silent: the count goes to the console and the
+       introspection hook below reports it, so "why can I not see that swing"
+       has an answer other than a shrug. Desktop is unchanged. */
+    const narrow = matchMedia('(max-width:640px)').matches;
+    const MAX_MARKERS = 60;
+    let drawn = markers;
+    if(narrow && markers.length > MAX_MARKERS){
+      drawn = markers.slice(-MAX_MARKERS);
+      lastMarkerDrop = markers.length - drawn.length;
+      console.info(`[chart] ${lastMarkerDrop} older markers hidden at this ` +
+                   `width (showing the most recent ${MAX_MARKERS} of ` +
+                   `${markers.length})`);
+    } else {
+      lastMarkerDrop = 0;
+    }
+    series.setMarkers(drawn);
     labelOverlays(n);
   }
 
@@ -1339,8 +1377,10 @@ window.SSChart = (() => {
     if(btn) btn.classList.add('loading');
     await Promise.all(missing.map(async k => {
       try{
+        // Same window as the base load — an overlay drawn from deeper history
+        // than the candles beneath it is evidence for bars that are not there.
         const rows = await api(
-          `/api/facts?kind=${k}&symbol=${encodeURIComponent(sym)}&tf=${tf}`);
+          `/api/facts?kind=${k}&symbol=${encodeURIComponent(sym)}&tf=${tf}&bars=1500`);
         // the market may have changed while this was in flight
         if(extraKey === want) extra[k] = Array.isArray(rows) ? rows : [];
       }catch(err){ if(extraKey === want) extra[k] = []; }
@@ -2399,5 +2439,9 @@ window.SSChart = (() => {
   }
 
   wire();
-  return {open, onShow, onHide};
+  return {open, onShow, onHide,
+    /* Introspection, for the suites and for answering "why can I not see that
+       swing on my phone" without guessing. A cap nobody can observe is
+       indistinguishable from a bug. */
+    _markerDrop: () => lastMarkerDrop};
 })();

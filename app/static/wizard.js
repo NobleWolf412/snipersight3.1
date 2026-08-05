@@ -63,7 +63,7 @@
   // which is what turns the step into UNDETERMINED rather than a guess.
   async function gather() {
     const paths = ['/api/overview', '/api/health', '/api/pipeline-health',
-                   '/api/setup-telemetry?limit=200', '/api/portfolio'];
+                   '/api/setup-telemetry?limit=500', '/api/portfolio'];
     const settled = await Promise.allSettled(paths.map(api));
     const names = ['overview', 'health', 'pipeline', 'telemetry', 'portfolio'];
     const out = {};

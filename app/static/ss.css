@@ -1026,6 +1026,16 @@ body:not(.dev) #consolePanel{display:none}
   letter-spacing:.16em;text-transform:uppercase;display:block;margin-bottom:3px}
 .tk-actions{display:flex;gap:var(--sm)}
 .tk-actions .btn{flex:1}
+/* Arm and Restore, at a thumb's size. Measured at 412px they rendered 34px
+   tall — under Android's 48dp floor, on the single most consequential control
+   in the app, reached at the bottom of a scrolled surface by the same thumb
+   holding the phone. This is the same correction already made for CLOSE on a
+   live position; leaving Arm at 34 while CLOSE is 48 would be an odd place to
+   draw the line. Desktop keeps its compact bar. */
+@media (max-width:900px){
+  .tk-actions{gap:var(--md)}
+  .tk-actions .btn{min-height:48px}
+}
 .tk-lock{color:var(--fg-4);font-size:var(--fs-1);line-height:1.6;text-align:center}
 /* Outcome of an arm. Brighter than .tk-lock on purpose: the lock line is
    standing context an operator learns to ignore, this line is what just
@@ -1556,7 +1566,21 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   /* over candles, so it needs its own ground to stay readable */
   background:rgba(7,11,16,.72);padding:2px 6px;border-radius:var(--r-sm)}
 .c-ohlc.up{color:var(--green)} .c-ohlc.down{color:var(--red-2)}
-@media (max-width:640px){.c-ohlc{display:none}}
+/* KEPT below 640, where it used to be dropped. The reasoning for dropping it
+   — "the first thing worth losing, the price chip already carries the close" —
+   is right for a narrow laptop and backwards for a phone. With a mouse the
+   crosshair lands exactly where you look and the readout is a convenience;
+   with a finger the crosshair is driven by a long press under an opaque
+   fingertip, so the line naming the bar you are actually touching is the only
+   way to know which one you got. It is the reading that gets harder, so it is
+   the readout that matters more.
+
+   It shrinks instead: smaller type, tucked under the top-left controls, and
+   still pointer-events:none so it can never eat a tap meant for the chart. */
+@media (max-width:640px){
+  .c-ohlc{font-size:10px;padding:1px 5px;top:4px;left:6px;
+    max-width:calc(100% - 12px);overflow:hidden;text-overflow:ellipsis}
+}
 
 /* "Looked at, not taken" — the line between what you can act on and what the
    engine merely examined. Without it, a refused four-day-old setup sat in the

@@ -284,8 +284,31 @@ def candles(symbol: str = Query("BTC-USD", pattern=SYMBOL_PATTERN),
 
 @app.get("/api/facts")
 def facts(kind: str, symbol: str = "BTC-USD", tf: str = "1H",
-          as_of: int | None = None):
-    """Generic as_of-cursored fact query — the same contract for every engine."""
+          as_of: int | None = None,
+          bars: int | None = Query(None, ge=1, le=5000),
+          response: Response = None):
+    """Generic as_of-cursored fact query — the same contract for every engine.
+
+    `bars` bounds the answer to the last N BARS, not the last N facts, and the
+    window is computed from the candle table — the same rows the caller is
+    drawing. That distinction matters: a count of facts would cut a different
+    depth for every kind, so the swings would reach further back than the
+    moving averages and the chart would draw a structure whose supporting
+    evidence had been trimmed off.
+
+    Unbounded by default, because this endpoint had no limit clause at all and
+    the fact store is append-only and grows forever. Measured 4 Aug 2026 for
+    BTCUSDT 4H alone: swing 134KB, ma 131KB, volume 70KB, momentum 63KB, fvg
+    56KB, volatility 53KB — about half a megabyte for one symbol on one
+    timeframe, every load, to draw markers over 1500 bars. The chart never had
+    any use for a fact older than its oldest candle; it downloaded them and
+    threw them away, which is invisible on loopback and is most of the page
+    weight on a phone.
+
+    Truncation is announced in `X-Facts-Window`, never silent. A caller that
+    asked for a window it did not get must be able to find out without
+    counting rows and guessing.
+    """
     if tf not in VALID_TFS:
         raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
     if kind not in KIND_VERSIONS:
@@ -294,13 +317,27 @@ def facts(kind: str, symbol: str = "BTC-USD", tf: str = "1H",
                 else [KIND_VERSIONS[kind]])
     con = store.connect()
     try:
+        cutoff = None
+        if bars is not None:
+            window = store.get_candles(con, symbol, tf,
+                                       end_ts=as_of or 2**53, limit=bars)
+            if window:
+                cutoff = window[0]["open_ts"]
         out = []
+        dropped = 0
         for ver in versions:
             for r in store.get_facts(con, symbol, tf, kind, ver, as_of):
+                if cutoff is not None and r["market_time"] < cutoff:
+                    dropped += 1
+                    continue
                 out.append({"market_time": r["market_time"],
                             "confirmed_at": r["confirmed_at"],
                             "algo_version": r["algo_version"], **json.loads(r["payload"])})
         out.sort(key=lambda f: f["market_time"])
+        if response is not None:
+            response.headers["X-Facts-Window"] = (
+                "unbounded" if cutoff is None
+                else f"from={cutoff} bars={bars} kept={len(out)} older_dropped={dropped}")
         return out
     finally:
         con.close()

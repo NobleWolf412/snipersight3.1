@@ -212,6 +212,85 @@ class BaselineResetTests(unittest.TestCase):
         self.assertIn("confirm", r.json()["detail"])
 
 
+class FactsWindowTests(unittest.TestCase):
+    """/api/facts had no limit clause of any kind.
+
+    It returned every fact ever written for a symbol and timeframe, forever,
+    into a chart that draws 1500 bars and discards the rest. Measured 4 Aug
+    2026 for BTCUSDT: a full 1H chart load moved 2.47MB, of which 1.59MB was
+    for bars that were not on screen. On loopback that is invisible; on a phone
+    it is most of the page weight, and it grows with the store.
+
+    `bars` bounds the answer to a window of BARS, computed from the candle
+    table — not to a count of facts, which would cut a different depth for
+    every kind and leave the swings reaching further back than the moving
+    averages beneath them.
+    """
+
+    def setUp(self):
+        self.client = TestClient(server.app)
+
+    def test_the_default_is_still_unbounded(self):
+        """Changing the default would silently truncate every existing caller.
+        The bound is opt-in and the header says so."""
+        r = self.client.get("/api/facts?kind=swing&symbol=BTCUSDT&tf=1H")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.headers.get("X-Facts-Window"), "unbounded")
+
+    def test_a_windowed_request_says_what_it_dropped(self):
+        """No silent caps. A caller that asked for a window it did not get has
+        to be able to find out without counting rows and guessing."""
+        r = self.client.get("/api/facts?kind=swing&symbol=BTCUSDT&tf=1H&bars=1500")
+        self.assertEqual(r.status_code, 200)
+        window = r.headers.get("X-Facts-Window", "")
+        self.assertIn("bars=1500", window)
+        self.assertIn("kept=", window)
+        self.assertIn("older_dropped=", window)
+
+    def test_the_window_never_returns_more_than_unbounded(self):
+        full = self.client.get("/api/facts?kind=swing&symbol=BTCUSDT&tf=1H").json()
+        win = self.client.get("/api/facts?kind=swing&symbol=BTCUSDT&tf=1H&bars=1500").json()
+        self.assertLessEqual(len(win), len(full))
+
+    def test_the_window_keeps_the_RECENT_end(self):
+        """The end of the chart the operator is looking at, and the end that
+        bears on the next decision."""
+        full = self.client.get("/api/facts?kind=ma&symbol=BTCUSDT&tf=1H").json()
+        win = self.client.get("/api/facts?kind=ma&symbol=BTCUSDT&tf=1H&bars=1500").json()
+        if not full or not win or len(win) == len(full):
+            self.skipTest("this store holds no history older than 1500 bars here")
+        self.assertEqual(win[-1]["market_time"], full[-1]["market_time"],
+                         "the newest fact was dropped — the window cut the "
+                         "wrong end")
+        self.assertGreater(win[0]["market_time"], full[0]["market_time"])
+
+    def test_the_chart_asks_for_the_same_window_it_draws(self):
+        """Two numbers for 'how much chart is there' would drift, and the
+        symptom would be markers drawn from evidence off the left edge."""
+        chart = (STATIC / "chart.js").read_text(encoding="utf-8")
+        self.assertIn("const BARS = 1500", chart)
+        self.assertIn("limit=${BARS}", chart)
+        self.assertIn("bars=${BARS}", chart)
+
+
+class OnePollForOnePayloadTests(unittest.TestCase):
+    def test_setup_telemetry_is_asked_for_one_way_only(self):
+        """shell.js asked limit=200 and funnel.js limit=500. There are far
+        fewer than 200 records, so both came back byte-identical — measured at
+        128,073 bytes each — and SSData caches on the URL, so it could not tell
+        they were the same answer. Two cache entries, two downloads, every
+        poll."""
+        import re
+        limits = set()
+        for name in ("shell.js", "funnel.js", "wizard.js", "diagnostics.js"):
+            src = (STATIC / name).read_text(encoding="utf-8")
+            limits.update(re.findall(r"setup-telemetry\?limit=(\d+)", src))
+        self.assertEqual(len(limits), 1,
+                         f"setup-telemetry is requested with differing limits "
+                         f"{sorted(limits)}, so one payload is fetched and "
+                         f"cached more than once")
+
+
 class InstallableOnAPhoneTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(server.app)

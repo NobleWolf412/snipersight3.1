@@ -169,5 +169,69 @@ ok('a refusal the finger cannot hover is written on the surface', () => {
     'the pointer tooltip was dropped; it should stay alongside the text');
 });
 
+ok('the candle readout survives on a phone', () => {
+  /* It was dropped below 640 as "the first thing worth losing, the price chip
+     already carries the close". True for a narrow laptop, backwards for a
+     phone: with a mouse the crosshair lands where you look, and with a finger
+     it is driven by a long press under an opaque fingertip, so the line naming
+     the bar you are touching is the only way to know which one you got. */
+  const css = read('ss.css');
+  const narrow = rules(css).filter(r => coversPhone(r.media) && /\.c-ohlc/.test(r.sel));
+  assert(narrow.length, '.c-ohlc has no phone-width rule at all');
+  assert(!narrow.some(r => /display:\s*none/.test(r.body)),
+    '.c-ohlc is hidden again below 640 — read this test before removing it');
+});
+
+ok('the marker cap is bounded AND observable', () => {
+  /* Only the signals layer was ever bounded; swings, structure, sweeps and
+     cycles were as many as the window held, and every one is re-laid-out on
+     each frame of a pinch. A cap nobody can observe is indistinguishable from
+     a bug, so the drop count is logged and exposed. */
+  const chart = read('chart.js');
+  assert(/MAX_MARKERS/.test(chart), 'the narrow-screen marker cap is gone');
+  assert(/slice\(-MAX_MARKERS\)/.test(chart),
+    'the cap no longer keeps the most RECENT markers — it must not cut the ' +
+    'end of the chart the operator is looking at');
+  assert(/_markerDrop/.test(chart), 'the drop count is no longer observable');
+  assert(/console\.info\([^)]*markers hidden/.test(chart.replace(/\n/g, ' ')),
+    'dropping markers became silent');
+});
+
+ok('the controls that commit a trade are thumb-sized', () => {
+  // Arm measured 34px at 412px — under Android's floor, on the most
+  // consequential control in the app, while CLOSE had already been raised.
+  const css = read('ss.css');
+  const narrow = rules(css).filter(r => coversPhone(r.media) && /\.tk-actions/.test(r.sel));
+  assert(narrow.some(r => /min-height:\s*4[8-9]px|min-height:\s*[5-9]\dpx/.test(r.body)),
+    'Arm/Restore are not raised to a 48px target below 900px');
+});
+
+ok('the nudge row is sized for a thumb everywhere', () => {
+  /* Not grown at a breakpoint: this is the PRIMARY way a level is set on a
+     phone, so it is built at that size from the start. */
+  const css = read('ss.css');
+  const base = rules(css).find(r => r.sel.trim() === '.tk-nudge button');
+  assert(base, '.tk-nudge button has no rule');
+  assert(/min-height:\s*4[4-9]px|min-height:\s*[5-9]\dpx/.test(base.body),
+    'the nudge buttons are below a 44px target');
+  assert(/touch-action:\s*manipulation/.test(base.body),
+    'a repeated nudge can be read as double-tap-to-zoom');
+});
+
+ok('the level handles can be dragged by a finger', () => {
+  /* touch-action:none is the whole reason the drag code runs at all — the
+     browser decides the gesture is a scroll before any handler is consulted. */
+  const css = read('ss.css');
+  const lvl = rules(css).find(r => r.sel.trim() === '.lvl');
+  assert(lvl && /touch-action:\s*none/.test(lvl.body),
+    '.lvl lost touch-action:none, so touch dragging silently stops working');
+  const chart = read('chart.js');
+  assert(/setPointerCapture/.test(chart), 'the drag no longer captures the pointer');
+  assert(/pointercancel/.test(chart),
+    'pointercancel is unhandled, so a taken-away touch leaves the chart frozen');
+  assert(!/addEventListener\('mousedown'/.test(chart),
+    'a mouse-only listener is back on the level handles');
+});
+
 console.log('\n' + passed + ' passed');
 process.exit(process.exitCode || 0);

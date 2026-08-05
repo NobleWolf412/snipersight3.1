@@ -41,6 +41,10 @@
   // survive the rename to Settings.
   const SURFACE_ALIASES = {setup: 'settings', rules: 'settings'};
   let pendingJump = null;
+  /* Set once the first full refresh has been kicked off. go() runs during
+     boot — from the initial hash — and refreshing from inside it then would
+     race the boot refresh for no gain. */
+  let booted = false;
   function go(name){
     name = SURFACE_ALIASES[name] || name;
     document.querySelectorAll('.surface').forEach(s => s.classList.toggle('on', s.id === 's' + '-' + name));
@@ -59,6 +63,12 @@
     // The console polls slowly while it is off screen; arriving on it should
     // not mean waiting out that slow tick for the first paint.
     if(name === 'diagnostics' && consoleReady) pollConsole();
+    /* ...and the same courtesy for the rest. The 30s tick now only refreshes
+       the surface you are looking at, so ARRIVING somewhere is the moment its
+       data has to be fetched — otherwise Settings would show whatever was
+       true when you last left it. Concurrent requests for one path collapse
+       inside SSData, so this costs nothing when it races the periodic tick. */
+    if(booted) refresh();
     /* A dead-end number becomes a door. Anything with data-jump routes to the
        surface AND scrolls the panel that answers it into view, because landing
        at the top of Diagnostics is not the same as being shown the funnel. */
@@ -3009,7 +3019,7 @@ weighed in. Name the facts you used.`;
 
   /* where candidates die, stage by stage — the operator's debugging view */
   async function loadTelemetry(){
-    const t = await api('/api/setup-telemetry?limit=200');
+    const t = await api('/api/setup-telemetry?limit=500');
     const stages = t.stages || {}, fails = t.failure_points || {};
     const rows = Object.entries(stages).length ? Object.entries(stages)
       : Object.entries(fails);
@@ -3290,6 +3300,35 @@ weighed in. Name the facts you used.`;
     () => setDev(!document.body.classList.contains('dev')));
 
   /* ---------- refresh loop ---------- */
+  /* WHICH SURFACE EACH LOADER IS FOR.
+
+     The 30s tick fired all eight regardless of what was on screen, so sitting
+     on Command re-fetched the settings, the credentials, the performance
+     tables and the telemetry — every half minute, forever. On loopback that
+     is free. On a phone it is the difference between leaving the app open and
+     watching the data allowance, and /api/setup-telemetry alone is 128KB a
+     poll. The console poller in this file already gates itself on visibility;
+     this is the same rule applied to the rest.
+
+     `null` means always, and the entries that carry it are not a shortcut:
+     the equity figure and the health chip live in the top bar, which is on
+     screen no matter which surface is selected, so gating them would freeze
+     the two numbers most likely to be glanced at. */
+  const LOADER_SURFACE = [
+    [null,          () => loadPortfolio()],     // top-bar equity, and Command
+    [null,          () => loadHealth()],        // top-bar health chip
+    ['command',     () => loadOverview()],
+    ['command',     () => loadRisk()],
+    ['settings',    () => loadSettings()],
+    ['settings',    () => loadCredentials()],
+    ['results',     () => loadPerformance()],
+    ['diagnostics', () => loadTelemetry()],
+  ];
+  const currentSurface = () => {
+    const on = document.querySelector('.surface.on');
+    return on ? on.id.replace(/^s-/, '') : 'command';
+  };
+
   async function refresh(){
     /* The portfolio lands FIRST and alone. The deck's membership is a join
        against it, so running the two concurrently meant a first paint that
@@ -3297,9 +3336,10 @@ weighed in. Name the facts you used.`;
        the race. Ordering costs one round trip and removes a whole class of
        "the screens disagree" bug. */
     const first = await Promise.allSettled([loadPortfolio()]);
-    const jobs = [loadOverview(), loadHealth(),
-                  loadRisk(), loadSettings(), loadCredentials(), loadPerformance(),
-                  loadTelemetry()];
+    const here = currentSurface();
+    const jobs = LOADER_SURFACE
+      .filter(([surface, run], i) => i !== 0 && (surface === null || surface === here))
+      .map(([, run]) => run());
     const results = first.concat(await Promise.allSettled(jobs));
     const failed = results.filter(r => r.status === 'rejected');
     if(failed.length) markDegraded(failed.map(f => f.reason).join('; '), failed.length);
@@ -3311,5 +3351,6 @@ weighed in. Name the facts you used.`;
     }                                             // health orb is reset by loadHealth
   }
   refresh();
+  booted = true;
   setInterval(refresh, 30000);
 })();
