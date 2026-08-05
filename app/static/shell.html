@@ -976,12 +976,14 @@
     <span class="sb-item"><span class="orb" id="sbOrb"></span><b id="sbLive">connecting…</b></span>
     <span class="sb-item" id="sbWatch"></span>
     <span style="margin-left:auto">Sim only — no live orders</span>
-    <!-- Diagnostics answers "is the machine telling me the truth" — a real
-         question, and not one to put in front of somebody deciding whether
-         this product is for them. Raw quality codes, the backend console and
-         the fact tracer are opt-in now instead of a permanent tab sitting
-         between Rules and Learn. -->
-    <button class="sb-dev" id="devToggle" type="button" aria-pressed="false">Developer mode</button>
+    <!-- Named for the ONE thing it reveals: the live server log at the foot
+         of Diagnostics. It read "Developer mode" from when it gated that whole
+         surface, and kept the label after the scope shrank to a single panel —
+         so pressing it from any other surface changed nothing the operator
+         could see. shell.js gives the label its state and its tooltip, and
+         sends you to the panel on the way on. -->
+    <button class="sb-dev" id="devToggle" type="button" aria-pressed="false"
+            title="show the live server log (Diagnostics, at the bottom)">Backend console</button>
   </footer>
 
 </div>

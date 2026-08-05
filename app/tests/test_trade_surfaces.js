@@ -551,4 +551,40 @@ ok('no control character survives where a regex escape was meant', () => {
             'a stray control byte is an unmatchable regex, and invisible');
 });
 
+
+/* THE STATUS-BAR TOGGLE. It said "Developer mode" from when it gated the whole
+   Diagnostics surface. Diagnostics is a nav tab now and one rule is left —
+   body:not(.dev) #consolePanel — so pressing it from any other surface changed
+   nothing visible, which reads as a broken control. */
+console.log('backend console toggle');
+// Slice, not a multi-line regex literal: a JS regex cannot span lines, and the
+// two previous attempts in this file died on exactly that.
+const setDevBody = (() => {
+  const i = JS.indexOf('function setDev(on, jump)');
+  return i < 0 ? '' : JS.slice(i, i + 1800);
+})();
+ok('it is named for the one thing it reveals', () => {
+  assert.ok(/Backend console/.test(HTML), 'the markup ships the honest label');
+  assert.ok(!/>Developer mode</.test(HTML), 'nothing still promises a mode');
+  assert.ok(/Backend console · on/.test(JS) || JS.includes('Backend console'),
+            'and it says when it is on');
+});
+ok('turning it on goes to the panel it just revealed', () => {
+  assert.ok(setDevBody, 'setDev(on, jump) not found');
+  assert.ok(setDevBody.includes("pendingJump = 'consolePanel'"), 'reuses the one jump path');
+  assert.ok(setDevBody.includes("go('diagnostics')"));
+});
+ok('it never hijacks the route at boot, or on the way off', () => {
+  assert.ok(setDevBody.includes('if(on && jump)'), 'both conditions, not either');
+  assert.ok(JS.includes('setDev(readDev());'), 'boot passes no jump');
+  assert.ok(JS.includes("setDev(!document.body.classList.contains('dev'), true)"),
+            'only the click asks to jump');
+});
+ok('the id and the storage key are unchanged', () => {
+  // Renaming either would break references and silently reset the preference
+  // for everyone who already has one. The label is the part that was wrong.
+  assert.ok(/id="devToggle"/.test(HTML));
+  assert.ok(JS.includes("DEV_KEY = 'ss.devMode'"));
+});
+
 console.log(`  ${passed} passed`);

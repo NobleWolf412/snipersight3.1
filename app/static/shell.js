@@ -3455,12 +3455,18 @@ weighed in. Name the facts you used.`;
     b.disabled = false; b.textContent = was;
   });
 
-  /* ---------- developer mode ----------
-     Diagnostics is the surface that asks whether the machine is telling the
-     truth. That is a real question and a necessary surface — but it is a
-     developer's question, and it was sitting in the rail between Rules and
-     Learn where the first thing a new reader clicked showed them
-     `ohlc invariant failure` and a log tail. It is opt-in now.
+  /* ---------- backend console ----------
+     What this gates is ONE panel: the live server log at the foot of
+     Diagnostics. It used to gate that whole surface — Diagnostics sat in the
+     rail between Rules and Learn, so the first thing a new reader clicked
+     showed them `ohlc invariant failure` and a log tail — but the surface is a
+     public tab now and only the console stayed behind the switch. The name and
+     the comment kept the old scope for a while after the behaviour shrank,
+     which is how an operator came to press it and find nothing changed.
+
+     The id (`devToggle`) and the storage key (`ss.devMode`) are deliberately
+     NOT renamed: the id is referenced elsewhere and the key holds a preference
+     that would silently reset for everyone who has one.
 
      The preference survives a reload, and turning it off while standing on
      Diagnostics moves you somewhere that still exists rather than leaving a
@@ -3468,14 +3474,35 @@ weighed in. Name the facts you used.`;
   const DEV_KEY = 'ss.devMode';
   const readDev = () => { try{ return localStorage.getItem(DEV_KEY) === '1'; }
                           catch(e){ return false; } };
-  function setDev(on){
+  function setDev(on, jump){
     // On BODY: the console panel sits on the stage, outside .shell, so a
     // .shell-scoped class could never reach it and the gate was decorative.
     document.body.classList.toggle('dev', on);
     const b = $('devToggle');
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.textContent = on ? 'Developer mode · on' : 'Developer mode';
+    /* "Developer mode" is a promise this control stopped keeping. It once
+       gated the whole Diagnostics surface; Diagnostics is a nav tab now and
+       the single rule left is `body:not(.dev) #consolePanel{display:none}`.
+       One panel is not a mode, and a label that overstates its scope leaves
+       the operator hunting for changes that were never going to happen. */
+    b.textContent = on ? 'Backend console · on' : 'Backend console';
+    b.title = on
+      ? 'the live server log, on Diagnostics — click to hide it again'
+      : 'show the live server log (Diagnostics, at the bottom)';
     try{ localStorage.setItem(DEV_KEY, on ? '1' : '0'); }catch(e){}
+    /* Turning it ON goes to the thing that was just turned on. This button
+       lives in the status bar, on every surface; the panel it reveals is the
+       last one on Diagnostics. Pressing it from anywhere else changed nothing
+       visible, which is indistinguishable from a control that does not work.
+       Reuses the existing pendingJump path rather than scrolling here, so
+       there stays one implementation of "go there and show me".
+
+       Only on the way ON, and never at boot — a preference restored on load
+       must not hijack the route the operator actually asked for. */
+    if(on && jump){
+      pendingJump = 'consolePanel';
+      go('diagnostics');
+    }
     /* This used to bounce #diagnostics to Command, from the era when the
        WHOLE surface was dev-gated. The surface is a public nav tab now and
        this only gates the console panel — but setDev runs at boot, so the
@@ -3484,7 +3511,7 @@ weighed in. Name the facts you used.`;
   }
   setDev(readDev());
   $('devToggle').addEventListener('click',
-    () => setDev(!document.body.classList.contains('dev')));
+    () => setDev(!document.body.classList.contains('dev'), true));
 
   /* ---------- refresh loop ---------- */
   /* WHICH SURFACE EACH LOADER IS FOR.
