@@ -452,3 +452,66 @@ class ConfoundGuard(unittest.TestCase):
         self.assertEqual(
             edgestats._setup_version_of("BTC|1D|PULLBACK|z|setup-v0.8-draft"),
             "setup-v0.8-draft")
+
+
+class TestForwardVsHistorical(TempStore):
+    """A backfilled trade is not a track record, and adding the two together
+    produced a number that described neither.
+
+    Measured on the live store 2026-08-05 (exec-v0.21): 466 pre-baseline trades
+    at +27.17 R and 32 forward ones at -10.49 R were reported as one book at
+    +16.68 R, while the equity curve — which replays only the forward half —
+    read 9,652 against a 10,000 start. Both figures were right; presenting them
+    side by side as the same book was not.
+    """
+
+    def _book(self, **kw):
+        return edgestats.report(self.con, algo_version=execsim.EXEC_VERSION,
+                                resamples=200, **kw)
+
+    def setUp(self):
+        super().setUp()
+        store.start_baseline(self.con, started_at=5_000_000)
+        # history: profitable, and none of it was ever tradeable
+        for i in range(12):
+            add_trade(self.con, f"old-{i}", "2.0", market_time=1_000_000 + i,
+                      confirmed_at=4_000_000 + i)
+        # forward: losing, and this is the half the account actually lived
+        for i in range(12):
+            add_trade(self.con, f"new-{i}", "-1.0", market_time=6_000_000 + i,
+                      confirmed_at=6_000_000 + i)
+
+    def test_the_two_halves_are_separable(self):
+        fwd = self._book(window="FORWARD")["book"]
+        hist = self._book(window="HISTORICAL")["book"]
+        self.assertEqual((fwd["n"], hist["n"]), (12, 12))
+        self.assertLess(fwd["sum_r"], 0, "the forward half is the losing one")
+        self.assertGreater(hist["sum_r"], 0, "the historical half is the winner")
+
+    def test_a_filtered_report_still_says_what_it_left_out(self):
+        """Same rule as venue_state: counts carry BOTH halves whichever is
+        selected, so a number can never quietly describe a subset."""
+        for w in (None, "FORWARD", "HISTORICAL"):
+            with self.subTest(window=w):
+                c = self._book(window=w)["counts"]
+                self.assertEqual((c["forward"], c["historical"]), (12, 12))
+                self.assertEqual(c["baseline_started_at"], 5_000_000)
+
+    def test_the_combined_book_warns_that_it_is_combined(self):
+        warns = " ".join(self._book()["warnings"])
+        self.assertIn("predate the active baseline", warns)
+        self.assertIn("BACKFILLED HISTORY", warns)
+
+    def test_a_single_window_does_not_warn(self):
+        """The warning exists to stop an unlabelled mix being read as a track
+        record. Once a window is chosen there is nothing to warn about, and a
+        warning that always fires is one nobody reads."""
+        for w in ("FORWARD", "HISTORICAL"):
+            with self.subTest(window=w):
+                warns = " ".join(self._book(window=w)["warnings"])
+                self.assertNotIn("predate the active baseline", warns)
+
+    def test_the_window_is_recorded_on_the_report(self):
+        self.assertEqual(self._book(window="FORWARD")["filters"]["window"],
+                         "FORWARD")
+        self.assertIsNone(self._book()["filters"]["window"])
