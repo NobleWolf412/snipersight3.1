@@ -261,7 +261,7 @@ class RefreshUniverseRepairs(unittest.TestCase):
         import live
         self.live = live
         self._saved = live._last_universe_refresh
-        live._last_universe_refresh = 0.0      # defeat the hourly throttle
+        live._last_universe_refresh = None     # defeat the hourly throttle
         self.addCleanup(setattr, live, "_last_universe_refresh", self._saved)
         self.log = mock.MagicMock()
 
