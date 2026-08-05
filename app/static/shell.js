@@ -2038,7 +2038,22 @@ weighed in. Name the facts you used.`;
     });
   }
 
-  function renderScoreboard(journal){
+  /* Renamed from renderScoreboard, which is what a SECOND function 900 lines
+     below is also called. Function declarations hoist, so the later one won
+     and this one never ran — for as long as both have existed. Nothing errored
+     and nothing looked broken from the code: the two callers resolved to the
+     Results scoreboard, which fills its own elements perfectly well.
+
+     What it cost is the "Closed today" tile on Command. This is the only code
+     that writes #mTodayTile / #mToday / #mTodaySub, so that tile has been
+     showing an em-dash forever, beside a Results panel reporting 7 trades and
+     a 29% win rate from the same journal.
+
+     Found by eslint's no-redeclare, which is the case CLAUDE.md describes: a
+     defect no text assertion and no `node --check` can see, because the file
+     is valid JavaScript and every suite that reads it still finds what it
+     expects. */
+  function renderTodayTile(journal){
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const cut = today.getTime() / 1000;
     const rows = journal.filter(j => j.ts >= cut);
@@ -2092,6 +2107,10 @@ weighed in. Name the facts you used.`;
 
     const journal = p.journal || [];
     renderJournal(journal, p.journal_total);
+    // Both, deliberately: this loader feeds Command's today tile AND the
+    // Results scoreboard, and the name collision meant only the second ever
+    // ran from here.
+    renderTodayTile(journal);
     renderScoreboard(journal);
 
     if(!$('positions').dataset.traceWired){
