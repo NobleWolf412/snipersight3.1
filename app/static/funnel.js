@@ -536,7 +536,7 @@
             fmt(Object.values(map).reduce((s, n) => s + n, 0)) + ' recorded at this stage'
           : 'no reason recorded for this drop'}</span>
       </span>
-      ${cta ? `<a class="btn btn-cyan dx-bn-cta" href="${cta.href}">Open ${esc(cta.label)} →</a>` : ''}
+      ${cta ? `<a class="btn btn-primary dx-bn-cta" href="${cta.href}">Open ${esc(cta.label)} →</a>` : ''}
     </div>`;
   }
 

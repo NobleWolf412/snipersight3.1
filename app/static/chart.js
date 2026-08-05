@@ -1291,6 +1291,10 @@ window.SSChart = (() => {
          living in the tooltip for whoever wants it. */
       b.textContent = b.dataset.label;
       b.classList.toggle('empty', !c);
+      /* Nine toggles whose only question is on/off, and the state lived purely
+         in a class. A screen-reader operator could not tell which layers were
+         drawn on the chart they were being asked to trade from. */
+      b.setAttribute('aria-pressed', String(b.classList.contains('on')));
       // in the menu, absence is said in words — a struck-through control
       // reads as broken every time
       if(!c) b.textContent = b.dataset.label + ' — no data';
@@ -1438,8 +1442,14 @@ window.SSChart = (() => {
 
   function setDir(d, quiet){
     dir = d;
-    document.querySelectorAll('#tkDir button').forEach(b =>
-      b.classList.toggle('on', b.dataset.d === d));
+    document.querySelectorAll('#tkDir button').forEach(b => {
+      const on = b.dataset.d === d;
+      b.classList.toggle('on', on);
+      /* Long vs Short is the single most consequential state in the ticket and
+         a screen reader was told nothing about it: the only signal was a class
+         that changes a background colour. Same pattern #tkTabs already uses. */
+      b.setAttribute('aria-pressed', String(on));
+    });
     if(!quiet){
       if(base && d !== base.dir) modified = true;
       recompute();
@@ -1691,7 +1701,10 @@ window.SSChart = (() => {
     $('cTfs').addEventListener('click', e => {
       const b = e.target.closest('button'); if(!b) return;
       tf = b.dataset.tf;
-      document.querySelectorAll('#cTfs button').forEach(x => x.classList.toggle('on', x === b));
+      document.querySelectorAll('#cTfs button').forEach(x => {
+        x.classList.toggle('on', x === b);
+        x.setAttribute('aria-pressed', String(x === b));
+      });
       load();
     });
     $('cLayersBtn').addEventListener('click', () => {

@@ -18,7 +18,7 @@
 .wx .panel-head{ gap: var(--md); }
 
 /* orientation line: what the strip is for, said once */
-.wx-sub{ font-family: var(--f-mono); font-size: 10px; letter-spacing: .1em;
+.wx-sub{ font-family: var(--f-mono); font-size:var(--fs-1); letter-spacing: .1em;
   color: var(--fg-4); text-transform: lowercase; }
 .wx .panel-head .chip{ margin-left: auto; flex: none; }
 
@@ -37,7 +37,7 @@
 
 /* ---- symbol ---- */
 .wx-sym{ display: flex; align-items: center; padding: 6px 12px;
-  font-family: var(--f-mono); font-size: 12.5px; letter-spacing: .04em;
+  font-family: var(--f-mono); font-size:var(--fs-2); letter-spacing: .04em;
   color: var(--fg); min-width: 0; }
 .wx-sym span{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -51,9 +51,9 @@
 .wx-tf::after{ content: ''; position: absolute; left: 0; right: 0; bottom: 5px;
   height: 2px; background: var(--wx-bias); opacity: .85; }
 .wx-tf.split::after{ left: 7px; }              /* the break = they disagree */
-.wx-tf .tfk{ font-family: var(--f-mono); font-size: 9.5px; font-weight: 600;
+.wx-tf .tfk{ font-family: var(--f-mono); font-size:var(--fs-1); font-weight: 600;
   letter-spacing: .16em; text-transform: uppercase; color: var(--fg-4); flex: none; }
-.wx-tf .reg{ font-family: var(--f-mono); font-size: 11.5px; color: var(--wx-tone);
+.wx-tf .reg{ font-family: var(--f-mono); font-size:var(--fs-2); color: var(--wx-tone);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* regime tone — direction by colour, conviction by weight of that colour */
@@ -78,7 +78,7 @@
 
 /* ---- what this means: the only prose on the strip, so the only Inter ---- */
 .wx-mean{ display: flex; align-items: center; gap: 9px; min-width: 0;
-  padding: 6px 12px 6px 10px; font-family: var(--f-body); font-size: 12.5px;
+  padding: 6px 12px 6px 10px; font-family: var(--f-body); font-size:var(--fs-2);
   line-height: 1.45; color: var(--fg-3); }
 .wx-row.live .wx-mean{ color: var(--fg-2); }
 .wx-arrow{ font-family: var(--f-mono); color: var(--fg-4); flex: none; }
@@ -88,7 +88,7 @@
 /* the full reason, revealed on click — kept out of the resting layout so
    twenty rows still fit above the fold */
 .wx-why{ display: none; grid-column: 2 / -1; padding: 0 12px 11px 10px;
-  font-family: var(--f-body); font-size: 12px; line-height: 1.55;
+  font-family: var(--f-body); font-size:var(--fs-2); line-height: 1.55;
   color: var(--fg-3); max-width: 78ch; }
 .wx-row.open .wx-why{ display: block; }
 .wx-row.open{ background: rgba(255,255,255,.03); }
@@ -96,20 +96,20 @@
 /* ---- footer: the sentence that explains the silence ---- */
 .wx-foot{ display: flex; align-items: center; gap: var(--md); flex-wrap: wrap;
   padding: var(--md) var(--lg); border-top: 1px solid var(--border-soft); }
-.wx-foot p{ font-family: var(--f-body); font-size: 12px; line-height: 1.5;
+.wx-foot p{ font-family: var(--f-body); font-size:var(--fs-2); line-height: 1.5;
   color: var(--fg-3); margin: 0; flex: 1; min-width: 220px; max-width: 78ch; }
-.wx-ver{ font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .12em;
+.wx-ver{ font-family: var(--f-mono); font-size:var(--fs-1); letter-spacing: .12em;
   color: var(--fg-4); text-transform: uppercase; }
 
 /* ---- loud fallback ----
    A strip that renders nothing looks identical to a calm market, and this one
    exists precisely to stop a quiet screen being misread. So it says so. */
 .wx-fail{ border-color: rgba(248,113,113,.4); }
-.wx-failbody{ padding: var(--lg); font-family: var(--f-body); font-size: 12.5px;
+.wx-failbody{ padding: var(--lg); font-family: var(--f-body); font-size:var(--fs-2);
   line-height: 1.6; color: var(--fg-3); display: flex; flex-direction: column;
   gap: var(--sm); max-width: 78ch; }
 .wx-failbody b{ color: var(--red-2); font-weight: 600; }
-.wx-failbody code{ font-family: var(--f-mono); font-size: 11px;
+.wx-failbody code{ font-family: var(--f-mono); font-size:var(--fs-1);
   color: var(--fg-4); word-break: break-all; }
 
 /* ---- responsive ---- */
@@ -117,7 +117,7 @@
 @media (max-width:1100px){
   .wx-sub{ display: none; }
   .wx{ --wx-cols: 88px minmax(104px, max-content) minmax(104px, max-content) minmax(0, 1fr); }
-  .wx-mean{ font-size: 12px; }
+  .wx-mean{ font-size:var(--fs-2); }
 }
 /* stacked: symbol on its own line, the two timeframes still side by side so the
    agreement rule stays readable, meaning underneath */
@@ -151,17 +151,17 @@
 .cy-head::-webkit-details-marker{ display: none }
 .cy-details[open] .cy-head{ margin-bottom: var(--sm) }
 /* the affordance the audit asked for: a control that expands must look like one */
-.cy-head::after{ content: '▾'; color: var(--fg-4); font-size: 10px;
+.cy-head::after{ content: '▾'; color: var(--fg-4); font-size:var(--fs-1);
   transition: transform .15s ease }
 .cy-details[open] .cy-head::after{ transform: rotate(180deg) }
 
 /* Market Weather's own disclosure. The load-bearing sentence stays out here;
    only the evidence grid folds. */
-.wx-lead{ font-family: var(--f-body); font-size: 12.5px; line-height: 1.6;
+.wx-lead{ font-family: var(--f-body); font-size:var(--fs-2); line-height: 1.6;
   color: var(--fg-2); padding: var(--md) var(--lg) 0 }
 .wx-summary{ display: flex; align-items: center; gap: var(--sm); cursor: pointer;
   list-style: none; padding: var(--sm) var(--lg) var(--md);
-  font-family: var(--f-mono); font-size: 10px; font-weight: 600;
+  font-family: var(--f-mono); font-size:var(--fs-1); font-weight: 600;
   letter-spacing: .16em; text-transform: uppercase; color: var(--fg-3) }
 .wx-summary::-webkit-details-marker{ display: none }
 .wx-summary::after{ content: '▾'; transition: transform .15s ease }
@@ -174,24 +174,29 @@
 .cy-row{ display: grid; grid-template-columns: 148px 1fr; gap: var(--md);
   padding: 7px 0; align-items: start }
 .cy-row + .cy-row{ border-top: 1px dashed var(--border-soft) }
-.cy-k{ font-family: var(--f-mono); font-size: 10px; font-weight: 600;
+.cy-k{ font-family: var(--f-mono); font-size:var(--fs-1); font-weight: 600;
   letter-spacing: .14em; text-transform: uppercase; color: var(--fg-4);
   padding-top: 2px }
-.cy-v b{ font-family: var(--f-display); font-size: 14px; color: var(--fg) }
+.cy-v b{ font-family: var(--f-display); font-size:var(--fs-3); color: var(--fg) }
 /* Amber, never red. A cycle peaking early is a reading, not a loss. */
 .cy-v b.cy-warn{ color: var(--amber) }
-.cy-note{ font-family: var(--f-body); font-size: 12px; line-height: 1.5;
+.cy-note{ font-family: var(--f-body); font-size:var(--fs-2); line-height: 1.5;
   color: var(--fg-3); margin-top: 3px; max-width: 70ch }
 /* The evidence class travels WITH the number it qualifies. `mechanical` and
    `heuristic` are not decoration — one is arithmetic on detected swings, the
    other is a rule of thumb fitted to two samples, and an operator who cannot
    tell them apart is being misled by the more confident-looking one. */
-.cy-tag{ font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--fg-4); margin-top: 5px }
+/* Sentence case, not uppercase. This tag carries a caveat, not a label —
+   "heuristic · fitted to 2 completed four-year cycles" runs to 103 characters,
+   and tracked uppercase at that length is the hardest thing on the surface to
+   read. The caveat is the whole point of the element: it is what stops a fitted
+   curve being read as a measured one. */
+.cy-tag{ font-family: var(--f-mono); font-size:var(--fs-1); letter-spacing: .01em;
+  line-height: 1.5; color: var(--fg-3); margin-top: 5px }
 .cy-win{ display: flex; gap: var(--sm); align-items: baseline; flex-wrap: wrap;
-  font-family: var(--f-mono); font-size: 12px; padding: 1px 0 }
+  font-family: var(--f-mono); font-size:var(--fs-2); padding: 1px 0 }
 .cy-win span{ color: var(--fg-4); min-width: 132px }
-.cy-win b{ font-family: var(--f-mono); font-size: 12px; color: var(--fg-2) }
-.cy-win em{ font-style: normal; color: var(--amber); font-size: 11px }
-.cy-foot{ font-family: var(--f-body); font-size: 11px; line-height: 1.5;
+.cy-win b{ font-family: var(--f-mono); font-size:var(--fs-2); color: var(--fg-2) }
+.cy-win em{ font-style: normal; color: var(--amber); font-size:var(--fs-1) }
+.cy-foot{ font-family: var(--f-body); font-size:var(--fs-1); line-height: 1.5;
   color: var(--fg-4); margin-top: var(--sm); max-width: 78ch }

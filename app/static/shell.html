@@ -39,12 +39,12 @@
 
     <!-- the account, readable from every surface — you should never have to
          navigate away to find out what the risk % is a percentage OF -->
-    <span class="chip chip-cyan" id="equityChip" title="account equity (paper)">
+    <span class="chip" id="equityChip" title="account equity (paper)">
       <span id="equityTxt">—</span><span id="equityRet" style="opacity:.7"></span></span>
     <span class="chip" id="healthChip" title="pipeline audit"><span class="orb" id="healthOrb"></span><span id="healthTxt">—</span></span>
     <span class="chip" id="scanChip"><span class="orb" id="scanOrb"></span><span id="scanTxt">SCANNER —</span></span>
     <span class="t-mono" id="clock" style="color:var(--fg-4)">—</span>
-    <button class="btn btn-cyan" id="btnCopilot"
+    <button class="btn btn-primary" id="btnCopilot"
             title="ask the copilot — it reads the facts, it cannot arm anything">Copilot</button>
     <!-- always visible, on every surface: the operator can always stop it -->
     <button class="btn btn-red" id="btnHalt" title="stop sizing new entries">HALT</button>
@@ -74,6 +74,25 @@
         <p>What should I do right now?</p>
       </div>
 
+      <!-- THE ANSWER, ABOVE THE EVIDENCE.
+
+           This surface asked "What should I do right now?" and replied with
+           seven co-equal panels over 2133px against an 818px stage. Nothing on
+           it was the answer; the operator assembled one by reading a tile, a
+           chip, and a deck headline and reconciling them. Two of those three
+           disagreed: the Active-setups tile counted refused and expired setups,
+           so it read 3 directly above a deck that read "no setups right now".
+
+           One line, first, in a sentence. It derives NOTHING. The count comes
+           from deckSplit(), the same function the deck itself renders from, and
+           the blocking clause comes from bindingConstraint(), the same function
+           that labels the risk-budget chip. If this line and a panel below it
+           ever disagree, one of those two functions is wrong and both readers
+           are wrong together, which is the only honest arrangement. -->
+      <p class="disposition" id="disposition">
+        <span class="skel skel-line" style="width:38%"></span>
+      </p>
+
       <!-- START HERE. The audit counted 79 buttons across the app and found
            not one of them was an entry point for someone who had just opened
            it: no first-run path, no statement of what this is. Shown once,
@@ -95,7 +114,7 @@
               before this trades real money.</li>
           </ol>
           <div class="fr-acts">
-            <button class="btn btn-cyan" id="frGo">Got it</button>
+            <button class="btn btn-primary" id="frGo">Got it</button>
             <button class="btn" id="frDiag">Something looks wrong</button>
           </div>
         </div>
@@ -109,7 +128,7 @@
                waiting for the next one — so a label implying a heavier,
                different action was the brightest button on the home screen
                promising something it never did. -->
-          <button class="btn btn-cyan" id="btnScan">Check now</button>
+          <button class="btn btn-primary" id="btnScan">Check now</button>
           <!-- The reason is ON the control, not hidden in a hover title. A
                disabled button whose explanation you have to discover teaches an
                operator that the app is arbitrary. -->
@@ -134,7 +153,12 @@
           <div class="t-mono scan-result" id="scanResult" hidden></div>
           <div class="grid cols-4">
             <div class="tile"><span class="t-label"><span class="term" data-t="universe">Tradeable now</span></span><span class="t-metric" id="mUniverse">—</span><span class="t-sub" id="mUniverseSub"></span></div>
-            <div class="tile"><span class="t-label"><span class="term" data-t="setup">Active setups</span></span><span class="t-metric" id="mSetups">—</span></div>
+            <!-- Counts what can still be acted on. It used to count the whole
+                 deck payload including REJECTED and expired rows, which is why
+                 it read 3 above a deck that said "no setups right now". The
+                 refused ones are not hidden: they are named on the sub-line and
+                 listed under "Looked at, not taken" below. -->
+            <div class="tile"><span class="t-label"><span class="term" data-t="setup">Active setups</span></span><span class="t-metric" id="mSetups">—</span><span class="t-sub" id="mSetupsSub"></span></div>
             <!-- "Closed today" where the equity tile sat: equity already lives
                  in the top bar on every surface, so this slot repeated a number
                  four inches from itself while "how did today actually go" — the
@@ -269,9 +293,9 @@
           </div>
         </div>
         <div class="seg" id="cTfs">
-          <button data-tf="15m">15m</button><button data-tf="1H">1H</button
-          ><button data-tf="4H" class="on">4H</button><button data-tf="1D">1D</button
-          ><button data-tf="1W">1W</button>
+          <button data-tf="15m" aria-pressed="false">15m</button><button data-tf="1H" aria-pressed="false">1H</button
+          ><button data-tf="4H" class="on" aria-pressed="true">4H</button><button data-tf="1D" aria-pressed="false">1D</button
+          ><button data-tf="1W" aria-pressed="false">1W</button>
         </div>
         <!-- One price chip: closed candle (what the engines see), live tick as
              a quiet suffix, freshness as the dot. Three chips became one. -->
@@ -357,8 +381,8 @@
                stop the wrong side of price and close the trade on the spot. -->
           <div class="tk-manage" id="tkManage" hidden></div>
           <div class="seg seg-dir tk-pinned-dir" id="tkDir" aria-label="Trade direction">
-            <button data-d="LONG" type="button">Long</button
-            ><button data-d="SHORT" type="button">Short</button>
+            <button data-d="LONG" type="button" aria-pressed="true">Long</button
+            ><button data-d="SHORT" type="button" aria-pressed="false">Short</button>
           </div>
 
           <div class="seg tk-tabs" id="tkTabs">
@@ -398,7 +422,7 @@
                        aria-label="Leverage for this trade">
                 <span class="t-mono" id="tkLevVal" style="min-width:3.5em;text-align:right"></span>
               </div>
-              <div class="t-mono" id="tkLiq" style="color:var(--fg-3);font-size:11px"></div>
+              <div class="t-mono" id="tkLiq" style="color:var(--fg-3);font-size:var(--fs-1)"></div>
             </div>
 
             <!-- per-trade risk: affects THIS trade only, never the default -->
@@ -434,7 +458,7 @@
                        aria-label="How far in R to take that part off">
                 <span class="t-label">R</span>
               </div>
-              <div class="t-mono" id="tkScaleAt" style="color:var(--fg-3);font-size:11px"></div>
+              <div class="t-mono" id="tkScaleAt" style="color:var(--fg-3);font-size:var(--fs-1)"></div>
             </div>
            </div>
 
@@ -482,7 +506,7 @@
                before acting. "Arm" alone left an operator to infer which
                book they were writing to, and the two books mean different
                things: this one is theirs, the strategy record is not. -->
-          <button class="btn btn-cyan" id="tkArm" disabled>Arm (paper)</button>
+          <button class="btn btn-primary" id="tkArm" disabled>Arm (paper)</button>
         </div>
         <!-- The operator's open trade on THIS chart, marked to the last
              closed bar. Without it a trade vanished into the book the
@@ -531,7 +555,7 @@
       <!-- The sample caveat, sized to the sample. A win rate off seven trades
            is a number, not evidence, and saying so here is cheaper than
            letting the reader find out later. -->
-      <p class="t-body" id="rSample" style="margin:0 0 var(--lg);color:var(--fg-4);font-size:11px"></p>
+      <p class="t-body" id="rSample" style="margin:0 0 var(--lg);color:var(--fg-4);font-size:var(--fs-1);max-width:56ch"></p>
       <div class="panel" style="margin-bottom:var(--lg)">
         <div class="panel-head"><h2 class="t-section">Trade Journal</h2>
           <span class="chip" id="jnlCount" style="margin-left:auto">—</span>
@@ -558,19 +582,23 @@
         </div>
       </div>
 
-      <!-- "Is the edge real?" — moved here from Diagnostics (audit B6).
-           Whether the recorded book is distinguishable from zero is THE
-           Results question, and it sits directly under the equity curve so the
-           honesty check is in the same eyeline as the curve it disciplines: a
-           promising 12-trade window reads differently with the bootstrap
-           interval right beneath it. edgeview.js owns it, reads
-           /api/edge-stats, and measures the WHOLE recorded book — its era band
-           says so and distinguishes it from the forward-window tiles above. -->
+      <!-- "Is the edge real?" — the bootstrap interval does NOT live here.
+           #edgeRoot is in Diagnostics; edgeview.js owns it, reads
+           /api/edge-stats, and measures the WHOLE recorded book.
 
-          <div class="skel skel-line" style="width:60%"></div>
-          <div class="skel skel-line" style="width:85%"></div>
-        </div>
-      </div>
+           A move of that panel to Results (audit B6) was started and never
+           finished: its opening tags went with it and four lines were left
+           behind here — two orphan skeleton bars with no panel to fill them,
+           and two closing divs with nothing to close. Those two closers
+           terminated .shell 40 lines early, so #s-settings, #s-diagnostics
+           and footer.statusbar parsed as children of <body>, below a
+           height:100vh shell inside overflow:hidden. Settings and Diagnostics
+           rendered blank and could not be scrolled to by any input.
+
+           The argument for the move still stands — the honesty check belongs
+           in the same eyeline as the curve it disciplines. Do it by moving the
+           whole panel, opening tags included, and let
+           test_shell_structure.js prove the tree still closes. -->
 
       <!-- The journal: every closed trade, one row each, newest first. The
            account's endings existed only as aggregates (return, drawdown,
@@ -666,7 +694,7 @@
               <span id="dirtyWhat">You have unsaved rule changes.</span>
               <span class="spacer"></span>
               <button class="btn" id="setReset" disabled>Discard</button>
-              <button class="btn btn-cyan" id="setApply" disabled>Apply</button>
+              <button class="btn btn-primary" id="setApply" disabled>Apply</button>
             </div>
           </div>
         </div>
