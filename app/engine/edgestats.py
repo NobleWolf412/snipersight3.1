@@ -178,7 +178,8 @@ def _setup_version_of(setup_id: str | None) -> str:
 
 def load_trades(con, *, algo_version: str, symbol: str | None = None,
                 tf: str | None = None, strategy: str | None = None,
-                as_of: int | None = None) -> tuple[list[dict], dict, list[str]]:
+                as_of: int | None = None,
+                since: int | None = None) -> tuple[list[dict], dict, list[str]]:
     """Filled trades for one algo version, in the order the system learned them.
 
     Returns (trades, counts, warnings). Ordering is by confirmed_at then id —
@@ -198,6 +199,9 @@ def load_trades(con, *, algo_version: str, symbol: str | None = None,
     if as_of is not None:
         q += " AND confirmed_at<=?"
         args.append(as_of)
+    if since is not None:
+        q += " AND confirmed_at>=?"
+        args.append(since)
     q += " ORDER BY confirmed_at, id"
 
     rows = con.execute(q, args).fetchall()
@@ -524,6 +528,7 @@ def _breakeven_fee(trades: list[dict]) -> dict:
 def report(con, *, algo_version: str | None = None, symbol: str | None = None,
            tf: str | None = None, strategy: str | None = None,
            as_of: int | None = None, venue_state: str | None = None,
+           window: str | None = None,
            resamples: int = BOOTSTRAP_RESAMPLES) -> dict:
     """Plain-dict edge report. Read-only: writes no facts, mutates nothing.
 
@@ -546,6 +551,38 @@ def report(con, *, algo_version: str | None = None, symbol: str | None = None,
         con, algo_version=algo_version, symbol=symbol, tf=tf,
         strategy=strategy, as_of=as_of)
 
+    # FORWARD vs HISTORICAL, split on the active baseline. Same shape as
+    # `venue_state` below and for the same reason: two populations were being
+    # added together and reported as one.
+    #
+    # Measured 2026-08-05 on exec-v0.21 — the two halves do not merely differ,
+    # they disagree about the sign:
+    #     before the baseline   n=466   +27.17 R   (backfilled history)
+    #     since the baseline    n= 32   -10.49 R   (the forward paper record)
+    #     added together        n=498   +16.68 R   <- what this used to print
+    # The account replays only the second row, so equity read 9,652 against a
+    # 10,000 start while this module reported +16.68 R beside it. Neither
+    # number was wrong; the pairing was.
+    #
+    # A backfilled trade is not a track record. The engine reconstructed it
+    # from candles that had already closed, so nobody could have taken it and
+    # no risk decision was ever made about it. It is evidence about the SIGNAL;
+    # only the forward half is evidence about the ACCOUNT.
+    baseline_at = store.get_active_baseline(con)["started_at"]
+    counts["forward"] = sum(1 for t in trades if t["confirmed_at"] >= baseline_at)
+    counts["historical"] = len(trades) - counts["forward"]
+    counts["baseline_started_at"] = baseline_at
+    if window == "FORWARD":
+        trades = [t for t in trades if t["confirmed_at"] >= baseline_at]
+    elif window == "HISTORICAL":
+        trades = [t for t in trades if t["confirmed_at"] < baseline_at]
+    elif counts["historical"] and counts["forward"]:
+        warnings.append(
+            f"{counts['historical']} of {len(trades)} trades predate the active "
+            f"baseline — they are BACKFILLED HISTORY, not a forward record, and "
+            f"the account never took them. This is the COMBINED book; pass "
+            f"window='FORWARD' for the one the equity curve replays.")
+
     from . import universe
     shadow = set(universe.shadow_symbols(con))
     counts["shadow_venue"] = sum(1 for t in trades if t["symbol"] in shadow)
@@ -566,7 +603,8 @@ def report(con, *, algo_version: str | None = None, symbol: str | None = None,
         "venues_version": venues.VENUES_VERSION,
         "algo_version": algo_version,
         "filters": {"symbol": symbol, "tf": tf, "strategy": strategy,
-                    "as_of": as_of, "venue_state": venue_state},
+                    "as_of": as_of, "venue_state": venue_state,
+                    "window": window},
         "resamples": resamples,
         "counts": counts,
         "warnings": warnings,
@@ -813,6 +851,7 @@ def main(argv: list[str] | None = None) -> int:
                  algo_version=opt("--algo"), symbol=opt("--symbol"),
                  tf=opt("--tf"), strategy=opt("--strategy"),
                  as_of=opt("--as-of", int),
+                 window=(opt("--window") or "").upper() or None,
                  resamples=opt("--resamples", int, BOOTSTRAP_RESAMPLES))
 
     print("=== EDGE SIGNIFICANCE + EDGE AFTER REAL FEES ===")
@@ -821,6 +860,15 @@ def main(argv: list[str] | None = None) -> int:
           f"tf={f['tf'] or 'ALL'} strategy={f['strategy'] or 'ALL'} "
           f"as_of={f['as_of'] or 'ALL'}")
     c = rep["counts"]
+    # The window is printed on its own line, before the numbers, because it is
+    # the population they describe. "+16.68 R" meant nothing until you knew it
+    # covered 466 backfilled trades the account never took.
+    import datetime as _dt
+    _b = _dt.datetime.fromtimestamp(c["baseline_started_at"]).strftime("%Y-%m-%d")
+    print(f"window={f['window'] or 'COMBINED'}  "
+          f"forward(since {_b})={c['forward']}  historical={c['historical']}"
+          + ("" if f["window"] else "   <- COMBINED mixes both; "
+             "--window forward is what the equity curve replays"))
     print(f"exec facts={c['exec_facts']}  filled={c['filled']}  "
           f"unfilled(MISSED)={c['unfilled_missed']}  "
           f"excluded={c['excluded_no_stop_distance'] + c['excluded_no_fee_record']}")
