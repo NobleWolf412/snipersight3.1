@@ -1285,6 +1285,19 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .pack-cols > .panel{break-inside:avoid;margin:0 0 var(--md)}
 @media(max-width:900px){.pack-cols{column-count:1}}
 
+/* Diagnostics: a compact status readout beside the surface's main list.
+
+   These two were in .pack-cols, which needs several panels to balance against
+   each other. With two — 174px and 1065px — column balancing has nothing to
+   work with, and the short one reserved a full half-width column with ~890px
+   of nothing beneath it.
+
+   align-items:start is the whole point: the status panel keeps its own height
+   instead of stretching to match a neighbour six times taller. */
+.diag-status-row{display:grid;gap:var(--md);align-items:start;
+  grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:900px){.diag-status-row{grid-template-columns:1fr}}
+
 /* One plain sentence above a dense block, saying what it is and how to read
    it. Prose font on purpose: these panels are walls of monospace figures, and
    a summary set in the same face as the data is not read as a summary. Sits

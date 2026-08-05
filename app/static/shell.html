@@ -742,18 +742,32 @@
     <!-- ─── DIAGNOSTICS ─── -->
     <section class="surface" id="s-diagnostics">
       <div class="surface-head"><h1 class="t-page">Diagnostics</h1><p>what is failing, and why</p></div>
-      <!-- Failures first, per operator ruling. One list: engine exceptions
+      <!-- THE TWO STATUS READOUTS, PAIRED.
+
+           Failures first, per operator ruling: engine exceptions
            (engine_faults, current state), data gates, and vocabulary drift.
-           funnel.js paints it from the same payload the funnel reads. -->
-      <div class="panel" id="failingPanel" style="margin-bottom:var(--lg)">
-        <div class="panel-head"><h2 class="t-section">Failing now</h2>
-          <span class="chip" id="failingChip" style="margin-left:auto">—</span></div>
-        <div id="failingRoot"><div class="empty">reading…</div></div>
-      </div>
-      <!-- packed, not gridded: "Why nothing fired" runs three times the height of
-           "Pipeline", and as a grid cell Pipeline stretched to match it — 836px of
-           empty bordered box. Same reason as the Rules columns. -->
-      <div class="pack-cols" style="margin-bottom:var(--lg)">
+           funnel.js paints it from the same payload the funnel reads.
+
+           Failing now and Pipeline are both surface-level status and both run
+           to roughly 150-190px, so they sit side by side without either one
+           stretching. They were not paired before: Failing now was a full-width
+           strip, and Pipeline shared a .pack-cols with "Why nothing fired" —
+           column-count:2 given one panel of 174px and one of 1065px, so
+           Pipeline reserved half the width and left ~890px of nothing beneath
+           it, which reads as a rendering fault rather than a layout.
+
+           The comment that used to sit here recorded the same fight from the
+           other side: as a grid CELL, Pipeline stretched to match its taller
+           neighbour, "836px of empty bordered box". Both attempts were trying
+           to stop a short panel being sized by a tall one. align-items:start
+           is the thing that actually does it; column-count was an escape that
+           traded a stretched box for an empty column. -->
+      <div class="diag-status-row" style="margin-bottom:var(--lg)">
+        <div class="panel" id="failingPanel">
+          <div class="panel-head"><h2 class="t-section">Failing now</h2>
+            <span class="chip" id="failingChip" style="margin-left:auto">—</span></div>
+          <div id="failingRoot"><div class="empty">reading…</div></div>
+        </div>
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Pipeline</h2>
             <button class="btn" id="btnAudit" style="margin-left:auto">Re-audit</button></div>
@@ -762,15 +776,18 @@
             <div class="t-mono" id="dCounts" style="color:var(--fg-3)">—</div>
           </div>
         </div>
-        <div class="panel">
-          <div class="panel-head"><h2 class="t-section">Why nothing fired</h2>
-            <button class="btn" id="btnDiagnose" style="margin-left:auto">Diagnose</button></div>
-          <div class="panel-body" id="dFunnel"><span class="skeleton" role="status" aria-label="loading">
+      </div>
+      <!-- The surface's actual answer, and now the only thing at full width in
+           this band. It gained 600px of measure when it stopped sharing a row,
+           and lost 100px of height for it. -->
+      <div class="panel" style="margin-bottom:var(--lg)">
+        <div class="panel-head"><h2 class="t-section">Why nothing fired</h2>
+          <button class="btn" id="btnDiagnose" style="margin-left:auto">Diagnose</button></div>
+        <div class="panel-body" id="dFunnel"><span class="skeleton" role="status" aria-label="loading">
         <span class="skel skel-line" style="width:70%"></span>
         <span class="skel skel-line" style="width:55%"></span></span></div>
-          <!-- funnel.js appends the stage bars + bottleneck pill here -->
-          <div id="funnelRoot"></div>
-        </div>
+        <!-- funnel.js appends the stage bars + bottleneck pill here -->
+        <div id="funnelRoot"></div>
       </div>
       <div class="grid cols-2">
         <div class="panel">
