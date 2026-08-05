@@ -11,13 +11,30 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # Majors, not the minimum that clears the warning. The three actions ran
+      # on the Node 20 runtime, which GitHub deprecated and was already forcing
+      # onto Node 24 — a forced runtime is a warning today and a broken run on
+      # whatever day they stop forcing it. checkout v5, setup-node v5 and
+      # setup-python v6 are the first releases that declare node24; these are
+      # the current majors on top of that.
+      #
+      # Their breaking changes were checked against this workflow rather than
+      # assumed harmless: setup-node v5 caches automatically when package.json
+      # names a packageManager, and this repo tracks no package.json or
+      # lockfile at all, so there is nothing for it to detect; setup-python v7
+      # drops the pip-install input, unused here; checkout v7 refuses fork
+      # checkouts for pull_request_target and workflow_run, and this workflow
+      # triggers on neither.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          # The suites reach for assert, fs and path and nothing else, so this
+          # pin is about running on a version that still gets security fixes,
+          # not about a feature. Node 20 went end-of-life in April 2026.
+          node-version: "24"
       # pytest and an HTTP client for fastapi's TestClient are TEST
       # dependencies, and their absence did not fail the run — it made two
       # modules unimportable, which unittest reports as two errors among
