@@ -635,11 +635,21 @@ def alert_tick(state: dict, live, warmup: bool = False) -> dict:
         if scanner_dark:
             log("heartbeat withheld: scanner is dark, so this machine is not "
                 "healthy and must not tell an outside monitor that it is")
+            state["hb_last"] = "withheld"
         else:
             try:
-                notify.heartbeat(log=log)
-            except Exception:
-                pass
+                result = notify.heartbeat(log=log)
+            except Exception as exc:
+                result = f"error({type(exc).__name__})"
+            # A SUCCESSFUL PING USED TO LEAVE NO TRACE, which made the one
+            # question worth asking about a dead-man's switch — is it actually
+            # running? — unanswerable from this machine. Answering it every
+            # five minutes forever would be noise, so it is logged on the first
+            # ping and on every CHANGE after that: a failure, and the recovery
+            # from one. A steady state says nothing, which is the point.
+            if result != state.get("hb_last"):
+                log(f"heartbeat: {result}")
+                state["hb_last"] = result
     return state
 
 
