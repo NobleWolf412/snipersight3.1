@@ -94,6 +94,40 @@ book.
 `/api/positions/close` and `/api/positions/adopt` write to the operator's actual
 book. Use the suites, or a scratch database.
 
+**...and the suites are not automatically safe either.** `TestClient` drives the
+real app against the real store and the real processes. Two instances, both
+found on 2026-08-05:
+
+`tests/test_system_restart.py` forced `_watchdog_alive` to `True` — the one
+guard that stops the restart endpoint proceeding — and then POSTed for real, so
+every run of the suite taskkilled the live scanner. That is the entire
+explanation for 356 exits, all `rc=1`, all "NOT ended by this supervisor". They
+were not a crash: `rc=1` is what `taskkill` produces, `TerminateProcess` never
+runs `atexit`, and the supervisor was telling the exact truth — the API server
+ended them, on the suite's instruction. It clustered during development and went
+quiet for 4h47m overnight because that is when nobody ran tests.
+
+`tests/test_arm_from_a_phone.py` was one mutation away from arming a real trade
+while checking a clamp; it was stopped by an unrelated validation, not by
+design.
+
+The rule that falls out: when a test forces a safety guard open, stub the thing
+the guard was protecting in the same breath. Both suites now assert that
+property about themselves.
+
+**Symptoms that mean "something outside killed it", not "it crashed":** exit
+code 1 with no traceback, and nothing in `data/live-exit.log` — `live.py`
+registers `atexit`, installs `faulthandler` and traps signals, so a process
+that exits through Python leaves at least one note. 178 starts with zero exit
+notes is a hard external kill every time.
+
+And **`_last_error()` in the watchdog is not where it died** unless the child
+runs with `-u`. Its stderr is redirected to a file, Python block-buffers that,
+and a killed process never flushes — so "last output" is whatever crossed the
+last 4KB boundary. It made 39 exits appear to end at `UNIVERSE onboarded
+PF_SPCXXUSD`, which was a red herring that cost hours; the same run read
+unbuffered had completed two full cycles and died asleep in `time.sleep`.
+
 **Other sessions are editing this repo.** They commit to `main`, they push, and
 they will sweep your uncommitted working tree into their commits. `git log -3`
 then looks as though your work vanished — it has not; it is further back, under

@@ -170,11 +170,25 @@
      panel wants one click to produce an answer, not a typed-out question the
      operator still has to send — but prefill stays, because a question you are
      meant to edit before sending is a different affordance. */
-  async function send(override){
+  /* NO PARAMETER, DELIBERATELY. This took an `override` that shadowed the
+     textarea, and #cpSend is bound straight to this function — so a click
+     called send(PointerEvent), `override != null` was true, and the question
+     sent to the model was the string "[object PointerEvent]". The textarea was
+     never read. The Enter key worked, because that path calls send() with
+     nothing, which is why the box appeared to work at all.
+
+     The parameter was already dead. Suggestion chips used to call
+     send(theirText); 5bf8038 changed them to drop the text into the textarea
+     instead, on the principle that the input belongs to the operator — after
+     which nothing filled `override` on purpose and only the click event did.
+
+     A dead parameter on a function bound to an event handler is not inert. It
+     is an open socket for whatever the browser passes first. */
+  async function send(){
     const ta = document.getElementById('cpText');
-    const text = String(override != null ? override : (ta.value || '')).trim();
+    const text = String(ta.value || '').trim();
     if(!text || busy) return;
-    if(override == null) ta.value = '';
+    ta.value = '';
     msgs.push({who: 'op', text});
     saveMsgs();
     busy = true; render();
