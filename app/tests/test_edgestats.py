@@ -4,7 +4,7 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
-from engine import edgestats, execsim, setups, store, venues
+from engine import edgestats, execsim, setups, store, universe, venues
 
 # Synthetic books use a fixed geometry so every number below is hand-checkable:
 #   entry 100, stop 90  -> stop distance (1R) = 10 price units
@@ -197,6 +197,109 @@ class TestSmallSampleRefusal(TempStore):
         self.assertIn("10 trades", refusal)
         self.assertIn("these few trades", refusal)
         self.assertTrue(rep["by_tf"]["1D"]["sufficient"])
+
+
+class TestFilteredBookRefusal(TempStore):
+    """The floor has to be measured on the book being GRADED, not on the one
+    `load_trades` found.
+
+    `counts["filled"]` is counted before `venue_state` picks a half, so gating
+    on it let a request whose traded half was empty walk past the floor and
+    into the arithmetic. `_breakeven_fee` divided by len(trades):
+    `/api/edge-stats?symbol=PF_XBTUSD` returned HTTP 500 against the live store
+    on 2026-08-04 — 14 filled trades matched, every one of them on a SHADOW
+    symbol, and the endpoint's default venue_state of TRADED left nothing to
+    measure. No filter is needed to open the same hole: a baseline whose
+    tradeable half is empty while its shadow half is not does it on the plain
+    request the Results page makes.
+    """
+
+    def setUp(self):
+        super().setUp()
+        store.insert_fact(
+            self.con, symbol="PORTFOLIO", tf="ALL", kind="universe",
+            market_time=1_700_000_000, confirmed_at=1_700_000_000,
+            algo_version=universe.UNIVERSE_VERSION,
+            payload={"members": [
+                {"symbol": "BTC-USD", "state": "ADMITTED",
+                 "reason": "liquid_and_warm"},
+                {"symbol": "PF_XBTUSD", "state": "SHADOW",
+                 "reason": "warming_for_venue_switch"},
+            ], "top_n": 20, "min_volume_usd": 3_000_000,
+               "min_daily_candles": 200, "rank_health": {}})
+        self.con.commit()
+
+    def _shadow(self, n, first=0):
+        for i in range(n):
+            add_trade(self.con, f"s{first + i}", "0.90", symbol="PF_XBTUSD",
+                      market_time=i * 1000, confirmed_at=i * 1000 + 500)
+
+    def _traded(self, n):
+        for i in range(n):
+            add_trade(self.con, f"t{i}", "0.90", symbol="BTC-USD",
+                      market_time=900_000 + i * 1000,
+                      confirmed_at=900_000 + i * 1000 + 500)
+
+    def test_an_all_shadow_book_refuses_rather_than_dividing_by_zero(self):
+        self._shadow(14)
+        rep = edgestats.report(self.con, venue_state="TRADED", resamples=500)
+        self.assertFalse(rep["sufficient"])
+        for k in ("book", "scenarios", "breakeven_fee", "verdict"):
+            self.assertIsNone(rep[k], f"{k} was reported off an empty book")
+
+    def test_the_refusal_still_reports_what_the_filter_removed(self):
+        """A filtered report that cannot say what it left out is worse than no
+        report: "0 trades" reads as an empty store, when the fact is that 14
+        trades exist and the risk authority will not size any of them."""
+        self._shadow(14)
+        rep = edgestats.report(self.con, venue_state="TRADED", resamples=500)
+        counts = rep["counts"]
+        self.assertEqual(counts["filled"], 14)
+        self.assertEqual(counts["shadow_venue"], 14)
+        self.assertEqual(counts["traded_venue"], 0)
+        # The property, not the phrasing: edgeview.js prints this string
+        # verbatim on a trader surface, so the words may be reworded — what
+        # must survive is that it names the empty half, the full count and
+        # which half was asked for.
+        refusal = rep["refusal"]
+        self.assertIn("0 filled trade", refusal)
+        self.assertIn("14", refusal)
+        self.assertIn("SHADOW", refusal)
+        self.assertIn("TRADED", refusal)
+
+    def test_a_handful_of_tradeable_trades_is_refused_not_solved_for_a_fee(self):
+        """Quieter than the crash and worse: below the floor but above zero,
+        the old gate reported `sufficient: true` beside a breakeven fee solved
+        from three trades, because the count it read described twenty-three."""
+        self._shadow(20)
+        self._traded(3)
+        rep = edgestats.report(self.con, venue_state="TRADED", resamples=500)
+        self.assertFalse(rep["sufficient"])
+        self.assertIsNone(rep["breakeven_fee"])
+        self.assertIsNone(rep["scenarios"])
+        self.assertEqual(rep["counts"]["traded_venue"], 3)
+        self.assertEqual(rep["counts"]["shadow_venue"], 20)
+        self.assertIn("3 filled trade", rep["refusal"])
+
+    def test_the_traded_half_is_still_graded_when_it_clears_the_floor(self):
+        """The gate must only refuse — it must not narrow a book that qualifies.
+        `book.n` is the traded half alone, never the 32 rows behind it."""
+        self._shadow(20)
+        self._traded(12)
+        rep = edgestats.report(self.con, venue_state="TRADED", resamples=500)
+        self.assertTrue(rep["sufficient"])
+        self.assertEqual(rep["book"]["n"], 12)
+        self.assertEqual(rep["counts"]["traded_venue"], 12)
+        self.assertTrue(rep["breakeven_fee"]["computable"])
+
+    def test_breakeven_fee_on_an_empty_book_is_not_computable(self):
+        """Defence in depth. `report`'s floor is the real gate, but this is a
+        module function reachable with any list a caller holds."""
+        be = edgestats._breakeven_fee([])
+        self.assertFalse(be["computable"])
+        self.assertIsNone(be["per_side"])
+        self.assertIsNone(be["mean_r_ex_fee"])
+        self.assertEqual(be["venues"], [])
 
 
 class TestBreakevenFee(TempStore):

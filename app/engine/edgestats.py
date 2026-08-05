@@ -58,7 +58,16 @@ from decimal import Decimal
 from . import store, venues
 from .execsim import EXEC_VERSION
 
-EDGESTATS_VERSION = "edgestats-v0.2-draft"
+EDGESTATS_VERSION = "edgestats-v0.3-draft"
+# v0.3: the sample floor is applied to the FILTERED book. It was applied to
+# `counts["filled"]`, which is measured before `venue_state` picks a half, so a
+# request whose traded half held 0-9 trades passed the gate. At 0 that was a
+# ZeroDivisionError in `_breakeven_fee` and an HTTP 500; between 1 and 9 it was
+# worse than a crash — `sufficient: true` beside a breakeven fee solved from as
+# few as one trade, which is the confident-number-on-no-sample this module
+# exists to refuse. Reported figures are withheld that used to be emitted, so
+# the tag moves with them.
+#
 # v0.2: funding restored to the venue-real scenario. It was being added back
 # with the fees (execsim folds it into `fees_price_units`) and then not
 # re-charged, so the scenario `_verdict` reads described a trade that paid no
@@ -460,8 +469,18 @@ def _breakeven_fee(trades: list[dict]) -> dict:
     When mean(r_ex_fee) <= 0 the solution is <= 0: the book loses before any fee
     is charged, and there is no fee rate that rescues it. That is reported as a
     fact, not smoothed into a small positive number.
+
+    An EMPTY book has no solution at all, and says so the same way. `report`'s
+    sample floor is the real gate, but this function is public and reachable
+    with any list the caller has; dividing by zero here is not a report, it is
+    a 500 with no sentence in it.
     """
     n = len(trades)
+    if not n:
+        return {"computable": False,
+                "reason": "no trades in this book — nothing to solve a fee against",
+                "mean_r_ex_fee": None, "mean_legs_r": None,
+                "per_side": None, "round_trip": None, "venues": []}
     mean_ex_fee = sum(t["r_ex_fee"] for t in trades) / n
     mean_legs = sum(t["legs_r"] for t in trades) / n
     if mean_legs <= 0:
@@ -580,12 +599,38 @@ def report(con, *, algo_version: str | None = None, symbol: str | None = None,
         "verdict": None,
     }
 
-    if counts["filled"] < MIN_TRADES:
+    # The floor is applied to the trades that are actually GRADED, not to the
+    # count `load_trades` returned. `counts["filled"]` is measured before
+    # `venue_state` selects a half of the book, so gating on it let an EMPTY
+    # traded book through the gate and into the arithmetic below: `_core` and
+    # `_scenarios` guard n == 0, `_breakeven_fee` did not, and the endpoint
+    # raised ZeroDivisionError instead of answering.
+    #
+    # Reproduced 2026-08-04 against the live store:
+    # `/api/edge-stats?symbol=PF_XBTUSD` returned HTTP 500 — 14 filled trades
+    # matched, all of them on a SHADOW symbol, and the endpoint's default
+    # venue_state of TRADED left nothing to measure. The same hole opens with
+    # no filters at all the moment a baseline's tradeable half is empty while
+    # its shadow half is not, which is the plain request the Results page makes.
+    #
+    # A slice that cannot be measured has to SAY so. A crash says nothing, and
+    # edgeview.js renders the resulting blank panel with no reason on it.
+    graded = len(trades)
+    if graded < MIN_TRADES:
         out["refusal"] = (
-            f"{counts['filled']} filled trade(s) for {algo_version} under these "
+            f"{graded} filled trade(s) for {algo_version} under these "
             f"filters — below the {MIN_TRADES}-trade floor. No expectancy, no "
             f"confidence interval, no breakeven fee and no verdict are reported. "
             f"This is a refusal, not a result of zero.")
+        if venue_state and graded < counts["filled"]:
+            # Which half was dropped, and how big the other one is. Without
+            # this the refusal reads as "there are no trades", when the real
+            # fact is "there are trades and none of them are yours to size".
+            out["refusal"] += (
+                f" {counts['filled']} trade(s) matched before the venue filter: "
+                f"{counts['traded_venue']} on TRADED symbols and "
+                f"{counts['shadow_venue']} on SHADOW ones. This report asked for "
+                f"{venue_state}.")
         return out
 
     out["sufficient"] = True
