@@ -138,6 +138,20 @@ TREND_VERSION = "trend-v0.2-draft"
 #: The same filter costs the live counter-move book -0.109 R/trade, which is
 #: the whole case for policy being per-playbook data rather than one global
 #: rule. See engine/bias.py for the full table.
+#:
+#: SO WHY IS IT STILL ALLOW? Because this engine's product is its SAMPLE, not
+#: its P&L. It does not trade, so the +0.086 R is a gain nobody collects —
+#: while the gate would refuse 2,001 of 2,823 trades, and those trades are the
+#: only evidence in this store that can grade a trend-following factor at all.
+#: That was the entire reason the module was written (see the counts at the top
+#: of this file: LONG x ABOVE = 0 across the whole live book).
+#:
+#: Paying 71% of the only sample that answers the question, to improve a number
+#: nobody banks, is a bad trade. It becomes a good one the day this engine is
+#: enabled — and on the day it is enabled, the filter should go on WITH it,
+#: because by then the P&L is real and the sample has already been collected.
+#: Flipping AGAINST / MIXED / FLAT to BLOCK is the change; it needs a version
+#: bump, not a discussion.
 BIAS_POLICY = bias.validate_policy({
     "WITH": "ALLOW",
     "AGAINST": "ALLOW",
@@ -274,7 +288,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 return None
             return min(beyond) if direction == "LONG" else max(beyond)
 
-        n_setups = n_rejected = 0
+        n_setups = n_rejected = n_bias_blocked = 0
         extended = 0            # consecutive bars price has held beyond the ribbon
         pullback_at = None      # bar index where the dip to the average began
         pullback_ext = None     # its extreme, which becomes the stop reference
@@ -375,6 +389,27 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
             maker_limit = ((entry - MAKER_OFFSET_R * risk) if want == "LONG"
                            else (entry + MAKER_OFFSET_R * risk))
+            # THE TOP-DOWN GATE. Inert while BIAS_POLICY is ALLOW everywhere —
+            # see that dict for why it stays so on THIS engine in particular:
+            # the filter improves a P&L nobody collects, at the cost of 71% of
+            # the only sample that can grade a trend-following factor.
+            bias_block = bias_src.check(want, bct, tf_seconds, BIAS_POLICY)
+            if bias.blocked(bias_block):
+                # Refusals are FACTS here too. This engine's whole product is
+                # its sample, so a gate that silently shrinks it is worse than
+                # one that shrinks it loudly — "no silent caps" applied to a
+                # strategy rather than to a report.
+                store.insert_fact(
+                    con, symbol=symbol, tf=tf, kind="setup_rejection",
+                    market_time=c["open_ts"], confirmed_at=bct,
+                    algo_version=TREND_VERSION,
+                    payload={"event": "REJECTED", "reason": "BIAS_BLOCKED",
+                             "details": {"bias": bias_block,
+                                         "strategy": "TREND_CONTINUATION",
+                                         "direction": want},
+                             "manifest_hash": manifest_hash})
+                n_bias_blocked += 1
+                continue
             setup_id = (f"{symbol}|{tf}|TREND_CONTINUATION|{c['open_ts']}"
                         f"|{TREND_VERSION}")
             payload = {
@@ -396,9 +431,10 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                         f"{'' if bars_pulling == 1 else 's'} and closed back "
                         f"{'above' if want == 'LONG' else 'below'} the ribbon "
                         f"· R:R {rr}"),
-                # Top-down annotation. Read as-of `bct` so a setup can only
-                # know the rungs that had already confirmed when it triggered.
-                "bias": bias_src.check(want, bct, tf_seconds, BIAS_POLICY),
+                # The SAME block the gate above judged, not a second call.
+                # Recomputing it here would be two authorities for one reading,
+                # agreeing until one of them is passed a different moment.
+                "bias": bias_block,
                 "manifest_hash": manifest_hash,
                 "cost_manifest_hash": cost_manifest_hash,
                 "armed": False, "armed_at": bct,
@@ -416,9 +452,10 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
         con.commit()
         rec.n_new_facts = n_setups
-        rec.notes = f"rejected={n_rejected}"
+        rec.notes = f"rejected={n_rejected} bias_blocked={n_bias_blocked}"
         return {"symbol": symbol, "tf": tf, "setups": n_setups,
-                "rejected": n_rejected}
+                "rejected": n_rejected,
+                "bias_blocked": n_bias_blocked}
 
 
 def main(argv=None) -> int:

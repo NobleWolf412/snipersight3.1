@@ -122,6 +122,37 @@ PULLBACK trades taken WITH a trending ladder ran -0.7391 R over 35 trades,
 P(>0) 0.3%. Buying a dip while the timeframes above are trending hard in your
 direction means buying an extended market, and the book says so.
 
+ENFORCEMENT: BUILT, TESTED, AND OFF EVERYWHERE. The gate is real — a BLOCK
+skips the setup and writes a `setup_rejection` fact under `BLOCK_REASON`, so a
+refusal is as auditable as an approval (§8) and the funnel has a sentence for
+it. Proven end to end rather than asserted: armed with a test policy on one
+symbol, trend emitted 48 setups and 41 refusals against 89 shipped, the run
+counter matched the fact count, and no setup survived that the policy should
+have refused. Shipped, every policy is ALLOW and it fires zero times.
+
+Three different reasons for OFF, and the difference matters:
+
+  setups    MEASURED, AND THE ANSWER IS NO. Every filter tried costs this
+            book money (-0.109 R/trade to WITH-only). Its best bucket is
+            AGAINST. Both playbooks fade moves; a ladder trending hard your
+            way means the move is extended.
+  trend     MEASURED, AND THE ANSWER IS NOT YET. Filtering to WITH is worth
+            +0.086 R/trade — but this engine does not trade, so that gain is
+            uncollected, and the gate would refuse 2,001 of 2,823 trades
+            which ARE the only evidence that can grade a trend-following
+            factor. Paying 71% of the sample to improve a number nobody banks
+            is a bad trade. Arm it the day the engine is enabled.
+  breakout  NOT MEASURED AT ALL. n=55, no sample to grade with. ALLOW is what
+            "we have not looked" must resolve to, exactly as UNKNOWN is.
+
+THE POLICY THAT LOOKS BEST IS THE ONE TO TRUST LEAST. Blocking only MIXED
+improves every live slice (+0.040 R/trade overall, +0.050 on REVERSAL) and is
+NOT armed, because it was invented after reading the table above. The MIXED
+bucket's own interval is [-0.635, +0.185] and the improved book still does not
+clear zero (P(>0) 75.0%). It is the best candidate for the next round and it
+needs data it has not seen; promoting it now would be fitting the rule to the
+sample, which is how the prior project got a 5,985-line scorer.
+
 Usage (from app/):
     from . import bias
     src = bias.load(con, symbol, tf)
@@ -198,8 +229,24 @@ EVIDENCE_MAX_BARS = 5
 #: honest evidence there is.
 EVIDENCE_EVENTS = ("BOS", "CHOCH")
 
+#: The rejection reason a blocked setup is recorded under. One name, shared,
+#: because the funnel has to be able to say WHICH gate refused a trade — and
+#: `setups.REJECTION_REASONS` refuses any reason it does not know.
+BLOCK_REASON = "BIAS_BLOCKED"
+
 _DIR_SIDE = {"BULL": "UP", "BEAR": "DOWN"}
 _WANT_SIDE = {"LONG": "UP", "SHORT": "DOWN"}
+
+
+def blocked(block: dict) -> bool:
+    """Did this check refuse the trade? The one place that question is asked.
+
+    Trivial by design. It exists so no engine writes `== "BLOCK"` inline: the
+    day REQUIRE_EVIDENCE grows a third outcome, or a policy learns to defer,
+    every call site follows automatically instead of four of them agreeing
+    until one does not.
+    """
+    return block["resolved"] == "BLOCK"
 
 
 def rungs_above(tf: str) -> tuple:

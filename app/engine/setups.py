@@ -168,6 +168,11 @@ PROX_ATR = Decimal(1)
 REJECTION_REASONS = frozenset({
     "NO_ELIGIBLE_PLAYBOOK", "RR_BELOW_MINIMUM", "UNECONOMIC_AFTER_COSTS",
     "ATR_UNAVAILABLE", "NO_CAUSAL_TARGET", "INVALID_BRACKET", "VETOED",
+    # The top-down gate. Inert while every BIAS_POLICY is ALLOW, and named
+    # here anyway: a gate whose refusals have no vocabulary reaches the
+    # operator as a raw enum the first time it fires, which is the worst
+    # possible moment to discover it.
+    bias.BLOCK_REASON,
 })
 MIN_RR = Decimal("1.5")
 GOOD_RR = Decimal("2.5")
@@ -262,6 +267,19 @@ PD_LOOKBACK_SWINGS = 6
 #:
 #: So the plausible rule is the one that loses money here. That is the whole
 #: reason this ships as ALLOW and gets graded rather than shipping as a gate.
+#:
+#: THE GATE IS BUILT AND ARMED NOWHERE. A BLOCK here skips the setup and writes
+#: a BIAS_BLOCKED rejection, so flipping one value turns it on with a full
+#: audit trail. It stays ALLOW because the measurement says filtering costs
+#: this book money, which is a stronger reason than "not yet tried".
+#:
+#: The tempting exception, recorded so it is not re-discovered and mistaken for
+#: new: blocking ONLY the MIXED state improves every slice of this book
+#: (+0.040 R/trade overall, +0.050 on REVERSAL, 66 trades dropped). It is not
+#: armed. That policy was invented AFTER reading the bucket table above, the
+#: MIXED interval is [-0.635, +0.185], and the improved book still does not
+#: clear zero (P(>0) 75.0%). It is the leading candidate for the next round on
+#: data it has not already seen — not a rule.
 BIAS_POLICY = bias.validate_policy({
     "WITH": "ALLOW",
     "AGAINST": "ALLOW",
@@ -1121,6 +1139,23 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             # bracket AND the size: recomputing "the same way" is not the same
             # guarantee, because the inputs (ATR, structure, equity) have moved
             # between arming and touch.
+            # THE TOP-DOWN GATE. Computed before the bracket is inherited so a
+            # refused trade never arms anything, and recorded as a REJECTION so
+            # the funnel can say which gate refused it — §8, a rejection is as
+            # auditable as an approval. Inert while BIAS_POLICY is ALLOW
+            # everywhere; see that dict for the measurement that keeps it so.
+            bias_block = bias_src.check(direction, bct, tf_seconds, BIAS_POLICY)
+            if bias.blocked(bias_block):
+                # The reason is spelled as a LITERAL, not as bias.BLOCK_REASON,
+                # so `test_pipeline_gates` can see it: that guard scans this
+                # source for reject() call sites and a constant reference is
+                # invisible to it. The two are pinned equal in test_bias.
+                reject(zone_id,
+                       {"market_time": cb["open_ts"], "confirmed_at": bct},
+                       "BIAS_BLOCKED",
+                       {"bias": bias_block, "strategy": strategy,
+                        "direction": direction})
+                continue
             _armed = armed_by_id.get(setup_id)
             _inherited = False
             if _armed and _armed.get("size_units") is not None:
@@ -1153,11 +1188,10 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                        "confluence": conf,
                        # The whole-ladder reading, as-of the confirming close.
                        # On VALIDATED only: this is the moment the trade exists,
-                       # and it is where a gate would act. A FORMING fact arms
+                       # and it is where the gate acts. A FORMING fact arms
                        # earlier and its reading can differ, so carrying one
                        # there would record a bias no decision was ever made on.
-                       "bias": bias_src.check(direction, bct, tf_seconds,
-                                              BIAS_POLICY),
+                       "bias": bias_block,
                        "reversal_evidence": rev_ev,
                        "manifest_hash": manifest_hash,
                        "cost_manifest_hash": cost_manifest_hash,

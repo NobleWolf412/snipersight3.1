@@ -147,7 +147,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 return None
             return min(beyond) if direction == "LONG" else max(beyond)
 
-        n_setups = n_rejected = 0
+        n_setups = n_rejected = n_bias_blocked = 0
         for b in breaks:
             direction = "LONG" if b["direction"] == "BULL" else "SHORT"
             i0 = ts_index.get(b["market_time"])
@@ -223,6 +223,24 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
             maker_limit = ((entry - MAKER_OFFSET_R * risk) if direction == "LONG"
                            else (entry + MAKER_OFFSET_R * risk))
+            # THE TOP-DOWN GATE. Inert while BIAS_POLICY is ALLOW everywhere,
+            # and on this engine that is not a measured decision but an ABSENT
+            # one: breakout has never been graded against the ladder, because
+            # at n=55 it has no sample to grade with. ALLOW is what "we have
+            # not looked" must resolve to, exactly as UNKNOWN is.
+            bias_block = bias_src.check(direction, bct, tf_seconds, BIAS_POLICY)
+            if bias.blocked(bias_block):
+                store.insert_fact(
+                    con, symbol=symbol, tf=tf, kind="setup_rejection",
+                    market_time=cb["open_ts"], confirmed_at=bct,
+                    algo_version=BREAKOUT_VERSION,
+                    payload={"event": "REJECTED", "reason": "BIAS_BLOCKED",
+                             "details": {"bias": bias_block,
+                                         "strategy": "BREAKOUT_RETEST",
+                                         "direction": direction},
+                             "manifest_hash": manifest_hash})
+                n_bias_blocked += 1
+                continue
             setup_id = (f"{symbol}|{tf}|BREAKOUT_RETEST|{b['market_time']}"
                         f"|{BREAKOUT_VERSION}")
             payload = {
@@ -244,7 +262,8 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                         f"R:R {rr}"),
                 # Top-down annotation, read as-of `bct` — a setup may only know
                 # the rungs that had already confirmed when it triggered.
-                "bias": bias_src.check(direction, bct, tf_seconds, BIAS_POLICY),
+                # The SAME block the gate judged, not a second call.
+                "bias": bias_block,
                 "manifest_hash": manifest_hash,
                 "cost_manifest_hash": cost_manifest_hash,
                 "armed": False, "armed_at": bct,
@@ -262,6 +281,6 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
         con.commit()
         rec.n_new_facts = n_setups
-        rec.notes = f"rejected={n_rejected}"
+        rec.notes = f"rejected={n_rejected} bias_blocked={n_bias_blocked}"
         return {"symbol": symbol, "tf": tf, "setups": n_setups,
-                "rejected": n_rejected}
+                "rejected": n_rejected, "bias_blocked": n_bias_blocked}

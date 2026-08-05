@@ -206,6 +206,72 @@ class AsOfDiscipline(unittest.TestCase):
         self.assertIsNotNone(self.src.check("LONG", 350, 10, needs)["evidence"])
 
 
+class Enforcement(unittest.TestCase):
+    """The gate exists and works, while every shipped policy leaves it inert.
+
+    A mechanism that has never fired is a mechanism nobody has tested. These
+    drive it with a TEST-ONLY policy so the code path is proven without any
+    playbook shipping a BLOCK — the alternative is discovering on the day
+    someone flips a value that the branch was never exercised.
+    """
+
+    BLOCK_ALL_AGAINST = {"WITH": "ALLOW", "AGAINST": "BLOCK", "MIXED": "ALLOW",
+                         "FLAT": "ALLOW", "UNKNOWN": "ALLOW"}
+
+    def setUp(self):
+        self.src = bias.Bias("4H", {"1D": [(100, "DOWN")], "1W": [(50, "DOWN")]},
+                             [])
+
+    def test_a_block_policy_actually_blocks(self):
+        out = self.src.check("LONG", 200, 1, self.BLOCK_ALL_AGAINST)
+        self.assertEqual(out["alignment"], "AGAINST")
+        self.assertTrue(bias.blocked(out))
+
+    def test_the_same_reading_allows_the_other_side(self):
+        out = self.src.check("SHORT", 200, 1, self.BLOCK_ALL_AGAINST)
+        self.assertEqual(out["alignment"], "WITH")
+        self.assertFalse(bias.blocked(out))
+
+    def test_blocked_is_the_one_place_the_question_is_asked(self):
+        """No engine may spell `== "BLOCK"` inline — four call sites agreeing
+        until one of them does not is how a rule quietly forks."""
+        import inspect
+
+        from engine import breakout, setups, trend
+        for mod in (setups, trend, breakout):
+            with self.subTest(engine=mod.__name__):
+                src = inspect.getsource(mod)
+                self.assertIn("bias.blocked(", src)
+                self.assertNotIn('== "BLOCK"', src)
+
+    def test_the_block_reason_is_canonical_and_has_a_funnel_sentence(self):
+        """A gate whose refusals have no vocabulary reaches the operator as a
+        raw enum the first time it fires."""
+        self.assertEqual(bias.BLOCK_REASON, "BIAS_BLOCKED")
+        self.assertIn(bias.BLOCK_REASON, setups.REJECTION_REASONS)
+        funnel = (pathlib.Path(inspect.getfile(setups)).parents[1]
+                  / "static" / "funnel.js").read_text(encoding="utf-8")
+        self.assertIn(f"{bias.BLOCK_REASON}:", funnel)
+
+    def test_every_playbook_records_a_refusal_as_a_fact(self):
+        """§8 — a rejection is as auditable as an approval. For the two
+        measurement engines this matters more than for the live book: their
+        product IS the sample, so a gate that shrinks it silently is worse
+        than one that shrinks it loudly."""
+        import inspect
+
+        from engine import breakout, setups, trend
+        for mod in (setups, trend, breakout):
+            with self.subTest(engine=mod.__name__):
+                src = inspect.getsource(mod)
+                i = src.find("bias.blocked(")
+                self.assertGreater(i, 0)
+                window = src[i:i + 1200]
+                self.assertTrue(
+                    "setup_rejection" in window or "reject(" in window,
+                    f"{mod.__name__} blocks without recording why")
+
+
 class PlaybookRoster(unittest.TestCase):
     """Every setup-emitting engine must declare how it treats the ladder.
 

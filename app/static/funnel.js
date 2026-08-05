@@ -142,6 +142,15 @@
              'the confirming candle was too narrow to trust, or the stop sat ' +
              'inside the venue tick resolution. The trace names which.',
       cta: DIAG_SURFACE },
+    BIAS_BLOCKED: {
+      plain: 'the bigger timeframes said no',
+      means: 'The trade was sound on its own chart, but this playbook has a ' +
+             'rule about what the timeframes above it were doing — and they ' +
+             'were doing the wrong thing. The trace names the reading on each ' +
+             'one. Every playbook carries its own rule here, because the ' +
+             'record says trend-following and counter-move strategies want ' +
+             'opposite answers.',
+      cta: DIAG_SURFACE },
 
     /* `cooldown(sl,12.0h)` has been rendering raw and lowercased on the deck
        and in the order ticket with no glossary entry and no card here, while
