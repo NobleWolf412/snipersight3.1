@@ -41,7 +41,14 @@ window.SSConfirm = (() => {
      rewritten into a data shape to gain a designed dialog. */
   function rowHtml(line){
     if(!line) return '<div class="ssc-gap"></div>';
-    const m = /^([^:]{1,28}):\s+(.+)$/.exec(line);
+    /* Greedy, and not [^:]. The old pattern could not cross the first colon,
+       so "R:R after fees: 1.93" — the single most important ratio in the trade
+       — was the one row in the Arm dialog that fell out of the key/value column
+       into loose prose. Greedy .{1,28} backtracks to the LAST ": " inside the
+       key window, which reads "R:R after fees" as the key and 1.93 as the
+       value. A colon inside the VALUE is unaffected: a clock time is "10:30",
+       with no space after the colon, so it never matches the separator. */
+    const m = /^(.{1,28}):\s(.+)$/.exec(line);
     if(!m) return `<div class="ssc-line">${esc(line)}</div>`;
     return `<div class="ssc-row"><span class="ssc-k">${esc(m[1])}</span>` +
            `<span class="ssc-v">${esc(m[2])}</span></div>`;

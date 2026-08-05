@@ -200,9 +200,20 @@ ok('the trace drawer speaks plainly and does not re-expose rank', () => {
 /* ---------- reachability ---------- */
 
 ok('trace rows are focusable and operable by keyboard', () => {
+  /* Was pinned to tabindex="0" role="button" appearing twice — the exact
+     pattern the position and pending rows have now DROPPED, because ARIA
+     forbids focusable descendants inside a button role and each row nested
+     Reasons, Copilot and (when filled) Close. A screen reader computed the
+     row's whole contents as the button name and buried the close control in it.
+
+     The property is unchanged and still asserted: both rows are reachable and
+     operable by keyboard. They just do it with a real <button> on the symbol
+     instead of a div wearing a role. */
   assert(JS.includes('function activatable'), 'one helper, not per-element retrofits');
-  assert((JS.match(/tabindex="0" role="button"/g) || []).length >= 2,
-    'position and pending rows must be focusable');
+  assert((JS.match(/class="pos-sym pos-open"/g) || []).length >= 2,
+    'position and pending rows must expose a real keyboard control');
+  assert(!/tabindex="0" role="button"[\s\S]{0,900}?pos-acts/.test(JS),
+    'a row with nested action buttons must not itself be role="button"');
   assert(/keydown/.test(JS) && /e\.key !== 'Enter' && e\.key !== ' '/.test(JS));
   assert(CSS.includes('.traceable:focus-visible'), 'focus must be visible');
 });
@@ -628,6 +639,53 @@ ok('every stage keeps its facts — map passes the INDEX', () => {
   assert.ok(!code.includes('all.map(stageHtml)'),
             'never pass a multi-arg function straight to map');
   assert.ok(TRACER.includes('all.map(s => stageHtml(s))'));
+});
+
+
+/* RESULTS: what a trade paid, and where price went. A stop-out read
+   "risked $197 · -$219" and left the operator to work out which number was
+   wrong. Neither is: a stop loses 1R of PRICE and the round trip is charged on
+   top of it. r_gross and costs_r were in the payload and reached no surface. */
+console.log('results: costs, and the bars it happened on');
+ok('a row says what the costs were, not just the net', () => {
+  assert.ok(JS.includes('const costR = Number(j.costs_r)'), 'costs_r must be read');
+  assert.ok(/R costs/.test(JS), 'and named on the row');
+  assert.ok(JS.includes('j.r_gross'), 'against the gross, which is the 1R part');
+  // Hidden when immaterial rather than printing "+0.00R costs" on every row.
+  assert.ok(/costR > 0\.004/.test(JS));
+});
+ok('a settled trade opens on the bars it happened on', () => {
+  assert.ok(/data-jsid=/.test(JS), 'rows carry their setup id');
+  assert.ok(/jnl-open/.test(JS) && CSS.includes('.jnl-row.jnl-open'),
+            'and look clickable');
+  assert.ok(JS.includes("SSChart.open(t.symbol, t.tf, {trade: t})"),
+            'the whole trade goes to the chart, not just the symbol');
+  assert.ok(JS.includes("go('chart')"), 'and it navigates');
+});
+ok('the chart draws it as CLOSED, never as a ticket', () => {
+  assert.ok(/function drawClosedTrade\(\)/.test(CHART));
+  assert.ok(CHART.includes("'CLOSED · IN AT'"));
+  assert.ok(/CLOSED · OUT \(/.test(CHART));
+  // A settled trade cannot be armed; dressing it as a plan would invite that.
+  const f = CHART.slice(CHART.indexOf('function drawClosedTrade()'),
+                        CHART.indexOf('function candle_index_at'));
+  assert.ok(!/levels\.|pickSetup|armable/.test(f), 'it must not touch the ticket');
+});
+ok('it moves the view to WHEN, not just what', () => {
+  assert.ok(/candle_index_at\(t\.ts\)/.test(CHART));
+  assert.ok(/setVisibleLogicalRange/.test(CHART));
+  // Landing on the newest bars would float the lines over unrelated price.
+  assert.ok(/i - Math\.floor\(span \* 0\.6\)/.test(CHART));
+});
+ok('a trade older than the loaded candles leaves the view alone', () => {
+  const f = CHART.slice(CHART.indexOf('function candle_index_at'),
+                        CHART.indexOf('function candle_index_at') + 600);
+  assert.ok(/best = null/.test(f), 'null rather than a bar that is not the one');
+  assert.ok(/if\(i != null\)/.test(CHART), 'and the caller checks it');
+});
+ok('the overlay clears so it cannot haunt the next chart', () => {
+  assert.ok(/for\(const l of tradeLines\)/.test(CHART));
+  assert.ok(/pendingTrade = null/.test(CHART));
 });
 
 console.log(`  ${passed} passed`);
