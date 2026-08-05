@@ -3,6 +3,7 @@ so every new finding in quality.py auto-inherits its response with no
 watchdog edit. See war-room/ideas-2026-07-26 items #2, #4, #9, #12."""
 import importlib
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -122,7 +123,11 @@ class TestQuarantinePersistence(unittest.TestCase):
     def _sequence(self, quarantines, age=10_000.0):
         """Feed consecutive audits and report when a terminate happened."""
         child = _FakeChild(alive=True)
-        child.started_at = 0.0
+        # Old enough that RESTART_GRACE_SEC cannot apply, stated against the
+        # same clock the code reads. 0.0 used to mean this and only did on a
+        # machine with hours of uptime; on a fresh one it means "just born"
+        # and the restart is deferred instead of dispatched.
+        child.started_at = time.monotonic() - watchdog.RESTART_GRACE_SEC - 1
         state = {"counts": {}, "at": 0.0}
         fake_con = MagicMock()
         fake_store = MagicMock(connect=MagicMock(return_value=fake_con))
@@ -171,7 +176,11 @@ class TestQuarantinePersistence(unittest.TestCase):
         """Not restarting must not mean not telling. The operator still needs to
         know data is being held back."""
         child = _FakeChild(alive=True)
-        child.started_at = 0.0
+        # Old enough that RESTART_GRACE_SEC cannot apply, stated against the
+        # same clock the code reads. 0.0 used to mean this and only did on a
+        # machine with hours of uptime; on a fresh one it means "just born"
+        # and the restart is deferred instead of dispatched.
+        child.started_at = time.monotonic() - watchdog.RESTART_GRACE_SEC - 1
         state = {"counts": {}, "at": 0.0}
         fake_store = MagicMock(connect=MagicMock(return_value=MagicMock()))
         toasts = []

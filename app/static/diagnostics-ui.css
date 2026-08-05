@@ -36,7 +36,7 @@ body.dx-funnel-live #dFunnel { display: none; }
   padding: var(--lg);
   color: var(--fg-4);
   font-family: var(--f-mono);
-  font-size: 11.5px;
+  font-size:var(--fs-2);
   line-height: 1.8;
 }
 
@@ -50,14 +50,14 @@ body.dx-funnel-live #dFunnel { display: none; }
   padding: var(--md);
   color: var(--red-2);
   font-family: var(--f-mono);
-  font-size: 11px;
+  font-size:var(--fs-1);
   line-height: 1.7;
 }
-.dx-fail b { display: block; letter-spacing: .16em; text-transform: uppercase; font-size: 10px; }
+.dx-fail b { display: block; letter-spacing: .16em; text-transform: uppercase; font-size:var(--fs-1); }
 .dx-fail code { color: var(--fg-3); word-break: break-all; }
 .dx-fail .dx-fail-what {
   font-family: var(--f-body);
-  font-size: 12.5px;
+  font-size:var(--fs-2);
   color: var(--fg-2);
   margin-top: 6px;
   display: block;
@@ -98,7 +98,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 
 .dx-bn-mark {
   font-family: var(--f-display);
-  font-size: 22px;
+  font-size:var(--fs-5);
   line-height: 1;
   color: var(--amber);
   font-variant-numeric: tabular-nums;
@@ -109,7 +109,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-bn-copy { min-width: 0; }
 .dx-bn-kicker {
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   font-weight: 600;
   letter-spacing: .18em;
   text-transform: uppercase;
@@ -119,13 +119,13 @@ body.dx-funnel-live #dFunnel { display: none; }
 /* Genuine prose — the one place on this surface where Inter is correct. */
 .dx-bn-line {
   font-family: var(--f-body);
-  font-size: 14px;
+  font-size:var(--fs-3);
   line-height: 1.45;
   color: var(--fg);
 }
 .dx-bn-sub {
   font-family: var(--f-mono);
-  font-size: 10.5px;
+  font-size:var(--fs-1);
   color: var(--fg-3);
   margin-top: 4px;
   font-variant-numeric: tabular-nums;
@@ -164,7 +164,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 }
 .dx-stage-name {
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   font-weight: 600;
   letter-spacing: .16em;
   text-transform: uppercase;
@@ -174,7 +174,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-stage-count {
   margin-left: auto;
   font-family: var(--f-display);
-  font-size: 15px;
+  font-size:var(--fs-4);
   color: var(--fg);
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -182,7 +182,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 /* the drop-off, stated as a number rather than left to be read off the bar */
 .dx-stage-drop {
   font-family: var(--f-mono);
-  font-size: 10.5px;
+  font-size:var(--fs-1);
   color: var(--amber);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -216,7 +216,6 @@ body.dx-funnel-live #dFunnel { display: none; }
   inset: 0 auto 0 0;
   background: linear-gradient(180deg, rgba(255, 255, 255, .20), rgba(255, 255, 255, .11));
   border-right: 1px solid rgba(255, 255, 255, .28);
-  transition: width .5s cubic-bezier(.22, .9, .3, 1);
 }
 /* survivors of the whole gauntlet: the one stage where green is a fact */
 .dx-stage.terminal .dx-stage-fill {
@@ -229,7 +228,7 @@ body.dx-funnel-live #dFunnel { display: none; }
   top: 50%;
   transform: translateY(-50%);
   font-family: var(--f-mono);
-  font-size: 9px;
+  font-size:var(--fs-1);
   font-weight: 600;
   letter-spacing: .16em;
   text-transform: uppercase;
@@ -242,7 +241,7 @@ body.dx-funnel-live #dFunnel { display: none; }
   align-items: baseline;
   margin-top: 4px;
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   color: var(--fg-4);
   font-variant-numeric: tabular-nums;
 }
@@ -259,7 +258,7 @@ body.dx-funnel-live #dFunnel { display: none; }
   gap: var(--sm);
   margin-bottom: var(--sm);
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   font-weight: 600;
   letter-spacing: .16em;
   text-transform: uppercase;
@@ -276,12 +275,12 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-reason:last-child { border-bottom: 0; }
 .dx-reason-code {
   font-family: var(--f-mono);
-  font-size: 11px;
+  font-size:var(--fs-1);
   color: var(--fg-2);
 }
 .dx-reason-n {
   font-family: var(--f-mono);
-  font-size: 12px;
+  font-size:var(--fs-2);
   font-weight: 600;
   color: var(--amber);
   font-variant-numeric: tabular-nums;
@@ -290,7 +289,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-reason-plain {
   grid-column: 1 / -1;
   font-family: var(--f-body);
-  font-size: 12.5px;
+  font-size:var(--fs-2);
   line-height: 1.5;
   color: var(--fg-3);
 }
@@ -309,7 +308,7 @@ body.dx-funnel-live #dFunnel { display: none; }
   background: transparent;
   cursor: pointer;
   font-family: var(--f-mono);
-  font-size: 11px;
+  font-size:var(--fs-1);
   color: var(--fg-3);
 }
 .dx-sample:hover { border-color: var(--border); background: rgba(255, 255, 255, .03); color: var(--fg-2); }
@@ -318,7 +317,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-sample .dx-sample-go { margin-left: auto; color: var(--fg-4); }
 .dx-sample-note {
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   color: var(--fg-4);
   margin-top: 6px;
   line-height: 1.6;
@@ -327,7 +326,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 @media (max-width:900px) {
   .dx-bottleneck { grid-template-columns: auto minmax(0, 1fr); }
   .dx-bn-cta { grid-column: 1 / -1; justify-self: start; }
-  .dx-stage-count { font-size: 14px; }
+  .dx-stage-count { font-size:var(--fs-3); }
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -372,7 +371,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 }
 .dx-drawer-title {
   font-family: var(--f-display);
-  font-size: 15px;
+  font-size:var(--fs-4);
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--fg);
@@ -380,7 +379,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-drawer-sub {
   width: 100%;
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   color: var(--fg-4);
   word-break: break-all;
 }
@@ -396,14 +395,14 @@ body.dx-funnel-live #dFunnel { display: none; }
   margin-bottom: var(--md);
   color: var(--amber);
   font-family: var(--f-mono);
-  font-size: 11px;
+  font-size:var(--fs-1);
   line-height: 1.7;
 }
 .dx-note .dx-note-what {
   display: block;
   margin-top: 5px;
   font-family: var(--f-body);
-  font-size: 12.5px;
+  font-size:var(--fs-2);
   color: var(--fg-2);
 }
 
@@ -416,7 +415,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 }
 .dx-verdict-line {
   font-family: var(--f-body);
-  font-size: 13.5px;
+  font-size:var(--fs-3);
   line-height: 1.5;
   color: var(--fg);
   margin-top: 6px;
@@ -427,11 +426,14 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-why {
   display: block;
   font-family: var(--f-body);
-  font-size: 12.5px;
+  font-size:var(--fs-2);
   line-height: 1.55;
   color: var(--fg-2);
-  background: rgba(255,255,255,.04);
-  border-left: 2px solid var(--accent);
+  /* Full border and tint. This file's own header comment forbids the side
+     stripe ("Status is carried by a full border + tint, a chip, or a corner
+     tag") and this rule was breaking it forty lines further down. */
+  background: rgba(var(--accent-rgb),.06);
+  border: 1px solid rgba(var(--accent-rgb),.35);
   border-radius: 4px;
   padding: 7px 10px;
   margin-top: 8px;
@@ -439,7 +441,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-why b {
   display: block;
   font-family: var(--f-mono);
-  font-size: 9px;
+  font-size:var(--fs-1);
   font-weight: 600;
   letter-spacing: .18em;
   text-transform: uppercase;
@@ -448,7 +450,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 }
 .dx-verdict-owner {
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--fg-4);
@@ -467,7 +469,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-tstage:last-child { border-bottom: 0; }
 .dx-tglyph {
   font-family: var(--f-mono);
-  font-size: 13px;
+  font-size:var(--fs-3);
   line-height: 1.3;
   text-align: center;
   color: var(--fg-4);
@@ -479,7 +481,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 
 .dx-tlabel {
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   font-weight: 600;
   letter-spacing: .16em;
   text-transform: uppercase;
@@ -489,7 +491,7 @@ body.dx-funnel-live #dFunnel { display: none; }
    ticks, which is the failure mode this component exists to fix. */
 .dx-tvalue {
   font-family: var(--f-mono);
-  font-size: 12.5px;
+  font-size:var(--fs-2);
   color: var(--fg);
   font-variant-numeric: tabular-nums;
   word-break: break-word;
@@ -498,13 +500,13 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-tstage.skip .dx-tvalue { color: var(--fg-4); }
 .dx-texpect {
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   color: var(--fg-4);
   margin-top: 2px;
 }
 .dx-tdetail {
   font-family: var(--f-body);
-  font-size: 12.5px;
+  font-size:var(--fs-2);
   line-height: 1.5;
   color: var(--fg-3);
   margin-top: 4px;
@@ -517,7 +519,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 }
 .dx-tfact {
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   color: var(--fg-4);
   font-variant-numeric: tabular-nums;
 }
@@ -565,7 +567,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 }
 .dx-modal-title {
   font-family: var(--f-display);
-  font-size: 16px;
+  font-size:var(--fs-4);
   letter-spacing: .18em;
   text-transform: uppercase;
   color: var(--fg);
@@ -579,7 +581,7 @@ body.dx-funnel-live #dFunnel { display: none; }
   border-top: 1px solid var(--border-soft);
   flex: none;
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   color: var(--fg-4);
   letter-spacing: .1em;
 }
@@ -592,7 +594,7 @@ body.dx-funnel-live #dFunnel { display: none; }
   padding: var(--md) var(--lg);
   margin-bottom: var(--lg);
   font-family: var(--f-body);
-  font-size: 13.5px;
+  font-size:var(--fs-3);
   line-height: 1.5;
   color: var(--fg-2);
 }
@@ -613,12 +615,12 @@ body.dx-funnel-live #dFunnel { display: none; }
 .dx-step:last-child { border-bottom: 0; }
 .dx-step-n {
   font-family: var(--f-mono);
-  font-size: 11px;
+  font-size:var(--fs-1);
   color: var(--fg-4);
   font-variant-numeric: tabular-nums;
   padding-top: 1px;
 }
-.dx-step-glyph { font-family: var(--f-mono); font-size: 13px; text-align: center; color: var(--fg-4); }
+.dx-step-glyph { font-family: var(--f-mono); font-size:var(--fs-3); text-align: center; color: var(--fg-4); }
 .dx-step.pass    .dx-step-glyph { color: var(--green-soft); }
 .dx-step.fail    .dx-step-glyph { color: var(--red-2); }
 .dx-step.warn    .dx-step-glyph { color: var(--amber); }
@@ -626,7 +628,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 
 .dx-step-title {
   font-family: var(--f-mono);
-  font-size: 11.5px;
+  font-size:var(--fs-2);
   font-weight: 600;
   color: var(--fg-2);
 }
@@ -634,7 +636,7 @@ body.dx-funnel-live #dFunnel { display: none; }
 /* the measured value, so a step is never just a tick */
 .dx-step-value {
   font-family: var(--f-mono);
-  font-size: 11px;
+  font-size:var(--fs-1);
   color: var(--fg-3);
   font-variant-numeric: tabular-nums;
   margin-top: 3px;
@@ -642,21 +644,21 @@ body.dx-funnel-live #dFunnel { display: none; }
 /* what it means and what to do — the reason the wizard exists at all */
 .dx-step-means {
   font-family: var(--f-body);
-  font-size: 12.5px;
+  font-size:var(--fs-2);
   line-height: 1.55;
   color: var(--fg-3);
   margin-top: 5px;
 }
 .dx-step-do {
   font-family: var(--f-body);
-  font-size: 12.5px;
+  font-size:var(--fs-2);
   line-height: 1.55;
   color: var(--fg-2);
   margin-top: 4px;
 }
 .dx-step-do b {
   font-family: var(--f-mono);
-  font-size: 10px;
+  font-size:var(--fs-1);
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--fg-4);
@@ -682,18 +684,18 @@ body.dx-funnel-live #dFunnel { display: none; }
   gap: 10px; align-items: baseline; padding: 1px 0;
 }
 .dx-tfact-k {
-  font-family: var(--f-mono); font-size: 9.5px; font-weight: 600;
+  font-family: var(--f-mono); font-size:var(--fs-1); font-weight: 600;
   letter-spacing: .12em; text-transform: uppercase; color: var(--fg-3);
 }
 .dx-tfact-v {
-  font-family: var(--f-mono); font-size: 11px; color: var(--fg-2);
+  font-family: var(--f-mono); font-size:var(--fs-1); color: var(--fg-2);
   font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
 }
 /* The internal id: available, not the headline. */
 .dx-copyid {
   margin-left: 8px; padding: 1px 7px; border-radius: var(--r-pill);
   border: 1px solid var(--border); background: transparent; cursor: pointer;
-  font-family: var(--f-mono); font-size: 9px; letter-spacing: .1em;
+  font-family: var(--f-mono); font-size:var(--fs-1); letter-spacing: .1em;
   text-transform: uppercase; color: var(--fg-3);
 }
 .dx-copyid:hover { color: var(--fg); border-color: var(--accent); }
@@ -712,31 +714,32 @@ body.dx-funnel-live #dFunnel { display: none; }
   border-radius:8px;padding:8px 10px;background:rgba(255,194,102,.05)}
 .dx-gate{display:grid;grid-template-columns:130px minmax(0,1fr) auto;
   gap:10px;align-items:baseline;padding:5px 2px;
-  border-bottom:1px solid rgba(255,255,255,.05);font-size:11.5px}
+  border-bottom:1px solid rgba(255,255,255,.05);font-size:var(--fs-2)}
 .dx-gate:last-of-type{border-bottom:0}
 .dx-gate-sym{font-family:var(--f-mono);font-weight:600;color:var(--fg)}
 .dx-gate-sym i{font-style:normal;color:var(--fg-4);margin-left:6px;font-weight:400}
 .dx-gate-what{color:var(--fg-2);line-height:1.45}
-.dx-gate-since{font-family:var(--f-mono);font-size:10px;color:var(--fg-4);white-space:nowrap}
+.dx-gate-since{font-family:var(--f-mono);font-size:var(--fs-1);color:var(--fg-4);white-space:nowrap}
 
 /* Vocabulary drift, made to LOOK like drift. An unlabelled reason rendered in
    the same voice as the written ones trains everyone to assume someone else
    labelled it. */
-.dx-drift{border-left:2px solid var(--amber);padding-left:8px}
-.dx-drift-tag{font-style:normal;color:var(--amber);font-size:10px;
+.dx-drift{border:1px solid rgba(255,194,102,.35);border-radius:6px;
+  background:rgba(255,194,102,.06);padding:6px 8px}
+.dx-drift-tag{font-style:normal;color:var(--amber);font-size:var(--fs-1);
   letter-spacing:.04em;margin-left:6px}
 
 /* ── "Failing now" — the list Diagnostics leads with ── */
 .fail-row{display:grid;grid-template-columns:52px 200px minmax(0,1fr) auto auto;
   gap:12px;align-items:baseline;padding:7px 14px;
-  border-bottom:1px solid rgba(255,255,255,.05);font-size:11.5px}
+  border-bottom:1px solid rgba(255,255,255,.05);font-size:var(--fs-2)}
 .fail-row:last-child{border-bottom:0}
 .fail-row.dim{opacity:.8}
-.fail-kind{font-family:var(--f-mono);font-size:9px;font-weight:700;
+.fail-kind{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:700;
   letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
 .fail-what{font-family:var(--f-mono);color:var(--fg-2)}
 .fail-what b{color:var(--fg)}
 .fail-err{font-family:var(--f-mono);color:var(--red-2);overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
 .fail-row.dim .fail-err{color:var(--fg-3)}
-.fail-meta{font-family:var(--f-mono);font-size:10px;color:var(--fg-4);white-space:nowrap}
+.fail-meta{font-family:var(--f-mono);font-size:var(--fs-1);color:var(--fg-4);white-space:nowrap}

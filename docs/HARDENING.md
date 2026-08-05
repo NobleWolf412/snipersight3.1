@@ -100,12 +100,19 @@ system remains paper-only until all of these are met:
 cd app
 python -m compileall -q .
 python -m unittest discover -s tests -v
-node tests/test_ticket_math.js
-node tests/test_lessons.js
+for f in tests/test_*.js; do node "$f" || break; done
 ```
 
 The JavaScript suites are not optional extras: `ticket-math.js` decides how big
 a trade is and re-implements `venues.liquidation_price`, so it is the only thing
 proving the ticket and the engine agree about where a position dies.
 
-CI runs these on every push and pull request.
+Run them by GLOB, never by name. This section listed two files, written when
+there were two; seventeen more were added over the following weeks and none of
+them were added here — and the same list had been pasted into the CI workflow,
+so the suite that prices every position was landing on `main` unverified while
+this document said it was covered. A named list is a second place to remember
+something, and it was not remembered.
+
+CI runs all of it on every push and pull request — `.github/workflows/ci.yml`,
+which fails if the glob matches nothing rather than passing an empty loop.

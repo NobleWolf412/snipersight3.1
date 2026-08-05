@@ -127,7 +127,7 @@
         // panel does not paraphrase it and does not blank it.
         return `<div class="ev-tf t-mono">
           <b>${esc(tf)}</b><span style="color:var(--fg-4)">${s.n ?? 0} trades</span>
-          <span class="ev-tf-none t-label">${esc(s.refusal || 'no verdict reported')}</span>
+          <span class="ev-tf-none t-note">${esc(s.refusal || 'no verdict reported')}</span>
         </div>`;
       }
       measured++;
@@ -138,7 +138,7 @@
       // Only when actually confounded. A reassuring note on every row trains
       // the eye to skip the one row that will eventually matter.
       const note = cf.confounded
-        ? `<div class="t-label" style="grid-column:2 / -1;color:var(--amber)">⚠ ${esc(cf.note || 'version-confounded slice')}</div>`
+        ? `<div class="t-note" style="grid-column:2 / -1;color:var(--amber)">⚠ ${esc(cf.note || 'version-confounded slice')}</div>`
         : '';
       return `<div class="ev-tf t-mono">
         <b>${esc(tf)}</b>
@@ -180,7 +180,7 @@
 
     return `<div style="margin-top:var(--lg)">
       <div class="t-section">By timeframe</div>
-      <div class="t-label" style="color:var(--fg-4);margin-bottom:var(--xs)">
+      <div class="t-note" style="color:var(--fg-4);margin-bottom:var(--xs)">
         the same book cut five ways, against the same break-even line</div>
       ${axis}
       ${body}
@@ -193,7 +193,7 @@
   function render(d) {
     if (!(d.sufficient ?? (d.book || {}).sufficient)) {
       panel(`<div class="empty">Not enough closed trades to say anything honest yet.
-        <br><span class="t-label" style="color:var(--fg-3)">${esc(d.refusal || 'sample too small')}</span></div>`);
+        <br><span class="t-note" style="color:var(--fg-3)">${esc(d.refusal || 'sample too small')}</span></div>`);
       return;
     }
     const b = d.book || {};
@@ -319,7 +319,7 @@
       </table>` : ''}
 
       ${d.breakeven_fee && d.breakeven_fee.computable ? `
-        <div class="t-label" style="margin-top:var(--sm);color:var(--fg-3)">
+        <div class="t-note" style="margin-top:var(--sm);color:var(--fg-3)">
           Break-even fee: ${num(d.breakeven_fee.per_side * 100, 4)}% per side
           (the book is ${Number(d.breakeven_fee.mean_r_ex_fee) > 0 ? 'profitable' : 'unprofitable'}
            before costs at ${num(d.breakeven_fee.mean_r_ex_fee)} R).
@@ -327,7 +327,7 @@
             ? '<b style="color:var(--red)">Negative — this book loses before a single fee is charged, so fees are not the cause.</b>'
             : ''}</div>` : ''}
 
-      ${(d.warnings || []).length ? `<div class="ev-warn t-label">${
+      ${(d.warnings || []).length ? `<div class="ev-warn t-note">${
         d.warnings.map(w => '⚠ ' + esc(w)).join('<br>')}</div>` : ''}
       ${(d.caveats || []).length ? `<div class="t-label" style="margin-top:var(--xs);color:var(--fg-4)">${
         d.caveats.map(esc).join('<br>')}</div>` : ''}

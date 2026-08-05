@@ -237,8 +237,15 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
         # Killing a scanner that has not yet had time to finish a pass is how
         # the restart loop sustained itself. Say so and wait rather than
         # silently doing nothing — a suppressed safety action must be visible.
-        age = time.monotonic() - getattr(live_child, "started_at", 0.0)
-        if live_child.alive() and age < RESTART_GRACE_SEC:
+        # Default None, never 0.0. `started_at` is monotonic, whose zero is
+        # BOOT — so a missing value read as 0.0 means "started at boot", which
+        # is ancient on a long-running desktop and newborn on a machine that
+        # came up a minute ago. The same clock reading two opposite things is
+        # not a default, and this one gates a SAFETY restart: unknown age must
+        # not defer it. A child that never recorded a start is not young.
+        started = getattr(live_child, "started_at", None)
+        age = None if started is None else time.monotonic() - started
+        if live_child.alive() and age is not None and age < RESTART_GRACE_SEC:
             log(f"audit: worst={worst} counts={counts} — {reason}, but "
                 f"live-scanner is {age:.0f}s old and a cycle needs ~296s; "
                 f"deferring restart (codes={codes[:6]})")

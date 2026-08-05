@@ -98,7 +98,7 @@
         <div class="cp-input">
           <textarea id="cpText" rows="2" placeholder="${ctx.kind === 'diagnostics'
             ? 'Why is…' : 'Ask about this setup'}"></textarea>
-          <button class="btn btn-cyan" id="cpSend"${busy ? ' disabled' : ''}>Send</button>
+          <button class="btn btn-primary" id="cpSend"${busy ? ' disabled' : ''}>Send</button>
         </div>
         <div class="cp-foot">never enters the record · runs on your Claude plan</div>
       </aside>`;

@@ -77,7 +77,15 @@ def install_exit_forensics() -> None:
     atexit.register(lambda: _exit_note("EXIT", "interpreter shutdown"))
 
 NATIVE_TFS = ("15m", "1H", "1D")
-_last_universe_refresh = 0.0
+# None, not 0.0, and the difference is not cosmetic. This is compared against
+# time.monotonic(), whose zero is BOOT — so 0.0 does not mean "never refreshed",
+# it means "refreshed at boot". On a machine that has been up for hours the
+# subtraction is huge and the first refresh runs, which is why this looked
+# correct for months on a desktop. On a freshly booted one — a CI runner, a
+# reboot, exactly when start.bat launches the scanner — monotonic() is a few
+# seconds, the throttle below sees less than REFRESH_SECONDS elapsed, and the
+# first universe refresh of the session is silently skipped for up to an hour.
+_last_universe_refresh = None
 # Symbols already announced as newly onboarded. A symbol stays in `warming`
 # forever when its venue has less history than the engines need, so without this
 # it is announced on every refresh and every restart. See refresh_universe().
@@ -176,7 +184,9 @@ ANNOUNCE_STATES = ("VALIDATED", "FORMING")
 def refresh_universe(con, log, beat=None):
     """Hourly: re-rank live, onboard newly-admitted symbols (backfill+engines)."""
     global _last_universe_refresh
-    if time.monotonic() - _last_universe_refresh < universe.REFRESH_SECONDS:
+    if (_last_universe_refresh is not None
+            and time.monotonic() - _last_universe_refresh
+                < universe.REFRESH_SECONDS):
         return
     _last_universe_refresh = time.monotonic()
     # the ranking sweep is a ~40s blocking call — beat inside it, not around it
