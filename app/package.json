@@ -1,0 +1,12 @@
+{
+  "name": "snipersight-app",
+  "private": true,
+  "description": "Lint config only. This package exists so `no-undef` has a real parser; the JavaScript suites themselves still need nothing but node's built-in assert, fs and path.",
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.0"
+  }
+}
