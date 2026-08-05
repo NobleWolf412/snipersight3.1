@@ -19,7 +19,7 @@ from decimal import Decimal
 
 from . import store, venues
 from .setups import SETUP_VERSION
-from .execsim import EXEC_VERSION
+from .execsim import EXEC_VERSION, plan_versions as execsim_plan_versions
 from .runlog import RunRecorder
 from .universe import admitted_at
 
@@ -235,13 +235,14 @@ def _day(ts: int) -> str:
 
 def run(con) -> dict:
     with RunRecorder(con, "risk", RISK_VERSION, "PORTFOLIO", "ALL") as rec:
-        from .scalein import SCALE_VERSION   # lazy: avoids circular import
         baseline = store.get_active_baseline(con)
         baseline_start = baseline["started_at"]
         intents, exits = [], {}
         for sym in _symbols(con):
             for tf in TFS:
-                for ver in (SETUP_VERSION, SCALE_VERSION):
+                # execsim owns the definition of what the book trades; risk
+                # sizes exactly that set and never a wider one.
+                for ver in execsim_plan_versions():
                     for r in store.get_facts(con, sym, tf, "setup", ver):
                         p = json.loads(r["payload"])
                         if (p["state"] == "VALIDATED" and

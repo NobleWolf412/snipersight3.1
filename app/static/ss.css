@@ -271,11 +271,21 @@ body{
    the table wanted 285px inside a 167px panel, and .panel is overflow-x:hidden,
    so the right-hand columns were not merely cramped, they were unreachable.
 
-   The scroller is the unclassed div the tables are already built into, matched
-   with :has() so none of the seven build sites needs a wrapper added. Where
-   :has() is unsupported the rule simply does not apply and nothing regresses. */
+   The scroller is the element the tables are already built into, matched with
+   :has() so none of the seven build sites needs a wrapper added. Where :has()
+   is unsupported the rule simply does not apply and nothing regresses.
+
+   :is(div,details), not div. Two of the six tables on Results scrolled and four
+   did not, and the four were the ones notTakenBlock() builds — it returns a
+   <details> with the table as a direct child, so a selector naming `div` never
+   matched them. Measured at 412px: 473px of table in a 345px box, inside a
+   .panel that is overflow:hidden, with no scrollbar and no pan. Ninety pixels
+   of every row in the untaken and shadow breakdowns were simply unreachable,
+   while the two tables beside them worked. Any future container earns the
+   scroller by holding a .data-table, not by being the right tag. */
 @media(max-width:900px){
-  .panel div:has(> .data-table){overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .panel :is(div,details):has(> .data-table){
+    overflow-x:auto;-webkit-overflow-scrolling:touch}
   .data-table{min-width:max-content}
 }
 

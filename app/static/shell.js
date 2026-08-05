@@ -292,6 +292,10 @@
   // The budget's binding stop, so the disposition line can quote it rather than
   // recompute it. Written by renderRiskBudget, read by renderDisposition.
   let lastConstraint = null;
+  /* The deck split the tile computed, so the disposition quotes the SAME object
+     rather than recomputing from a variable that is populated later in the
+     cycle. See renderDisposition for what that cost. */
+  let lastSplit = null;
   /* The portfolio payload the Open Trades rows were built from. The copilot
      button needs the whole trade — direction, entry, stop, target — to compose
      its question, and putting six values on the button as data attributes
@@ -458,7 +462,7 @@
     const active = SSState.deck();
     /* Actionable only. A nav badge reading 3 that leads to "nothing to take" is
        a false alarm, and it was firing on every refused setup in the window. */
-    const split = deckSplit(active);
+    const split = lastSplit = deckSplit(active);
     $('mSetups').textContent = split.ordered.length;
     $('mSetupsSub').textContent = split.passed.length
       ? `${split.passed.length} examined, not taken` : '';
@@ -719,8 +723,22 @@
     const el = $('disposition');
     if(!el) return;
     if(!lastOverview) return;              // still loading: keep the skeleton
+    /* Wait for the split rather than guessing at it. This read
+       deckSplit(lastDeckArgs ? lastDeckArgs[0] : []), and lastDeckArgs is set
+       by renderDeck, which the overview handler calls AFTER this function — so
+       on first paint the split was empty, refused counted 0, and the line
+       omitted its refusal clause while the tile forty pixels below already read
+       "3 examined, not taken". It corrected on the next poll, which means it
+       was wrong for the first thirty seconds and right after: wrong during the
+       twenty-second check, which is one of the three session shapes this
+       surface exists to serve, and right for the two that would have caught it.
+
+       Now it quotes the very object the tile rendered from, and holds the
+       skeleton until there is one. A shared authority is only shared if every
+       reader reads the same instance. */
+    if(!lastSplit) return;
     const sc = lastOverview.scanner || {};
-    const split = deckSplit(lastDeckArgs ? lastDeckArgs[0] : []);
+    const split = lastSplit;
     const stop = lastConstraint && lastConstraint.blocked ? lastConstraint : null;
     const n = split.ordered.length, refused = split.passed.length;
 
@@ -3475,6 +3493,52 @@ weighed in. Name the facts you used.`;
       }
     }                                             // health orb is reset by loadHealth
   }
+  /* HOVER IS NOT A DELIVERY MECHANISM.
+
+     Nine elements carried an explanation over 60 characters in a title and
+     nothing else: no role, no tabindex, no aria. A title is revealed by a mouse
+     pointer and by nothing else — not a finger, not the Tab key, not a screen
+     reader — and this app now ships a phone manifest and standalone icons, so
+     the pointer is no longer the assumed input.
+
+     The two longest were prose and are now visible text in Settings. The rest
+     are status chips in bars with no room to spare, so they keep the tooltip
+     and gain the two attributes that make it reachable: a tab stop, and a
+     description the assistive layer can read. Same pattern glossary.js already
+     applies to .term, generalised — so a future chip earns it by carrying a
+     long title, not by someone remembering.
+
+     aria-description, not aria-label: a label REPLACES the accessible name,
+     which on a chip reading "DEGRADED" would swallow the word the operator
+     needs. glossary.js:170 records that bug being found the hard way. */
+  function reachableTitles(root){
+    (root || document).querySelectorAll('[title]:not([data-titlefix])').forEach(el => {
+      const t = el.getAttribute('title') || '';
+      if(t.length <= 60) return;
+      if(!el.matches('a[href],button,input,select,textarea,[tabindex]')) el.tabIndex = 0;
+      if(!el.hasAttribute('aria-description') && !el.hasAttribute('aria-label'))
+        el.setAttribute('aria-description', t);
+      el.dataset.titlefix = '1';
+    });
+  }
+  reachableTitles();
+  /* Observed, not polled. Titles are written by eight renderers across five
+     files at times this module does not control — a position row appears the
+     moment the portfolio poll lands, and on a timer it would sit unreachable
+     until the next sweep. The observer is debounced and only ever adds two
+     attributes, and it skips anything already stamped, so it cannot loop. */
+  {
+    let pending = 0;
+    const obs = new MutationObserver(() => {
+      clearTimeout(pending);
+      pending = setTimeout(() => reachableTitles(), 250);
+    });
+    obs.observe(document.body, {
+      subtree: true, childList: true,
+      attributes: true, attributeFilter: ['title']
+    });
+  }
+
   refresh();
   booted = true;
   setInterval(refresh, 30000);

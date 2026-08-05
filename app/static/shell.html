@@ -726,9 +726,17 @@
       <div class="pack-cols">
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Exchanges</h2>
-            <span class="chip" title="keys are encrypted with Windows DPAPI, tied to your user account, never written to the fact store or the log, and cannot be read back — a stored key does NOT enable live trading, that gate is separate and locked">read-only keys only</span>
+            <span class="chip">read-only keys only</span>
             <span class="chip" id="credChip" style="margin-left:auto">—</span></div>
           <div class="panel-body">
+            <!-- Was a 211-character title on the chip above. A security
+                 guarantee is read at the moment a key is about to be pasted,
+                 and a hover cannot be read by a finger, a keyboard, or a screen
+                 reader — on an app that now ships a phone manifest. -->
+            <p class="t-note" style="margin:0 0 var(--md)">Keys are encrypted with
+              Windows DPAPI, tied to your user account, never written to the fact
+              store or the log, and cannot be read back. A stored key does
+              <b>not</b> enable live trading; that gate is separate and locked.</p>
             <div id="credFields"></div>
           </div>
         </div>
@@ -736,8 +744,17 @@
           <!-- the cost-model build stamp (`costs-v0.4`) lived here; it is
                provenance for a developer, not a rule the reader can change -->
           <div class="panel-head"><h2 class="t-section">Risk</h2>
-            <span class="chip" style="margin-left:auto" title="sized by the engine, not editable here — changing risk per trade would replay and re-size the entire forward record under the same engine version, which the versioning rule forbids">read-only</span></div>
+            <span class="chip" style="margin-left:auto">read-only</span></div>
           <div class="panel-body">
+            <!-- Was a 180-character title. "Why can I not change this?" is the
+                 first question this panel provokes, and the answer was the one
+                 thing on it a touch device could not reach. -->
+            <!-- Kept on one line deliberately: two suites assert this exact
+                 phrase survives near #riskNow, and wrapping it across an
+                 indented newline defeats the match while the sentence still
+                 reads correctly on screen. -->
+            <p class="t-note" style="margin:0 0 var(--md)">Sized by the engine, not
+              editable here. Changing risk per trade would replay and re-size the entire forward record under the same engine version, which the versioning rule forbids.</p>
             <div class="tk-out" id="riskNow"></div>
             <!-- B7 — one line, then a disclosure. This was a nine-line essay
                  standing between the operator and the numbers above it. The

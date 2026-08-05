@@ -969,17 +969,51 @@ WATCHDOG_LOCK_PORT = 8423       # watchdog.py holds a listening lock socket here
 HEARTBEAT = STATIC.parent / "data" / "heartbeat.json"
 
 
+def _audit_kill(pid: int) -> None:
+    """Write who asked for a process to die, next to the supervisor's own log.
+
+    Best-effort and silent on failure: an audit line must never be able to stop
+    the thing it is auditing, which is the same rule the notifier learned.
+    """
+    import traceback
+    try:
+        # The call stack names the endpoint. `/api/system/restart` and the
+        # wizard's `?target=scanner` are different callers reaching the same
+        # taskkill, and the difference is the whole question.
+        stack = [f.name for f in traceback.extract_stack()[:-2]][-6:]
+        line = (f"{time.strftime('%Y-%m-%d %H:%M:%S')} "
+                f"api-server: KILLING pid={pid} via {' > '.join(stack)}\n")
+        with open(STATIC.parent / "data" / "watchdog.log", "a",
+                  encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass
+
+
 def _stop_pid(pid: int) -> tuple[bool, str]:
     """Stop a process and report the OBSERVED outcome.
 
     Windows note: os.kill(pid, SIGTERM) does terminate the target but can still
     raise WinError 87, so trusting the exception produced a false "stop failed"
     while the watchdog log showed a clean exit. taskkill reports truthfully.
+
+    EVERY KILL FROM HERE IS RECORDED, into the supervisor's own log rather than
+    only into the HTTP reply nobody keeps.
+
+    The scanner has exited 356 times, always rc=1, always "NOT ended by this
+    supervisor". rc=1 is what `taskkill /F` produces, and taskkill is reached
+    from exactly two places: this function, and the watchdog's clear_orphans —
+    which already logs every kill it makes. So if the deaths are taskkills and
+    the supervisor is not making them, they came through here, and until now
+    that left no trace at all: the caller got a JSON reply and the log got
+    nothing. The next exit therefore answers the question either way — a line
+    beside it, or the absence of one.
     """
     import os
     import signal
     import subprocess
     import sys
+    _audit_kill(pid)
     if sys.platform == "win32":
         r = subprocess.run(["taskkill", "/PID", str(pid), "/F"],
                            capture_output=True, text=True, timeout=10)

@@ -362,6 +362,30 @@ def simulate_entry(candles, atr, order_i, entry, sl, long, *, entry_model,
             "note": note}
 
 
+def plan_versions() -> tuple:
+    """THE definition of what this book trades — the setup generations the
+    simulator executes, and nothing else.
+
+    Extracted because it had quietly become three copies: this simulator's own
+    loop, `risk.py`'s intent scan, and — by OMISSION — `live.py`'s announcer,
+    which had no copy at all. Its filter gated on the setup's state, on the
+    baseline window and on how late the setup was, but never on which ENGINE
+    produced it, so it announced every module that writes a `setup` fact. That
+    includes the two that are MEASURED AND NOT ENABLED, and the operator was
+    being alerted to take TREND_CONTINUATION trades from a playbook measured at
+    -0.1500 R with its interval entirely below zero. 17 of them.
+
+    A WHITELIST, deliberately, rather than a blacklist of the not-enabled. The
+    two failure modes are not symmetric: an engine that should alert and does
+    not is a missed trade, while an engine that should not alert and does is
+    the operator trading something the book has never graded. A new playbook
+    must therefore be silent until someone adds it here — the same reason
+    `pipeline.GATES` raises on an unknown name rather than warning.
+    """
+    from .scalein import SCALE_VERSION   # lazy: avoids circular import
+    return (SETUP_VERSION, SCALE_VERSION)
+
+
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
     with RunRecorder(con, "execsim", EXEC_VERSION, symbol, tf) as rec:
         # Venue-derived: spot fees on a perp are a 14x over-charge, and
@@ -371,9 +395,8 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         candle_times = [c["open_ts"] for c in candles]
         atr = compute_atr(candles)
 
-        from .scalein import SCALE_VERSION   # lazy: avoids circular import
         setups = {}
-        for ver in (SETUP_VERSION, SCALE_VERSION):
+        for ver in plan_versions():
             for r in store.get_facts(con, symbol, tf, "setup", ver):
                 p = json.loads(r["payload"])
                 if p["state"] == "VALIDATED":
