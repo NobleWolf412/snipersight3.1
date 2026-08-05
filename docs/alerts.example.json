@@ -26,6 +26,23 @@
     "when the PC is the thing that failed."
   ],
 
+  "_toast_readme": [
+    "toast:true puts Windows desktop notifications back. It is OFF by default",
+    "and that is not caution, it is measured. On the first live run of this",
+    "system the watchdog drained a backlog of 14 alerts, spawned 14 PowerShell",
+    "processes in a few seconds, and inside 25 seconds the scanner had exited",
+    "twice and the api-server once — all three with the same no-traceback",
+    "signature that killed the scanner 191 times before. It went quiet again",
+    "as soon as the queue emptied.",
+    "",
+    "Spawning PowerShell from a process that supervises others reaches those",
+    "others, and the isolation flags already in the code do not stop it. Phone",
+    "delivery is an HTTP POST and has none of this problem, which is why the",
+    "sinks below are the path that actually carries alerts. Turn the toast on",
+    "only if you want it and have read this."
+  ],
+  "toast": false,
+
   "sinks": [
     {
       "name": "phone",

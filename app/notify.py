@@ -249,15 +249,49 @@ def _send_remote(sink: dict, title: str, msg: str, priority: str) -> str:
                  {"Content-Type": "application/json"})
 
 
-def deliver_pending(limit: int = 20, log=None) -> dict:
+#: How many alerts one tick may deliver. Small on purpose — see the burst
+#: described on `toast_enabled` below. A backlog drains over several ticks
+#: instead of all at once, and the queue is durable, so nothing is lost.
+DELIVER_PER_TICK = 3
+
+
+def toast_enabled() -> bool:
+    """Whether the Windows toast sink runs. OFF unless explicitly turned on.
+
+    MEASURED, 2026-08-05, and the reason this default is what it is.
+
+    Moving delivery out of the scanner and into the watchdog was supposed to
+    make toasts safe: the scanner had died 191 times at toast call sites, and
+    the supervisor is not doing delicate work. On the first live run the
+    watchdog drained a backlog of 14 and spawned 14 PowerShell processes in a
+    few seconds. Within 25 seconds the scanner exited rc=1 twice with no
+    traceback — `NOT ended by this supervisor`, the same signature as before —
+    and the api-server followed. The stack went quiet again the moment the
+    queue emptied.
+
+    So the hazard was never "the scanner spawns PowerShell". It is that
+    spawning PowerShell at all, from a process supervising others, reaches
+    those others. CREATE_NO_WINDOW and CREATE_NEW_PROCESS_GROUP were already
+    in place for both rounds of this; they are not sufficient.
+
+    That is survivable for a desktop nicety and unacceptable for the thing it
+    was built for. Phone delivery is an HTTP POST — no console, no child
+    process, none of this failure mode — so the remote sink is the path that
+    actually carries the alerts, and the toast is opt-in for anyone who wants
+    it back and has read this.
+    """
+    return bool(config().get("toast", False))
+
+
+def deliver_pending(limit: int = DELIVER_PER_TICK, log=None) -> dict:
     """Send what is queued. Call this from the WATCHDOG tick, never the scanner.
 
     Every send is attempted independently and a failure marks the row rather
-    than raising — an unreachable phone must not stop the local toast, and
-    neither must stop the supervisor. Rows are marked sent even when every sink
-    failed, with the reason recorded: retrying a notification forever means a
-    phone that comes back online after a night buzzes for a night of events,
-    which is worse than missing them.
+    than raising — an unreachable phone must not stop the other sinks, and
+    none of them must stop the supervisor. Rows are marked sent even when every
+    sink failed, with the reason recorded: retrying forever means a phone that
+    comes back online after a night buzzes for a night of events, which is
+    worse than missing them.
     """
     out = {"sent": 0, "failed": 0, "sinks": len(config().get("sinks") or [])}
     try:
@@ -270,10 +304,13 @@ def deliver_pending(limit: int = 20, log=None) -> dict:
             "WHERE sent_at IS NULL ORDER BY queued_at LIMIT ?", (limit,)).fetchall()
         for key, priority, title, msg in rows:
             outcomes = []
-            try:
-                outcomes.append("toast=" + ("ok" if toast(title, msg) else "no"))
-            except Exception as exc:
-                outcomes.append(f"toast=error({type(exc).__name__})")
+            if toast_enabled():
+                try:
+                    outcomes.append("toast=" + ("ok" if toast(title, msg) else "no"))
+                except Exception as exc:
+                    outcomes.append(f"toast=error({type(exc).__name__})")
+            else:
+                outcomes.append("toast=off")
             for sink in (config().get("sinks") or []):
                 name = sink.get("name") or sink.get("type") or "remote"
                 try:
@@ -281,6 +318,9 @@ def deliver_pending(limit: int = 20, log=None) -> dict:
                 except Exception as exc:
                     outcomes.append(f"{name}=error({type(exc).__name__})")
             verdict = ", ".join(outcomes)
+            # "off" is not a delivery. With no sink configured every alert is
+            # correctly reported as undelivered, which is the honest reading:
+            # it was recorded and nobody was told.
             ok = any("=ok" in o or "=http 2" in o for o in outcomes)
             out["sent" if ok else "failed"] += 1
             con.execute("UPDATE notifications SET sent_at=?, outcome=? "

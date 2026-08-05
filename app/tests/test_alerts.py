@@ -167,6 +167,61 @@ class RemoteDeliveryIsOffUntilAskedFor(QueueCase):
         self.assertIn("phone=", row[1])
 
 
+class TheToastSinkIsOffUntilAskedFor(QueueCase):
+    """Measured 2026-08-05, on the first live run of this system.
+
+    Moving delivery out of the scanner and into the watchdog was supposed to
+    make toasts safe. The watchdog drained a backlog of 14 and spawned 14
+    PowerShell processes in a few seconds; within 25 seconds the scanner exited
+    rc=1 twice with no traceback — `NOT ended by this supervisor`, the same
+    signature as the 191 deaths before it — and the api-server followed. The
+    stack went quiet the moment the queue emptied.
+
+    So the hazard was never "the SCANNER spawns PowerShell". It is that
+    spawning PowerShell at all, from a process that supervises others, reaches
+    those others. CREATE_NO_WINDOW and CREATE_NEW_PROCESS_GROUP were already in
+    place for both rounds; they are not sufficient.
+
+    Phone delivery is an HTTP POST and has none of this failure mode, so it is
+    the path that carries the alerts and the toast is opt-in.
+    """
+
+    def test_no_toast_is_spawned_by_default(self):
+        import subprocess
+        calls = []
+        real = subprocess.run
+        subprocess.run = lambda *a, **k: calls.append("spawn")
+        try:
+            notify.enqueue("k", "t", "m")
+            notify.deliver_pending()
+        finally:
+            subprocess.run = real
+        self.assertEqual(calls, [],
+                         "the watchdog spawned a process to deliver an alert — "
+                         "that is what took the scanner and the server down")
+
+    def test_it_can_be_turned_back_on_deliberately(self):
+        notify.CONFIG.write_text(json.dumps({"toast": True}), encoding="utf-8")
+        self.assertTrue(notify.toast_enabled())
+
+    def test_an_undelivered_alert_is_not_reported_as_sent(self):
+        """With the toast off and no remote sink, nobody was told. Saying
+        otherwise would be the silent-degradation this codebase forbids."""
+        notify.enqueue("k", "t", "m")
+        out = notify.deliver_pending()
+        self.assertEqual(out["sent"], 0)
+        self.assertEqual(out["failed"], 1)
+
+    def test_a_backlog_drains_over_several_ticks(self):
+        """14 at once is what caused the kill. The queue is durable, so a small
+        per-tick limit loses nothing and bounds the burst."""
+        self.assertLessEqual(notify.DELIVER_PER_TICK, 5)
+        for i in range(10):
+            notify.enqueue(f"k{i}", "t", "m")
+        first = notify.deliver_pending()
+        self.assertEqual(first["sent"] + first["failed"], notify.DELIVER_PER_TICK)
+
+
 class TheShadowBookIsNeverAnnounced(unittest.TestCase):
     def test_the_watchdog_reads_only_risk_and_the_operators_own_trades(self):
         """`exec` and `order` are the engine's simulation — 100-400 events a
