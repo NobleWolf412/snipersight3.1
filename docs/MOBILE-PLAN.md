@@ -9,6 +9,51 @@ landscape, three competing plans, three adversarial judges). Claims marked
 
 ---
 
+## STATUS — all six phases built, 2026-08-05
+
+| Phase | State | Commit |
+|---|---|---|
+| 1. Icon, front door, cheap safety | done | `7c365d7` |
+| 2. The phone stops being able to lie | done | `203286c` |
+| 3. The cockpit fits the phone | done | `8215959` |
+| 4. Arm and close with a thumb | done | `27adcae` |
+| 5. The chart owns the screen | done, **scope corrected** | `38b4c8a` |
+| 6. The phone tells you when something happened | done, **needs a watchdog restart** | `ab85af4` |
+
+**Two things still need the operator.**
+
+1. **Restart the watchdog** so phase 6 runs. `/api/system/restart` restarts the
+   scanner and the server; the supervisor holding the new code is neither.
+   Stop `watchdog.py` and run `start.bat`.
+2. **Copy `docs/alerts.example.json` to `app/data/alerts.json`** if you want
+   alerts on the phone rather than only toasts on the PC. Left off
+   deliberately — an alert names your symbol, direction and P&L.
+
+**Where the plan was wrong**, recorded because the plan is evidence too:
+
+- Phase 5's layout items were largely obsolete by the time they were reached.
+  Measured at 412×915 before touching anything: the chart already got 529px and
+  the toolbar was 98px in three rows. The "toolbar taller than the chart" and
+  "the ticket cannot fit by stacking" described the pre-fix layout. The toolbar
+  consolidation and the order-ticket bottom sheet were therefore **not built** —
+  they would have been churn. The data work in that phase was real and was done.
+- Phase 4's "every POST is a bare fetch with no pending state" was wrong for
+  Arm, which already disabled its button. The genuine defect next to it was
+  worse and unlisted: on a dropped reply it asserted `nothing was armed`, which
+  it cannot know.
+- Phase 2's health-chip visibility fix had already been made by another session.
+- The `/api/facts` saving is real but **timeframe-dependent**: 66% at 1H and
+  55% at 15m, and currently **zero** at 4H and 1D, where the store holds less
+  history than the chart's 1500-bar window. It grows as the store does.
+
+**Three bugs were introduced and caught by verification rather than by review** —
+a lower-cased timeframe table that switched Arm off after a minute on a 4H
+chart, a kill-switch key that collapsed 23 events into 2, and a heartbeat field
+read as `at` instead of `ts` that would have cried wolf every tick. All three
+would have passed any amount of reading. Each now has a test.
+
+---
+
 ## 1. The answer
 
 **Keep the engine where it is and make the phone a careful window onto it.**
