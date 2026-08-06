@@ -224,23 +224,11 @@
         <div id="mine"></div>
       </div>
 
-      <!-- Open trades, in detail. The same book the Mission Briefs rail leads
-           with — the rail is the glance, this is the row-by-row read with the
-           per-trade controls. Collapsed by default so one book is not two
-           panels of equal weight: the cards answer "what am I in", and this
-           answers it again for whoever wants the numbers in a line.
-
-           `active_positions` had been in the portfolio payload the whole time
-           and rendered on no surface: the only place an open trade appeared
-           was the chart's order ticket, and only while you happened to be
-           looking at that symbol's chart. -->
-      <details class="panel" id="posPanel" style="margin-bottom:var(--lg);display:none">
-        <summary class="panel-head">
-          <h2 class="t-section">Engaged — detail</h2>
-          <span class="chip" id="posRisk" style="margin-left:auto">—</span>
-        </summary>
-        <div id="positions"></div>
-      </details>
+      <!-- "Engaged — detail" stood here: a second, row-shaped rendering of the
+           same open positions the Mission Briefs rail already carries. Its
+           controls (the keyboard-operable symbol, Reasons, the composed hold
+           question and Close) all moved onto the mission card, so nothing was
+           lost with the panel. -->
 
       <!-- MISSION BRIEFS — the Setup Deck and the Approaching radar, fused
            into one horizontally scanned rail of dossier cards. The two feeds
@@ -331,33 +319,21 @@
           <h2 class="t-section">Overwatch</h2>
           <span class="chip" id="nearCount" style="margin-left:auto">—</span>
         </div>
-        <div class="mw-tabs">
-          <div class="seg" id="mwSeg" role="tablist" aria-label="market watch groups">
-            <button role="tab" data-mw="level" class="on" aria-selected="true">Manual setups <b>0</b></button>
-            <button role="tab" data-mw="far" aria-selected="false">Out of reach <b>0</b></button>
-            <button role="tab" data-mw="all" aria-selected="false">All markets <b>0</b></button>
-            <button role="tab" data-mw="passed" aria-selected="false">Refused <b>0</b></button>
-          </div>
-        </div>
+        <!-- ONE RANKED DECK, no tabs. There were four — Manual setups, Out of
+             reach, All markets, Refused — and they were never a partition:
+             "All markets" iterated the whole weather universe while "Manual
+             setups" iterated the zone sweep, so the same symbol appeared on
+             both wearing two different badges. "Out of reach" was pure
+             redundancy, every card on it the bottom rank, 21 times out of 21.
+
+             Now: one card per market, ranked by how close price is to a zone
+             the engine watches and then by whether a playbook trades that
+             market's condition. The engine's bound is the grey bottom of the
+             ordering rather than a tab. The refused setups answer a different
+             question — "why did nothing fire" — and live with the rest of
+             that answer on Diagnostics. -->
         <p class="t-body mw-lede" id="nearLede"></p>
         <div id="near"></div>
-        <!-- Out of reach: markets with a live zone further away than the
-             engine's own bound. The tab is a label; the sentence this group
-             leads with is where the bound is actually stated. -->
-        <div id="nearFar" hidden></div>
-        <!-- EVERY MARKET — Market Weather's per-symbol breakdown, as cards.
-             The two groups above are keyed on the zone sweep, so a market
-             with no live zone anywhere near it appears in neither: the
-             regime read for a third of the universe had nowhere to render.
-             This group is the whole watched universe, one card per market,
-             carrying the condition it is in whether or not price is standing
-             near anything. -->
-        <div id="allMarkets" hidden></div>
-        <!-- The refused setups render here and are shown by the toggle above.
-             Same cards the rail builds, same differ — renderDeck moves the
-             node rather than rebuilding it, so a verdict flipping mid-session
-             costs no repaint. -->
-        <div id="passed" class="wheel-rail" hidden tabindex="0"></div>
       </div>
 
       <!-- Market Watch used to stand here as its own "At a level" panel. It is
@@ -1026,6 +1002,22 @@
         <span class="skel skel-line" style="width:55%"></span></span></div>
         <!-- funnel.js appends the stage bars + bottleneck pill here -->
         <div id="funnelRoot"></div>
+      </div>
+
+      <!-- REFUSED SETUPS — the per-instance view, directly under its own
+           aggregate. These cards used to sit on Command, first inside Mission
+           Briefs and then as a fourth Overwatch tab, and in both places they
+           were dead trades in the panel that answers "what should I do right
+           now". The question they answer is "why did nothing fire", and that
+           is this surface's whole subject: the funnel above counts the
+           refusals, and this names them one at a time with the reason on each
+           card. -->
+      <div class="panel" id="refusedPanel" style="margin-bottom:var(--lg);display:none">
+        <div class="panel-head"><h2 class="t-section">Refused setups</h2>
+          <span class="chip" id="refusedCount" style="margin-left:auto">—</span></div>
+        <p class="t-body mw-lede" id="refusedLede"></p>
+        <div id="refused" class="wheel-rail" tabindex="0" role="group"
+             aria-label="refused setups — use left and right arrow keys"></div>
       </div>
       <div class="grid cols-2">
         <div class="panel">

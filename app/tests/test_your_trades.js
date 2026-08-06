@@ -72,8 +72,16 @@ ok('your book is never merged into the engine\'s', () => {
     'a hand-picked trade must never join the engine position list');
   assert(/hand-picked · not engine record/.test(HTML),
     'the panel must say whose plan these are');
-  assert(HTML.indexOf('id="minePanel"') < HTML.indexOf('id="posPanel"'),
-    'your orders belong above the engine positions, not mixed into them');
+  /* Re-pinned: #posPanel is gone — the engine's open trades are the Mission
+     Briefs rail (#deck) now, so the comparison re-points at that. The
+     ordering property is UNCHANGED in direction: your hand-picked orders sit
+     above the engine's book, because the panel that can mislead you about
+     whose plan a trade was should be met first. The separation itself is
+     carried by the two assertions above, which are untouched. */
+  assert(HTML.indexOf('id="minePanel"') < HTML.indexOf('id="deck"'),
+    'your orders belong above the engine book, not mixed into it');
+  assert(!/id="posPanel"/.test(HTML),
+    'the duplicate Engaged-detail panel is back');
 });
 
 ok('the row is visually attributed, not just captioned', () => {

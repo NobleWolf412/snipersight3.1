@@ -210,8 +210,14 @@ ok('trace rows are focusable and operable by keyboard', () => {
      operable by keyboard. They just do it with a real <button> on the symbol
      instead of a div wearing a role. */
   assert(JS.includes('function activatable'), 'one helper, not per-element retrofits');
-  assert((JS.match(/class="pos-sym pos-open"/g) || []).length >= 2,
-    'position and pending rows must expose a real keyboard control');
+  /* Re-pinned: one card renderer now serves BOTH a filled position and a
+     resting order (missionCardInner takes `filled`), so one occurrence
+     covers what two row builders used to. The property is unchanged — the
+     symbol is a real <button>, reachable and operable by keyboard. */
+  assert((JS.match(/class="mc-tok t-mono pos-sym pos-open"/g) || []).length >= 1,
+    'the mission card must expose a real keyboard control on the symbol');
+  assert(/missionCardInner\(t, filled/.test(JS),
+    'one renderer must still serve both filled positions and resting orders');
   assert(!/tabindex="0" role="button"[\s\S]{0,900}?pos-acts/.test(JS),
     'a row with nested action buttons must not itself be role="button"');
   assert(/keydown/.test(JS) && /e\.key !== 'Enter' && e\.key !== ' '/.test(JS));
@@ -452,8 +458,15 @@ ok('the row opens the chart, not the trace drawer', () => {
   assert.ok(!/pos-row traceable/.test(JS), 'the whole row is no longer a trace target');
   // go() FIRST: SSChart.open only loads data, it does not navigate. Without
   // it the ticket silently managed a trade on a surface not being looked at.
-  const h = JS.match(/const m = e\.target\.closest\('\[data-manage\]'\);[\s\S]{0,220}/);
+  /* Re-pinned: the Engaged-detail rows are gone and their delegated handler
+     with them. `data-manage` now lives on the mission card and is bound
+     per-element in wireCardActions. The PROPERTY is unchanged and is what
+     this checks — go() must run BEFORE SSChart.open, because open() only
+     loads data and does not navigate. */
+  const h = JS.match(/\[data-manage\]'\)\.forEach[\s\S]{0,400}/);
   assert.ok(h && /go\('chart'\)/.test(h[0]), 'the click must navigate');
+  assert.ok(h && h[0].indexOf("go('chart')") < h[0].indexOf('SSChart.open'),
+    'go() must come first, or the ticket manages a trade off-screen');
 });
 ok('the trace is still reachable, as its own control', () => {
   // A <button data-trace> inside the row, so nothing was lost by taking the
@@ -464,12 +477,18 @@ ok('the trace is still reachable, as its own control', () => {
   assert.ok(!/gate-by-gate/.test(JS), 'and its tooltip is plain English');
 });
 ok('keyboard reaches what the mouse reaches', () => {
-  // Anchored on the POSITIONS handler — this file has several keydown
-  // listeners and the first one is not it.
-  const k = JS.match(/\$\('positions'\)\.addEventListener\('keydown'[\s\S]{0,420}/);
-  assert.ok(k, 'positions keydown handler not found');
-  assert.ok(/data-manage/.test(k[0]) && /go\('chart'\)/.test(k[0]),
-            'Enter/Space must open the chart, same as a click');
+  /* Re-pinned, and the property is now satisfied by construction rather than
+     by a hand-rolled keydown. The symbol on a mission card is a real
+     <button>, so Enter and Space come from the platform and cannot be
+     forgotten at the next call site — which is why the old #positions
+     keydown listener no longer exists.
+
+     What must hold: the control that opens the chart is a BUTTON carrying
+     data-manage, not a div with a click handler. */
+  assert.ok(/<button class="mc-tok t-mono pos-sym pos-open" data-manage=/.test(JS),
+    'the symbol is not a real button — Enter and Space are lost');
+  assert.ok(!/\$\('positions'\)/.test(JS),
+    'the deleted positions panel is still referenced');
 });
 ok('the copilot is OFFERED a HOLDING question, not an entry one', () => {
   assert.ok(/const holdAsk = t =>/.test(JS), 'one composer, shared by both row types');

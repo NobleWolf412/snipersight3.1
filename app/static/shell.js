@@ -950,7 +950,16 @@
       </div>
       <div class="mc-hero">
         <div class="mc-idy">
-          <div class="mc-tok t-mono">${esc(tokenOf(t.symbol))}</div>
+          <!-- A REAL BUTTON, not a div with a click handler. This carries the
+               keyboard affordance the deleted Engaged-detail rows owned: the
+               symbol opens the chart on this trade, and a native <button>
+               gets Enter and Space from the platform rather than from a
+               hand-rolled keydown that has to be remembered at every new
+               call site. Both a filled position and a resting order render
+               through here, so one control covers both. -->
+          <button class="mc-tok t-mono pos-sym pos-open" data-manage="${esc(t.symbol)}"
+                  data-managetf="${esc(t.tf)}"
+                  title="open the chart on this trade">${esc(tokenOf(t.symbol))}</button>
           <div class="mc-sub t-label" title="${esc(t.symbol)}">${
             esc(String(t.symbol).replace('-USD',''))} · ${esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
           <div class="mc-dirline">
@@ -969,10 +978,24 @@
         t.risk_usd == null ? '—' : money(t.risk_usd)}</b>${
         t.notional_usd == null ? '' : ` · Size <b style="color:var(--fg)">${money(t.notional_usd)}</b>`}</div>
       <div class="mc-acts">
-        <button class="btn" data-why="${esc(t.setup_id || '')}"
+        <button class="btn" data-trace="${esc(t.setup_id || '')}"
                 title="what this trade passed, gate by gate">Reasons</button>
-        <button class="btn btn-amber" data-sym="${esc(t.symbol)}" data-tf="${esc(t.tf)}"
+        <!-- The composed hold question, carried over from the deleted rows.
+             It OFFERS the wording and never sends it — the dock fills its own
+             input and the operator presses send. -->
+        <button class="btn" data-ask="${esc(t.setup_id || '')}"
+                data-asksym="${esc(t.symbol)}" data-asktf="${esc(t.tf)}"
+                title="ask the copilot whether to hold this — it reads the trace and cannot arm">Ask</button>
+        <button class="btn btn-amber" data-manage="${esc(t.symbol)}"
+                data-managetf="${esc(t.tf)}"
                 title="open the chart — the ticket manages this position">Manage</button>
+        <!-- CLOSE, carried over with the rest. It is the one WRITE control on
+             this card and it only exists for a filled position: a resting
+             order has nothing to close. Leaving it behind with the deleted
+             rows would have removed the operator's ability to close from
+             Command at all, which is a capability loss, not a declutter. -->
+        ${filled ? `<button class="btn pos-close" data-close-sid="${esc(t.setup_id || '')}"
+                title="close this on YOUR book at the last closed price — the engine keeps simulating its own plan, so the two outcomes can be compared">Close</button>` : ''}
       </div>`;
   }
 
@@ -996,11 +1019,11 @@
        things being watched — not in the panel that answers "what should I do
        right now", where a four-day-dead card was sitting in the slot where
        advice goes. */
-    const strip = $('passed');
+    const strip = $('refused'), panel = $('refusedPanel');
     if(!setups.length){
       deckRows.clear();
       if(strip) strip.innerHTML = deckEmptyHtml(funnel);
-      mwCounts({passed: 0});
+      if(panel) panel.style.display = '';
       return;
     }
 
@@ -1046,7 +1069,6 @@
        (see renderMissions), so in practice this is `passed` — refused and
        expired. Both go to the same tab: the question they answer is "why did
        nothing fire", and that is not the question the rail answers. */
-    mwCounts({passed: ordered.length + passed.length});
 
     /* SECONDS, because that is what the row's two clocks compare against.
        `foundAgo` subtracts `market_time` and `expiresIn` subtracts
@@ -1110,8 +1132,99 @@
       setTimeout(() => { rec.el.remove(); deckRows.delete(key); }, 900);
     }
 
+    /* The panel hides itself when there is nothing refused — an empty
+       "Refused setups" heading is a promise of an explanation that is not
+       there. The count and the lede both name the window so the number is
+       answerable. */
+    if(panel){
+      const n = ordered.length + passed.length;
+      panel.style.display = n ? '' : 'none';
+      const cnt = $('refusedCount');
+      if(cnt) cnt.textContent = n + (n === 1 ? ' setup' : ' setups');
+      const lede = $('refusedLede');
+      if(lede) lede.textContent = n
+        ? 'Setups the risk authority refused, or that expired before price ' +
+          'came back. Each card carries the reason it was not taken.'
+        : '';
+    }
     wireCardActions(strip || el);
     mountRails(strip || el);
+  }
+
+  /* CLOSING A POSITION, carried out of the deleted Engaged-detail rows.
+
+     This is the one WRITE control on a mission card and the irreversible
+     half of the pair: an arm can be left to expire, a close is recorded
+     and the engine's own simulation carries on without it. The
+     confirmation restates the trade from the payload the card was built
+     from, so the dialog quotes the position the operator can see rather
+     than a second fetch that could name a different one. */
+  async function closePosition(c){
+    if(c.disabled) return;
+    const sid = c.dataset.closeSid;
+
+    /* SAY WHAT IS ABOUT TO END. The ticket restates side, symbol, levels
+       and dollars before arming; closing had no equivalent, on the
+       reasoning that it is small and quiet. That reasoning was written
+       for a 55x19 button under a cursor. On a phone this control is now
+       48px and full width, sitting in a list the operator is scrolling
+       with the same thumb — and closing is the irreversible half of the
+       pair: an arm can be left to expire, a close is recorded and the
+       engine's own simulation carries on without it.
+
+       Restated from the payload the row was built from, so the dialog
+       quotes the position the operator can see rather than a second
+       fetch that could name a different one. */
+    const pos = (lastPortfolio.active_positions || [])
+      .concat(lastPortfolio.pending_orders || [])
+      .find(x => x.setup_id === sid);
+    if(pos){
+      const r0 = pos.r_multiple != null ? Number(pos.r_multiple) : null;
+      const lines = [
+        `${String(pos.direction || '').toUpperCase()} ${pos.symbol || ''} ${pos.tf || ''}`,
+        `entry ${pos.entry}`,
+        r0 == null ? 'result so far unknown'
+                   : `closing at ${r0 >= 0 ? '+' : ''}${r0}R`,
+      ];
+      if(!await SSConfirm({
+        title: 'Close this position?',
+        rows: lines,
+        note: 'This ends the trade on your paper book now, at the last ' +
+              "closed bar. The engine's own simulation of the setup " +
+              'carries on.',
+        confirmLabel: 'Close it',
+        tone: 'danger'
+      })) return;
+    }
+
+    const was = c.textContent;
+    c.disabled = true; c.textContent = 'closing…';
+    try{
+      const r = await fetch('/api/positions/close', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({setup_id: sid})});
+      const d = await r.json().catch(() => ({}));
+      c.textContent = r.ok
+        ? (d.closed ? `closed ${d.closed.r_at_close}R` : 'closed')
+        : 'failed — ' + (d.detail || r.status);
+      if(r.ok) refresh();
+    }catch(err){
+      /* 'unreachable' claimed the close did not happen. fetch() rejects
+         both when the request never left AND when it arrived, was
+         recorded, and the reply was lost — indistinguishable from here,
+         and the second is ordinary on cellular. Refreshing is the answer
+         that cannot be wrong: the row either disappears because it
+         closed, or it is still there because it did not. */
+      c.textContent = 'no reply — checking…';
+      try{
+        await refresh();
+        c.textContent = 'no reply; see the list';
+      }catch(_){
+        c.textContent = 'no reply, and the list will not load — unknown';
+      }
+    }
+    // give the outcome a beat to be read, then hand the button back
+    setTimeout(() => { c.disabled = false; c.textContent = was; }, 3000);
   }
 
   /* One wiring pass for every card in the app, whichever container it lives
@@ -1151,6 +1264,48 @@
       if(b.dataset.wired) return;
       b.dataset.wired = '1';
       b.addEventListener('click', () => explainRefusal(b.dataset.reasons, b.dataset.rsym));
+    });
+    /* CARRIED FROM THE DELETED ENGAGED-DETAIL ROWS.
+
+       `data-manage` opens the chart on that trade — go() FIRST, because
+       SSChart.open only loads the data and navigating is the caller's job;
+       without it the ticket silently switched to managing a trade on a
+       surface the operator was not looking at.
+
+       These are real <button>s, so Enter and Space come from the platform and
+       the hand-rolled keydown handler that used to live on #positions is not
+       needed. */
+    box.querySelectorAll('[data-manage]').forEach(m => {
+      if(m.dataset.wired) return;
+      m.dataset.wired = '1';
+      m.addEventListener('click', e => {
+        e.stopPropagation();
+        go('chart');
+        if(window.SSChart) SSChart.open(m.dataset.manage, m.dataset.managetf);
+      });
+    });
+    /* The composed hold question. It reaches the dock as a SUGGESTION and is
+       never auto-sent — the operator's input is theirs, which is the ruling
+       test_copilot_dock.js pins in both directions. */
+    box.querySelectorAll('[data-close-sid]').forEach(b => {
+      if(b.dataset.wired) return;
+      b.dataset.wired = '1';
+      b.addEventListener('click', e => { e.stopPropagation(); closePosition(b); });
+    });
+    box.querySelectorAll('[data-ask]').forEach(a => {
+      if(a.dataset.wired) return;
+      a.dataset.wired = '1';
+      a.addEventListener('click', e => {
+        e.stopPropagation();
+        if(!window.SSCopilot) return;
+        const t = (lastPortfolio.active_positions || [])
+          .concat(lastPortfolio.pending_orders || [])
+          .find(x => x.setup_id === a.dataset.ask);
+        if(!t) return;
+        SSCopilot.open({kind: 'chart', symbol: a.dataset.asksym,
+                        tf: a.dataset.asktf, setupId: a.dataset.ask,
+                        suggest: holdAsk(t)});
+      });
     });
   }
 
@@ -1931,52 +2086,99 @@
     return by;
   }
 
-  /* ---------- threat level ----------
-     How loudly a card should read, derived from the engine's OWN reach
-     verdict and nothing else. Four steps, because `engine_reach` has four
-     states and inventing a fifth would be inventing a claim.
+  /* ═══════════ ONE SCALE FOR "COULD I TRADE THIS?" — REACH & PLAY ═══════════
 
-     Deliberately NOT a score, and deliberately not renamed. The colour is
-     the only thing added here; the words on the chip stay the plain-language
-     sentences NEAR_SAY already writes, because a newcomer can decode "in the
-     zone now" and cannot decode "THREAT: ALPHA". Colour carries urgency,
-     language carries meaning, and neither is asked to do the other's job. */
-  const THREAT = {
-    AT_ZONE:          {lvl: 3, cls: 't3', stamp: 'st-t3', ring: 'ring-ok'},
-    IN_RANGE:         {lvl: 2, cls: 't2', stamp: 'st-t2', ring: 'ring-mid'},
-    NO_FORMING_ON_TF: {lvl: 1, cls: 't1', stamp: 'st-t1', ring: 'ring-cy'},
-    OUT_OF_RANGE:     {lvl: 0, cls: 't0', stamp: 'st-t0', ring: 'ring-dim'},
+     There were THREE badge vocabularies for one question, and a letter grade
+     restating all of them. The same market rendered CONTACT (green) under one
+     tab and NO PLAY (grey) under the next, carrying the identical letter B on
+     both, because the tabs were never a partition — the all-markets list was a
+     superset of the near-level list, and the badge slot silently changed its
+     question depending on which one you were looking at. Counted live: 12
+     cards showing CONTACT/TRACKING/HOLDING beside grades B and C, 21 showing
+     OUT OF REACH beside grade D every single time, and 31 showing
+     PLAYABLE/NO PLAY beside B, C and D.
+
+     One badge now, in one slot, on every card on every surface. It states two
+     facts and fuses neither:
+
+       REACH — 1:1 with the engine's own `engine_reach` (nearlevels.py). Four
+               values in, four words out, no fifth invented.
+       PLAY  — from weather's `live`: does any playbook trade this market's
+               condition. Only ever printed when it is NOT favourable, because
+               the good case is the quiet case.
+
+     The two are deliberately NOT merged into a single tier word. nearlevels
+     refuses to model playbook coverage and the weather engine knows nothing of
+     distance; a word ordering both would be a claim neither engine makes, and
+     the off-diagonal cases (in the zone with no playbook; far out with one)
+     would misread under any total order. So the words stay separate and only
+     the COLOUR carries the combined rank — which is enough to sort by, and
+     honest, because every card prints the sentence that produced it. */
+  const REACH_WORD = {
+    AT_ZONE:          'IN THE ZONE',
+    IN_RANGE:         'NEARBY',
+    NO_FORMING_ON_TF: 'NOT PLANNED HERE',
+    OUT_OF_RANGE:     'OUT OF REACH',
   };
-  const threatOf = reach => THREAT[reach] || THREAT.OUT_OF_RANGE;
-
-  /* ---------- the manual-trade grade ----------
-     A letter for a hand-trade candidate, from TWO facts the engine already
-     publishes and nothing else:
-
-       · where price stands relative to the zone   (engine_reach)
-       · whether any playbook covers this market's condition   (weather.live)
-
-     It grades SITUATION, not outcome, and the card says so in the line under
-     the letter — because a grade with no stated basis is exactly the
-     uncalibrated score this product refuses to ship. Nothing here predicts a
-     win rate; the forward record is the only thing allowed to talk about
-     that, and it currently says no strategy clears zero. */
-  function gradeOf(reach, playbookLive){
-    const t = threatOf(reach).lvl;
-    if(t === 3 && playbookLive) return {g: 'A', cls: 'g-a',
-      why: 'Price is in the zone and a playbook trades this condition.'};
-    if(t === 3) return {g: 'B', cls: 'g-b',
-      why: 'Price is in the zone, but no playbook covers this condition.'};
-    if(t === 2 && playbookLive) return {g: 'B', cls: 'g-b',
-      why: 'Close to the zone and a playbook trades this condition.'};
-    if(t === 2) return {g: 'C', cls: 'g-c',
-      why: 'Close to the zone; no playbook covers this condition.'};
-    if(t === 1) return {g: 'C', cls: 'g-c',
-      why: 'Near, but the engine does not plan ahead on this timeframe.'};
-    return {g: 'D', cls: 'g-d',
-      why: 'Further out than the engine looks. It is not considering this.'};
+  /* Rank 3..0. The lattice is the one the old grade already computed — it was
+     never wrong, it was just printed as an uninterpretable letter beside a
+     word that contradicted it. */
+  function reachPlay(reach, live){
+    const r = REACH_WORD[reach] ? reach : 'OUT_OF_RANGE';
+    const word = REACH_WORD[r];
+    /* THREE play states, not two. A symbol the weather payload does not carry
+       has no reading, and an absent reading must never be drawn as a flat one
+       — that is the same rule the regime strip already follows. */
+    const play = live === true ? 'yes' : live === false ? 'no' : 'unknown';
+    const suffix = play === 'no' ? ' · NO PLAY'
+                 : play === 'unknown' ? ' · NO READ' : '';
+    let rank;
+    if(r === 'AT_ZONE')               rank = play === 'yes' ? 3 : 2;
+    else if(r === 'IN_RANGE')         rank = play === 'yes' ? 2 : 1;
+    else if(r === 'NO_FORMING_ON_TF') rank = 1;
+    else                              rank = 0;
+    /* The basis, in one sentence, on the card. A badge whose reasoning is not
+       on screen is the uncalibrated score this product exists to refuse. */
+    const why =
+      r === 'AT_ZONE' && play === 'yes'
+        ? 'Price is in the zone and a playbook trades this condition.'
+      : r === 'AT_ZONE'
+        ? 'Price is in the zone, but no playbook covers this condition.'
+      : r === 'IN_RANGE' && play === 'yes'
+        ? 'Close to the zone and a playbook trades this condition.'
+      : r === 'IN_RANGE'
+        ? 'Close to the zone; no playbook covers this condition.'
+      : r === 'NO_FORMING_ON_TF'
+        ? 'Near, but the engine does not plan ahead on this timeframe.'
+        : 'Further out than the engine looks. It is not considering this.';
+    return {word, suffix, label: word + suffix, rank,
+            stamp: 'st-t' + rank, cls: 't' + rank,
+            ring: ['ring-dim', 'ring-cy', 'ring-mid', 'ring-ok'][rank], why};
   }
 
+  /* The engine's universe state, in words. It was printed as a raw enum. */
+  const UNIVERSE_LABEL = {
+    ADMITTED: 'Tradeable', SHADOW: 'Shadow — never sized',
+    WARMING: 'Warming up', UNTRACKED: 'Not in the universe',
+  };
+
+  /* ONE RANKED DECK. Four tabs became one rail.
+
+     The tabs were never a partition — "All markets" iterated the whole
+     weather universe while "Manual setups" iterated near-level rows, so the
+     same symbol appeared on both wearing two different badges. And "Out of
+     reach" was pure redundancy: every card on it was the bottom rank, 21
+     times out of 21.
+
+     So: one card per MARKET over the watched universe, each carrying its
+     nearest zone row, sorted by rank and then by distance. The engine's own
+     bound is no longer a tab — it is the grey bottom of one ordering, which
+     is what it always was.
+
+     What is lost is a second card for a symbol at AT_ZONE on 15m and
+     IN_RANGE on 4H; the nearest row wins. The per-timeframe regime strip
+     still prints every timeframe with its label bound to it, so nothing about
+     the market's condition is hidden — only the duplicate card is. */
   function renderNear(d, weather){
     const panel = $('nearPanel'), box = $('near');
     const rows = (d && d.rows) || [];
@@ -1985,231 +2187,123 @@
     const c = d.counts || {};
     const prox = d.prox_atr, max = d.max_distance_atr;
     const wx = weatherIndex(weather);
-    $('nearCount').textContent = `${c.in_engine_range || 0} in reach`;
-    /* Two short sentences, not the 296-character block this was. It still
-       says what was scanned and what was left out — a list that cannot name
-       its exclusions reads as a complete one, and the shadow half is a third
-       of the universe — but it says it in a breath. Everything cut from here
-       is on the cards themselves or on the tab that owns it. */
-    $('nearLede').textContent =
-      `${c.symbols} markets swept, ${rows.length} standing within ${max} ATR of a zone. ` +
-      `${c.shadow_excluded} shadow markets are excluded — the risk authority never sizes them.`;
-    /* Degraded loudly (§4): a market whose structure could not be read is
-       MISSING from this list, and silence would read as "price is not near a
-       level there" — the strongest possible wrong answer. */
-    const warn = (d.warnings || []).length
-      ? `<div class="deck-divider" style="color:var(--amber)">${esc(d.warnings.length +
-          ' market(s) could not be read and are missing from this list')}</div>`
-      : '';
-    /* The line the panel exists to draw, drawn once instead of only being
-       spelled out 23 times in chips. Rows are sorted by distance, so the
-       engine's own bound is a single clean boundary in the list — everything
-       above it is a zone the engine is at least close enough to consider,
-       everything below is one it is not. Same device as the Deck's
-       "Looked at, not taken", for the same reason: without it the far rows sit
-       in the slot where actionable things go. */
-    /* THE OUT-OF-RANGE ROWS FOLD AWAY.
 
-       This panel was 3,341px of a 5,072px surface at 1440, and 73% of it at
-       412 — two thirds of the surface that asks "what should I do right now?"
-       spent on markets the engine has explicitly disowned. Twenty of the
-       twenty-eight rows rendered below the divider, each repeating the same
-       130-character sentence about the ATR bound, so the panel said the same
-       thing twenty times in the slot where actionable things go.
-
-       Nothing is hidden and nothing is dropped: the summary carries the count,
-       the reason is stated once for the group instead of once per row, and one
-       click restores every row exactly as before. The <details> pattern is the
-       one this app already uses at .wx-details, .explainer and .issue.
-
-       The in-range rows are untouched. They are the ones the engine is
-       actually considering, and they were never the volume problem. */
-    const inRange = rows.filter(r => r.engine_reach !== 'OUT_OF_RANGE');
-    const beyond  = rows.filter(r => r.engine_reach === 'OUT_OF_RANGE');
+    /* ONE DENOMINATOR. Three rings drew the same ATR figure at three
+       different lengths — one divided by prox_atr, one by max_distance_atr,
+       one by a hard-coded 3 — so a card could show 0.6 ATR fuller than a card
+       showing 0.4. Both bounds ride on the payload for exactly this reason;
+       the rail uses the sweep's own outer bound throughout. */
     const bound = parseFloat(max) || 3;
+    const fillOf = dist => isNaN(dist) || !isFinite(dist) ? 6
+      : Math.max(6, Math.min(96, (1 - dist / bound) * 100));
 
-    /* A watch card, not a mission card — deliberately smaller and quieter
-       than the rail above, because these are places price is standing, not
-       plans the engine cleared. Same honesty as the rows they replace: reach
-       off the payload, the say-sentence on the card, zone and distance and
-       never a bracket. */
-    const rowHtml = (r, withSay) => {
-      const dist = parseFloat(r.distance_atr);
-      const fill = isNaN(dist) ? 10 : Math.max(8, Math.min(96, (1 - dist / bound) * 100));
-      const say = (NEAR_SAY[r.engine_reach] || NEAR_SAY.OUT_OF_RANGE)(r, prox);
-      /* basis[0] is draft.py's own sentence for the zone it anchored on —
-         type, bounds, state and strength. The WORDS are lifted rather than
-         reworded: it is the one authority on what this row is standing at.
-
-         Only the price range is reformatted, and only through px() — the
-         shared formatter every other panel prices through. Zone bounds come
-         off a Decimal and arrive full length ("7.156–7.8689580900"), which is
-         ten digits of noise on a surface read between bars. Both sides go
-         through px together so one cannot end up with a thousands separator
-         while the other does not. A wording change in draft.py makes this
-         match nothing and the sentence renders as it does today — the
-         degradation is a longer number, never a broken row. */
-      /* draft.py's own sentence for the zone, with its lead-in trimmed and
-         its first letter raised. Every one of these rendered as "nearest
-         live DEMAND zone 0.68–0.68 (WEAKENED, strength 41)" — a lowercase
-         fragment repeated down the whole panel, restating "nearest live" on
-         a card whose entire subject is the nearest live zone. The engine's
-         words are still the engine's; only the redundant lead-in goes. */
-      const zone = ((r.basis || [])[0] || 'A live zone')
-        .replace(/([\d.]+)–([\d.]+)/, (m, a, b) => `${px(a)}–${px(b)}`)
-        .replace(/^nearest live /, '')
-        .replace(/^./, ch => ch.toUpperCase());
-      /* The reach chip lives in the WIDE column, not beside the timeframe.
-         Its natural width is ~144px and the identity column is 150px, so
-         sitting there it wrapped to two lines on every one of 23 rows and
-         pushed the row to 110px tall. Same crush the Deck's reasoning column
-         took: a label narrower than its own content is not a label. */
-      /* The weather half. Quoted, never recomputed: `label` and `meaning` are
-         the engine's own words for this market's condition, and `live` is
-         its own verdict on whether a playbook covers it. A symbol the
-         weather payload does not carry simply renders without this strip —
-         an absent reading must never be drawn as a flat or neutral one. */
-      const w = wx.get(r.symbol);
-      const wxHtml = w ? `
-        <div class="wl-wx">
-          <div class="wl-regs">${(w.timeframes || []).map(t =>
-            `<span class="wl-reg${t.bias === 'LONG' ? ' up' : t.bias === 'SHORT' ? ' dn' : ''}">
-              <b>${esc(t.tf)}</b>${esc(t.label || '—')}</span>`).join('')}</div>
-          <div class="wl-mean${w.live ? ' live' : ''}">${esc(w.meaning || '')}</div>
-        </div>` : '';
-      /* THE SAME CARD AS A MISSION BRIEF. Not "similar to" — the same
-         component, the same classes, the same order: stamp row, hero (big
-         symbol left, ring right), the evidence, the actions. The only things
-         that differ are the material, which is reserved for a trade you are
-         actually in, and what the ring is measuring.
-
-         It was a second, smaller, differently-shaped design before: 252px
-         against 344, nine loose children against five, no hero row and no
-         ring at all. Two card designs on one surface is two things to learn. */
-      const th = threatOf(r.engine_reach);
-      const gr = gradeOf(r.engine_reach, !!(w && w.live));
-      return `<div class="mc wl-card ${th.cls}">
-        <div class="mc-top">
-          <span class="mc-stamp ${th.stamp}">${esc(say[0])}</span>
-          <span class="mc-id t-mono">${esc(r.tf)} · ${r.direction === 'LONG' ? 'Long' : 'Short'}</span>
-        </div>
-        <div class="mc-hero">
-          <div class="mc-idy">
-            <div class="mc-tok t-mono">${esc(tokenOf(r.symbol))}</div>
-            <div class="mc-sub t-label" title="${esc(r.symbol)}">${
-              esc(String(r.symbol).replace('-USD', ''))}</div>
-            <div class="mc-dirline">
-              <span class="wl-grade ${gr.cls}" title="${esc(gr.why)}">${gr.g}</span>
-              <span class="t-label wl-grade-why">${esc(gr.why)}</span>
-            </div>
-          </div>
-          <div class="mc-ringcol">
-            ${ringSvg(fill / 100, th.ring, isNaN(dist) ? '—' : dist.toFixed(2), 'ATR away')}
-            <div class="t-label mc-exp">To the zone</div>
-          </div>
-        </div>
-        ${wxHtml}
-        <div class="mc-nums t-mono">${esc(zone)}</div>
-        ${withSay ? `<div class="mc-story radar-say">${esc(say[2])}</div>` : ''}
-        <div class="mc-acts">
-          <button class="btn" data-nsym="${esc(r.symbol)}" data-ntf="${esc(r.tf)}">Open chart</button>
-        </div>
-      </div>`;
-    };
-
-    /* The group's shared sentence, printed once. Every OUT_OF_RANGE row
-       returned the identical string from NEAR_SAY, so it was rendered once per
-       row and read as noise by the third repetition. Its whole job is to
-       state the engine's bound in words, which matters more now that the tab
-       is called "Out of reach" — the tab is the label, this is the meaning. */
-    const beyondSay = beyond.length
-      ? (NEAR_SAY.OUT_OF_RANGE(beyond[0], prox) || [])[2] || '' : '';
-
-    /* EVERY MARKET — the weather universe, one card each. The two groups
-       above are keyed on the zone sweep, so a market with no live zone
-       anywhere near it appeared in neither and its regime read had nowhere
-       to go. This carries it: condition first, and the nearest zone only
-       where the sweep actually found one.
-
-       Nearest row per SYMBOL, because the sweep is per symbol AND timeframe
-       and a market can be near a zone on the 15m while standing nowhere on
-       the 4H. Showing the closest is the honest summary; the tab above lists
-       every pair for whoever wants them. */
+    /* Nearest row per SYMBOL. The sweep is per symbol AND timeframe, and a
+       market can be at a zone on one timeframe and nowhere on another; the
+       closest is the honest one-line summary. */
     const nearestBySym = new Map();
     for(const r of rows){
       const dv = parseFloat(r.distance_atr);
       const cur = nearestBySym.get(r.symbol);
-      if(!cur || (!isNaN(dv) && dv < cur.d)) nearestBySym.set(r.symbol, {d: isNaN(dv) ? 99 : dv, r});
+      if(!cur || (!isNaN(dv) && dv < cur.d))
+        nearestBySym.set(r.symbol, {d: isNaN(dv) ? 99 : dv, r});
     }
-    const allHtml = [...wx.values()].map(w => {
-      const hit = nearestBySym.get(w.symbol);
-      const th = hit ? threatOf(hit.r.engine_reach) : threatOf('OUT_OF_RANGE');
-      const gr = gradeOf(hit ? hit.r.engine_reach : 'OUT_OF_RANGE', !!w.live);
-      /* `live` is the engine's own verdict that a playbook covers this
-         market's condition — quoted, never inferred from the regime here. */
-      // the same component again — one card design, three kinds of content
-      return `<div class="mc wl-card ${th.cls}${w.live ? ' wl-live' : ''}">
+
+    /* The deck covers the union: every market the weather engine reports,
+       plus any swept symbol weather does not carry. A market missing from one
+       source is shown with that half marked unknown rather than dropped. */
+    const symbols = new Set([...wx.keys(), ...nearestBySym.keys()]);
+    const cards = [...symbols].map(sym => {
+      const w = wx.get(sym) || null;
+      const hit = nearestBySym.get(sym) || null;
+      const reach = hit ? hit.r.engine_reach : 'OUT_OF_RANGE';
+      const rp = reachPlay(reach, w ? !!w.live : null);
+      const sayFn = NEAR_SAY[reach] || NEAR_SAY.OUT_OF_RANGE;
+      return {sym, w, hit, rp,
+              dist: hit ? hit.d : Infinity,
+              say: sayFn(hit ? hit.r : {tf: ''}, prox)};
+    }).sort((a, b) => b.rp.rank - a.rp.rank || a.dist - b.dist);
+
+    $('nearCount').textContent = `${c.in_engine_range || 0} in reach`;
+    /* Says what was swept and what was left out — a list that cannot name its
+       exclusions reads as a complete one — then states the ranking rule,
+       because a sorted deck whose basis is unstated is a ranking nobody can
+       check. */
+    $('nearLede').textContent =
+      `${c.symbols} markets swept, ${rows.length} standing within ${max} ATR of a zone. ` +
+      `${c.shadow_excluded} shadow markets are excluded — the risk authority never sizes them. ` +
+      `Ranked on both halves of the badge together — how close price is to a zone ` +
+      `the engine watches, and whether a playbook trades this market's condition. ` +
+      `A market sitting in its zone with no playbook ranks level with one nearby ` +
+      `that has one; distance breaks the tie.`;
+
+    /* Degraded loudly: a market whose structure could not be read is MISSING
+       from this list, and silence would read as "price is not near a level
+       there" — the strongest possible wrong answer. */
+    const warn = (d.warnings || []).length
+      ? `<div class="deck-divider" style="color:var(--amber)">${esc(d.warnings.length +
+          ' market(s) could not be read and are missing from this list')}</div>`
+      : '';
+
+    const cardHtml = k => {
+      const w = k.w, hit = k.hit, rp = k.rp, say = k.say;
+      /* draft.py's own sentence for the zone, lead-in trimmed and first
+         letter raised. The engine's words stay the engine's. */
+      const zone = hit
+        ? ((hit.r.basis || [])[0] || 'A live zone')
+            .replace(/([\d.]+)–([\d.]+)/, (m, a, b) => `${px(a)}–${px(b)}`)
+            .replace(/^nearest live /, '').replace(/^./, ch => ch.toUpperCase())
+        : 'No live zone within the swept range.';
+      const regimes = w && (w.timeframes || []).length
+        ? `<div class="wl-wx">
+            <div class="wl-regs">${w.timeframes.map(t =>
+              `<span class="wl-reg${t.bias === 'LONG' ? ' up' : t.bias === 'SHORT' ? ' dn' : ''}">
+                <b>${esc(t.tf)}</b>${esc(t.label || '—')}</span>`).join('')}</div>
+            <div class="wl-mean${w.live ? ' live' : ''}">${esc(w.meaning || '')}</div>
+          </div>`
+        : '';
+      const chartTf = hit ? hit.r.tf
+        : (w && w.timeframes && w.timeframes[0] && w.timeframes[0].tf) || '4H';
+      return `<div class="mc wl-card ${rp.cls}">
         <div class="mc-top">
-          <span class="mc-stamp ${w.live ? 'st-go' : 'st-wait'}">${
-            w.live ? 'PLAYABLE' : 'NO PLAY'}</span>
-          <span class="mc-id t-mono">${esc(w.state || '')}${
-            w.rank != null ? ' · Rank ' + esc(String(w.rank)) : ''}</span>
+          <span class="mc-stamp ${rp.stamp}">${esc(rp.label)}</span>
+          <span class="mc-id t-mono">${hit ? esc(hit.r.tf) + ' · ' +
+            (hit.r.direction === 'LONG' ? 'Long' : 'Short') : 'no zone'}</span>
         </div>
         <div class="mc-hero">
           <div class="mc-idy">
-            <div class="mc-tok t-mono">${esc(tokenOf(w.symbol))}</div>
-            <div class="mc-sub t-label" title="${esc(w.symbol)}">${
-              esc(String(w.symbol).replace('-USD', ''))}</div>
-            <div class="mc-dirline">
-              <span class="wl-grade ${gr.cls}" title="${esc(gr.why)}">${gr.g}</span>
-              <span class="t-label wl-grade-why">${esc(gr.why)}</span>
-            </div>
+            <div class="mc-tok t-mono">${esc(tokenOf(k.sym))}</div>
+            <div class="mc-sub t-label" title="${esc(k.sym)}">${
+              esc(String(k.sym).replace('-USD', ''))}${
+              w && w.state ? ' · ' + esc(UNIVERSE_LABEL[w.state] || w.state) : ''}</div>
+            <div class="t-label wl-why">${esc(rp.why)}</div>
           </div>
           <div class="mc-ringcol">
-            ${ringSvg(hit ? Math.max(0.06, 1 - Math.min(hit.d / 3, 1)) : 0, th.ring,
-              hit ? hit.d.toFixed(2) : '—', hit ? 'ATR away' : 'no zone')}
+            ${ringSvg(fillOf(k.dist) / 100, rp.ring,
+                      isFinite(k.dist) ? k.dist.toFixed(2) : '—', 'ATR away')}
             <div class="t-label mc-exp">To the zone</div>
           </div>
         </div>
-        <div class="wl-wx">
-          <div class="wl-regs">${(w.timeframes || []).map(t =>
-            `<span class="wl-reg${t.bias === 'LONG' ? ' up' : t.bias === 'SHORT' ? ' dn' : ''}">
-              <b>${esc(t.tf)}</b>${esc(t.label || '—')}</span>`).join('')}</div>
-          <div class="wl-mean${w.live ? ' live' : ''}">${esc(w.meaning || '')}</div>
-        </div>
-        <div class="mc-story radar-say">${teachTxt(w.why || '')}</div>
+        ${regimes}
+        <div class="mc-nums t-mono">${esc(zone)}</div>
+        <div class="mc-story radar-say">${esc(say[2])}</div>
         <div class="mc-acts">
-          <button class="btn" data-nsym="${esc(w.symbol)}" data-ntf="${
-            esc((w.timeframes && w.timeframes[0] && w.timeframes[0].tf) || '4H')}">Open chart</button>
+          <button class="btn" data-nsym="${esc(k.sym)}" data-ntf="${esc(chartTf)}">Open chart</button>
         </div>
       </div>`;
-    }).join('');
+    };
 
-    box.innerHTML = warn
-      + (inRange.length
-          ? `<div class="wl-rail wheel-rail" tabindex="0">${inRange.map(r => rowHtml(r, true)).join('')}</div>`
-          : '<div class="empty mw-empty">Nothing is standing at a level the engine watches right now.</div>');
-    /* The bound's own sentence leads the group it describes — the tab says
-       "Out of reach", this says out of reach OF WHAT. */
-    $('nearFar').innerHTML = beyond.length
-      ? `<p class="t-note mw-note">${esc(beyondSay)}</p>` +
-        `<div class="wl-rail wheel-rail" tabindex="0">${beyond.map(r => rowHtml(r, false)).join('')}</div>`
-      : '<div class="empty mw-empty">Every market with a live zone is inside the engine’s reach.</div>';
-    $('allMarkets').innerHTML = allHtml
-      ? `<div class="wl-rail wheel-rail" tabindex="0">${allHtml}</div>`
-      : '<div class="empty mw-empty">No market condition has been reported yet.</div>';
+    box.innerHTML = warn + (cards.length
+      ? `<div class="wl-rail wheel-rail" tabindex="0" role="group"
+              aria-label="markets — use left and right arrow keys">${
+           cards.map(cardHtml).join('')}</div>`
+      : '<div class="empty mw-empty">No market condition has been reported yet.</div>');
 
-    [box, $('nearFar'), $('allMarkets')].forEach(el =>
-      el.querySelectorAll('button[data-nsym]').forEach(b =>
-        b.addEventListener('click', () => {
-          go('chart');
-          if(window.SSChart) SSChart.open(b.dataset.nsym, b.dataset.ntf);
-        })));
-    mwCounts({level: inRange.length, far: beyond.length, all: wx.size});
-    /* The groups were just rebuilt from scratch, so their old wheels are
-       attached to elements the document no longer holds. mountRails sweeps
-       those and gives every new rail an engine of its own. */
-    mountRails();
+    box.querySelectorAll('button[data-nsym]').forEach(b =>
+      b.addEventListener('click', () => {
+        go('chart');
+        if(window.SSChart) SSChart.open(b.dataset.nsym, b.dataset.ntf);
+      }));
+    mountRails(box);
   }
 
   /* Glossary underlining for a plain string, matching what weather.js did
@@ -2217,61 +2311,12 @@
      text — losing an underline is acceptable, rendering raw HTML is not. */
   const teachTxt = t => window.SSTeach ? window.SSTeach(t) : esc(t);
 
-  /* ---------- Overwatch groups ----------
-     Four lists, four toggles, nothing buried. Two of these used to be
-     `<details>` a reader had to discover: the out-of-range markets, and the
-     refused setups, which were worse off still — they sat inside Mission
-     Briefs, putting dead trades in the panel that answers "what should I do
-     right now". Being a tab is the demotion they needed; being hidden was
-     not.
-
-     Only counts and visibility live here. Every card is rendered by whoever
-     owns its data — renderNear for the three market groups, renderDeck for
-     the refused ones — so this switch never becomes a second authority on
-     what any of them say. */
-  const MW_GROUPS = {level: 'near', far: 'nearFar', all: 'allMarkets', passed: 'passed'};
-  let mwActive = 'level';
-
-  function mwShow(key){
-    if(!MW_GROUPS[key]) return;
-    mwActive = key;
-    for(const [k, id] of Object.entries(MW_GROUPS)){
-      const el = $(id);
-      if(el) el.hidden = k !== key;
-    }
-    document.querySelectorAll('#mwSeg button[data-mw]').forEach(b => {
-      const on = b.dataset.mw === key;
-      b.classList.toggle('on', on);
-      b.setAttribute('aria-selected', String(on));
-    });
-    /* A hidden track measures zero, so its wheel could not place anything
-       while the tab was closed. Sync on reveal, not on render. */
-    const shown = $(MW_GROUPS[key]);
-    if(shown) mountRails(shown);
-  }
-
-  function mwCounts(n){
-    for(const [k, v] of Object.entries(n)){
-      const b = document.querySelector(`#mwSeg button[data-mw="${k}"] b`);
-      if(b) b.textContent = v;
-      const btn = b && b.parentElement;
-      /* An empty group says so on its own tab rather than opening onto
-         nothing — the same `.seg button.empty` treatment the chart's overlay
-         picker already uses for a timeframe with no facts recorded. */
-      if(btn) btn.classList.toggle('empty', !v);
-    }
-  }
-
-  (function wireMarketWatch(){
-    const seg = $('mwSeg');
-    if(!seg) return;
-    seg.addEventListener('click', e => {
-      const b = e.target.closest('button[data-mw]');
-      if(b) mwShow(b.dataset.mw);
-    });
-    mwShow('level');
-  })();
-
+  /* The four Overwatch tabs are gone. They were never a partition — the
+     all-markets list was a superset of the near-level list — so the same
+     symbol appeared twice wearing two different badges. One ranked deck
+     replaces them (renderNear above); the refused setups moved to their own
+     home. MW_GROUPS, mwShow, mwCounts and wireMarketWatch went with the
+     tab strip they drove. */
   async function loadNearLevels(){
     /* Weather comes from the SHARED cache, never a second fetch. weather.js
        already subscribes to this path on a 30s cadence, so SSData hands back
@@ -2318,154 +2363,25 @@ and a concrete recommendation — hold, tighten the stop (to what price and
 why), or close — with the round-trip cost and the recorded edge state
 weighed in. Name the facts you used.`;
 
+  /* THE BOOK IS THE MISSION RAIL. This used to render a second, row-shaped
+     copy of active_positions and pending_orders into an "Engaged — detail"
+     panel on Command — the same two arrays renderMissions builds, on the same
+     surface, under a different shape. The operator called it what it was: a
+     duplicate.
+
+     Everything it owned travelled onto the mission card first: the symbol is
+     a real <button> carrying data-manage (so Enter and Space come from the
+     platform rather than a hand-rolled keydown), the Reasons control keeps
+     data-trace, the composed hold question keeps data-ask, and Close keeps
+     data-close-sid with its confirmation. All four are bound per-element in
+     wireCardActions.
+
+     What is left here is the state assignment, which is load-bearing:
+     renderMissions reads lastPortfolio, so deleting this outright would
+     silently blank the rail. */
   async function renderPositions(p){
     lastPortfolio = p || {};
-    /* The book IS the mission rail now — see renderMissions. Repainted from
-       here rather than on the overview's clock, because this is the payload
-       that changes when a position opens or fills, and the rail must not
-       carry a trade the portfolio has already closed. */
     renderMissions();
-    const panel = $('posPanel'), box = $('positions');
-    const list = p.active_positions || [];
-    /* Armed orders that have not filled yet. Same payload, same builder — the
-       only difference is the order event (PLACED vs FILLED) — and they reached
-       no surface either. An armed order is money committed to a price: it is
-       holding a slot and it will become a position without asking again, so
-       leaving it invisible meant the deck could look idle while two orders sat
-       waiting to fire. */
-    const pending = p.pending_orders || [];
-    if(!list.length && !pending.length){
-      panel.style.display = 'none'; box.innerHTML = ''; return;
-    }
-    panel.style.display = '';
-    $('posRisk').textContent = money(p.open_risk_usd || 0) + ' at risk' +
-      (pending.length ? ` · ${pending.length} waiting` : '');
-
-    const priceOf = t =>
-      api(`/api/candles?symbol=${encodeURIComponent(t.symbol)}&tf=${
-            encodeURIComponent(t.tf)}&limit=1`)
-        .then(rows => {
-          const arr = Array.isArray(rows) ? rows : [];
-          const last = arr[arr.length - 1];
-          return last ? +last.close : null;
-        })
-        .catch(() => null);
-    const prices = await Promise.all(list.map(priceOf));
-    const pendPrices = await Promise.all(pending.map(priceOf));
-
-    box.innerHTML = list.map((t, i) => {
-      const long = t.direction === 'LONG';
-      const entry = +t.entry, sl = +t.sl, tp = +t.tp, now = prices[i];
-      const span = Math.abs(tp - sl);
-      // where price stands between the two ends, as a percentage of the trade
-      const at = (now == null || !span) ? null
-        : Math.max(2, Math.min(98, ((long ? now - sl : sl - now) / span) * 100));
-      const perR = Math.abs(entry - sl);
-      const r = (now == null || !perR) ? null
-        : (long ? now - entry : entry - now) / perR;
-      const tone = r == null ? '' : r >= 0 ? 'up' : 'down';
-      /* The ROW opens the chart. It used to open the trace, which answers
-         "why was this taken" — a good question, but not the one an operator
-         clicking a live position is asking. They want to see it, and to be
-         able to act on it. The trace keeps its own control, so nothing is
-         lost; it just stops being the thing a whole-row click does. */
-      /* NOT role="button". ARIA forbids focusable descendants inside a button
-         role, and this row holds three real ones — Reasons, Copilot, and Close,
-         the control that ends a live position. A screen reader computed the
-         row's entire contents as the button's accessible name ("ADA short 4H
-         reversal stop 0.20063 now 0.18910 ... Reasons Copilot Close") and
-         buried the close control inside it.
-
-         The row stays clickable for a pointer, which is the affordance the
-         comment above argues for. The keyboard path is the symbol itself: one
-         real button, named for what it opens, in the tab order once. */
-      return `<div class="pos-row manageable" data-manage="${esc(t.symbol)}"
-        data-managetf="${esc(t.tf)}">
-        <div>
-          <button class="pos-sym pos-open" data-manage="${esc(t.symbol)}"
-            data-managetf="${esc(t.tf)}"
-            title="open this trade on the chart — drag the stop or target and press Update trade"
-            >${esc(tokenOf(t.symbol))}</button>
-          <div class="t-label" style="margin-top:3px">${long ? 'Long' : 'Short'} · ${
-            esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
-        </div>
-        <div>
-          <div class="pos-track"><span class="end-sl"></span><span class="end-tp"></span>${(() => {
-            // Entry tick + travelled segment. Without the entry the marker had
-            // no origin: a 3:1 trade STARTS at 25% of this bar, so "near the
-            // stop end" is where every fresh trade lives, win or lose. What is
-            // honest to colour is the movement SINCE entry.
-            const entAt = span ? Math.max(2, Math.min(98,
-              ((long ? entry - sl : sl - entry) / span) * 100)) : null;
-            if(at == null || entAt == null) return '';
-            const a = Math.min(entAt, at), b = Math.max(entAt, at);
-            return `<span class="pos-prog ${tone}" style="left:${a.toFixed(1)}%;width:${(b - a).toFixed(1)}%"></span>` +
-                   `<span class="pos-entry" style="left:${entAt.toFixed(1)}%" title="entry ${px(entry)}"></span>` +
-                   `<span class="pos-mark" style="left:${at.toFixed(1)}%"></span>`;
-          })()}</div>
-          <div class="pos-ends">
-            <span>stop ${px(sl)}</span>
-            <span class="now">${now == null ? 'price unavailable' : 'now ' + px(now)}</span>
-            <span>target ${px(tp)}</span>
-          </div>
-        </div>
-        <div class="pos-r ${tone}">${
-          rr(r)}
-          <span class="t-sub">${money(t.risk_usd)} at risk</span>
-          <div class="pos-acts">
-            <button class="btn" data-trace="${esc(t.setup_id || '')}"
-              title="what this trade had to pass before it was taken — the zone, the confirmation, and every check">Reasons</button>
-            <button class="btn btn-primary" data-ask="${esc(t.setup_id || '')}"
-              data-asksym="${esc(t.symbol)}" data-asktf="${esc(t.tf)}"
-              title="ask the copilot to read this open trade and recommend hold, tighten or close — runs on your Claude plan">Copilot</button>
-            <button class="btn pos-close" data-close-sid="${esc(t.setup_id || '')}"
-              title="close this on YOUR book at the last closed price — the engine keeps simulating its own plan, so the two outcomes can be compared">Close</button>
-          </div></div>
-      </div>`;
-    }).join('') + pending.map((t, i) => {
-      const long = t.direction === 'LONG';
-      const entry = +t.entry, now = pendPrices[i];
-      // How far price still has to travel to trigger this order. Percent, not
-      // ATR: this is a distance to a resting limit, not a volatility judgement.
-      const away = (now == null || !now) ? null
-        : Math.abs(now - entry) / now * 100;
-      // Same rule as a filled row: the click shows you the trade. An unfilled
-      // order cannot be managed on the chart, so it gets no Update path — but
-      // "let me look at it" is the same request either way.
-      /* Same as the filled row: not role="button", because this one nests
-         Reasons and Copilot. The symbol carries the keyboard path. */
-      return `<div class="pos-row pending manageable" data-manage="${esc(t.symbol)}"
-        data-managetf="${esc(t.tf)}">
-        <div>
-          <button class="pos-sym pos-open" data-manage="${esc(t.symbol)}"
-            data-managetf="${esc(t.tf)}"
-            title="open this order on the chart"
-            >${esc(tokenOf(t.symbol))}</button>
-          <div class="t-label" style="margin-top:3px">${long ? 'Long' : 'Short'} · ${
-            esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
-        </div>
-        <div>
-          <div class="pos-wait">rests <b>${px(entry)}</b>${
-            away == null ? '' : ` · ${away.toFixed(1)}% away`}
-            <span class="t-sub" title="Nothing is at stake until it fills">unfilled</span></div>
-          <div class="pos-ends">
-            <span>stop ${px(+t.sl)}</span>
-            <span class="now">${now == null ? 'price unavailable' : 'now ' + px(now)}</span>
-            <span>target ${px(+t.tp)}</span>
-          </div>
-        </div>
-        <div class="pos-r">
-          <span class="chip chip-amber">waiting</span>
-          <span class="t-sub">${money(t.risk_usd)} if it fills</span>
-          <div class="pos-acts">
-            <button class="btn" data-trace="${esc(t.setup_id || '')}"
-              title="what this trade had to pass before it was taken — the zone, the confirmation, and every check">Reasons</button>
-            <button class="btn btn-primary" data-ask="${esc(t.setup_id || '')}"
-              data-asksym="${esc(t.symbol)}" data-asktf="${esc(t.tf)}"
-              title="ask the copilot whether this resting order still makes sense — runs on your Claude plan">Copilot</button>
-          </div></div>
-      </div>`;
-    }).join('');
   }
 
   /* ---------- YOUR book ----------
@@ -2977,125 +2893,7 @@ weighed in. Name the facts you used.`;
     renderTodayTile(journal);
     renderScoreboard(journal);
 
-    if(!$('positions').dataset.traceWired){
-      $('positions').dataset.traceWired = '1';
-      $('positions').addEventListener('click', async e => {
-        /* Close comes first: it lives INSIDE a traceable row, so letting the
-           trace handler see the event would open the drawer instead. */
-        const c = e.target.closest('[data-close-sid]');
-        if(c){
-          e.stopPropagation();
-          if(c.disabled) return;
-          const sid = c.dataset.closeSid;
 
-          /* SAY WHAT IS ABOUT TO END. The ticket restates side, symbol, levels
-             and dollars before arming; closing had no equivalent, on the
-             reasoning that it is small and quiet. That reasoning was written
-             for a 55x19 button under a cursor. On a phone this control is now
-             48px and full width, sitting in a list the operator is scrolling
-             with the same thumb — and closing is the irreversible half of the
-             pair: an arm can be left to expire, a close is recorded and the
-             engine's own simulation carries on without it.
-
-             Restated from the payload the row was built from, so the dialog
-             quotes the position the operator can see rather than a second
-             fetch that could name a different one. */
-          const pos = (lastPortfolio.active_positions || [])
-            .concat(lastPortfolio.pending_orders || [])
-            .find(x => x.setup_id === sid);
-          if(pos){
-            const r0 = pos.r_multiple != null ? Number(pos.r_multiple) : null;
-            const lines = [
-              `${String(pos.direction || '').toUpperCase()} ${pos.symbol || ''} ${pos.tf || ''}`,
-              `entry ${pos.entry}`,
-              r0 == null ? 'result so far unknown'
-                         : `closing at ${r0 >= 0 ? '+' : ''}${r0}R`,
-            ];
-            if(!await SSConfirm({
-              title: 'Close this position?',
-              rows: lines,
-              note: 'This ends the trade on your paper book now, at the last ' +
-                    "closed bar. The engine's own simulation of the setup " +
-                    'carries on.',
-              confirmLabel: 'Close it',
-              tone: 'danger'
-            })) return;
-          }
-
-          const was = c.textContent;
-          c.disabled = true; c.textContent = 'closing…';
-          try{
-            const r = await fetch('/api/positions/close', {
-              method: 'POST', headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({setup_id: sid})});
-            const d = await r.json().catch(() => ({}));
-            c.textContent = r.ok
-              ? (d.closed ? `closed ${d.closed.r_at_close}R` : 'closed')
-              : 'failed — ' + (d.detail || r.status);
-            if(r.ok) refresh();
-          }catch(err){
-            /* 'unreachable' claimed the close did not happen. fetch() rejects
-               both when the request never left AND when it arrived, was
-               recorded, and the reply was lost — indistinguishable from here,
-               and the second is ordinary on cellular. Refreshing is the answer
-               that cannot be wrong: the row either disappears because it
-               closed, or it is still there because it did not. */
-            c.textContent = 'no reply — checking…';
-            try{
-              await refresh();
-              c.textContent = 'no reply; see the list';
-            }catch(_){
-              c.textContent = 'no reply, and the list will not load — unknown';
-            }
-          }
-          setTimeout(() => { c.disabled = false; c.textContent = was; }, 3000);
-          return;
-        }
-        /* Ask the copilot about a trade already taken. The question is
-           composed here rather than typed, because the useful one is long and
-           the operator should not have to write it every time. */
-        const a = e.target.closest('[data-ask]');
-        if(a){
-          e.stopPropagation();
-          if(!window.SSCopilot) return;
-          const t = (lastPortfolio.active_positions || [])
-            .concat(lastPortfolio.pending_orders || [])
-            .find(x => x.setup_id === a.dataset.ask);
-          if(!t) return;
-          SSCopilot.open({kind: 'chart', symbol: a.dataset.asksym,
-                          tf: a.dataset.asktf, setupId: a.dataset.ask,
-                          suggest: holdAsk(t)});
-          return;
-        }
-        const d = e.target.closest('[data-trace]');
-        if(d && d.dataset.trace && window.SSTracer){
-          e.stopPropagation();
-          SSTracer.open(d.dataset.trace);
-          return;
-        }
-        // The row itself: show me this trade. go() FIRST — SSChart.open only
-        // loads the data; navigating is the caller's job, as at every other
-        // call site. Without it the ticket silently switched to managing a
-        // trade on a surface the operator was not looking at.
-        const m = e.target.closest('[data-manage]');
-        if(m){
-          go('chart');
-          if(window.SSChart) SSChart.open(m.dataset.manage, m.dataset.managetf);
-        }
-      });
-      // delegation covers the click; the rows still have to be reachable and
-      // operable, which is per-element and has to run after each render
-      $('positions').addEventListener('keydown', e => {
-        if(e.key !== 'Enter' && e.key !== ' ') return;
-        // Keyboard must reach what the mouse reaches: the row opens the chart.
-        // Buttons inside it are real <button>s and handle their own keys.
-        const m = e.target.closest('[data-manage]');
-        if(!m) return;
-        e.preventDefault();
-        go('chart');
-        if(window.SSChart) SSChart.open(m.dataset.manage, m.dataset.managetf);
-      });
-    }
     // fire-and-forget: the positions panel fetches a price per open trade, and
     // a slow venue must not hold up the equity numbers above it
     indexHeld(p);
@@ -4771,6 +4569,16 @@ weighed in. Name the facts you used.`;
      the equity figure and the health chip live in the top bar, which is on
      screen no matter which surface is selected, so gating them would freeze
      the two numbers most likely to be glanced at. */
+  /* The refused-setup feed, for Diagnostics. Reads the same overview payload
+     Command reads — SSData collapses it to one request — and renders through
+     the same renderDeck, so the two surfaces can never disagree about which
+     setups were refused or why. */
+  async function loadRefused(){
+    const o = await api('/api/overview', 15000);
+    SSState.put('overview', o);
+    renderDeck(SSState.deck(), o.rejection_funnel || {});
+  }
+
   const LOADER_SURFACE = [
     [null,          () => loadPortfolio()],     // top-bar equity, and Command
     [null,          () => loadHealth()],        // top-bar health chip
@@ -4784,6 +4592,13 @@ weighed in. Name the facts you used.`;
     ['settings',    () => loadCredentials()],
     ['results',     () => loadPerformance()],
     ['diagnostics', () => loadTelemetry()],
+    /* The refused cards live on Diagnostics now, and renderDeck is fed only by
+       loadOverview, which is Command-gated. Without an entry here, arriving on
+       Diagnostics by hash, bookmark or the 5 key shows whatever was painted
+       last — or nothing at all on a cold load — with nothing saying so.
+       loadOverview stays Command-gated; this asks for the same payload through
+       SSData, which dedupes it to one request. */
+    ['diagnostics', () => loadRefused()],
   ];
   const currentSurface = () => {
     const on = document.querySelector('.surface.on');
