@@ -688,4 +688,37 @@ ok('the overlay clears so it cannot haunt the next chart', () => {
   assert.ok(/pendingTrade = null/.test(CHART));
 });
 
+
+/* A LABEL THAT CANNOT SURVIVE ITS BOX. "BOTTLENECK" sits absolutely positioned
+   inside a 14px overflow:hidden bar, and came apart two ways at once — 11px
+   text inherited line-height 1.55 for a 17.05px line box (letters shaved top
+   and bottom), and an unbreakable word anchored right with no width limit
+   overflowed LEFT and was clipped to its tail. It read as "ECK": a fragment
+   that looks like a different word, with nothing to say it was truncated. */
+console.log('funnel: the bottleneck tag');
+ok('the tag fits the bar it is painted on', () => {
+  const DXCSS = S('diagnostics-ui.css');
+  const rule = DXCSS.slice(DXCSS.indexOf('.dx-stage-tag {'),
+                           DXCSS.indexOf('.dx-stage-foot'));
+  assert.ok(rule, '.dx-stage-tag rule not found');
+  // includes(), not a regex: three escapes written into this file through
+  // patch scripts have landed as the byte they denote, and one of them was
+  // here, in the guard for this very bug.
+  assert.ok(rule.includes('line-height: 1;'),
+            'without an explicit line-height it inherits 1.55 and is clipped');
+  assert.ok(/white-space: *nowrap/.test(rule), 'one unbreakable word must not wrap');
+  assert.ok(/max-width: *calc\(100% - 12px\)/.test(rule),
+            'it must not be able to exceed the track it lives in');
+  assert.ok(/text-overflow: *ellipsis/.test(rule),
+            'if it ever shortens it has to say so');
+});
+ok('the track it sits in still clips, which is why the above matters', () => {
+  const DXCSS = S('diagnostics-ui.css');
+  const track = DXCSS.slice(DXCSS.indexOf('.dx-stage-track {'),
+                            DXCSS.indexOf('.dx-stage-fill'));
+  assert.ok(/overflow: *hidden/.test(track));
+  assert.ok(/height: *14px/.test(track),
+            'if this height changes, re-check the tag line-height against it');
+});
+
 console.log(`  ${passed} passed`);

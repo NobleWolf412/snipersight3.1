@@ -222,6 +222,20 @@ body.dx-funnel-live #dFunnel { display: none; }
   background: linear-gradient(180deg, rgba(0, 255, 170, .34), rgba(0, 255, 170, .16));
   border-right-color: rgba(0, 255, 170, .5);
 }
+/* BOTTLENECK, on a 14px bar that clips. Two ways this word came apart, and an
+   operator reported the second as "red letters cut off saying eck":
+
+   VERTICAL — the tag inherited body line-height 1.55, so 11px text made a
+   17.05px line box inside a 14px track with overflow:hidden. Every letter lost
+   ~1.5px off the top and bottom. line-height:1 puts an 11px box in a 14px slot.
+
+   HORIZONTAL — white-space was `normal` on a single unbreakable word with no
+   width limit, anchored right:6px. Where the track is narrower than the word,
+   the box overflows to the LEFT and the track clips it, leaving the tail —
+   BOTTLENECK read as ECK. A fragment that looks like a different word is worse
+   than a truncation, because nothing about it says it is truncated. Now it
+   cannot exceed the track, and if it ever has to shorten it says so with an
+   ellipsis. */
 .dx-stage-tag {
   position: absolute;
   right: 6px;
@@ -229,10 +243,15 @@ body.dx-funnel-live #dFunnel { display: none; }
   transform: translateY(-50%);
   font-family: var(--f-mono);
   font-size:var(--fs-1);
+  line-height: 1;
   font-weight: 600;
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--red-2);
+  white-space: nowrap;
+  max-width: calc(100% - 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dx-stage-foot {
