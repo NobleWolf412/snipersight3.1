@@ -98,22 +98,19 @@ export default [
          (err, data) and uses only one of them is idiomatic, not a mistake. */
       'no-unused-vars': ['warn', {args: 'none', varsIgnorePattern: '^_'}],
 
-      /* ── The three below are DOWNGRADED, NOT SILENCED ──────────────────
-         Nothing here is switched off. Each one currently fires on code that
-         predates this config, so gating the build on it would mean either a
-         red CI from the first commit or a cleanup smuggled in beside the tool
-         that found it. They report; they do not block; and every outstanding
-         instance is named here so "warn" cannot quietly become "ignored".
+      /* `no-redeclare` GATES, and it has already earned it. On the linter's
+         first run it found `renderScoreboard` declared twice in shell.js —
+         one filling Command's "Closed today" tile, one filling the Results
+         scoreboard. Declarations hoist, so the later won and the earlier had
+         never run: both call sites resolved to something real, nothing
+         errored, and the only symptom was a tile showing an em-dash beside a
+         Results panel reporting trades from the same journal. Fixed in
+         8ae629b by renaming the tile's own to `renderTodayTile`, so the rule
+         is back to an error and this comment records why it was ever not.
 
-         no-redeclare — ONE instance, and it is a real defect, not noise:
-         `renderScoreboard` is declared twice in shell.js, at 2041 and 2948.
-         The second silently wins, so the first is dead code — and the two do
-         different jobs. The dead one fills the "Closed today" tile
-         (#mTodayTile / #mToday / #mTodaySub), which is why that tile renders
-         an em-dash with no sub-line on Command. Fixing it means deciding
-         whether that tile should live, which is a change with a visible
-         outcome and belongs in its own commit rather than in the one that
-         installs the linter. Raise this to "error" the moment it lands.
+         ── The two below REPORT, they do not block ─────────────────────────
+         Neither is switched off, and every outstanding instance is named here
+         so "warn" cannot quietly become "ignored".
 
          no-empty — 11 instances, all `catch(e){}`. §4 of the constitution
          says a silent fallback IS a bug, so these are worth working through;
@@ -122,7 +119,7 @@ export default [
          no-useless-assignment — 1 instance, shell.js:166. Defensive
          `let seen = true` before a try/catch that assigns on both paths.
          Harmless, and arguably clearer than the alternative. */
-      'no-redeclare': 'warn',
+      'no-redeclare': 'error',
       'no-empty': 'warn',
       'no-useless-assignment': 'warn',
     },
