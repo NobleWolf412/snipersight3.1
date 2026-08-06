@@ -43,17 +43,39 @@
   const mKey = c => 'ss-cp-msgs|' + ctxKey(c);
   const MAX_KEPT = 40;
 
+  /* A WRITE THAT FAILS SAYS SO — ONCE.
+
+     sessionStorage throws when the browser has storage disabled, when a
+     private window has exhausted its allowance, or when the transcript grows
+     past quota. The READS below already fall back honestly (no session, no
+     messages). The WRITES used to swallow it in silence, and the operator's
+     only clue was a copilot conversation that quietly failed to survive a
+     reload — a stated behaviour not happening, with nothing anywhere saying
+     why. §4: a degraded path has to be audible.
+
+     Once, though, not per call. saveMsgs() runs on every message, so warning
+     each time would bury the first and truest report under a hundred copies of
+     itself. The consequence is named in the message because "QuotaExceeded"
+     alone does not tell the reader which behaviour they just lost. */
+  let storageWarned = false;
+  function storageFailed(lost, e){
+    if(storageWarned) return;
+    storageWarned = true;
+    console.warn(`copilot: browser storage is unavailable — ${lost} will not ` +
+                 `survive a reload (${(e && e.message) || e})`);
+  }
+
   const getSession = () => { try { return sessionStorage.getItem(sKey(ctx)); }
                              catch(e){ return null; } };
   const setSession = id => { try { if(id) sessionStorage.setItem(sKey(ctx), id); }
-                             catch(e){} };
+                             catch(e){ storageFailed('this conversation', e); } };
   function loadMsgs(c){
     try{ return JSON.parse(sessionStorage.getItem(mKey(c)) || '[]'); }
     catch(e){ return []; }
   }
   function saveMsgs(){
     try{ sessionStorage.setItem(mKey(ctx), JSON.stringify(msgs.slice(-MAX_KEPT))); }
-    catch(e){}
+    catch(e){ storageFailed('the messages in this conversation', e); }
   }
 
   /* What is the operator looking at right now? Chart publishes its symbol/tf;
@@ -230,8 +252,12 @@
   function clear(){
     if(!ctx) return;
     msgs = [];
+    /* `msgs = []` above already cleared what is on screen, so Clear does what
+       it says either way. What can still fail is the erasure from storage —
+       and a transcript the operator asked to be rid of coming back on the next
+       reload is the one failure here worth hearing about. */
     try{ sessionStorage.removeItem(mKey(ctx)); sessionStorage.removeItem(sKey(ctx)); }
-    catch(e){}
+    catch(e){ storageFailed('the cleared conversation, which may come back', e); }
     render();
   }
 

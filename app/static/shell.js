@@ -6,6 +6,26 @@
 (() => {
   const $ = id => document.getElementById(id);
   const fmt = n => Number(n).toLocaleString();
+
+  /* A PREFERENCE THAT FAILS TO PERSIST SAYS SO — ONCE.
+
+     localStorage throws with storage disabled, in a private window that has
+     exhausted its allowance, and on quota. The reads in this file all fall
+     back deliberately; the writes used to swallow the error, so a setting the
+     operator changed simply reverted on the next load with nothing anywhere
+     saying why. §4 — a degraded path has to be audible.
+
+     Once per load, because the alternative is a warning per toggle burying the
+     first and truest one. The message names the BEHAVIOUR that was lost rather
+     than only the exception: "QuotaExceededError" does not tell a reader that
+     their intro card is coming back. */
+  let storageWarned = false;
+  function storageFailed(lost, e){
+    if(storageWarned) return;
+    storageWarned = true;
+    console.warn(`shell: browser storage is unavailable — ${lost} will not ` +
+                 `survive a reload (${(e && e.message) || e})`);
+  }
   /* The sign goes OUTSIDE the currency symbol. Naively prefixing '$' produced
      "$-19" for a loss, while chart.js's usd() produced "-$19" and the
      scoreboard hand-rolled "−$19" with a Unicode minus — the same −$19.46
@@ -163,12 +183,21 @@
   const FR_KEY = 'ss.seen-intro';
   const frEl = document.getElementById('firstRun');
   if(frEl){
-    let seen = true;
+    /* Read: HIDE on failure, deliberately. "Shown once, dismissed forever" is
+       the promise; a storage error that re-showed the intro would break it on
+       every load, and an operator who has never seen the card loses nothing by
+       not seeing it once. */
+    let seen;
     try{ seen = localStorage.getItem(FR_KEY) === '1'; }catch(e){ seen = true; }
     frEl.hidden = seen;
     const dismiss = () => {
       frEl.hidden = true;
-      try{ localStorage.setItem(FR_KEY, '1'); }catch(e){}
+      /* Write: SAY so. The card goes away for this session either way, but if
+         this throws it comes back on the next load, and "dismissed forever"
+         quietly became "dismissed until you reload" with nothing anywhere
+         explaining it. Once per load — this runs on a click, not a loop. */
+      try{ localStorage.setItem(FR_KEY, '1'); }
+      catch(e){ storageFailed('the dismissal of the intro card', e); }
     };
     document.getElementById('frGo').addEventListener('click', dismiss);
     document.getElementById('frDiag').addEventListener('click', () => {
@@ -464,8 +493,12 @@
        one screen. The engine owns this number now (`universe_counts`).
 
        75 also made "no setups right now" read as a malfunction: 19 symbols
-       producing nothing is the ordinary case, 75 producing nothing is not. */
-    const uc = o.universe_counts || {};
+       producing nothing is the ordinary case, 75 producing nothing is not.
+
+       The read itself lives in SSState.symbolSets(), called below — this
+       function held a second `universe_counts` lookup that nothing consumed,
+       which is the shape the original defect took: two places deriving one
+       number. One place does now. */
     SSState.put('overview', o);
     /* Every count names the SET it belongs to. "15 symbols" on its own was
        unanswerable: fifteen out of what, and fifteen that can do what? */
@@ -3653,7 +3686,8 @@ weighed in. Name the facts you used.`;
     b.title = on
       ? 'raw internals are showing: backend console, and fact-level detail in a trace'
       : 'show raw internals: the backend console, and the fact-level detail in a trace';
-    try{ localStorage.setItem(DEV_KEY, on ? '1' : '0'); }catch(e){}
+    try{ localStorage.setItem(DEV_KEY, on ? '1' : '0'); }
+    catch(e){ storageFailed('the developer-detail setting', e); }
     /* Turning it ON goes to the thing that was just turned on. This button
        lives in the status bar, on every surface; the panel it reveals is the
        last one on Diagnostics. Pressing it from anywhere else changed nothing

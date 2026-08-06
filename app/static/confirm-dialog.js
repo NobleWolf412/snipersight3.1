@@ -105,7 +105,12 @@ window.SSConfirm = (() => {
         openDialog = null;
         // give focus back to whatever opened this, or the keyboard is stranded
         if(returnFocus && document.contains(returnFocus)) {
-          try { returnFocus.focus(); } catch(e) {}
+          /* The `document.contains` guard above already handles the element
+             having been removed. This catches the rest: focus() throws on a
+             disabled control, and on one inside a hidden subtree. The dialog
+             is closing either way, and forcing focus somewhere arbitrary would
+             be worse than the browser's own fallback to <body>. */
+          try { returnFocus.focus(); } catch(e) { /* not focusable any more */ }
         }
         resolve(answer);
       };

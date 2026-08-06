@@ -95,8 +95,18 @@ export default [
          deleting, but it is not a defect the way an unbound READ is, and
          making it fail the build is how a bug gate turns into a chore that
          gets disabled. Args are ignored entirely: a handler that takes
-         (err, data) and uses only one of them is idiomatic, not a mistake. */
-      'no-unused-vars': ['warn', {args: 'none', varsIgnorePattern: '^_'}],
+         (err, data) and uses only one of them is idiomatic, not a mistake.
+
+         `caughtErrors: 'none'` for the same reason one level down. Once the
+         empty blocks were filled in, all 37 remaining findings were unused
+         catch BINDINGS — `catch(e)` where the recovery genuinely does not
+         need the exception. That is the language's own shape, not a defect,
+         and the alternative is 37 edits to optional-catch-binding syntax
+         whose only effect is to satisfy a linter. What matters about a catch
+         is whether the block is EMPTY, and `no-empty` gates that now. */
+      'no-unused-vars': ['warn', {
+        args: 'none', caughtErrors: 'none', varsIgnorePattern: '^_',
+      }],
 
       /* `no-redeclare` GATES, and it has already earned it. On the linter's
          first run it found `renderScoreboard` declared twice in shell.js —
@@ -108,20 +118,31 @@ export default [
          8ae629b by renaming the tile's own to `renderTodayTile`, so the rule
          is back to an error and this comment records why it was ever not.
 
-         ── The two below REPORT, they do not block ─────────────────────────
-         Neither is switched off, and every outstanding instance is named here
-         so "warn" cannot quietly become "ignored".
+         `no-empty` GATES TOO, and it is the rule that carries §4 into the
+         JavaScript: a fallback that is silent is a bug. All 11 instances have
+         been dealt with on their merits rather than annotated away, and they
+         split cleanly in two:
 
-         no-empty — 11 instances, all `catch(e){}`. §4 of the constitution
-         says a silent fallback IS a bug, so these are worth working through;
-         they are also spread across surfaces owned by other work in flight.
+           · IDEMPOTENT TEARDOWN (6) — removing a price line whose series was
+             already replaced, releasing a pointer capture already released,
+             focusing an element that is no longer focusable. Arriving second
+             at a job already done is not a degraded path, and these keep an
+             empty block WITH a comment saying so. That is the honest form:
+             `no-empty` accepts a commented block, so the silence becomes a
+             stated decision instead of an unexplained one.
+           · A WRITE THAT LOST SOMETHING (5) — sessionStorage and localStorage
+             writes in copilot.js and shell.js. These are real degraded paths:
+             a preference or a conversation that fails to persist reverts on
+             the next load with nothing anywhere saying why. They now warn on
+             the console, ONCE per load, naming the behaviour that was lost
+             rather than only the exception.
 
-         no-useless-assignment — 1 instance, shell.js:166. Defensive
-         `let seen = true` before a try/catch that assigns on both paths.
-         Harmless, and arguably clearer than the alternative. */
+         The distinction to preserve if a new one appears: an empty catch
+         around a TEARDOWN is fine and needs a comment; an empty catch around
+         anything that was supposed to CHANGE something is a bug. */
       'no-redeclare': 'error',
-      'no-empty': 'warn',
-      'no-useless-assignment': 'warn',
+      'no-empty': 'error',
+      'no-useless-assignment': 'error',
     },
   },
   {

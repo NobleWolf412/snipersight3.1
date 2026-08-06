@@ -72,7 +72,6 @@ ok('Results: the empty window says so in words, not just dashes', () => {
 });
 
 ok('Telemetry: zero records is grey "no data", not green "clean"', () => {
-  const b = body('loadTelemetry') || SRC;
   const seg = SRC.slice(SRC.indexOf('telChip') - 900, SRC.indexOf('telChip') + 900);
   assert(seg.includes("'no data'"), 'empty record set still reads as a verdict');
   assert(/clean · /.test(seg), 'a clean verdict carries no denominator');

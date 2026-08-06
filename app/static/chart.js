@@ -225,7 +225,11 @@ window.SSChart = (() => {
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', end);
       el.removeEventListener('pointercancel', end);
-      try{ el.releasePointerCapture(ev.pointerId); }catch(_){}
+      /* Throws if the capture is already gone — the pointer left the window,
+         or the browser released it when the element was re-rendered under the
+         drag. Both mean the job is done. Nothing is owed here; the empty block
+         is a decision, not an oversight. */
+      try{ el.releasePointerCapture(ev.pointerId); }catch(_){ /* already released */ }
       el.classList.remove('drag');
       chart.applyOptions({handleScroll: true, handleScale: true});
       flagFling(riskBefore);
@@ -384,7 +388,6 @@ window.SSChart = (() => {
   function recompute(){
     const out = $('tkOut'), key = $('tkKey'), warn = $('tkWarn');
     const e = levels.entry, tp = levels.tp, sl = levels.sl;
-    const long = dir === 'LONG';
 
     // Say plainly whose numbers these are. Anything the operator touched is
     // excluded from the strategy record, so the label must never read "engine".
@@ -616,8 +619,22 @@ window.SSChart = (() => {
     drawScale();
   }
 
+  /* WHY EVERY removePriceLine IS WRAPPED, once, for the four places that do it.
+
+     A price line belongs to the series it was drawn on. Change symbol or
+     timeframe and `load()` builds a fresh series, which takes its lines with
+     it — but the arrays here still hold the old handles, and lightweight-charts
+     throws on a handle whose series is gone. Removing an already-removed line
+     is not a degraded path, it is a teardown arriving second; the array is
+     emptied on the next line either way, so there is nothing to report and
+     nothing to fall back to.
+
+     That is the whole reason these blocks are empty, and it is written here
+     rather than three times below. What would NOT be acceptable is an empty
+     catch around a draw — a line that failed to appear is a chart lying about
+     where a trade sits, and none of these are that. */
   function drawScale(){
-    if(scaleLine){ try{ series.removePriceLine(scaleLine); }catch(e){} scaleLine = null; }
+    if(scaleLine){ try{ series.removePriceLine(scaleLine); }catch(e){ /* line already gone with its series */ } scaleLine = null; }
     if(!series || !scalePlan || !isFinite(scalePlan.price)) return;
     // Dashed and dim like every other unarmed plan level — this is a rung the
     // operator is drawing, not a level anything is resting at yet.
@@ -680,13 +697,11 @@ window.SSChart = (() => {
      symbol on Command — this is the same fact repeated at the point where the
      trade is actually committed, which is where it earns its screen space.
 
-     Colour only, one letter-group per timeframe, detail in the title: the
-     ladder is context, and context must never be louder than the chart. */
-  const LADDER_TONE = {
-    BULL_TREND: 'lx-bull', WEAKENING_BULL: 'lx-bull-w',
-    BEAR_TREND: 'lx-bear', WEAKENING_BEAR: 'lx-bear-w',
-    TRANSITION: 'lx-trans', RANGE: 'lx-range',
-  };
+     It is a TITLE, not a strip. The visual ladder was retired for the reason
+     loadContext() gives below, and the LADDER_TONE map that coloured its
+     rungs outlived it here unread — along with fourteen `.ctx-ladder` rules
+     in ss.css that had styled no element on any surface since. Both are gone;
+     the linter found the map, and the map led to the CSS. */
   async function loadContext(){
     /* The per-timeframe ladder read as a second timeframe picker — same
        shape, adjacent position, different meaning, hover-only explanation.
@@ -822,7 +837,7 @@ window.SSChart = (() => {
     $('tkRiskPct').textContent = '';
     $('tkArmed').textContent = '';
     openPos = [];
-    for(const l of posLines){ try{ series.removePriceLine(l); }catch(e){} }
+    for(const l of posLines){ try{ series.removePriceLine(l); }catch(e){ /* line already gone with its series */ } }
     posLines = [];
     $('tkOpen').innerHTML = '';
     const el = $('chartEmpty');
@@ -1005,7 +1020,7 @@ window.SSChart = (() => {
      nothing about it can be armed, and dressing it as a plan would invite
      exactly that. Cleared on the next load, so it never haunts another chart. */
   function drawClosedTrade(){
-    for(const l of tradeLines){ try{ series.removePriceLine(l); }catch(e){} }
+    for(const l of tradeLines){ try{ series.removePriceLine(l); }catch(e){ /* line already gone with its series */ } }
     tradeLines = [];
     const t = pendingTrade;
     pendingTrade = null;
@@ -1051,7 +1066,7 @@ window.SSChart = (() => {
   }
 
   function drawPosition(){
-    for(const l of posLines){ try{ series.removePriceLine(l); }catch(e){} }
+    for(const l of posLines){ try{ series.removePriceLine(l); }catch(e){ /* line already gone with its series */ } }
     posLines = [];
     const el = $('tkOpen');
     if(!openPos.length){ el.innerHTML = ''; return; }
@@ -1850,7 +1865,7 @@ window.SSChart = (() => {
          a bar that then squeezed the chart above it to 124px. The operator
          only ever acts on the most binding one; the rest are noise until it
          is cleared. */
-      const warnEl = $('tkWarn'), dupWarnEl = $('tkDup');
+      const warnEl = $('tkWarn');
       if(dupe){
         if(blockEl) blockEl.hidden = true;
         if(warnEl) warnEl.hidden = true;
@@ -2450,14 +2465,14 @@ window.SSChart = (() => {
   function renderSymList(filter){
     const q = (filter || '').trim().toUpperCase();
     const hit = s => !q || s.symbol.toUpperCase().includes(q);
-    let html = '', n = 0;
+    let html = '';
     for(const [state, label] of PICK_GROUPS){
       const rows = allSymbols.filter(s => s.state === state && hit(s));
       if(!rows.length) continue;
       html += `<div class="sym-group">${label} (${rows.length})</div>` +
-        rows.map(s => { n++; return `<button class="sym-row${s.symbol === sym ? ' on' : ''}"
+        rows.map(s => `<button class="sym-row${s.symbol === sym ? ' on' : ''}"
           data-sym="${s.symbol}">
-          <b>${s.symbol}</b><i>${s.venue ? venueName(s.venue) : ''}</i></button>`; }).join('');
+          <b>${s.symbol}</b><i>${s.venue ? venueName(s.venue) : ''}</i></button>`).join('');
     }
     const known = new Set(PICK_GROUPS.map(g => g[0]));
     const rest = allSymbols.filter(s => !known.has(s.state) && hit(s));

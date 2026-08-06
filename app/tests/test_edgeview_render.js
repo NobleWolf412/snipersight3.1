@@ -113,7 +113,6 @@ const clone = o => JSON.parse(JSON.stringify(o));
 
   ok('the mean is never coloured green or red', () => {
     // means render in fg-2; colour belongs to the interval band only.
-    const meanCells = html.match(/class="ev-tf t-mono">[\s\S]*?<\/div>\s*<\/div>/g) || [];
     assert(!/ev-tf-mean" style="[^"]*background:var\(--green\)/.test(html),
            'mean marker coloured green');
     assert(html.includes('color:var(--fg-2)">0.104 R'),

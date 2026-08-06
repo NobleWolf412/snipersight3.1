@@ -361,23 +361,14 @@ body{
   .data-table{min-width:max-content}
 }
 
-/* The context ladder — /api/context on the chart. One cell per timeframe,
-   regime as colour, detail in the title. Context, so quieter than everything
-   that is actually the chart. The current timeframe gets the ring. */
-.ctx-ladder{display:inline-flex;gap:3px;align-items:center}
-.ctx-ladder .lx{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;
-  letter-spacing:.08em;padding:2px 5px;border-radius:var(--r-sm);
-  color:var(--bg);opacity:.8;cursor:help}
-.ctx-ladder .lx.on{outline:1px solid var(--fg-2);outline-offset:1px;opacity:1}
-.ctx-ladder .lx-bull{background:var(--green-soft)}
-.ctx-ladder .lx-bull-w{background:rgba(74,222,128,.5)}
-.ctx-ladder .lx-bear{background:var(--red-2)}
-.ctx-ladder .lx-bear-w{background:rgba(248,113,113,.5)}
-.ctx-ladder .lx-trans{background:var(--amber);opacity:.6}
-.ctx-ladder .lx-range{background:var(--fg-4)}
-/* absent data must not look flat — same rule the weather strip follows */
-.ctx-ladder .lx-none{background:transparent;color:var(--fg-4);
-  border:1px dashed var(--border)}
+/* The context ladder's fourteen rules are GONE, with the feature they styled.
+   It was retired deliberately — chart.js says why at loadContext(): a row of
+   per-timeframe cells beside the timeframe buttons read as a second timeframe
+   picker, same shape, adjacent position, different meaning. The same facts now
+   live on the regime chip's hover title.
+   Nothing ever wrote class="ctx-ladder" after that change, so these rules had
+   styled no element on any surface since. Found by the linter: chart.js still
+   held the LADDER_TONE map that named them, unread. */
 
 /* B7 — reasoning behind a settings decision, folded. One line stays on the
    page; the essay is a click away for whoever actually wants it. */

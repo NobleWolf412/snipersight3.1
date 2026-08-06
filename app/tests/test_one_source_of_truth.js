@@ -19,7 +19,6 @@ const assert = require('assert');
 const S = f => fs.readFileSync(path.join(__dirname, '..', 'static', f), 'utf8');
 const JS = S('shell.js');
 const CHART = S('chart.js');
-const CSS = S('ss.css');
 
 let passed = 0;
 function ok(name, fn) {
