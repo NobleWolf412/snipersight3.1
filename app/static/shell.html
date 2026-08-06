@@ -714,6 +714,27 @@
         <span class="skel skel-line" style="width:78%"></span>
         <span class="skel skel-line" style="width:40%"></span></span></div>
       </div>
+
+      <!-- "Is the edge real?" — HERE, on the surface that asks it.
+
+           This panel has now crossed between the two surfaces twice, and the
+           record of both moves is worth keeping because the argument is real
+           on both sides. It began on Results, moved to Diagnostics on the
+           ruling that "Results is the trades; the statistics deep-dive is an
+           engineering reading and lives with the other instruments", and comes
+           back on a measurement: at 1,488px it was 40% of a Diagnostics
+           surface that had grown to four and a half screens, and it was the
+           only thing there not answering "what is failing". Its own header
+           says it covers a different window than the tiles it sat under.
+
+           Diagnostics is faults. Results is the record. This is the record.
+           edgeview.js mounts into #edgeRoot wherever it sits, so the move is
+           markup only. -->
+      <div id="edgeRoot" style="margin-top:var(--lg)">
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:64px"></div>
+        </div>
+      </div>
     </section>
 
     <!-- ─── SCANNER SETUP ─── -->
@@ -838,6 +859,32 @@
     <!-- ─── DIAGNOSTICS ─── -->
     <section class="surface" id="s-diagnostics">
       <div class="surface-head"><h1 class="t-page">Diagnostics</h1><p>what is failing, and why</p></div>
+
+      <!-- THE ANSWER, AND THE HANDOVER — same shape as Command's disposition
+           line, deliberately, because it does the same job one surface over.
+
+           This surface ran to 3,722px against an 800px stage: four and a half
+           screens, eight panels, ~5,500 characters. The operator's actual
+           workflow is not to read it — it is to copy what is wrong out of it
+           and paste that somewhere it can be diagnosed. Selecting that by hand
+           across a funnel, three warning rows and a stage table is the part
+           that was overwhelming, not the data itself.
+
+           So the surface answers in one sentence and hands over in one click,
+           and the detail below stays exactly where it was for the long dive.
+           `diagReport()` composes the text from the SAME payloads the panels
+           render from — never a second read of the API and never a re-derived
+           count, or the report and the screen could disagree, which is the one
+           thing a handover must never do (§6). -->
+      <p class="disposition" id="diagState">
+        <span class="skel skel-line" style="width:46%"></span>
+      </p>
+      <div class="diag-handover">
+        <button class="btn btn-primary" id="btnCopyDiag"
+                title="put a plain-text summary of everything on this surface on the clipboard">
+          Copy report</button>
+        <span class="t-label" id="diagStamp"></span>
+      </div>
       <!-- THE TWO STATUS READOUTS, PAIRED.
 
            Failures first, per operator ruling: engine exceptions
@@ -907,12 +954,12 @@
         </div>
       </div>
 
-      <!-- The edge panel lived here until 2026-07-31 (audit B6). "Is the
-           recorded book distinguishable from zero?" is literally the Results
-           question, and keeping the answer one surface away meant someone
-           reading a 12-trade forward sample as a result had the correction
-           somewhere they were not looking. It now sits under the equity curve
-           on Results. -->
+      <!-- Two comments stood here, and they contradicted each other: one said
+           the edge panel had moved TO Results in audit B6, the other said it
+           had moved back FROM Results by operator ruling. Only the second was
+           true, and a reader had no way to tell which. Both are gone; the
+           panel is on Results now and the single account of why it has been on
+           both surfaces lives beside it there. -->
 
       <!-- static/diagnostics.html was a complete second application — its own
            header, stylesheet, and a searchable decision-provenance view this
@@ -921,19 +968,6 @@
            someone designed it to be embedded here and stopped one step short.
            This is that step. The iframe stays src-less until opened, so the
            second app costs nothing until someone asks for it. -->
-      <!-- "Is the edge real?" — moved here from Results (operator ruling:
-           Results is the trades; the statistics deep-dive is an engineering
-           reading and lives with the other instruments). edgeview.js mounts
-           into this div wherever it sits. -->
-      <div id="edgeRoot" style="margin-bottom:var(--lg)">
-        <div class="skeleton" role="status" aria-label="loading">
-          <div class="skel" style="height:64px"></div>
-        </div>
-      </div>
-      <!-- SIBLING of #edgeRoot, never a child: edgeview.js mounts by replacing
-           edgeRoot's innerHTML, and when two closing divs went missing here
-           (beta pass, 4 Aug 2026) this details — and the console panel below —
-           were parsed as edgeRoot children and silently wiped on mount. -->
       <details class="explainer" id="provenance" style="margin-top:var(--lg)">
         <summary class="explainer-head">
           <h2 class="t-section">Decision Provenance</h2>

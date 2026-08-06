@@ -116,14 +116,30 @@ ok('Results has no orphan skeleton bars left in it', () => {
 
 ok('#edgeRoot is documented where it actually lives', () => {
   /* CLAUDE.md: documenting something that does not exist costs the reader more
-     than documenting nothing. The stale version of this comment sent readers to
-     Results for a panel that is in Diagnostics. */
+     than documenting nothing.
+
+     This panel has crossed between the two surfaces twice, and BOTH times the
+     comment describing the move outlived the move. The last round left two
+     contradicting comments in Diagnostics — one saying it had gone to Results,
+     one saying it had come back — with no way for a reader to tell which was
+     true. That is what this test is for; it is not really about an offset.
+
+     It lives in Results now: Diagnostics is faults, Results is the record, and
+     at 1,488px it was 40% of a Diagnostics surface that had grown to four and
+     a half screens. If it moves again, the comment beside it moves too. */
+  const results = HTML.indexOf('id="s-results"');
   const diag = HTML.indexOf('id="s-diagnostics"');
   const edge = HTML.indexOf('id="edgeRoot"');
   assert.ok(edge > -1, '#edgeRoot not found in shell.html');
-  assert.ok(edge > diag,
-    '#edgeRoot moved out of Diagnostics — update the comment in Results that ' +
-    'tells the reader where it lives, or this file is now the stale one.');
+  assert.ok(edge > results && edge < diag,
+    '#edgeRoot moved out of Results — move the comment that explains why it ' +
+    'lives there along with it, or this file is now the stale one.');
+  /* And the account of the move travels with the panel: a bare div would pass
+     the offsets above while telling the next reader nothing. */
+  const near = HTML.slice(Math.max(0, edge - 1400), edge);
+  assert.ok(/Diagnostics is faults\. Results is the record\./.test(near),
+    'the comment explaining why #edgeRoot sits in Results is gone or moved ' +
+    'away from it — it is the whole point of this check');
 });
 
 console.log(`  ${passed}/6 passed`);

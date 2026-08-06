@@ -636,6 +636,16 @@ body{
 .disposition.go::before{background:var(--green)}
 .disposition.warn::before{background:var(--amber)}
 .disposition.bad::before{background:var(--red)}
+
+/* The Diagnostics handover: the disposition sentence answers, this hands the
+   answer over. It sits directly under that sentence, which already carries
+   --xl beneath it, so this pulls back up into that gap rather than adding a
+   second one — the button belongs to the sentence, not to the panels below.
+   Wraps on a narrow stage so the stamp drops under the button instead of
+   squeezing it. */
+.diag-handover{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sm);
+  margin:calc(var(--xl) * -1 + var(--xs)) 0 var(--xl)}
+.diag-handover .t-label{text-transform:none;letter-spacing:0;color:var(--fg-4)}
 .disposition.bad{color:var(--red-2)}
 .disposition .skel{height:1.1em;width:38%}
 
@@ -1153,6 +1163,13 @@ body:not(.dev) #consolePanel{display:none}
      floor is a target you hit twice. They stack full-width because the row is
      already one column here, so the space costs nothing. */
   .deck-row .btn{min-height:48px;width:100%;justify-content:center}
+  /* Same floor, same reasoning, for the Diagnostics handover. Measured at
+     34px on a 375px stage the day it was built — and this one is the only
+     control on that surface a thumb is ever aiming for, because the whole
+     point of the surface is to press it and paste the result somewhere. It
+     does not go full-width: the timestamp sits beside it on a phone once the
+     row wraps, and a full-width button would push that to a third line. */
+  .diag-handover .btn{min-height:48px}
 }
 
 /* An expired setup fades where it stands and holds its slot for the duration,

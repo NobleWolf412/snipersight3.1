@@ -2626,6 +2626,12 @@ weighed in. Name the facts you used.`;
   /* ---------- DIAGNOSTICS ---------- */
   async function loadHealth(){
     const h = await api('/api/pipeline-health');
+    /* Kept for the handover report, which must quote what the panels were
+       painted from rather than fetch its own copy — two reads of a moving
+       audit could disagree, and a report that disagrees with the screen is
+       worse than no report. Same reason for lastDiagTelemetry below. */
+    lastDiagHealth = h;
+    renderDiagState();
     const blockers = (h.blockers || []).length, warns = (h.warnings || []).length;
 
     /* THE EMPTY-WINDOW RULE, site 3 of 4 — and the most consequential, because
@@ -3397,8 +3403,136 @@ weighed in. Name the facts you used.`;
   });
 
   /* where candidates die, stage by stage — the operator's debugging view */
+  /* ---------- Diagnostics: the answer, and the handover ------------------
+     The surface's own question is "what is failing, and why". Eight panels
+     answered it across 3,722px, and the operator's real use of them is to
+     copy what is wrong and hand it over. These two functions are that: one
+     sentence at the top, and one button that puts the whole surface on the
+     clipboard as text a person can read before they send it.
+
+     Both read ONLY the payloads the panels were painted from. No second
+     fetch, no re-derived count (§6) — a handover that disagrees with the
+     screen it was copied from is worse than no handover at all. */
+  let lastDiagHealth = null, lastDiagTelemetry = null;
+
+  const diagFaults = t => ((t && t.engine_faults) || []).length;
+  const diagGates = t => ((t && t.data_gates) || []).length;
+
+  function renderDiagState(){
+    const el = $('diagState');
+    if(!el) return;
+    const h = lastDiagHealth, t = lastDiagTelemetry;
+    if(!h && !t) return;                  // keep the skeleton; say nothing yet
+    const said = [];
+    if(h && h.pending){
+      said.push('The audit has not finished its first pass, so nothing below has been checked yet.');
+    } else if(h){
+      const faults = diagFaults(t), gates = diagGates(t);
+      const broken = faults + gates;
+      /* The count and the consequence in the same breath. "DEGRADED" alone
+         taught the operator nothing about whether to trade today — the whole
+         reason the chip on every surface carries its consequence too. */
+      said.push(broken
+        ? `${broken} thing${broken === 1 ? '' : 's'} failing.`
+        : 'Nothing is failing.');
+      said.push(h.evaluation_allowed
+        ? `The pipeline is ${String(h.status || '').toLowerCase()} and still sizing trades.`
+        : `The pipeline is ${String(h.status || '').toLowerCase()} and has stopped sizing trades.`);
+    }
+    /* The bottleneck belongs in the answer: on a surface about why nothing
+       fired, the stage that ate the candidates IS the answer, and it was
+       1,000px down the page. */
+    const f = t && t.funnel;
+    if(f && f.rejected_candidates != null && f.validated != null){
+      const seen = f.rejected_candidates + f.validated;
+      if(seen) said.push(`${f.rejected_candidates} of ${seen} candidates never became a setup.`);
+    }
+    el.textContent = said.join(' ');
+
+    const stamp = $('diagStamp');
+    if(stamp){
+      const v = (t && t.versions) || {};
+      const tags = Object.values(v).filter(Boolean).slice(0, 3).join(' · ');
+      stamp.textContent = tags ? `${tags} — the report carries all of it` : '';
+    }
+  }
+
+  /* Plain text, not JSON, and that is a decision. The operator reads this
+     before sending it; JSON would paste smaller and cost them the ability to
+     check what they are handing over, which is the one thing this surface
+     exists to give them. */
+  function diagReport(){
+    const h = lastDiagHealth || {}, t = lastDiagTelemetry || {};
+    const L = [];
+    /* Column width is measured, not guessed. A fixed padEnd(16) ran
+       NO_ELIGIBLE_PLAYBOOK straight into its own count — "NO_ELIGIBLE_PLAYBOOK142"
+       — in the one artifact whose entire job is being read by someone else. */
+    const rows = pairs => {
+      const w = Math.max(0, ...pairs.map(([k]) => String(k).length)) + 2;
+      return pairs.map(([k, v]) => `  ${String(k).padEnd(w)}${v}`);
+    };
+    const pad = (k, v) => rows([[k, v]])[0];
+    L.push('SNIPERSIGHT DIAGNOSTICS');
+    L.push(new Date().toString());
+    const v = t.versions || {};
+    if(Object.keys(v).length) L.push(Object.entries(v).map(([k, s]) => `${k}=${s}`).join(' · '));
+    const b = t.baseline;
+    if(b) L.push(`baseline ${b.id}${b.label ? ' "' + b.label + '"' : ''}`);
+
+    L.push('', 'STATE');
+    L.push(pad('pipeline', (h.status || '—') +
+      (h.pending ? ' · audit still running' : '') +
+      (h.evaluation_allowed === false ? ' · NOT sizing trades' : ' · sizing trades')));
+    const rc = h.rung_counts || {};
+    if(Object.keys(rc).length)
+      L.push(pad('rungs', Object.entries(rc).map(([k, n]) => `${k.toLowerCase()} ${n}`).join(' · ')));
+    (h.blockers || []).forEach(x => L.push(pad('BLOCKER', x.code || x)));
+
+    const faults = (t.engine_faults || []), gates = (t.data_gates || []);
+    L.push('', `FAILING NOW (${faults.length + gates.length})`);
+    if(!faults.length && !gates.length) L.push('  nothing');
+    faults.forEach(x => L.push(`  ${x.symbol} ${x.tf} ${x.engine}: ${x.error}`));
+    gates.forEach(x => L.push(`  ${x.symbol} ${x.tf} ${x.gate}: ${x.detail}`));
+
+    const f = t.funnel || {};
+    if(Object.keys(f).length){
+      L.push('', 'WHY NOTHING FIRED');
+      L.push(...rows(Object.entries(f).map(([k, n]) => [k.replace(/_/g, ' '), n])));
+    }
+    const cr = t.candidate_rejections || {};
+    if(Object.keys(cr).length){
+      L.push('', 'REJECTED BEFORE VALIDATION');
+      L.push(...rows(Object.entries(cr).sort((a, b) => b[1] - a[1]).slice(0, 8)));
+    }
+
+    const st = t.stages || {};
+    if(Object.keys(st).length){
+      L.push('', 'SETUP TELEMETRY');
+      L.push(...rows(Object.entries(st).sort((a, b) => b[1] - a[1])
+        .map(([k, n]) => [k.replace(/_/g, ' ').toLowerCase(), n])));
+    }
+    /* GROUPED AND COUNTED, the way the panel on screen shows them. Listed one
+       per line this was twelve identical "KNOWN_VENUE_GAPS" and then "…and 87
+       more" — 12 lines carrying one fact, and the one number that mattered
+       (97) nowhere in them. */
+    const warns = h.warnings || [];
+    if(warns.length){
+      const by = {};
+      warns.forEach(w => {
+        const k = (w.code || w.rung || 'UNLABELLED').toString();
+        by[k] = (by[k] || 0) + 1;
+      });
+      L.push('', `OPEN ISSUES (${warns.length})`);
+      L.push(...rows(Object.entries(by).sort((a, b) => b[1] - a[1])
+        .map(([k, n]) => [k.replace(/_/g, ' ').toLowerCase(), '×' + n])));
+    }
+    return L.join('\n');
+  }
+
   async function loadTelemetry(){
     const t = await api('/api/setup-telemetry?limit=500');
+    lastDiagTelemetry = t;
+    renderDiagState();
     const stages = t.stages || {}, fails = t.failure_points || {};
     const rows = Object.entries(stages).length ? Object.entries(stages)
       : Object.entries(fails);
@@ -3645,6 +3779,42 @@ weighed in. Name the facts you used.`;
       await loadHealth();
     }catch(err){ markDegraded(String(err)); }
     b.disabled = false; b.textContent = was;
+  });
+
+  /* The handover. Refuses rather than copying half a report: before the first
+     audit lands there is nothing to hand over, and a clipboard quietly holding
+     "pipeline: —" is worse than a button that says wait. */
+  $('btnCopyDiag').addEventListener('click', async e => {
+    const b = e.currentTarget, was = b.textContent;
+    if(!lastDiagHealth && !lastDiagTelemetry){
+      toast('Nothing to copy yet — the first audit has not landed.', 'warn');
+      return;
+    }
+    const text = diagReport();
+    try{
+      await navigator.clipboard.writeText(text);
+      b.textContent = 'Copied';
+      toast(`${text.split('\n').length} lines copied.`, 'ok');
+    }catch(err){
+      /* Clipboard access can be refused, and a button that appears to work and
+         silently does not is the failure this app keeps writing tests about.
+         Select the text instead so the operator can still copy it by hand. */
+      b.textContent = 'Select and copy';
+      const pre = document.createElement('pre');
+      pre.className = 't-mono';
+      pre.style.cssText = 'white-space:pre-wrap;max-height:40vh;overflow:auto;' +
+        'margin-top:var(--sm);padding:var(--md);border:1px solid var(--border);' +
+        'border-radius:var(--r-sm);background:var(--bg)';
+      pre.textContent = text;
+      const host = document.querySelector('.diag-handover');
+      if(host && !host.nextElementSibling?.matches?.('pre')) host.after(pre);
+      const r = document.createRange();
+      r.selectNodeContents(pre);
+      const sel = getSelection();
+      sel.removeAllRanges(); sel.addRange(r);
+      toast('The browser refused clipboard access — the report is selected below.', 'warn');
+    }
+    setTimeout(() => { b.textContent = was; }, 2000);
   });
 
   /* ---------- developer detail ----------

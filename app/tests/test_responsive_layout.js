@@ -135,6 +135,17 @@ ok('the Deck\'s own buttons are thumb-sized', () => {
     'the Setup Deck buttons are back under a 48px target below 900px');
 });
 
+ok('the Diagnostics handover button is thumb-sized', () => {
+  /* Built at 34px and caught in the same measurement pass as the Deck's. This
+     one earns the floor on traffic rather than stakes: it is the only control
+     on Diagnostics anyone aims for, because the surface exists so the operator
+     can press it and paste the result somewhere it can be diagnosed. */
+  const css = read('ss.css');
+  const narrow = rules(css).filter(r => coversPhone(r.media) && /\.diag-handover \.btn/.test(r.sel));
+  assert(narrow.some(r => /min-height:\s*4[8-9]px|min-height:\s*[5-9]\dpx/.test(r.body)),
+    'the Diagnostics Copy report button is back under a 48px target below 900px');
+});
+
 ok('the controls that WRITE are thumb-sized on a phone', () => {
   /* 24px is the WCAG floor for a pointer; Android asks 48dp, and the gap is
      not pedantry — one of these three is CLOSE on a live position, sitting in
