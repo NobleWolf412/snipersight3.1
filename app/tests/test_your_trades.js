@@ -340,13 +340,50 @@ ok('the stop still takes the whole bar', () => {
     'the loss — plausible, flattering, and unprovable from OHLC');
 });
 
-ok('the version moved, and the old one is still read', () => {
-  assert(/MANUAL_VERSION = "manual-v0\.2-draft"/.test(ENGINE),
-    'a scale-out changes what r_multiple MEANS — a v0.1 reader is wrong about the trade');
-  assert(/MANUAL_VERSIONS = \("manual-v0\.1-draft", MANUAL_VERSION\)/.test(ENGINE),
-    'without a wider read set the bump strands every order still open under v0.1');
+/* Re-pinned when the override key moved off the engine version (manual-v0.3).
+ * The old assertions named v0.2 and the exact two-element tuple, so the next
+ * bump would have failed them for being a bump — which is not what they are
+ * for. The PROPERTY is: the write tag is one version, the read set is every
+ * version this book has ever written, and it only ever grows. Stated that way
+ * a bump passes and a bump that STRANDS the old book fails, which is the
+ * direction that matters. */
+ok('the version moved, and every old one is still read', () => {
+  const cur = ENGINE.match(/MANUAL_VERSION = "(manual-v[\d.]+-draft)"/);
+  assert(cur, 'the write tag must be one named manual version');
+  const set = ENGINE.match(/MANUAL_VERSIONS = \(([^)]*)\)/);
+  assert(set, 'the read set must be a literal tuple, greppable from here');
+  /* Every tag this book has SHIPPED. Append on a bump; never remove. Dropping
+   * one strands every order still open under it: never settled, never expired,
+   * absent from every surface. */
+  for (const shipped of ['manual-v0.1-draft', 'manual-v0.2-draft']) {
+    assert(set[1].includes('"' + shipped + '"'),
+      `the read set dropped ${shipped} — orders under it are stranded armed forever`);
+  }
+  assert(!set[1].includes('"' + cur[1] + '"') && /MANUAL_VERSION\s*\)?\s*$/.test(set[1].trim()),
+    'the current tag belongs in the tuple as MANUAL_VERSION, last, not restated as a literal');
   assert(/algo_version IN \(\{marks\}\)/.test(ENGINE),
     'the read path must filter on the tuple, not on one version');
+});
+
+/* ─────────── an override outlives the engine version it was written under ───────────
+ * The class of bug, not the one instance. Found live 2026-08-06: `setup_id`
+ * embeds SETUP_VERSION, the portfolio suppressed on an exact id match, so the
+ * bump from setup-v0.15 to v0.17 re-minted the id and a position the operator
+ * had CLOSED for +$136.22 came back as $194.60 of live exposure. It was the
+ * only position, so open_risk_usd was entirely a closed trade. */
+ok('an operator override is keyed on the zone, not on the engine version', () => {
+  assert(/def setup_zone_key\(/.test(ENGINE),
+    'the version-stripping rule needs one named home, or it gets re-implemented');
+  assert(/def overridden_zone_keys\(/.test(ENGINE),
+    'the suppression set must come from the same map operator_closed is built from');
+  assert(!/if sid in completed or sid in overrides/.test(SERVER),
+    'an exact setup_id match expires every override the next time setups bumps');
+  assert(/setup_zone_key\(sid\) in override_zones/.test(SERVER),
+    'the portfolio must suppress on the version-stripped id');
+  /* operator_closed keeps the FULL id, one row per fact. Collapsing it on the
+   * stripped key would hide a second close of the same zone — real money. */
+  assert(/out\[p\["setup_id"\]\] = /.test(ENGINE),
+    'overridden_setups must stay keyed on the full id so no closed trade is lost');
 });
 
 /* ───────────────── the label that was written twice ───────────────── */

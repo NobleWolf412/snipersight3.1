@@ -1,6 +1,6 @@
 """Manual (operator) paper book — trades the operator arms by hand.
 
-algo manual-v0.2-draft.
+algo manual-v0.3-draft.
 
 WHY THIS IS A SEPARATE BOOK, which is the whole design and not a filing
 preference. The forward paper record on `setup-*`/`exec-*` is the evidence that
@@ -72,8 +72,9 @@ partials, so its walk is byte-identical and `blend_r` over its single leg is the
 same quotient v0.1 wrote — but it is stated rather than assumed.
 """
 import json
+import re
 from bisect import bisect_left
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from . import costs, store, venues
 from .swings import compute_atr
@@ -82,13 +83,13 @@ from .runlog import RunRecorder
 # with it — that is the point of the two books differing only in the plan.
 from .execsim import MAX_BARS, MAX_ENTRY_BARS, FUNDING_RATE_PER_SETTLEMENT
 
-MANUAL_VERSION = "manual-v0.2-draft"
+MANUAL_VERSION = "manual-v0.3-draft"
 #: Every version this book has EVER written, oldest first. Reads filter on this
 #: tuple; writes only ever carry `MANUAL_VERSION`. The distinction is the whole
 #: migration: a bump that moved both would strand every intent still open under
 #: the old tag, because `unresolved` — the resolver's work list — finds work by
 #: version and would simply stop seeing them. See the module docstring.
-MANUAL_VERSIONS = ("manual-v0.1-draft", MANUAL_VERSION)
+MANUAL_VERSIONS = ("manual-v0.1-draft", "manual-v0.2-draft", MANUAL_VERSION)
 Q2 = Decimal("0.01")
 
 #: Scale-out bounds. The cap is not a capacity limit — it is a statement about
@@ -436,13 +437,74 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
     return {"intent_id": intent_id, "written": bool(written), **payload}
 
 
+#: The trailing component of a `setup_id`: an engine version tag such as
+#: `setup-v0.17-draft`, `breakout-v0.5-draft`, `trend-v0.2-draft`. Matched
+#: rather than split blindly, because ids minted before the version was added
+#: (setups.py:977-984) have no such component and must survive untouched.
+_VERSION_TAIL = re.compile(r"^[a-z][a-z_]*-v[0-9]+(?:\.[0-9]+)*(?:-[a-z]+)?$")
+
+
+def setup_zone_key(setup_id: str) -> str:
+    """A `setup_id` with its engine version stripped: symbol|tf|strategy|zone_id.
+
+    THE IDENTITY AN OVERRIDE IS ABOUT. `setup_id` is version-scoped on purpose
+    — two engine generations must never mint the same id, or every downstream
+    join merges them silently (setups.py:975-983). That rule is right for
+    facts. It is WRONG for an operator's decision, and the difference is the
+    whole reason this function exists.
+
+    A setup fact is a derivation: bump the engine and you get a new, separate
+    derivation of the same zone touch, correctly under a new id. An override is
+    not a derivation — it is the operator saying "I am out of this trade". The
+    trade is the zone, not the generation of code that described it. So when
+    `SETUP_VERSION` moved, the id was re-minted, the exact-match suppression in
+    the portfolio view stopped firing, and a position the operator had CLOSED
+    came back as live exposure under the new tag.
+
+    Measured on the live store, 2026-08-06: UNIUSDT 4H REVERSAL appeared as
+    `…|setup-v0.17-draft` in `active_positions` while its close sat in
+    `operator_closed` as `…|setup-v0.15-draft` — same zone, same entry 4.379.
+    The VALIDATED setup facts under v0.13 through v0.17 all carry the identical
+    `confirmed_at` (1785470400) and byte-identical entry/sl/tp, so it was one
+    zone touch re-derived five times, not five signals. It was the only
+    position, so `open_risk_usd` read $194.60 against a trade closed for
+    +$136.22 — and that number drives the risk meters, the free-slot chip and
+    the exposure accent.
+
+    Keying on the zone rather than the generation is what makes an override
+    survive a version bump. The trade-off is stated rather than hidden: a
+    genuine LATER re-entry into the same zone (same `zone_id`, so the same
+    creation timestamp) is suppressed too. That was already true within a
+    single version — the exact-match key had the identical property — so this
+    widens the window in time, not in kind. A newly created zone gets a new
+    `zone_id` and is unaffected.
+    """
+    head, _, tail = setup_id.rpartition("|")
+    return head if head and _VERSION_TAIL.match(tail) else setup_id
+
+
 def overridden_setups(con) -> dict:
-    """setup_id -> the operator's early close, for the portfolio view."""
+    """setup_id -> the operator's early close, for the portfolio view.
+
+    Keyed on the FULL id, one row per override fact, so nothing collapses: an
+    operator can close the same zone twice across generations and both closes
+    are money that has to appear. Suppression is a different question and asks
+    it through `setup_zone_key` — see `overridden_zone_keys`.
+    """
     out = {}
     for r in _facts(con, OVERRIDE_KIND):
         p = json.loads(r["payload"])
         out[p["setup_id"]] = {**p, "closed_at": r["confirmed_at"]}
     return out
+
+
+def overridden_zone_keys(overrides: dict) -> set:
+    """The version-free zones the operator has taken off the engine's book.
+
+    Takes the map `overridden_setups` already built rather than re-reading the
+    facts, so the two views cannot disagree about what was overridden.
+    """
+    return {setup_zone_key(sid) for sid in overrides}
 
 
 def adopt_position(con, setup_id: str, symbol: str, tf: str, direction: str,
@@ -1315,6 +1377,46 @@ def book(con, limit: int = 200) -> dict:
     # outcome==TP was already wrong for a profitable TIMEOUT. Counted on net R,
     # the same number the expectancy uses.
     wins = [r for r in settled if Decimal(r.get("r_multiple") or 0) > 0]
+
+    # ---- dollars ----------------------------------------------------------
+    # DERIVED HERE, NOT PERSISTED. `pnl_usd` is net R times the dollars the
+    # ticket had at risk, with the same Decimal multiply and the same
+    # ROUND_HALF_UP quantize the engine book uses (server.py's journal row), so
+    # "what did I make by hand" and "what did the engine make" are two figures
+    # a reader may compare digit for digit. If either side ever rounded the
+    # other way the two books would disagree by a cent on a half-cent tie, and
+    # a book that disagrees with its sibling by a cent is a book nobody trusts
+    # the rest of.
+    #
+    # Deriving it in a READ VIEW is deliberate and is why this needs no version
+    # bump: no fact is written, nothing is stamped with MANUAL_VERSION, and a
+    # replay recomputes the same number from the same stored operands. The
+    # moment this lands in a payload it becomes a second generation of output
+    # under one tag and it IS a bump.
+    #
+    # The key is set on EVERY row, settled or not, and is None where no dollar
+    # figure exists. A cancelled order has no P&L and an absent key would let a
+    # reader's `?? 0` render it as break-even — the exact confusion the field
+    # contract exists to stop.
+    total_pnl, n_no_risk, n_priced = Decimal(0), 0, 0
+    for row in rows:
+        row["pnl_usd"] = None
+        if row["outcome"] not in ("TP", "SL", "TRAIL_STOP", "TIMEOUT"):
+            continue                     # CANCELLED/MISSED never carried size
+        if row.get("risk_usd") is None:
+            # A settled trade with an R and no dollars, permanently: the ticket
+            # was armed without a valid risk figure (chart.js sends null) and
+            # nothing can reconstruct it after the fact. COUNTED and reported,
+            # never quietly dropped — this is a degraded path and the rule is
+            # that a degraded path is audible.
+            n_no_risk += 1
+            continue
+        pnl = (Decimal(str(row.get("r_multiple") or 0)) *
+               Decimal(str(row["risk_usd"]))).quantize(Q2,
+                                                       rounding=ROUND_HALF_UP)
+        row["pnl_usd"] = str(pnl)
+        total_pnl += pnl
+        n_priced += 1
     return {
         "version": MANUAL_VERSION,
         "trades": rows[-limit:],
@@ -1325,4 +1427,17 @@ def book(con, limit: int = 200) -> dict:
         "win_rate": round(len(wins) / len(settled) * 100, 1) if settled else None,
         "total_r": str(cum.quantize(Q2)),
         "expectancy_r": str((cum / len(settled)).quantize(Q2)) if settled else None,
+        # Over EVERY row, like `n`, `wins` and `total_r` beside it — while
+        # `trades` above is capped at `limit`. A total that quietly meant "the
+        # rows we returned" would disagree with the R figure printed next to it
+        # the day the book passes 200 trades.
+        #
+        # None, not "0.00", when NO settled trade carried a risk figure. Six
+        # settled losses with no dollars on any of them would otherwise total
+        # $0.00 and read as break-even. Absent, not zero.
+        "total_pnl_usd": str(total_pnl.quantize(Q2)) if n_priced else None,
+        # How many settled trades that sum LEAVES OUT. The surface must print
+        # it beside the total; "−$254.76 across 4 of 5 trades" is honest and
+        # "−$254.76" alone is not.
+        "n_no_risk_usd": n_no_risk,
     }

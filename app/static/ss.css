@@ -348,8 +348,7 @@ body{
    page. So the body keeps a quiet inset surface while the section around it
    floats. This is the one place the two halves of the vibe meet. */
 .panel.floating > .panel-body,
-.panel.floating > .budget-grid,
-.panel.floating > .gate-list{
+.panel.floating > .budget-grid{
   background:linear-gradient(180deg,rgba(255,255,255,.022),rgba(0,0,0,.16));
   border:1px solid var(--border-soft);border-radius:var(--r-lg);
   box-shadow:0 1px 0 rgba(255,255,255,.04) inset}
@@ -381,14 +380,6 @@ details.panel.floating > summary{padding-left:var(--lg)}
 /* the health chip becomes a route to Diagnostics only while it has something
    to explain — a control that looks clickable at rest but is not lies twice */
 .chip.clickable{cursor:pointer;text-decoration:underline;text-underline-offset:3px}
-/* The live tick. Deliberately the quietest chip on the bar: it is display-only,
-   no engine reads it, and it must never carry the visual weight of a number the
-   system actually acted on. A slow pulse says "this is moving" without becoming
-   another thing flashing at the operator. */
-.chip-live{background:transparent;border:1px dashed var(--border);
-  color:var(--fg-3);font-variant-numeric:tabular-nums;
-  animation:livePulse 4s ease-in-out infinite}
-@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.62}}
 
 /* The era label. Deliberately BODY PROSE, not a chip: it is two sentences that
    have to be read and understood, and the all-caps mono treatment this app uses
@@ -443,33 +434,9 @@ details.panel.floating > summary{padding-left:var(--lg)}
   .data-table{min-width:max-content}
 }
 
-/* The context ladder — /api/context on the chart. One cell per timeframe,
-   regime as colour, detail in the title. Context, so quieter than everything
-   that is actually the chart. The current timeframe gets the ring. */
-.ctx-ladder{display:inline-flex;gap:3px;align-items:center}
-.ctx-ladder .lx{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;
-  letter-spacing:.08em;padding:2px 5px;border-radius:var(--r-sm);
-  color:var(--bg);opacity:.8;cursor:help}
-.ctx-ladder .lx.on{outline:1px solid var(--fg-2);outline-offset:1px;opacity:1}
-.ctx-ladder .lx-bull{background:var(--green-soft)}
-.ctx-ladder .lx-bull-w{background:rgba(74,222,128,.5)}
-.ctx-ladder .lx-bear{background:var(--red-2)}
-.ctx-ladder .lx-bear-w{background:rgba(248,113,113,.5)}
-.ctx-ladder .lx-trans{background:var(--amber);opacity:.6}
-.ctx-ladder .lx-range{background:var(--fg-4)}
-/* absent data must not look flat — same rule the weather strip follows */
-.ctx-ladder .lx-none{background:transparent;color:var(--fg-4);
-  border:1px dashed var(--border)}
-
-/* B7 — reasoning behind a settings decision, folded. One line stays on the
-   page; the essay is a click away for whoever actually wants it. */
-.fine-print{margin-top:var(--sm)}
-.fine-print summary{cursor:pointer;list-style:none;font-family:var(--f-mono);
-  font-size:var(--fs-1);letter-spacing:.08em;color:var(--fg-4);
-  text-decoration:underline dotted;text-underline-offset:3px}
-.fine-print summary::-webkit-details-marker{display:none}
-.fine-print summary:hover{color:var(--fg-2)}
-.fine-print[open] summary{margin-bottom:var(--sm)}
+/* The chart's per-timeframe context is a title on the regime chip now, not a
+   strip of coloured rungs — see loadContext() in chart.js. The .ctx-ladder /
+   .lx-* rules that drew the rungs went with it. */
 
 /* The explainer. Body prose for the same reason the era band is: these are
    paragraphs to be read once and understood, and the all-caps mono this app
@@ -484,17 +451,9 @@ details.panel.floating > summary{padding-left:var(--lg)}
   margin-left:auto;transition:transform .15s ease}
 .explainer[open] .explainer-head::after{transform:rotate(180deg)}
 .explainer-head:hover .t-section{color:var(--fg-2)}
-.explainer-body{padding:0 var(--lg) var(--lg);color:var(--fg-2);max-width:78ch}
-.explainer-body p{margin-bottom:var(--md)}
-.explainer-body b{color:var(--fg);font-weight:600}
-.explainer-steps{margin:0 0 var(--md);padding-left:1.35em}
-.explainer-steps li{margin-bottom:var(--sm);padding-left:.2em}
-.explainer-steps li::marker{color:var(--accent);font-family:var(--f-mono);
-  font-size:var(--fs-1)}
-/* the "controlled by" pointer: this is what ties a step to a toggle below */
-.explainer-steps em{display:block;margin-top:3px;font-style:normal;
-  font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.1em;
-  text-transform:uppercase;color:var(--fg-4)}
+/* The one .explainer left in the tree (Decision Provenance) fills its body
+   with .prov-body, so the .explainer-body / .explainer-steps rules that
+   styled the old settings essay had nothing to style. */
 @media (prefers-reduced-motion: reduce){
   .explainer-head::after{transition:none}
 }
@@ -552,19 +511,6 @@ details.panel.floating > summary{padding-left:var(--lg)}
 .scan-result.bad{color:var(--red-2);background:rgba(255,100,100,.07);
   border-color:rgba(255,100,100,.40)}
 
-/* A disabled control carries its reason INLINE. Hidden in a hover title, the
-   explanation may as well not exist — and an unexplained dead button reads as
-   an app that is arbitrary rather than one that is careful. */
-.locked-ctl{display:inline-flex;flex-direction:column;gap:2px;align-items:flex-start}
-.locked-ctl .locked-why{font-family:var(--f-mono);font-size:var(--fs-1);
-  letter-spacing:.06em;color:var(--fg-4);max-width:22ch;line-height:1.3}
-
-/* One line above the deck saying what the deck is. Sits inside the panel so it
-   cannot be read as belonging to the panel above it. */
-.deck-note{padding:var(--sm) var(--lg) var(--md);color:var(--fg-3);
-  font-size:var(--fs-2);line-height:1.6;border-bottom:1px solid var(--border-soft)}
-.deck-note a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
-
 /* ---------- buttons ---------- */
 .btn{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.14em;
   text-transform:uppercase;padding:9px 14px;border-radius:var(--r-md);cursor:pointer;
@@ -595,7 +541,6 @@ details.panel.floating > summary{padding-left:var(--lg)}
 .btn-amber:hover{border-color:var(--amber-2);color:var(--amber)}
 .btn-red{background:rgba(248,113,113,.10);color:var(--red-2);border-color:rgba(248,113,113,.35)}
 .btn-red:hover{border-color:var(--red);color:var(--red)}
-.btn-lg{font-size:var(--fs-3);padding:12px 20px}
 
 /* ---------- metric tile ---------- */
 .tile{background:rgba(0,0,0,.4);border:1px solid var(--border-soft);border-radius:var(--r-lg);
@@ -780,16 +725,16 @@ body:not(.dev) #consolePanel{display:none}
 
 .grid{display:grid;gap:var(--md)}
 .cols-2{grid-template-columns:repeat(2,1fr)}
-.cols-3{grid-template-columns:repeat(3,1fr)}
 .cols-4{grid-template-columns:repeat(4,1fr)}
-@media(max-width:1100px){.cols-4{grid-template-columns:repeat(2,1fr)}.cols-3{grid-template-columns:repeat(2,1fr)}}
-/* .cols-2 got no rule while .cols-3 and .cols-4 got one on the line above —
+@media(max-width:1100px){.cols-4{grid-template-columns:repeat(2,1fr)}}
+/* .cols-2 got no rule while .cols-4 got one on the line above —
    the same miss as .deck-row, and measurable: at a 412px viewport it held two
    166.5px columns and BOTH children reported scrollWidth past their box. It
    carries the two four-column performance tables on Results and the two
    Diagnostics panels, so a four-column table was living in 167px.
-   One column below 900, where .cols-3 and .cols-4 are already down to two. */
-@media(max-width:900px){.cols-2,.cols-3,.cols-4{grid-template-columns:1fr}}
+   One column below 900, where .cols-4 is already down to two.
+   (.cols-3 was defined here and applied by nothing; it has been deleted.) */
+@media(max-width:900px){.cols-2,.cols-4{grid-template-columns:1fr}}
 
 /* backend console — the operator watching the engines think */
 #console{height:260px;overflow:auto;padding:var(--md) var(--lg);margin:0;
@@ -1506,25 +1451,14 @@ body:not(.dev) #consolePanel{display:none}
 .mc-acts .btn{flex:1;justify-content:center;text-align:center}
 .mc-say{flex:1}
 
-/* THE ARRIVAL. One authored moment, spent only when a card appears mid-
-   session: the card lands, the stamp presses in, the ring sweeps out to its
-   reading. Page load is excluded in shell.js, and reduced-motion turns the
-   whole sequence off below. The recorded system says nothing celebrates;
-   this is the operator-approved exception, and it runs once per arrival. */
-.mc-new{animation:mcLand .45s cubic-bezier(.22,.9,.3,1) backwards}
-.mc-new .mc-stamp{animation:mcStamp .5s cubic-bezier(.22,.9,.3,1) .3s backwards}
-.mc-new .mc-ring-fill{animation:mcRing .9s cubic-bezier(.22,.9,.3,1) .4s backwards}
-/* The arrival moves the card with the standalone `translate` property, NOT
-   with `transform` — `transform` belongs to the depth system above, and a
+/* THE ARRIVAL is gone. `.mc-new` was applied by nothing — the class, its
+   three keyframes and the first-paint guard that gated it all went together.
+   If a card-arrival moment is ever wanted back, note what killed the last
+   one: it must move the card with the standalone `translate` property, never
+   `transform`, because `transform` belongs to the depth system above and a
    keyframe touching it replaces the card's whole rotation for the duration.
-   That is not theoretical: it flattened every arriving card to a plain 2D
-   scale, and a card whose animationend never fired (a backgrounded tab
-   suspends animations) stayed flattened. These two properties compose, so
-   the card can land and be turned at the same time. */
-@keyframes mcLand{from{opacity:0;translate:26px}}
-@keyframes mcStamp{0%{opacity:0;transform:scale(2.1) rotate(-8deg)}
-  55%{opacity:1;transform:scale(.95) rotate(-1deg)}100%{transform:scale(1) rotate(0)}}
-@keyframes mcRing{from{stroke-dashoffset:163.36}}
+   That flattened every arriving card, and one whose animationend never fired
+   (a backgrounded tab suspends animations) stayed flat. */
 
 /* the rail's mouse chrome — a phone swipes instead, so it never sees these */
 .mb-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:3;
@@ -1567,7 +1501,6 @@ body:not(.dev) #consolePanel{display:none}
 }
 @media (prefers-reduced-motion: reduce){
   .mc,.mb-nav,.mc::before{transition:none}
-  .mc-new,.mc-new .mc-stamp,.mc-new .mc-ring-fill{animation:none}
   /* Depth is motion here — the turn only reads while cards travel through
      it. Reduced-motion gets the rail flat and evenly lit, which is the same
      information without the parallax. */
@@ -1762,14 +1695,10 @@ body:not(.dev) #consolePanel{display:none}
 /* ---------- watch cards (Command: At a level) ----------
    Where price is standing near structure. Deliberately a size down from the
    mission cards above: these are places, not plans, and the chrome must not
-   promote them. The meter fills as distance in ATR shrinks — anticipation
-   drawn as position, like the open-trade track. */
+   promote them. Distance in ATR is drawn by the card's ring now; the flat
+   `.radar-meter` bar that used to draw it is gone and had no emitter. */
 .radar-say{font-family:var(--f-body);font-size:var(--fs-2);color:var(--fg-3)}
 .radar-say b{color:var(--fg-2);font-weight:500}
-.radar-meter{height:4px;border-radius:var(--r-pill);background:rgba(255,255,255,.06);
-  overflow:hidden;flex:none}
-.radar-meter i{display:block;height:100%;border-radius:var(--r-pill);
-  background:linear-gradient(90deg,rgba(255,194,102,.25),var(--amber));}
 /* Room above and below for the cards' shadows and their hover lift. It has
    to come from PADDING, not from overflow: a scroll container with
    `overflow-x:auto` computes `overflow-y:visible` to `auto`, so asking for
@@ -1841,12 +1770,6 @@ body:not(.dev) #consolePanel{display:none}
   background:linear-gradient(180deg,rgba(0,255,170,.08),transparent 42%),var(--card)}
 .wl-card.t2{border-color:rgba(255,194,102,.3)}
 .wl-card.t1{border-color:rgba(34,211,238,.24)}
-
-/* The reach chips carry the same four hues, also fixed. */
-.chip-t3{background:rgba(0,255,170,.12);color:var(--green)}
-.chip-t2{background:rgba(255,194,102,.12);color:var(--amber)}
-.chip-t1{background:rgba(34,211,238,.12);color:var(--cyan)}
-.chip-t0{background:rgba(255,255,255,.05);color:var(--fg-3)}
 
 /* A market a playbook actually covers, in the every-market group. Uses the
    accent deliberately — "the engine would trade this condition" IS the
@@ -1928,15 +1851,65 @@ details.panel > summary:focus-visible{outline:2px solid var(--accent);outline-of
   background:linear-gradient(180deg,rgba(0,255,170,.07),transparent 46%),
              linear-gradient(160deg,rgba(255,255,255,.03),rgba(0,0,0,.28)),var(--card)}
 .prog-card:not(.earned) .prog-title{color:var(--fg-3)}
-/* Going live: the same card, on the one surface that is otherwise a form. */
-.gate-card{min-height:210px}
+/* Going live: the same card as a milestone, on the same rail. No min-height of
+   its own — the two kinds ride one track now and a second floor made the cards
+   step up and down in height as the wheel turned. `.stat-card` sets it once. */
 .gate-card.earned{border-color:rgba(0,255,170,.4);
   background:linear-gradient(180deg,rgba(0,255,170,.07),transparent 46%),
              linear-gradient(160deg,rgba(255,255,255,.03),rgba(0,0,0,.28)),var(--card)}
 .gate-card:not(.earned) .prog-title{color:var(--fg-3)}
 .gate-body{padding-bottom:var(--sm)}
-.gate-body > .wheel-rail{padding:var(--md) 0 var(--xl);margin:0 calc(var(--lg) * -1)}
 .gate-foot{padding:0 0 var(--sm);color:var(--fg-4);max-width:60ch}
+
+/* ══ LEDGER: three books, never summed ══
+   Everything here exists to stop two numbers being read as one. The books sit
+   in a GRID rather than a rail because the surface's question is a comparison
+   — see the rule in docs/CONSISTENCY-PLAN.md §3 — and a comparison you have
+   to page through is not one. */
+
+/* The wallet band is deliberately unlike everything below it: no card ground,
+   a dashed edge, and the accent nowhere near it. It is a placeholder for a
+   number that does not exist, and it must never look like a reading. */
+.wallet-band{display:flex;align-items:flex-start;gap:var(--md);
+  border:1px dashed var(--border);border-radius:var(--r-lg);
+  padding:var(--md) var(--lg);margin-bottom:var(--lg);background:none}
+.wallet-say{font-family:var(--f-body);font-size:var(--fs-2);line-height:1.55;
+  color:var(--fg-3);max-width:70ch}
+.wallet-say b{display:block;font-family:var(--f-display);font-size:var(--fs-4);
+  letter-spacing:.06em;color:var(--fg-2);margin-bottom:2px}
+
+/* The honesty banner is an era band that is NOT neutral. The era band on
+   Results says "these two counts differ and that is fine"; this one says
+   "adding these would be wrong", which is a caution, so it carries the amber
+   edge the rest of the app uses for one. */
+.ledger-warn{border-left-color:var(--amber);color:var(--fg-2)}
+
+.ledger-books{display:grid;gap:var(--md);grid-template-columns:repeat(3,1fr);
+  margin-bottom:var(--xl)}
+/* Three books at 1100px are ~330px each, which is where a card stops being
+   readable. Below that they stack — still three books, still never added. */
+@media(max-width:1100px){.ledger-books{grid-template-columns:1fr}}
+.ledger-books .skeleton{padding:0}
+/* In a grid the card is a grid item, not a wheel item: it takes the width of
+   its track and matches its neighbours' height, so the three totals line up
+   on one baseline. The phone rule that bleeds a WHEEL card past the track
+   edge (`.mc{margin-inline:-20px}` under 640px) must not reach it — in a grid
+   that is not an overlapping stack, it is just a card hanging off the page. */
+.book-card{height:100%}
+@media(max-width:640px){.book-card{margin-inline:0}}
+.book-money{font-family:var(--f-display);font-size:var(--fs-6);line-height:1;
+  letter-spacing:.03em;color:var(--fg)}
+.book-money.up{color:var(--green)}
+.book-money.down{color:var(--red-2)}
+.book-card .tk-out{margin-top:var(--sm)}
+/* The caveat that names what a total leaves out. Never hidden when the count
+   is zero — a line that only appears when something is wrong gives the reader
+   no way to know it is absent. */
+.book-caveat{font-family:var(--f-body);font-size:var(--fs-2);line-height:1.5;
+  color:var(--fg-3);margin-top:auto}
+.book-caveat.warn{color:var(--amber)}
+.ledger-link{margin:0;color:var(--fg-3)}
+.ledger-link a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 
 .mb-lede{padding:var(--md) var(--lg);font-family:var(--f-body);
   font-size:var(--fs-3);line-height:1.55;color:var(--fg-3);max-width:78ch}
@@ -1961,7 +1934,6 @@ details.panel > summary:focus-visible{outline:2px solid var(--accent);outline-of
 .mw-empty{padding:var(--xl) var(--lg)}
 /* .wl-btn and .wl-say went with the bespoke layout — the card uses
    .mc-acts and .mc-story now, like every other card. */
-@media (prefers-reduced-motion: reduce){.radar-meter i{transition:none}}
 
 /* settings rows */
 .set-row{display:flex;align-items:flex-start;gap:var(--md);padding:10px 0;
@@ -1983,19 +1955,15 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 
 .empty{padding:var(--xl);text-align:center;color:var(--fg-4);
   font-family:var(--f-mono);font-size:var(--fs-2);line-height:2}
-.stub{border:1px dashed var(--border);border-radius:var(--r-lg);padding:var(--xl);
-  color:var(--fg-4);font-family:var(--f-mono);font-size:var(--fs-2);line-height:1.9}
-.stub b{color:var(--fg-3);font-weight:600}
 
 ::-webkit-scrollbar{width:9px;height:9px}
 ::-webkit-scrollbar-thumb{background:var(--card);border-radius:var(--r-pill)}
 ::-webkit-scrollbar-track{background:transparent}
 
-/* ---------- copilot drawer ---------- */
-.cp-scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60}
-.cp-drawer{position:fixed;top:0;right:0;bottom:0;width:min(440px,92vw);z-index:61;
-  display:flex;flex-direction:column;background:var(--bg-2);
-  border-left:1px solid var(--border);box-shadow:-18px 0 40px rgba(0,0,0,.45)}
+/* ---------- copilot drawer ----------
+   The scrim-and-drawer shape was refused (test_copilot_dock.js pins that it
+   must not come back); copilot.js emits .cp-dock. .cp-scrim / .cp-drawer had
+   no emitter and are gone. */
 .cp-head{display:flex;align-items:center;gap:8px;padding:10px 12px;
   border-bottom:1px solid var(--border-soft)}
 .cp-title{font-family:var(--f-display);font-size:var(--fs-3);letter-spacing:.22em;
@@ -2146,10 +2114,6 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
    edit invited clicks and a setting you can edit read as a label. */
 .set-row input:not([type=checkbox]),.set-row input[type=checkbox]{
   outline:1px solid transparent}
-.readonly-block{border:1px solid var(--border-soft);border-radius:var(--r-md);
-  background:rgba(255,255,255,.02);padding:var(--sm) var(--md)}
-.readonly-block .t-label::after{content:' · reported';color:var(--fg-4);
-  letter-spacing:.08em}
 
 /* The consequence of applying, promoted out of 10px grey text sitting BELOW
    the buttons it describes. */
@@ -2196,15 +2160,6 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:900px){.diag-status-row{grid-template-columns:1fr}}
 
-/* One plain sentence above a dense block, saying what it is and how to read
-   it. Prose font on purpose: these panels are walls of monospace figures, and
-   a summary set in the same face as the data is not read as a summary. Sits
-   between the head and the body so it cannot be mistaken for a caption on any
-   one number. */
-.panel-sub{font-family:var(--f-body);font-size:var(--fs-2);line-height:1.5;
-  color:var(--fg-3);margin:0;padding:var(--sm) var(--lg) 0;max-width:78ch}
-.panel-sub + .panel-body{padding-top:var(--md)}
-@media(max-width:640px){.panel-sub{font-size:var(--fs-2)}}
 
 /* Your book, beside the engine's. Same row grammar as .pos-row on purpose —
    an open trade is an open trade — with a left edge that says whose plan it
@@ -2326,24 +2281,10 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   text-transform:uppercase;color:var(--fg-4);padding:12px var(--lg) 6px;
   border-top:1px solid var(--border-soft);margin-top:var(--sm)}
 
-/* Going live: four criteria as bars that move. A dead end cannot answer
-   "how close am I", which is the only question worth asking of a lock. */
-.gate-row{padding:9px 0;border-bottom:1px solid var(--border-soft)}
-.gate-row:last-of-type{border-bottom:0}
-.gate-head{display:flex;align-items:baseline;gap:8px;
-  font-family:var(--f-mono);font-size:var(--fs-1)}
-.gate-mark{color:var(--fg-4);width:10px;flex:none}
-.gate-row.ok .gate-mark{color:var(--green)}
-.gate-label{color:var(--fg-2)}
-.gate-row.ok .gate-label{color:var(--fg)}
-.gate-have{margin-left:auto;color:var(--fg-3);font-variant-numeric:tabular-nums;
-  white-space:nowrap}
-.gate-bar{height:3px;background:var(--bg-2);border-radius:2px;margin:6px 0 5px;
-  overflow:hidden}
-.gate-bar i{display:block;height:100%;background:var(--amber);border-radius:2px;}
-.gate-row.ok .gate-bar i{background:var(--green)}
-@media (prefers-reduced-motion:reduce){.gate-bar i{transition:none}}
-.gate-note{font-size:var(--fs-1);color:var(--fg-3);line-height:1.55;max-width:52ch}
+/* Going live: four criteria, each showing its DISTANCE, not just its state —
+   a dead end cannot answer "how close am I", which is the only question worth
+   asking of a lock. They are `.mc.gate-card` with a progress ring now; the
+   `.gate-row` / `.gate-bar` list that drew them first had no emitter left. */
 /* The build gate, stated apart from the evidence gate on purpose: the
    operator moves one by trading and cannot move the other at all. */
 .gate-foot{margin-top:11px;padding-top:9px;border-top:1px solid var(--border-soft);

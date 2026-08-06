@@ -76,6 +76,39 @@ ok('Guardrails keeps its rows and moves its sentence to hover', () => {
     'the new-entries-only fact must survive on the chip hover');
 });
 
+/* WAS: Risk and Guardrails as two panels, each printing the daily loss halt,
+   the maximum concurrent positions and the total open risk — one from
+   /api/trade-config in fractions, one from /api/settings.values.risk_config in
+   percentages, the second inventing 6, 2 and 4 when a key was absent. Three
+   caps the engine owns, six readings on one surface, three of them a guess.
+
+   The property this now pins is the one that was always meant: ONE authority
+   per cap, and no UI-invented default standing in for a number the engine
+   owns. Both output blocks are in one panel; #riskNow is the caps and nothing
+   else prints them. */
+ok('a cap is read from one authority, and never invented', () => {
+  const ri = SHELL.indexOf("$('riskNow').innerHTML");
+  const gi = SHELL.indexOf("$('guardRows').innerHTML");
+  assert(ri > 0 && gi > 0, 'one of the two settings blocks was renamed');
+  const guards = SHELL.slice(gi, SHELL.indexOf(';', gi));
+  for (const cap of ['daily loss halt', 'max concurrent', 'total open risk']) {
+    assert(!guards.includes(cap),
+      `"${cap}" is printed by the guardrail block as well as by #riskNow — ` +
+      `two readings of one cap, and they were in different units`);
+  }
+  assert(!/setValues\.risk_config|values\.risk_config\b(?![\s\S]{0,3}in perc)/
+    .test(SHELL.replace(/\/\*[\s\S]*?\*\//g, ' ')),
+    'the settings copy of the risk caps is being read again — /api/trade-config ' +
+    'is the authority, and the two disagreed about units');
+  assert(!/!=\s*null\s*\?\s*rc\./.test(SHELL),
+    'a client-side fallback for an engine-owned cap came back');
+  // one panel, one heading
+  assert(/Risk &amp; guardrails|Risk & guardrails/.test(HTML),
+    'the merged panel lost its heading');
+  assert(!/<h2 class="t-section">Guardrails<\/h2>/.test(HTML),
+    'Guardrails is a second panel again');
+});
+
 ok('the halt still has exactly one path', () => {
   assert(/BUTTON_OWNED = new Set\(\['halted'\]\)/.test(SHELL),
     'the halted checkbox is renderable again — two paths to a destructive action');
@@ -90,11 +123,49 @@ ok('the dirty banner still guards Apply', () => {
 /* The lock that had no key. "live execution LOCKED" was printed here and the
    condition it named was defined nowhere in the system, so the app's stated
    purpose sat behind a door with no handle (UX audit, 4 Aug 2026). */
-ok('going live states its criteria on the surface that locks it', () => {
-  assert(/id="gateRoot"/.test(HTML), 'the criteria have nowhere to render');
+/* WAS: `id="gateRoot"` on Settings. The criteria moved to Results' Progression
+   track — they were a wheel of met/not-met cards with a ring and a note,
+   thirty lines from a wheel of met/not-met cards with a ring and a note that
+   measured the same forward record and shared two criteria outright.
+
+   The property is unchanged and is what this pins: the lock must not be a dead
+   end. It has to say what it scores, and the criteria have to be reachable
+   from it in one click. WHERE they render is a layout decision; that they
+   exist, are measured by the engine, and are one link away is not. */
+ok('going live is not a dead end', () => {
   assert(/Going live/.test(HTML), 'the panel lost its heading');
-  assert(/renderLiveGate/.test(SHELL), 'nothing paints the criteria');
+  assert(/id="gateChip"/.test(HTML), 'the lock no longer says where the record stands');
+  assert(/id="gateFoot"/.test(HTML), 'the build caveat has nowhere to render');
+  assert(/href="#results"/.test(HTML.slice(HTML.indexOf('id="gateChip"'))),
+    'the Going live panel does not link to the criteria — a lock whose ' +
+    'conditions are one surface away and unlinked is the dead end this ' +
+    'panel was built to end');
+  assert(/loadLiveGate/.test(SHELL), 'nothing reads the criteria');
   assert(/\/api\/live-gate/.test(SHELL), 'the criteria are not read from the engine');
+  assert(/id="progTrack"/.test(HTML), 'the track the criteria render into is gone');
+});
+
+ok('the criteria and the milestones share one verdict word', () => {
+  /* LOCKED used to mean two things thirty lines apart: a milestone the record
+     had not reached (Progression) and live execution being off (Settings).
+     One track, one MET / NOT MET vocabulary; LOCKED survives on Settings
+     meaning exactly one thing. */
+  const i = SHELL.indexOf('function renderProgression()');
+  assert(i > 0, 'renderProgression was renamed');
+  /* LINE-ENDING AGNOSTIC. This anchored on '\n  }\n', and shell.js in a
+     Windows checkout is 100% CRLF — so indexOf returned -1, slice(i, -1)
+     yielded the entire rest of the file, and the two assertions below were
+     satisfied by ANY occurrence of those strings anywhere beneath, including
+     inside the Ledger. A fail-open slice, in the test whose stated purpose
+     was to pin this precisely. */
+  const endM = /\r?\n {2}\}\r?\n/.exec(SHELL.slice(i + 200));
+  assert(endM, 'could not find the end of renderProgression');
+  const block = SHELL.slice(i, i + 200 + endM.index);
+  assert(/'MET'/.test(block) && /'NOT MET'/.test(block),
+    'the progression track no longer stamps MET / NOT MET');
+  assert(!/EARNED/.test(block),
+    'EARNED is back on the progression track — two verdict vocabularies for ' +
+    'one idea, on one rail');
 });
 
 ok('LOCKED points at where the condition is written down', () => {
@@ -112,10 +183,19 @@ ok('every criterion shows how close it is, proportionally', () => {
   assert(/gate-card/.test(SHELL) && /gate-card/.test(CSS),
     'the criteria no longer render as cards — check this test still ' +
     'describes the code');
-  assert(/ringSvg\(\(c\.progress/.test(SHELL) || /gate-bar/.test(SHELL),
+  /* The criteria moved onto the shared Progression rail, so the ring is drawn
+     from the row's `frac` rather than inline from `c.progress`. Pin the two
+     halves of the property separately: the engine's measured progress reaches
+     the row, and the row draws it. */
+  assert(/c\.progress/.test(SHELL), 'the indicator is not driven by measured progress');
+  const gi = SHELL.indexOf('function gateRows()');
+  assert(gi > 0, 'gateRows was renamed — this test no longer reads the criteria');
+  assert(/frac:[^\n]*c\.progress/.test(SHELL.slice(gi, gi + 900)),
+    'the engine\'s measured progress no longer reaches the card');
+  const pi = SHELL.indexOf('function renderProgression()');
+  assert(/ringSvg\(r\.frac/.test(SHELL.slice(pi, pi + 3000)) || /gate-bar/.test(SHELL),
     'progress is not drawn — a lock that shows only its state tells the ' +
     'operator nothing about how far off it is');
-  assert(/c\.progress/.test(SHELL), 'the indicator is not driven by measured progress');
 });
 
 ok('the build gate is stated apart from the evidence gate', () => {

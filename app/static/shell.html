@@ -65,11 +65,12 @@
     <button class="btn btn-red" id="btnHalt" title="stop sizing new entries">HALT</button>
   </header>
 
-  <!-- ══ left rail: five surfaces, each with one job ══ -->
+  <!-- ══ left rail: six surfaces, each with one job ══ -->
   <nav class="nav">
     <a href="#command" class="on"   data-s="command">Command<span class="nav-count" id="nCommand"></span></a>
     <a href="#chart"                data-s="chart">Chart</a>
     <a href="#results"              data-s="results">Results</a>
+    <a href="#ledger"               data-s="ledger">Ledger</a>
     <div class="nav-sep"></div>
     <a href="#settings"             data-s="settings">Settings</a>
     <a href="#diagnostics"          data-s="diagnostics">Diagnostics<span class="nav-count" id="nDiag"></span></a>
@@ -743,9 +744,19 @@
           <span class="chip" id="progCount" style="margin-left:auto">—</span>
         </div>
         <p class="t-body mw-lede" id="progLede"></p>
+        <!-- Full rail chrome. Three of the app's rails were bare — no arrows,
+             and `card 3 of 9` announced to nobody, because makeRail's navState
+             is a no-op without opts.status. This one now carries nine cards. -->
         <div class="mb-shell">
+          <button class="mb-nav mb-prev" id="progPrev" aria-label="previous milestone" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.5 2 5 8l5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
           <div class="mb-track wheel-rail" id="progTrack" role="group" tabindex="0"
                aria-label="progression — use left and right arrow keys"></div>
+          <button class="mb-nav mb-next" id="progNext" aria-label="next milestone" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5.5 2 11 8l-5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <p class="sr-only" id="progStatus" aria-live="polite"></p>
         </div>
       </div>
       <div class="panel floating" style="margin-bottom:var(--lg)">
@@ -820,13 +831,19 @@
         </div>
       </div>
 
-      <div class="panel floating">
+      <div class="panel floating" style="margin-bottom:var(--lg)">
         <div class="panel floating-head"><h2 class="t-section">Forward Record</h2></div>
         <div class="panel floating-body t-body" id="resultsNote"><span class="skeleton" role="status" aria-label="loading">
         <span class="skel skel-line" style="width:92%"></span>
         <span class="skel skel-line" style="width:78%"></span>
         <span class="skel skel-line" style="width:40%"></span></span></div>
       </div>
+
+      <!-- One line, no figure restated. Everything above this counts the
+           engine's paper account only; the other two books are a surface
+           away and are never added to it. -->
+      <p class="t-note ledger-link">Your own trades and your own exits are
+        counted separately, in <a href="#ledger">Ledger</a>.</p>
     </section>
 
     <!-- ─── SCANNER SETUP ─── -->
@@ -862,11 +879,25 @@
             <div id="credFields"></div>
           </div>
         </div>
+        <!-- ONE PANEL, ONE AUTHORITY.
+             Risk and Guardrails both printed the daily loss halt, the maximum
+             concurrent positions and the total open risk — from two endpoints,
+             in two unit conventions (fractions from /api/trade-config,
+             percentages from /api/settings.values.risk_config), with the
+             second inventing client-side fallbacks of 6, 2 and 4 for numbers
+             the engine owns. Three caps, six readings, and nothing on screen
+             said which was authoritative.
+
+             Now: #riskNow is the caps, read only from /api/trade-config;
+             #guardRows is the halt STATE, which lives only in settings and is
+             duplicated nowhere. The invented fallbacks are gone — a cap the
+             engine did not send now reads as absent, not as 6%. -->
         <div class="panel">
           <!-- the cost-model build stamp (`costs-v0.4`) lived here; it is
                provenance for a developer, not a rule the reader can change -->
-          <div class="panel-head"><h2 class="t-section">Risk</h2>
-            <span class="chip" style="margin-left:auto">read-only</span></div>
+          <div class="panel-head"><h2 class="t-section">Risk &amp; guardrails</h2>
+            <span class="chip" id="guardChip" style="margin-left:auto"
+              title="read-only — and every guardrail blocks NEW entries only: open positions still settle, and live order submission stays locked regardless">—</span></div>
           <div class="panel-body">
             <!-- Was a 180-character title. "Why can I not change this?" is the
                  first question this panel provokes, and the answer was the one
@@ -878,6 +909,7 @@
             <p class="t-note" style="margin:0 0 var(--md)">Sized by the engine, not
               editable here. Changing risk per trade would replay and re-size the entire forward record under the same engine version, which the versioning rule forbids.</p>
             <div class="tk-out" id="riskNow"></div>
+            <div class="tk-out" id="guardRows" style="margin-top:var(--md)"></div>
             <!-- B7 — one line, then a disclosure. This was a nine-line essay
                  standing between the operator and the numbers above it. The
                  reasoning is worth keeping; it is not worth reading on every
@@ -922,32 +954,26 @@
                 title="runs `claude --version` — the copilot needs the CLI on PATH and a logged-in plan">Test</button></div>
           </div>
         </div>
-        <div class="panel">
-          <div class="panel-head"><h2 class="t-section">Guardrails</h2>
-            <span class="chip" id="guardChip" style="margin-left:auto"
-              title="every guardrail blocks NEW entries only — open positions still settle, and live order submission stays locked regardless">—</span></div>
-          <div class="panel-body">
-            <div class="tk-out" id="guardRows"></div>
-          </div>
-        </div>
         <!-- The lock that had no key. "Forward paper evidence has not yet
              earned live execution" was printed on two surfaces and defined
-             nowhere; engine/livegate.py now measures what "earned" means and
-             this shows the record against it. -->
+             nowhere; engine/livegate.py now measures what "earned" means.
+
+             THE CRITERIA THEMSELVES LEFT THIS PANEL. They were a wheel of
+             cards with a met/not-met stamp, a ring and a note, sitting thirty
+             lines from Results' Progression track — which is a wheel of cards
+             with a met/not-met stamp, a ring and a note, measuring the same
+             forward record, and sharing two criteria outright. One track, one
+             MET/NOT MET vocabulary, on the surface that asks whether this is
+             working. Settings keeps the lock and its consequence: is it on,
+             what the record scores against the gate, and the build fact no
+             amount of good trading can earn. -->
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Going live</h2>
             <span class="chip" id="gateChip" style="margin-left:auto">—</span></div>
           <div class="panel-body gate-body">
-            <!-- The four gates ride the same wheel as everything else. This is
-                 the only card-shaped thing on Settings; the rest of the surface
-                 stays a form, because a carousel is a poor way to change a
-                 number. -->
-            <div id="gateRoot" class="wheel-rail" tabindex="0" role="group"
-                 aria-label="going-live criteria — use left and right arrow keys">
-              <div class="skeleton" role="status" aria-label="loading">
-                <div class="skel" style="height:22px"></div>
-              </div></div>
             <p class="t-note gate-foot" id="gateFoot"></p>
+            <p class="t-note" style="margin:var(--md) 0 0">The four criteria, and
+              how far off each one is: <a href="#results">Results → Progression</a>.</p>
           </div>
         </div>
       </div>
@@ -1094,6 +1120,90 @@
           <button class="btn" id="btnFollow" title="follow new output">Following</button>
         </div>
         <pre id="console" class="t-mono">connecting…</pre>
+      </div>
+    </section>
+
+    <!-- ─── LEDGER ───
+
+         THREE BOOKS, NEVER SUMMED. The engine's paper account; the trades the
+         operator armed by hand; the operator's own exits on trades the engine
+         picked. Three windows, three pools of capital, three totals — and no
+         fourth number anywhere on this surface that adds any two of them.
+
+         `manual.arm` never consults the risk authority, so hand-armed size was
+         never drawn from the engine's $10,000. A combined "main wallet" figure
+         would therefore be an invention, and it is the exact leak the version
+         separation exists to prevent: two generations of money under one
+         label. Two figures with two labels is honest; one figure made of both
+         is not.
+
+         The third book is the interesting one. The engine chose those trades
+         and the operator chose when to leave them, both outcomes are recorded,
+         and that money is counted in NO total anywhere else in the store —
+         not in the equity curve, not in the manual book. It is the purest
+         measure of operator skill this app holds. -->
+    <section class="surface" id="s-ledger" tabindex="-1">
+      <div class="surface-head"><h1 class="t-page">Ledger</h1><p>Where are the wins coming from?</p></div>
+
+      <!-- THE WALLET BAND CARRIES NO NUMBER, and must not until a real balance
+           arrives over a signed request. What exists today: a DPAPI credential
+           vault with `read_secret` and no caller. What does not: request
+           signing of any kind — there is no `hmac` import anywhere in app/ —
+           a `balance()` on any venue adapter, or `POST /api/credentials/test`.
+           A placeholder figure here would be the only invented money in the
+           app, and a stored key does not move this band either: the live
+           gate is separate and locked. -->
+      <div class="wallet-band">
+        <span class="chip" id="walletChip">not connected</span>
+        <div class="wallet-say"><b>Exchange wallet</b>
+          <span>No balance is read from any exchange. Nothing on this page is
+          money you can withdraw.</span></div>
+      </div>
+
+      <!-- NON-OPTIONAL, and static rather than rendered: a banner that depends
+           on a fetch is a banner that can be absent exactly when the numbers
+           below it are wrong. -->
+      <div class="era-band ledger-warn">
+        Three separate books, <b>never added</b>. They cover different windows
+        and different capital, and the forward record is negative.
+      </div>
+
+      <!-- A GRID, NOT A WHEEL. The rule: a rail when the front card answers the
+           question on its own, a grid when answering it needs two things side
+           by side. "Where are the wins coming from" is a comparison between
+           three books by construction, so all three are on screen at once. -->
+      <div class="ledger-books" id="ledgerBooks">
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:180px"></div></div>
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:180px"></div></div>
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:180px"></div></div>
+      </div>
+
+      <!-- The engine's own closed trades are NOT re-tabled here. They already
+           have exactly one rendering, the Trade Journal on Results, and a
+           second copy is how two surfaces start disagreeing. The two tables
+           below are the rows that exist on no other surface. -->
+      <div class="panel floating" style="margin-bottom:var(--lg)">
+        <div class="panel-head"><h2 class="t-section">Your trades</h2>
+          <span class="chip" id="ledgerMineChip" style="margin-left:auto">—</span></div>
+        <div class="panel-body">
+          <div id="ledgerMine"><div class="skeleton" role="status" aria-label="loading">
+            <div class="skel" style="height:24px"></div>
+            <div class="skel" style="height:24px"></div>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="panel floating">
+        <div class="panel-head"><h2 class="t-section">Your exits</h2>
+          <span class="chip" id="ledgerExitChip" style="margin-left:auto">—</span></div>
+        <div class="panel-body">
+          <div id="ledgerExits"><div class="skeleton" role="status" aria-label="loading">
+            <div class="skel" style="height:24px"></div>
+          </div></div>
+        </div>
       </div>
     </section>
 

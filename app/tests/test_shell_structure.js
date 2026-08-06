@@ -47,7 +47,12 @@ function depths(src) {
 }
 
 const ROWS = depths(CODE);
-const SURFACES = ['s-command', 's-chart', 's-results', 's-settings', 's-diagnostics'];
+/* THIS LIST FAILS OPEN. A surface that is not named here is not depth-checked
+   at all, and a section that parses outside .shell renders blank with nothing
+   saying so — which is the entire reason this file exists. Anything with
+   `class="surface"` belongs in it, on the commit that adds it. */
+const SURFACES = ['s-command', 's-chart', 's-results', 's-ledger', 's-settings',
+                  's-diagnostics'];
 
 let passed = 0;
 function ok(name, fn) {
@@ -71,7 +76,7 @@ ok('div depth never goes negative', () => {
   assert.ok(!bad, bad && `depth ${bad.depth} at line ${bad.line}: ${bad.text}`);
 });
 
-ok('all five surfaces sit at the same div depth', () => {
+ok('every surface sits at the same div depth', () => {
   const found = SURFACES.map(id => {
     const row = ROWS.find(r => r.text.includes(`id="${id}"`));
     assert.ok(row, `surface ${id} not found in shell.html`);
@@ -83,6 +88,19 @@ ok('all five surfaces sit at the same div depth', () => {
     'surfaces at a different depth than ' + found[0].id + ` (${base}): ` +
     off.map(f => `${f.id}=${f.depth} (line ${f.line})`).join(', ') +
     ' — a section outside .shell renders blank.');
+});
+
+ok('the list above covers every surface in the markup', () => {
+  /* Closes the fail-open hole. SURFACES used to be five hand-written ids, and
+     a sixth section could be added — and be broken — without this file ever
+     looking at it. Read the markup instead and require the list to match. */
+  const inMarkup = [...CODE.matchAll(/<section class="surface[^"]*" id="([\w-]+)"/g)]
+    .map(m => m[1]);
+  assert(inMarkup.length >= 5, `the section scan found ${inMarkup.length} surfaces`);
+  const unchecked = inMarkup.filter(id => !SURFACES.includes(id));
+  assert.strictEqual(unchecked.length, 0,
+    `${unchecked.join(', ')} carries class="surface" and is not in SURFACES, ` +
+    'so nothing in this file checks that it closes inside .shell.');
 });
 
 ok('the status bar closes inside the shell, not after it', () => {
@@ -126,4 +144,4 @@ ok('#edgeRoot is documented where it actually lives', () => {
     'tells the reader where it lives, or this file is now the stale one.');
 });
 
-console.log(`  ${passed}/6 passed`);
+console.log(`  ${passed}/7 passed`);

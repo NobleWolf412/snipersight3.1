@@ -197,8 +197,13 @@
   const expBtn = document.getElementById('btnExport');
   if(expBtn) expBtn.addEventListener('click', () => exportJournal(lastJournal));
 
+  /* Ledger takes 6, not 4. It sits beside Results in the rail because that is
+     where it belongs by subject, but 4 and 5 have meant Settings and
+     Diagnostics for the life of the app and renumbering a habit is a worse
+     cost than a rail whose order and whose keys are not the same list. The
+     keys are accelerators; nothing on screen numbers the rail. */
   const KEYS = {'1': 'command', '2': 'chart', '3': 'results',
-                '4': 'settings', '5': 'diagnostics'};
+                '4': 'settings', '5': 'diagnostics', '6': 'ledger'};
   addEventListener('keydown', e => {
     // never steal a keystroke from a field, and never from a chord the OS or
     // the browser owns
@@ -211,7 +216,7 @@
     if(KEYS[e.key]){ e.preventDefault(); go(KEYS[e.key]); return; }
     if(e.key === 'c' && window.SSCopilot){ e.preventDefault(); SSCopilot.toggle(); }
     if(e.key === '?'){ e.preventDefault(); toast(
-      'Keys: 1–5 switch surfaces · c toggles the copilot · Esc closes ' +
+      'Keys: 1–6 switch surfaces · c toggles the copilot · Esc closes ' +
       'popovers. Arming is deliberately not on a key.', 'good'); }
   });
 
@@ -482,7 +487,6 @@
 
        75 also made "no setups right now" read as a malfunction: 19 symbols
        producing nothing is the ordinary case, 75 producing nothing is not. */
-    const uc = o.universe_counts || {};
     SSState.put('overview', o);
     /* Every count names the SET it belongs to. "15 symbols" on its own was
        unanswerable: fifteen out of what, and fifteen that can do what? */
@@ -1109,12 +1113,6 @@
         node.innerHTML = html;
         rec = {el: node, html, cls};
         deckRows.set(key, rec);
-        /* THE ARRIVAL, EARNED ONCE. A card that appears while the operator is
-           in the session is the event this surface exists for, and it lands
-           like one: the stamp presses in, the ring sweeps to its reading.
-           First paint is excluded — every card "arriving" on every page load
-           would spend the moment on nothing — and prefers-reduced-motion
-           turns the whole thing off in CSS, where the animation lives. */
       }else{
         rec.el.classList.remove('expiring');
         if(rec.cls !== cls){ rec.el.className = cls; rec.cls = cls; }
@@ -1123,7 +1121,6 @@
       // every card here is a card that did not become a position
       (strip || el).appendChild(rec.el);   // appendChild MOVES an existing node
     });
-    deckPainted = true;
 
     for(const [key, rec] of deckRows){
       if(seen.has(key)) continue;
@@ -1359,7 +1356,6 @@
   }
 
   const deckRows = new Map();          // token -> {el, html, cls}
-  let deckPainted = false;             // first paint is not an "arrival"
 
   /* ---------- the mission rail ----------
      A rotating wheel, not a slider. SSWheel (static/wheel.js) owns the
@@ -1460,12 +1456,20 @@
       if(next){ next.hidden = st.cards.length < 2; next.disabled = i >= st.cards.length - 1; }
       const live = opts.status && $(opts.status);
       if(live && st.cards[i]){
-        const tok = st.cards[i].querySelector('.mc-tok');
+        /* THE POSITION IS ANNOUNCED EVEN WHEN THE CARD HAS NO SYMBOL. This
+           read `.mc-tok` only and wrote an empty string when it found none —
+           so on every rail whose cards are not trades (the stat wheel, the
+           progression track) a screen reader was told nothing at all as the
+           wheel turned, which is the exact hint a sighted reader gets from
+           the cards moving. Title first if the card has one, then its verdict,
+           then where it sits. */
+        const tok = st.cards[i].querySelector('.mc-tok, .prog-title, .stat-big');
         const stamp = st.cards[i].querySelector('.mc-stamp');
-        live.textContent = tok
-          ? `${tok.textContent}, ${stamp ? stamp.textContent.toLowerCase() : ''}, ` +
-            `${i + 1} of ${st.cards.length}`
-          : '';
+        live.textContent = [
+          tok && tok.textContent.trim(),
+          stamp && stamp.textContent.trim().toLowerCase(),
+          `${i + 1} of ${st.cards.length}`,
+        ].filter(Boolean).join(', ');
       }
     }
 
@@ -2051,8 +2055,10 @@
      they are labels; sentences are one line because the old ones ran to
      three and nobody read the third.
 
-     Colours are FIXED here (chip-t3..t0), never chip-accent — see the threat
-     block in ss.css for why that mattered. */
+     Only the SENTENCE (index 2) is read. The label and the chip class in
+     indices 0 and 1 are leftovers from the tabbed rail: the card takes its
+     word and its colour from the one Reach & Play scale now, and the
+     `chip-t*` rules those strings named have been deleted from ss.css. */
   const NEAR_SAY = {
     AT_ZONE: () =>
       ['CONTACT', 'chip-t3',
@@ -3381,12 +3387,22 @@ weighed in. Name the facts you used.`;
     const pct = v => (v * 100).toFixed(v * 100 % 1 ? 1 : 0) + '%';
     const row = (k, v, note) => `<div><span class="k">${k}</span>` +
       `<span class="v">${v}${note ? ' <span style="color:var(--fg-4)">' + note + '</span>' : ''}</span></div>`;
+    /* THE ONE AUTHORITY ON THE CAPS. Guardrails printed the daily loss halt,
+       the maximum concurrent positions and the total open risk a second time,
+       off /api/settings.values.risk_config, in percentages where these are
+       fractions — and invented client-side fallbacks of 6, 2 and 4 when the
+       key was missing. Three caps the engine owns, six readings on one panel,
+       three of them a UI guess. The duplicates are deleted; what is left in
+       #guardRows is halt STATE, which lives nowhere else.
+
+       `live execution` says where the condition is written down rather than
+       just LOCKED — the lock spent months here with no definition anywhere. */
     $('riskNow').innerHTML =
       row('risk per trade', pct(c.risk_pct)) +
       row('total open risk', pct(c.max_total_risk_pct), `(${c.max_concurrent} × per-trade)`) +
       row('concurrent positions', c.max_concurrent) +
       row('daily loss halt', pct(c.daily_loss_pct)) +
-      row('live execution', c.live_enabled ? 'ENABLED' : 'LOCKED') +
+      row('live execution', c.live_enabled ? 'ENABLED' : 'LOCKED — see Going live') +
       // Per-venue, because the difference is decisive rather than cosmetic:
       // a 0.1%-stop trade nets -7.00R on spot and +2.30R on perps.
       (c.venues || []).map(v => row(
@@ -3567,27 +3583,30 @@ weighed in. Name the facts you used.`;
     if(shape !== setShape){ buildSettings(); setShape = shape; }
     syncSettingInputs();
     patchSettingsState();
-    // guardrails: every gate that can stop new entries, and whether it is armed
+    /* THE HALT STATE, and only that. Three caps (daily loss, max concurrent,
+       total open risk) used to be printed here as well as in #riskNow — from
+       a different endpoint, in percentages against #riskNow's fractions, with
+       invented fallbacks of 6, 2 and 4 standing in for whatever the engine
+       failed to send. They are gone; #riskNow is the one authority on a cap,
+       and a cap the engine does not send now reads as absent rather than as
+       somebody's guess.
+
+       These three rows survive because nothing else prints them: whether the
+       operator has pulled the halt, the drawdown ceiling, and whether a
+       blocked data audit stops trading. All three are settings, not caps. */
     const gr = (k, v, cls) => `<div><span class="k">${k}</span>` +
       `<span class="v ${cls || ''}">${v}</span></div>`;
-    const rc = setValues.risk_config || {};
+    const ddPct = setValues.max_drawdown_pct;
     $('guardRows').innerHTML =
       gr('operator halt', setValues.halted ? 'ENGAGED' : 'armed',
          setValues.halted ? 'bad' : 'good') +
-      gr('total drawdown halt', setValues.max_drawdown_pct + '% from peak', 'good') +
-      gr('daily loss halt', (rc.daily_loss_pct != null ? rc.daily_loss_pct : 6) + '%', 'good') +
+      // No fallback. An absent ceiling is not a 20% ceiling.
+      gr('total drawdown halt', ddPct == null ? 'not set' : ddPct + '% from peak',
+         ddPct == null ? 'warn' : 'good') +
       gr('data-health halt', setValues.halt_on_data_blocked ? 'armed' : 'DISABLED',
-         setValues.halt_on_data_blocked ? 'good' : 'warn') +
-      gr('max concurrent', rc.max_concurrent != null ? rc.max_concurrent : 2) +
-      gr('total open risk', (rc.max_total_risk_pct != null ? rc.max_total_risk_pct : 4) + '%') +
-      // "LOCKED" alone was the whole answer for months. It now names where
-      // the condition is written down, and the panel below shows the record
-      // against it.
-      gr('live execution', 'LOCKED — see Going live', 'warn');
+         setValues.halt_on_data_blocked ? 'good' : 'warn');
     $('guardChip').textContent = setValues.halted ? 'halted' : 'armed';
     $('guardChip').className = 'chip ' + (setValues.halted ? 'chip-red' : 'chip-green');
-
-    renderLiveGate();
 
     const halted = !!setValues.halted;
     $('btnHalt').textContent = halted ? 'HALTED' : 'HALT';
@@ -3779,6 +3798,10 @@ weighed in. Name the facts you used.`;
     statRail.sync();
   }
   let statRail = null, progRail = null;
+  /* Declared here, above their first reader. renderProgression is reached from
+     the ungated portfolio loader on every surface, and `let` in a temporal
+     dead zone throws rather than reading undefined. */
+  let lastGate = null, gateErr = null;
 
   /* ---------- progression ----------
      Real thresholds only. Each row is a gate this system already enforces or
@@ -3789,7 +3812,6 @@ weighed in. Name the facts you used.`;
   function progressionRows(){
     const s = lastScore, p = lastPortfolio || {};
     if(!s) return [];
-    const dd = p.max_drawdown_pct == null ? null : Number(p.max_drawdown_pct);
     const halts = p.kill_switch_days ?? 0;
     const rows = [
       {t: 'First blood', done: s.n >= 1, have: Math.min(s.n, 1), need: 1,
@@ -3798,41 +3820,104 @@ weighed in. Name the facts you used.`;
       {t: 'Readable sample', done: s.n >= 10, have: Math.min(s.n, 10), need: 10,
        d: 'Ten closed trades — the minimum a confidence interval can be computed from.',
        locked: 'The maths cannot bound an edge on fewer than ten.'},
-      {t: 'Arguable record', done: s.n >= 100, have: Math.min(s.n, 100), need: 100,
-       d: 'One hundred closed trades — what Settings wants before the record argues for real money.',
-       locked: 'Settings → Going live holds real orders until this lands.'},
+      /* "Arguable record" (100 trades) and "Shallow water" (drawdown) used to
+         live here as well as on the going-live gate — the same two thresholds,
+         measured twice, on two surfaces, in two vocabularies. The gate's
+         versions win: they are the engine's own measurement, they carry its
+         note, and the drawdown one reads the operator's CONFIGURED ceiling
+         instead of a hardcoded 10. Both are appended below from /api/live-gate.
+         Do not add a local copy back. */
       {t: 'Discipline held', done: halts === 0 && s.n > 0, have: halts === 0 ? 1 : 0, need: 1,
        d: 'The daily loss limit has never had to stop you.',
        locked: 'The kill switch has fired. It working is good; needing it is the note.'},
-      {t: 'Shallow water', done: dd != null && dd < 10, have: dd != null && dd < 10 ? 1 : 0, need: 1,
-       d: 'Deepest drawdown still under 10%.',
-       locked: dd == null ? 'No drawdown recorded yet.'
-                          : `Currently ${dd}% down from the high-water mark.`},
     ];
     return rows;
+  }
+
+  /* ---------- progression: one track, one vocabulary ----------
+
+     The going-live criteria used to be a second wheel of the same card, on
+     Settings, thirty lines from a "Guardrails" panel — met/not-met stamp, ring,
+     note, measuring the same forward record, sharing two criteria outright
+     with the rows above. Two tracks meant two verdict words for one idea:
+     Progression said EARNED / LOCKED and the gate said MET / NOT MET, while
+     LOCKED ALSO meant "live execution is off" on the panel beside it.
+
+     One track now, and MET / NOT MET everywhere on it. LOCKED survives on
+     Settings meaning exactly one thing.
+
+     The four gate cards keep the `gate-card` class and their engine-supplied
+     note; the local milestones keep `prog-card`. They are told apart on screen
+     by one line — the gate ones say what they unlock. */
+  function gateRows(){
+    if(!lastGate) return [];
+    return (lastGate.criteria || []).map(c => ({
+      gate: true,
+      t: c.label,
+      done: !!c.pass,
+      frac: Math.max(0, Math.min(1, c.progress || 0)),
+      id: c.have == null ? 'not yet measurable'
+        : c.key === 'sample' ? `${fmt(c.have)} of ${fmt(c.need)}`
+        : c.key === 'edge' ? `${c.have > 0 ? '+' : ''}${c.have}R lower bound`
+        : c.key === 'drawdown' ? `${c.have}% of ${c.need}%`
+        : String(c.have),
+      d: 'One of the four that unlock live execution.',
+      story: c.note,
+    }));
   }
 
   function renderProgression(){
     const el = $('progTrack');
     if(!el) return;
-    const rows = progressionRows();
+    const local = progressionRows().map(r => ({
+      gate: false,
+      t: r.t,
+      done: r.done,
+      frac: Math.max(0, Math.min(1, r.have / r.need)),
+      id: r.need > 1 ? r.have + ' / ' + r.need : '',
+      d: r.d,
+      story: r.done ? r.d : r.locked,
+    }));
+    const rows = local.concat(gateRows());
     const done = rows.filter(r => r.done).length;
     const chip = $('progCount');
-    if(chip) chip.textContent = `${done} of ${rows.length}`;
+    /* The chip counts what it can measure and says so when that is not
+       everything. "2 of 3 met" beside a rail of four cards is the kind of
+       small disagreement that makes a reader stop trusting both numbers. */
+    if(chip) chip.textContent = !rows.length ? '—'
+      : lastGate ? `${done} of ${rows.length} met`
+      : `${done} of ${rows.length} met · 4 not read`;
     const lede = $('progLede');
     if(lede) lede.textContent =
-      'Milestones for the record itself, not for winning. None of these say the ' +
-      'method works — that is what average R and the confidence interval are for.';
+      'Milestones for the record itself, not for winning, and the four criteria ' +
+      'that unlock live execution. None of these say the method works — that is ' +
+      'what average R and the confidence interval are for.';
     if(!rows.length){
       el.innerHTML = '<div class="empty">Nothing recorded yet.</div>';
       return;
     }
-    el.innerHTML = rows.map(r => {
-      const frac = Math.max(0, Math.min(1, r.have / r.need));
-      return `<div class="mc stat-card prog-card${r.done ? ' earned' : ''}">
+    /* THE GATE'S ABSENCE IS AUDIBLE. /api/live-gate is fetched by the Results
+       and Settings loaders; renderProgression also runs from the portfolio
+       loader, which is ungated. Rendering the three local milestones with no
+       word about the missing four would read as a complete track. */
+    const missing = !lastGate
+      ? `<div class="mc stat-card prog-card">
+          <div class="mc-top"><span class="mc-stamp st-wait">NOT READ</span></div>
+          <div class="mc-hero"><div class="mc-idy">
+            <div class="prog-title t-mono">Going-live criteria</div>
+            <div class="mc-sub t-label">four more, not loaded</div>
+          </div></div>
+          <div class="mc-story stat-note">${esc(gateErr
+            ? 'Could not read the criteria — ' + gateErr
+            : 'The four criteria that unlock live execution have not been read yet.')}</div>
+        </div>`
+      : '';
+    el.innerHTML = rows.map(r =>
+      `<div class="mc stat-card ${r.gate ? 'gate-card' : 'prog-card'}${
+          r.done ? ' earned' : ''}">
         <div class="mc-top">
-          <span class="mc-stamp ${r.done ? 'st-go' : 'st-wait'}">${r.done ? 'EARNED' : 'LOCKED'}</span>
-          <span class="mc-id t-mono">${r.need > 1 ? r.have + ' / ' + r.need : ''}</span>
+          <span class="mc-stamp ${r.done ? 'st-go' : 'st-wait'}">${r.done ? 'MET' : 'NOT MET'}</span>
+          <span class="mc-id t-mono">${esc(r.id)}</span>
         </div>
         <div class="mc-hero">
           <div class="mc-idy">
@@ -3840,87 +3925,53 @@ weighed in. Name the facts you used.`;
             <div class="mc-sub t-label">${esc(r.d)}</div>
           </div>
           <div class="mc-ringcol">
-            ${ringSvg(frac, r.done ? 'ring-ok' : 'ring-mid',
-                      Math.round(frac * 100) + '%', r.done ? 'done' : 'to go')}
+            ${ringSvg(r.frac, r.done ? 'ring-ok' : 'ring-mid',
+                      Math.round(r.frac * 100) + '%', r.done ? 'met' : 'to go')}
           </div>
         </div>
-        <div class="mc-story stat-note">${esc(r.done ? r.d : r.locked)}</div>
-      </div>`;
-    }).join('');
-    if(!progRail) progRail = makeRail(el, {});
+        <div class="mc-story stat-note">${esc(r.story)}</div>
+      </div>`).join('') + missing;
+    if(!progRail) progRail = makeRail(el, {prev: 'progPrev', next: 'progNext',
+                                           status: 'progStatus', tilt: true});
     progRail.sync();
   }
 
-  /* ---------- going live: the criteria, and where the record stands ----------
+  /* ---------- going live: the lock, and where the record stands ----------
 
      The audit found the app's whole purpose behind a lock with no key —
      "Auto: Off", "live execution LOCKED", and no definition anywhere of what
-     would unlock it. engine/livegate.py measures four criteria; this shows
-     them as bars that move, because "how close am I" is the question a dead
-     end cannot answer.
+     would unlock it. engine/livegate.py measures four criteria.
 
-     Two verdicts, never merged: the EVIDENCE bar is what the operator moves
+     THE CRITERIA RENDER ON RESULTS now, in the Progression track, because they
+     are the same shape and the same measurement as the milestones already
+     there. What stays on Settings is the lock itself: the score against the
+     gate (#gateChip) and the build fact (#gateFoot).
+
+     Two verdicts, never merged: the EVIDENCE gate is what the operator moves
      by trading the paper book; the ORDER ROUTER is a build task nobody earns
      by trading well. Collapsing them is how the Arm button stayed dead for
-     months. */
-  let gateShown = null;
-  async function renderLiveGate(){
-    const root = $('gateRoot'); if(!root) return;
-    let g;
-    try{ g = await api('/api/live-gate'); }
+     months, and #gateFoot is the half that is not on Results. */
+  async function loadLiveGate(){
+    try{ lastGate = await api('/api/live-gate'); gateErr = null; }
     catch(err){
-      root.innerHTML = '<div class="empty">could not read the criteria</div>';
-      $('gateChip').textContent = '—';
-      return;
+      /* Keep no stale criteria. A gate that cannot be read is not a gate the
+         record has failed, and last tick's four cards would say it had. */
+      lastGate = null;
+      gateErr = err.message || 'the server did not answer';
     }
-    // Cheap identity check: this is polled with the rest of Settings and the
-    // criteria move slowly, so skip the DOM write when nothing changed.
-    const stamp = JSON.stringify(g.criteria.map(c => [c.pass, c.have]));
-    if(stamp === gateShown) return;
-    gateShown = stamp;
-
-    $('gateChip').textContent = g.ready ? 'evidence met' : `${g.met}/${g.total} met`;
-    $('gateChip').className = 'chip ' + (g.ready ? 'chip-green' : 'chip-amber');
-
-    root.innerHTML = g.criteria.map(c => {
-      const pct = Math.round((c.progress || 0) * 100);
-      const have = c.have == null ? 'not yet measurable'
-        : c.key === 'sample' ? `${fmt(c.have)} of ${fmt(c.need)}`
-        : c.key === 'edge' ? `${c.have > 0 ? '+' : ''}${c.have}R lower bound`
-        : c.key === 'drawdown' ? `${c.have}% of ${c.need}%`
-        : String(c.have);
-      /* THE ONE CARD-SHAPED THING ON SETTINGS. Four gates that must each be
-         true before real money is possible — a genuine progression track, and
-         the most motivating screen in the app. It rides the same wheel and
-         wears the same card as everything else, so the language the operator
-         learned on Command reads here without being taught twice.
-
-         Everything else on Settings stays a form. A wheel is a fine way to
-         look at four things in turn and a poor way to change a number, and
-         the point of the carousel was never to put every surface on one. */
-      return `<div class="mc gate-card${c.pass ? ' earned' : ''}">
-        <div class="mc-top">
-          <span class="mc-stamp ${c.pass ? 'st-go' : 'st-wait'}">${c.pass ? 'MET' : 'NOT MET'}</span>
-          <span class="mc-id t-mono">${esc(have)}</span>
-        </div>
-        <div class="mc-hero">
-          <div class="mc-idy">
-            <div class="prog-title t-mono">${esc(c.label)}</div>
-          </div>
-          <div class="mc-ringcol">
-            ${ringSvg((c.progress || 0), c.pass ? 'ring-ok' : 'ring-mid',
-                      pct + '%', c.pass ? 'met' : 'to go')}
-          </div>
-        </div>
-        <div class="mc-story stat-note">${esc(c.note)}</div>
-      </div>`;
-    }).join('');
+    const chip = $('gateChip');
+    if(chip){
+      chip.textContent = !lastGate ? 'unreadable'
+        : lastGate.ready ? 'evidence met' : `${lastGate.met}/${lastGate.total} met`;
+      chip.className = 'chip ' + (!lastGate ? 'chip-red'
+        : lastGate.ready ? 'chip-green' : 'chip-amber');
+    }
     const foot = $('gateFoot');
-    if(foot) foot.textContent = g.build_note || '';
-    if(!gateRail) gateRail = makeRail(root, {});
-    gateRail.sync();
+    if(foot) foot.textContent = lastGate
+      ? (lastGate.build_note || '')
+      : `Could not read the criteria — ${gateErr}`;
+    renderProgression();
   }
-  let gateRail = null;
 
   /* `input`, not `change`: the dirty flag should follow typing, not wait for
      blur. The handler patches state and never re-renders — calling the full
@@ -4579,11 +4630,306 @@ weighed in. Name the facts you used.`;
     renderDeck(SSState.deck(), o.rejection_funnel || {});
   }
 
+  /* ═══════════════ LEDGER: three books, never summed ═══════════════
+
+     THE RULE THIS SURFACE ENFORCES. Nothing here adds two books together, and
+     nothing may be added later. `manual.arm` never consults the risk
+     authority, so a hand-armed position's size was never drawn from the
+     engine's $10,000 — the two dollar figures are denominated in different
+     capital, over different windows, under different versions. A combined
+     "main wallet" total would be an invented number wearing the authority of a
+     measured one, which is precisely what the version separation exists to
+     prevent.
+
+     Every figure on this surface goes through window.SSFormat. A money surface
+     with its own formatter is how "$193 / $195 / 194.68 / $194" happened — one
+     number, four renderings, four surfaces, read as four numbers.
+
+     The field names read here are the ones tests/test_ledger_field_contract.py
+     holds against the live endpoints. Adding a read means adding it there, or
+     a renamed server field silently becomes a confident $0. */
+  let lastBook = null, bookErr = null;
+
+  async function loadLedger(){
+    try{ lastBook = await api('/api/manual/book'); bookErr = null; }
+    catch(err){
+      lastBook = null;
+      bookErr = err.message || 'the server did not answer';
+    }
+    renderLedger();
+  }
+
+  /* One key/value row, in the shape #riskNow already uses. */
+  const lgRow = (k, v, cls) => `<div><span class="k">${esc(k)}</span>` +
+    `<span class="v ${cls || ''}">${v}</span></div>`;
+  /* One percentage rule, the app's own: 1dp, explicit sign. */
+  const pctOf = v => (Number(v) >= 0 ? '+' : '') + pct(v);
+
+  /* A book card. `era` is one of the two nouns the app uses for a window and
+     they are NOT interchangeable — the engine's account is scoped to the
+     active baseline, the operator's own book is all of history by design. */
+  function bookCard(o){
+    return `<div class="mc stat-card book-card">
+      <div class="mc-top">
+        <span class="mc-stamp ${o.stamp}">${esc(o.era)}</span>
+        <span class="mc-id t-mono">${esc(o.id)}</span>
+      </div>
+      <div class="mc-hero">
+        <div class="mc-idy">
+          <div class="prog-title t-mono">${esc(o.title)}</div>
+          <div class="book-money ${o.tone || ''}">${o.money}</div>
+          <div class="mc-sub t-label">${esc(o.sub)}</div>
+        </div>
+        ${o.ring || ''}
+      </div>
+      <div class="tk-out">${o.rows}</div>
+      <div class="book-caveat ${o.caveatTone || ''}">${esc(o.caveat)}</div>
+    </div>`;
+  }
+
+  function renderLedger(){
+    const box = $('ledgerBooks');
+    if(!box) return;
+    const p = lastPortfolio || {};
+    const s = lastScore;
+    const cards = [];
+
+    /* ── A. the engine's paper account ──
+       Every figure is read, none re-derived. equity/return/drawdown come off
+       the payload; the four method numbers come off `lastScore`, which
+       renderScoreboard computes once for the Results tiles. Computing them a
+       second time here is how two surfaces start disagreeing about one book. */
+    const ret = p.return_pct == null ? null : Number(p.return_pct);
+    const ruled = s ? s.n : 0;
+    cards.push(bookCard({
+      era: 'forward window',
+      stamp: 'st-t1',
+      id: p.baseline && p.baseline.started_at
+        ? 'since ' + new Date(p.baseline.started_at * 1000)
+            .toLocaleDateString(undefined, {day: 'numeric', month: 'short'})
+        : '—',
+      title: 'Engine, paper',
+      // The account's own headline is its equity, not a P&L: this book is the
+      // only one of the three that has a balance.
+      money: p.equity == null ? '—' : money(p.equity),
+      tone: ret == null || !ruled ? '' : ret >= 0 ? 'up' : 'down',
+      sub: p.start_equity == null ? 'paper account'
+         : `started ${money(p.start_equity)} · paper`,
+      ring: s && s.n ? `<div class="mc-ringcol">${
+        ringSvg(s.win, s.win >= 0.5 ? 'ring-ok' : 'ring-low',
+                Math.round(s.win * 100) + '%', `of ${s.n}`)}</div>` : '',
+      rows:
+        lgRow('return', ret == null || !ruled ? '—' : pctOf(ret),
+              !ruled ? '' : ret >= 0 ? 'good' : 'bad') +
+        lgRow('max drawdown', p.max_drawdown_pct == null ? '—'
+              : p.max_drawdown_pct + '%') +
+        lgRow('trades closed', s ? fmt(s.n) : '—') +
+        lgRow('average R', s ? rr(s.avg) : '—', !s ? '' : s.avg >= 0 ? 'good' : 'bad') +
+        lgRow('profit factor', !s ? '—' : s.pf == null ? 'no losses yet' : s.pf.toFixed(2)) +
+        lgRow('open risk', p.open_risk_usd == null ? '—' : money(p.open_risk_usd)),
+      caveat: 'The engine chose and sized these. Every trade is in the Trade ' +
+              'Journal on Results.',
+    }));
+
+    /* ── B. the operator's own hand-armed trades ── */
+    if(bookErr){
+      cards.push(bookCard({
+        era: 'recorded book', stamp: 'st-t0', id: 'unreadable',
+        title: 'Your trades', money: '—', sub: 'not read',
+        rows: '', caveatTone: 'warn',
+        caveat: `Could not read your book — ${bookErr}. Any trades you armed ` +
+                `are still there; this column just cannot show them.`,
+      }));
+    } else if(lastBook){
+      const b = lastBook;
+      const wr = b.win_rate == null ? null : Number(b.win_rate);
+      const total = b.total_pnl_usd;
+      const priced = b.n - (b.n_no_risk_usd || 0);
+      cards.push(bookCard({
+        era: 'recorded book',
+        stamp: 'st-t1',
+        id: `${fmt(b.n)} settled`,
+        title: 'Your trades',
+        /* NULL IS NOT ZERO. `total_pnl_usd` is null, never "0.00", when no
+           settled trade carried a risk figure — six losses with no dollars on
+           any of them would otherwise total $0.00 and read as break-even. */
+        money: total == null ? '—' : signedMoney(total),
+        tone: total == null ? '' : Number(total) >= 0 ? 'up' : 'down',
+        sub: 'armed by hand · not risk-sized',
+        /* TWO UNITS, ONE SCREEN. `lastScore.win` is a FRACTION (wins/n) and
+           manual.book()'s `win_rate` is a PERCENTAGE (0-100). Both rings sat
+           side by side reading the same kind of number, and this one fed a
+           percentage to ringSvg — which clamps to [0,1], so any win at all
+           drew a full green ring labelled 6000%. It read correctly only
+           because the live value is 0.0. Normalised here, at the one call
+           site that consumes the server's unit. */
+        ring: b.n && wr != null ? `<div class="mc-ringcol">${
+          ringSvg(wr / 100, wr >= 50 ? 'ring-ok' : 'ring-low',
+                  Math.round(wr) + '%', `of ${fmt(b.n)}`)}</div>` : '',
+        rows:
+          lgRow('settled trades', fmt(b.n)) +
+          lgRow('wins', fmt(b.wins)) +
+          lgRow('total R', b.total_r == null ? '—' : rr(b.total_r),
+                b.total_r == null ? '' : Number(b.total_r) >= 0 ? 'good' : 'bad') +
+          lgRow('expectancy', b.expectancy_r == null ? '—' : rr(b.expectancy_r) + '/trade',
+                b.expectancy_r == null ? '' : Number(b.expectancy_r) >= 0 ? 'good' : 'bad'),
+        /* PRINTED EVERY TIME, including when the count is zero. A ticket armed
+           without a valid risk figure stores none, so that trade has an R and
+           no dollars, permanently. A caveat that appears only when something
+           is missing gives the reader no way to know it is absent. */
+        caveatTone: (b.n_no_risk_usd || 0) > 0 ? 'warn' : '',
+        caveat: b.n === 0
+          ? 'Nothing settled yet. Never added to the account above.'
+          : total == null
+            ? `No settled trade carried a risk figure, so this book has R and ` +
+              `no dollars. Never added to the account above.`
+            : `Dollars across ${fmt(priced)} of ${fmt(b.n)} settled trades. ` +
+              `Never added to the account above.`,
+      }));
+    } else {
+      cards.push(bookCard({
+        era: 'recorded book', stamp: 'st-t0', id: '—',
+        title: 'Your trades', money: '—', sub: 'not read yet',
+        rows: '', caveat: 'Your book has not been read yet.',
+      }));
+    }
+
+    /* ── C. the operator's exits on engine trades ──
+       The engine picked the setup and the operator picked the exit. This money
+       is in NO other total in the store: risk.py never mentions manual or
+       override, and manual.book() reads exec facts only. No win rate here on
+       purpose — the entry is the engine's and the exit is the operator's, so a
+       rate over these rows would be attributing one author's result to two. */
+    const oc = p.operator_closed || [];
+    const ocUsd = p.operator_closed_usd;
+    const ocNo = p.operator_closed_no_usd || 0;
+    cards.push(bookCard({
+      era: 'forward window',
+      stamp: 'st-t1',
+      id: `${fmt(oc.length)} closed`,
+      title: 'Your exits',
+      money: !oc.length ? '—' : ocUsd == null ? '—' : signedMoney(ocUsd),
+      tone: !oc.length || ocUsd == null ? '' : Number(ocUsd) >= 0 ? 'up' : 'down',
+      sub: 'engine picked · you closed',
+      rows:
+        lgRow('closes recorded', fmt(oc.length)) +
+        lgRow('priced', fmt(Math.max(0, oc.length - ocNo))) +
+        lgRow('counted elsewhere', 'nowhere', 'warn'),
+      caveatTone: ocNo > 0 ? 'warn' : '',
+      caveat: !oc.length
+        ? 'You have not closed an engine trade by hand yet.'
+        : ocNo > 0
+          ? `${fmt(ocNo)} of these carries no dollar figure and is not in the ` +
+            `total. This money is in no other total in the app.`
+          : 'This money is in no other total in the app — not the equity ' +
+            'curve above, not your own book.',
+    }));
+
+    box.innerHTML = cards.join('');
+    renderLedgerMine();
+    renderLedgerExits();
+  }
+
+  /* The outcomes that mean a trade actually happened. Same four the manual
+     engine settles on and the same four tests/test_ledger_field_contract.py
+     calls SETTLED — anything else (CANCELLED, MISSED) never took size. */
+  const SETTLED_OUTCOMES = ['TP', 'SL', 'TRAIL_STOP', 'TIMEOUT'];
+  const plural = (n, word) => `${fmt(n)} ${word}${n === 1 ? '' : 's'}`;
+
+  /* A trade row, in the shape the Trade Journal already uses so the three
+     books read the same way. Not clickable: a hand-armed trade has no engine
+     setup_id to open a chart on. */
+  function ledgerRow(o){
+    const flat = o.r == null || Number(o.r) === 0;
+    return `<div class="jnl-row${flat ? '' : Number(o.r) > 0 ? ' up' : ' down'}">
+      <div>
+        <div class="t-mono" style="font-size:13px;color:var(--fg)">${
+          o.dir === 'SHORT' ? '<span class="dir-dn">▼</span>'
+          : o.dir === 'LONG' ? '<span class="dir-up">▲</span>' : ''} ${
+          esc(tokenOf(o.symbol))}</div>
+        <div class="t-label" style="margin-top:3px">${esc(o.tf || '')}</div>
+      </div>
+      <div class="jnl-say">${esc(o.say)}
+        <div class="t-sub">${esc(o.when)}</div>
+      </div>
+      <div class="jnl-r">${o.r == null ? '—' : rr(o.r)}
+        <span class="t-sub">${o.usd == null ? esc(o.noUsd || 'no dollars')
+                                            : signedMoney(o.usd)}</span></div>
+    </div>`;
+  }
+
+  const dayOf = ts => ts == null ? 'no date'
+    : new Date(ts * 1000).toLocaleDateString(undefined,
+        {day: 'numeric', month: 'short'});
+
+  function renderLedgerMine(){
+    const box = $('ledgerMine'), chip = $('ledgerMineChip');
+    if(!box) return;
+    if(bookErr || !lastBook){
+      if(chip) chip.textContent = 'unavailable';
+      box.innerHTML = `<div class="empty">Could not read your book${
+        bookErr ? ' — ' + esc(bookErr) : ''}.</div>`;
+      return;
+    }
+    const rows = lastBook.trades || [];
+    if(chip) chip.textContent = rows.length
+      ? `${plural(rows.length, 'row')} · ${fmt(lastBook.n)} settled`
+      : 'none';
+    if(!rows.length){
+      box.innerHTML = '<div class="empty">You have not armed a trade by hand yet.</div>';
+      return;
+    }
+    /* `pnl_usd` is on EVERY row, holding null where there is no dollar figure —
+       cancelled and missed orders never took size, and a settled trade whose
+       ticket carried no risk figure never will. `risk_usd` is NOT on every row,
+       which is why nothing here reads it: money(undefined) renders "$NaN".
+
+       AND AN UNSETTLED ROW HAS NO R. The engine writes `r_multiple: "0"` on a
+       cancelled order and on an entry window that expired, because nothing
+       happened — but +0.00R on a money surface reads as a trade that broke
+       even, which is the same confident-zero bug in a different unit. Those
+       rows print an em-dash and say they were never sized. */
+    box.innerHTML = rows.map(t => {
+      const settled = SETTLED_OUTCOMES.includes(t.outcome);
+      return ledgerRow({
+        symbol: t.symbol, tf: t.tf, dir: t.direction,
+        say: String(t.outcome || '').replace(/_/g, ' ').toLowerCase(),
+        when: dayOf(t.resolved_at),
+        r: settled ? t.r_multiple : null,
+        usd: t.pnl_usd,
+        noUsd: settled ? 'no dollars' : 'never sized',
+      });
+    }).join('');
+  }
+
+  function renderLedgerExits(){
+    const box = $('ledgerExits'), chip = $('ledgerExitChip');
+    if(!box) return;
+    const rows = (lastPortfolio || {}).operator_closed || [];
+    if(chip) chip.textContent = rows.length ? plural(rows.length, 'row') : 'none';
+    if(!rows.length){
+      box.innerHTML =
+        '<div class="empty">You have not closed an engine trade by hand yet.</div>';
+      return;
+    }
+    box.innerHTML = rows.map(o => ledgerRow({
+      symbol: o.symbol, tf: o.tf, dir: o.direction,
+      say: 'closed by you',
+      when: dayOf(o.closed_at),
+      r: o.r_at_close, usd: o.usd_at_close,
+    })).join('');
+  }
+
   const LOADER_SURFACE = [
     [null,          () => loadPortfolio()],     // top-bar equity, and Command
     [null,          () => loadHealth()],        // top-bar health chip
     ['command',     () => loadOverview()],
-    ['command',     () => loadRisk()],
+    /* NOT Command-tagged. Its only DOM output is #riskNow, which is on
+       SETTINGS — so a reload or a POST /api/system/restart while on Settings
+       left that panel literally blank, with no empty-state rule on .tk-out to
+       say so. `null` rather than 'settings' because loadRisk also sets
+       `liveEnabled` and the accent mode, which are global. */
+    [null,          () => loadRisk()],
     // Command-only, deliberately: the sweep costs ~1.7s across 95 symbol/tf
     // pairs and there is no reason to pay it while the operator is reading
     // Results.
@@ -4599,6 +4945,17 @@ weighed in. Name the facts you used.`;
        loadOverview stays Command-gated; this asks for the same payload through
        SSData, which dedupes it to one request. */
     ['diagnostics', () => loadRefused()],
+    /* Twice, deliberately. The gate's criteria render in Results' Progression
+       track and its chip and build note render on Settings, so both surfaces
+       need the payload and neither should pay for the other's. SSData collapses
+       concurrent reads of one path to a single request. */
+    ['results',     () => loadLiveGate()],
+    ['settings',    () => loadLiveGate()],
+    /* Its own loader, or arriving on Ledger by hash, bookmark or the 6 key
+       shows three skeletons until the next 30s tick. The portfolio half of the
+       surface rides the ungated loadPortfolio above; this fetches the manual
+       book and paints all three columns. */
+    ['ledger',      () => loadLedger()],
   ];
   const currentSurface = () => {
     const on = document.querySelector('.surface.on');

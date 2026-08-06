@@ -15,7 +15,7 @@ assertion is a number this file can point at.
 """
 import tempfile
 import unittest
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 from engine import manual, store, execsim, setups
@@ -869,10 +869,24 @@ class ManualCase(unittest.TestCase):
         p.update(kw)
         return p
 
-    def test_the_retired_tag_is_read_and_never_written(self):
-        self.assertEqual(manual.MANUAL_VERSION, "manual-v0.2-draft")
-        self.assertIn("manual-v0.1-draft", manual.MANUAL_VERSIONS)
+    #: Every tag this book has SHIPPED. Append on a bump; never remove. This
+    #: list is the assertion — naming only the newest one made the test fail
+    #: on the NEXT bump for being a bump, which is not what it guards.
+    SHIPPED_MANUAL_TAGS = ("manual-v0.1-draft", "manual-v0.2-draft",
+                           "manual-v0.3-draft")
+
+    def test_the_retired_tags_are_read_and_never_written(self):
+        """The read set only ever grows. Dropping a tag strands every order
+        still open under it — never settled, never expired, absent from every
+        surface, because the resolver finds work by querying algo_version."""
+        for tag in self.SHIPPED_MANUAL_TAGS:
+            self.assertIn(tag, manual.MANUAL_VERSIONS,
+                          f"{tag} left the read set — its open orders are stranded")
         self.assertIn(manual.MANUAL_VERSION, manual.MANUAL_VERSIONS)
+        self.assertEqual(manual.MANUAL_VERSIONS[-1], manual.MANUAL_VERSION,
+                         "the write tag must be the newest entry, last")
+        self.assertEqual(len(set(manual.MANUAL_VERSIONS)),
+                         len(manual.MANUAL_VERSIONS), "a tag is listed twice")
 
     def test_an_intent_still_open_under_the_old_tag_is_not_stranded(self):
         """The defect the bump would otherwise have shipped.
@@ -1151,6 +1165,116 @@ class ManualCase(unittest.TestCase):
         self.assertEqual(b["wins"], 1)
         self.assertEqual(len(b["curve"]), 1)
         self.assertTrue(all(t["source"] == "OPERATOR" for t in b["trades"]))
+
+    # ---------- the book in dollars ----------
+    #
+    # `book()` is a READ VIEW. It derives these and persists nothing, which is
+    # the whole reason they need no version bump — see the comment in
+    # manual.book(). If a future change writes pnl_usd into a payload, this
+    # section is where the bump argument has to be re-made.
+
+    def test_a_settled_trade_is_priced_with_the_engine_books_arithmetic(self):
+        """R times the dollars at risk, quantized ROUND_HALF_UP.
+
+        The rounding mode is the point, not decoration. Both operands arrive
+        2dp-quantized so the product lands on four decimals and half-cent ties
+        are reachable, where Python's round() banks to even. server.py builds
+        the ENGINE journal's pnl_usd with ROUND_HALF_UP; if this side ever
+        drifted, the two books on the Ledger would disagree by a cent on the
+        same trade and neither would be believable.
+        """
+        self.load(self.flat(6) + [(100, 104, 99, 103)] + self.flat(5))
+        manual.create_intent(self.con, SPOT, "1H", "LONG",
+                             entry=100, tp=104, sl=98, created_at=0,
+                             risk_usd=100)
+        self.run_engine()
+        b = manual.book(self.con)
+        self.assertEqual(b["n"], 1, "precondition: one settled trade")
+        row = b["trades"][0]
+        want = (Decimal(row["r_multiple"]) * Decimal(row["risk_usd"])).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP)
+        self.assertEqual(row["pnl_usd"], str(want))
+        self.assertEqual(b["total_pnl_usd"], str(want))
+        self.assertEqual(b["n_no_risk_usd"], 0)
+
+    def test_a_settled_trade_with_no_risk_figure_is_counted_never_dropped(self):
+        """An R with no dollars behind it, permanently — and it must be loud.
+
+        chart.js sends risk_usd=null when the ticket has no valid risk figure
+        and the intent stores the null, so the trade settles with a real R and
+        no way to ever price it. Dropping it from the total silently would make
+        the dollar figure quietly cover fewer trades than the R figure beside
+        it. The count is what lets the surface say "across 4 of 5 trades".
+        """
+        self.load(self.flat(6) + [(100, 104, 99, 103)] + self.flat(5))
+        manual.create_intent(self.con, SPOT, "1H", "LONG",
+                             entry=100, tp=104, sl=98, created_at=0)
+        self.run_engine()
+        b = manual.book(self.con)
+        self.assertEqual(b["n"], 1, "precondition: it IS a settled trade")
+        self.assertIsNone(b["trades"][0]["pnl_usd"])
+        self.assertEqual(b["n_no_risk_usd"], 1)
+        self.assertIsNone(b["total_pnl_usd"],
+                          "no priced trade means no total — $0.00 would read "
+                          "as break-even on a trade that lost or won")
+
+    def test_pnl_usd_is_a_key_on_every_row_even_when_it_is_absent(self):
+        """Absent, not missing. A reader's `?? 0` turns a missing key into 0."""
+        self.load(self.flat(6) + [(100, 104, 99, 103)] + self.flat(5))
+        manual.create_intent(self.con, SPOT, "1H", "LONG",
+                             entry=100, tp=104, sl=98, created_at=0)
+        self.run_engine()
+        for row in manual.book(self.con)["trades"]:
+            self.assertIn("pnl_usd", row)
+
+    def test_a_cancelled_order_contributes_no_dollars(self):
+        """Cancelling must not move the money curve any more than the R curve.
+
+        The same argument as `test_cancel_resolves_the_intent_without_
+        recording_a_trade`: if a withdrawn order counted, anyone could improve
+        their record by cancelling the ones that looked like losers.
+        """
+        self.load(self.flat(4), symbol=PERP, tf="1H")
+        intent = manual.create_intent(self.con, PERP, "1H", "LONG",
+                                      entry=90, tp=94, sl=88, created_at=2 * TF,
+                                      risk_usd=100)
+        manual.cancel_intent(self.con, intent["intent_id"], at=4 * TF)
+        b = manual.book(self.con)
+        self.assertEqual([t["outcome"] for t in b["trades"]], ["CANCELLED"])
+        self.assertIsNone(b["trades"][0]["pnl_usd"])
+        self.assertIsNone(b["total_pnl_usd"], "nothing settled, so no total")
+        self.assertEqual(b["n_no_risk_usd"], 0,
+                         "a cancellation is not a trade missing its dollars")
+
+    def test_the_total_covers_the_priced_trades_and_says_what_it_omits(self):
+        """One priced settled trade, one unpriced, one cancelled — in one book.
+
+        The total must equal the priced one alone, and `n_no_risk_usd` must
+        name the gap. This is the shape the Ledger renders and the shape that
+        would otherwise lie.
+        """
+        self.load(self.flat(6) + [(100, 104, 99, 103)] + self.flat(5))
+        self.load(self.flat(6) + [(100, 104, 99, 103)] + self.flat(5),
+                  symbol=PERP, tf="1H")
+        self.load(self.flat(4), symbol=PERP2, tf="1H")
+        manual.create_intent(self.con, SPOT, "1H", "LONG",       # priced
+                             entry=100, tp=104, sl=98, created_at=0,
+                             risk_usd=100)
+        manual.create_intent(self.con, PERP, "1H", "LONG",       # no dollars
+                             entry=100, tp=104, sl=98, created_at=0)
+        cancelled = manual.create_intent(self.con, PERP2, "1H", "LONG",
+                                         entry=90, tp=94, sl=88,
+                                         created_at=2 * TF, risk_usd=100)
+        self.run_engine()
+        self.run_engine(symbol=PERP, tf="1H")
+        manual.cancel_intent(self.con, cancelled["intent_id"], at=4 * TF)
+        b = manual.book(self.con)
+        self.assertEqual(b["n"], 2, "two settled trades, one of them unpriced")
+        self.assertEqual(b["n_no_risk_usd"], 1)
+        priced = [t for t in b["trades"] if t["pnl_usd"] is not None]
+        self.assertEqual(len(priced), 1)
+        self.assertEqual(b["total_pnl_usd"], priced[0]["pnl_usd"],
+                         "the total must be the priced rows and only those")
 
     # ---------- the whole book, live: the bug that hid three orders ----------
 

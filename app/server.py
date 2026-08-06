@@ -846,11 +846,20 @@ def portfolio():
         # engine's simulation is untouched and will still record its own
         # outcome for this setup; this only stops the cockpit showing exposure
         # the operator has declared finished.
+        #
+        # Matched on the VERSION-STRIPPED id, not the id itself. `setup_id`
+        # embeds SETUP_VERSION, so an exact-match key made every override
+        # expire the moment the engine version moved: the same zone was
+        # re-derived under the new tag, the suppression stopped firing, and a
+        # position the operator had closed came back as live exposure with
+        # nothing announcing it. See `manual.setup_zone_key` for the measured
+        # case and for what the wider key does and does not cover.
         from engine import manual as _manual
         overrides = _manual.overridden_setups(con)
+        override_zones = _manual.overridden_zone_keys(overrides)
         positions, pending_orders = [], []
         for sid, order in latest_order.items():
-            if sid in completed or sid in overrides:
+            if sid in completed or _manual.setup_zone_key(sid) in override_zones:
                 continue
             detail = setup_by_id.get(sid, {})
             sized = risk_by_id.get(sid, {})
@@ -939,6 +948,37 @@ def portfolio():
                 "operator_closed": sorted(overrides.values(),
                                           key=lambda d: d["closed_at"],
                                           reverse=True)[:20],
+                # The operator's own exits on the ENGINE's trades — the engine
+                # picked the setup, the operator picked the moment. This money
+                # is counted in no other total on this payload or in the manual
+                # book, so without this field it is on screen row by row and
+                # nowhere in a sum.
+                #
+                # Summed over EVERY override, not over the 20 rows above: the
+                # same rule `journal`/`journal_total` follows two fields down.
+                # A total that silently meant "the visible ones" would be
+                # wrong the day a 21st close is recorded, and wrong quietly.
+                # `usd_at_close` is already 2dp from manual.py, so the sum is
+                # exact and the quantize is shape, not rounding.
+                # NULL IS NOT ZERO, the same rule `total_pnl_usd` follows on
+                # the manual book. Summing with Decimal(0) always produced a
+                # float, so a book whose every close was unpriceable reported
+                # $0.00 — which reads as "broke even" rather than "could not
+                # be priced", and the UI's `== null` guard could never fire.
+                "operator_closed_usd": (
+                    float(sum((Decimal(str(o["usd_at_close"]))
+                               for o in overrides.values()
+                               if o.get("usd_at_close") is not None), Decimal(0))
+                          .quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+                    if any(o.get("usd_at_close") is not None
+                           for o in overrides.values()) else None),
+                # How many closes that sum leaves out. A close recorded against
+                # a position with no risk figure has an R and no dollars,
+                # permanently — the same degraded path `n_no_risk_usd` reports
+                # on the manual book, and audible for the same reason.
+                "operator_closed_no_usd": sum(
+                    1 for o in overrides.values()
+                    if o.get("usd_at_close") is None),
                 "pending_orders": pending_orders,
                 "open_risk_usd": round(sum(float(p["risk_usd"] or 0)
                                            for p in positions), 2),
@@ -2162,8 +2202,12 @@ def trade_config(symbol: str | None = None):
         # nothing in the system defined the condition it named — see
         # engine/livegate.py. The criteria are measurable and live at
         # /api/live-gate; the reason now points at them instead of gesturing.
+        # The four criteria MOVED to Results -> Progression; Settings keeps the
+        # lock and its consequence. This sentence is printed on the arming
+        # ticket — the surface where money is committed — so a pointer at the
+        # wrong panel is worse here than anywhere else in the app.
         "live_locked_reason": "Forward paper evidence has not yet earned live "
-                              "execution — see Settings for the four criteria "
+                              "execution — see Results for the four criteria "
                               "and where the record stands against them.",
     }
 

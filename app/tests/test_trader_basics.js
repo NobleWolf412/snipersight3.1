@@ -86,8 +86,21 @@ ok('the book can be taken out of the app', () => {
 
 ok('the nav is reachable from the keyboard', () => {
   assert(/const KEYS = \{'1': 'command'/.test(SHELL), 'no surface shortcuts');
-  for (const k of ['2', '3', '4', '5']) {
-    assert(new RegExp(`'${k}': '`).test(SHELL), `surface ${k} has no key`);
+  /* Read the surfaces out of the MARKUP rather than listing them: this used to
+     be a hardcoded '2'..'5' and a sixth surface could ship with no accelerator
+     without anything noticing. Every section with class="surface" needs a key,
+     and every key has to name a surface that exists. */
+  const map = SHELL.slice(SHELL.indexOf('const KEYS = '),
+                          SHELL.indexOf('};', SHELL.indexOf('const KEYS = ')));
+  const bound = [...map.matchAll(/'(\w)': '(\w+)'/g)].map(m => m[2]);
+  const surfaces = [...HTML.matchAll(/<section class="surface[^"]*" id="s-(\w+)"/g)]
+    .map(m => m[1]);
+  assert(surfaces.length >= 5, `the section scan found ${surfaces.length} surfaces`);
+  for (const s of surfaces) {
+    assert(bound.includes(s), `surface ${s} has no key`);
+  }
+  for (const b of bound) {
+    assert(surfaces.includes(b), `key for '${b}' names a surface that does not exist`);
   }
 });
 
@@ -106,8 +119,20 @@ ok('nothing that commits money is on a hotkey', () => {
   /* An accelerator that sizes a trade is one fat finger from a position
      nobody meant to take. This app's own rule is that irreversible-feeling
      actions get a confirm dialog, not a shortcut. */
-  const block = SHELL.slice(SHELL.indexOf('const KEYS = '),
-                            SHELL.indexOf('const KEYS = ') + 1400);
+  /* Bounded by the handler, not by a byte count. This sliced a FIXED 1400
+     characters after `const KEYS = ` — a window that a sixth surface pushed
+     twenty characters along, and which would pass vacuously the moment
+     anything above it grew enough to shorten it past the handler's end. Now
+     it runs from the map to the clock block that follows the listener, so it
+     covers exactly the keydown handler however long that is. */
+  const from = SHELL.indexOf('const KEYS = ');
+  const to = SHELL.indexOf('/* ---------- clock ----------', from);
+  assert(from > 0 && to > from,
+    'the keydown handler is no longer bounded by the KEYS map and the clock ' +
+    'block — re-anchor this slice before trusting it');
+  const block = SHELL.slice(from, to);
+  assert(/addEventListener\('keydown'/.test(block),
+    'the slice no longer contains the keydown listener it is checking');
   for (const bad of ['tkArm', 'btnHalt', 'arm(', 'cancel']) {
     assert(!block.includes(bad),
       `the keyboard handler reaches ${bad} — arming, halting and cancelling ` +

@@ -408,7 +408,6 @@ window.SSChart = (() => {
   function recompute(){
     const out = $('tkOut'), key = $('tkKey'), warn = $('tkWarn');
     const e = levels.entry, tp = levels.tp, sl = levels.sl;
-    const long = dir === 'LONG';
 
     // Say plainly whose numbers these are. Anything the operator touched is
     // excluded from the strategy record, so the label must never read "engine".
@@ -704,13 +703,8 @@ window.SSChart = (() => {
      symbol on Command — this is the same fact repeated at the point where the
      trade is actually committed, which is where it earns its screen space.
 
-     Colour only, one letter-group per timeframe, detail in the title: the
-     ladder is context, and context must never be louder than the chart. */
-  const LADDER_TONE = {
-    BULL_TREND: 'lx-bull', WEAKENING_BULL: 'lx-bull-w',
-    BEAR_TREND: 'lx-bear', WEAKENING_BEAR: 'lx-bear-w',
-    TRANSITION: 'lx-trans', RANGE: 'lx-range',
-  };
+     The coloured rung strip that once carried it is gone — see loadContext
+     below for what replaced it. Its tone map went with it. */
   async function loadContext(){
     /* The per-timeframe ladder read as a second timeframe picker — same
        shape, adjacent position, different meaning, hover-only explanation.
@@ -1880,7 +1874,7 @@ window.SSChart = (() => {
          a bar that then squeezed the chart above it to 124px. The operator
          only ever acts on the most binding one; the rest are noise until it
          is cleared. */
-      const warnEl = $('tkWarn'), dupWarnEl = $('tkDup');
+      const warnEl = $('tkWarn');
       if(dupe){
         if(blockEl) blockEl.hidden = true;
         if(warnEl) warnEl.hidden = true;
