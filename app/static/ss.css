@@ -1144,6 +1144,15 @@ body:not(.dev) #consolePanel{display:none}
    to justify a trade. */
 @media(max-width:900px){
   .deck-row{grid-template-columns:1fr;gap:var(--sm)}
+  /* ...and its buttons, which measured 34px with real rows on screen. The
+     earlier pass raised the controls that WRITE — Arm, and CLOSE on a live
+     position — and stopped there, on the reasoning that a mis-tap only costs
+     money at those two. That is right about the stakes and wrong about the
+     traffic: "Ask copilot" and "Open chart" are the first things a thumb
+     reaches for on the first surface the app opens, and a target under the
+     floor is a target you hit twice. They stack full-width because the row is
+     already one column here, so the space costs nothing. */
+  .deck-row .btn{min-height:48px;width:100%;justify-content:center}
 }
 
 /* An expired setup fades where it stands and holds its slot for the duration,
@@ -1154,7 +1163,31 @@ body:not(.dev) #consolePanel{display:none}
 }
 
 /* a setup the risk authority refused is not an opportunity — do not dress it as one */
-.deck-row.dead{opacity:.55}
+/* NO OPACITY. This was opacity:.55, and it multiplied down onto every piece
+   of text in the row: the refusal sentence measured 2.82:1, the prices 3.10:1,
+   the labels 2.59:1, the buttons 3.51:1. 161 elements across the app fell below
+   AA and every single one of them passed at full opacity — the failure was
+   never a colour choice, it was a multiplier applied downstream.
+
+   The header of this file records lifting --fg-3 and --fg-4 "until the DIMMEST
+   step clears 4.5:1 on the darkest surface it is ever drawn on". An ancestor
+   opacity silently undoes that whole exercise, and no contrast pass caught it
+   for three review rounds because every resolver measured the colour without
+   multiplying by 0.55.
+
+   It matters here more than anywhere else in the app: "Looked at, not taken" is
+   the ONLY place the product writes why the engine refused a setup, which is
+   the mechanism its entire positioning rests on. It was the least readable text
+   on the screen.
+
+   De-emphasis is now structural rather than optical. The row is marked by its
+   muted ground and by the divider above it; the chrome steps back; the CONTENT
+   keeps the colours that were measured to pass. Dimming the reasoning was
+   always the wrong half to dim. */
+.deck-row.dead{background:rgba(0,0,0,.22)}
+/* the chrome recedes, not the reasoning */
+.deck-row.dead .btn{opacity:.75}
+.deck-row.dead .chip{filter:saturate(.6)}
 .deck-row.dead .t-mono b{color:var(--fg-3) !important}
 /* The engine's own one-line reason for the setup. It was reaching the browser
    on every deck item and rendered nowhere — visible only inside the chart's
@@ -1474,7 +1507,17 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 /* A setup the operator already took and closed. Not an opportunity and not
    exposure — it is history with a number attached, so it reads as neither
    amber (your money is on this) nor red (refused). */
-.deck-row.done{opacity:.72;box-shadow:inset 3px 0 0 var(--fg-4)}
+/* Same reason as .dead above: the 0.72 multiplier took this row's labels to
+   3.58:1 and its chips to 3.69:1. The inset rule already marked the row
+   structurally, which is exactly what should have been carrying the meaning. */
+.deck-row.done{background:rgba(0,0,0,.14);box-shadow:inset 3px 0 0 var(--fg-4)}
+.deck-row.done .btn{opacity:.8}
+
+/* Same defect, one element: #equityRet carried style="opacity:.7" inline,
+   which took the return figure beside the equity to 4.09:1. It is the number
+   that says whether the account is up or down. A dimmer step exists as a token
+   and clears AA; a multiplier does not. */
+#equityRet{color:var(--fg-3)}
 .deck-held.done{color:var(--fg-3);letter-spacing:.06em;text-transform:none;
   font-size:var(--fs-1)}
 .deck-held.done::before{background:var(--fg-4);box-shadow:none}
