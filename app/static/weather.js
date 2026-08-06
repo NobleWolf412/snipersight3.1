@@ -58,65 +58,20 @@
     return window.SSTeach ? window.SSTeach(text) : esc(text);
   }
 
-  /* ---------- presentation lookups ----------
-     Both map an engine constant to a class name. Neither decides anything. */
-  const TONE = {
-    BULL_TREND: 'r-bull', WEAKENING_BULL: 'r-bull-w',
-    BEAR_TREND: 'r-bear', WEAKENING_BEAR: 'r-bear-w',
-    TRANSITION: 'r-trans', RANGE: 'r-range',
-  };
-  function bias(tf) {
-    if (!tf.regime) return 'b-unknown';        // absent data, not a flat market
-    if (tf.bias === 'LONG') return 'b-long';
-    if (tf.bias === 'SHORT') return 'b-short';
-    return tf.requires_sweep ? 'b-gated' : 'b-flat';
-  }
-  /* BTCUSDT -> BTC, BTC-USD -> BTC. The full symbol stays in the title. */
-  const shortName = s => String(s).replace(/-USD$/, '').replace(/USDT$/, '');
+  /* The per-symbol grid that used to live here — the regime cells, their
+     bias colouring, the expand-a-row-for-the-reason behaviour — is gone, and
+     with it TONE, bias(), shortName(), rowHtml() and the expanded-row set.
 
-  const COLLAPSED = 8;                 // above the fold beats complete-but-buried
-  let showAll = false;
-  /* Both start CLOSED on Command, and survive the 30s re-render — a panel that
-     folded itself back up under the reader every half minute would be worse
-     than one that never folded at all. */
-  let tableOpen = false, backdropOpen = false;
-  const open = new Set();              // rows the operator expanded, kept across refreshes
+     It was not deleted, it MOVED. It listed exactly the markets the
+     At-a-level sweep listed, a screen apart, so "what condition is DOGE in
+     and is price anywhere near a level in it" took two panels and a
+     scroll. Both halves are one card per market in Overwatch now
+     (shell.js renderNear), which reads THIS payload out of the shared SSData
+     cache — same response, same instant, same words.
 
-  function rowHtml(s) {
-    const cells = s.timeframes.map((t, i) => {
-      const b = bias(t);
-      // A colour change between adjacent cells IS the disagreement, so the
-      // break in the rule is drawn from the same two classes — no second
-      // opinion about whether the timeframes agree.
-      const split = i > 0 && bias(s.timeframes[i - 1]) !== b ? ' split' : '';
-      return `<div class="wx-tf ${b}${split}">` +
-        `<span class="tfk">${esc(t.tf)}</span>` +
-        `<span class="reg ${TONE[t.regime] || 'r-none'}">${esc(t.label)}</span></div>`;
-    }).join('');
-    /* NOT role="button" on the row. The row holds glossary terms, and
-       glossary.js makes every one of them a focus stop — ARIA forbids focusable
-       descendants inside a button role, so a screen reader computed this row's
-       whole contents as the button's name ("DOGE 1D Bear weakening 4H Bear
-       weakening -> Pullback shorts are live ...") and the terms inside it
-       announced as buttons within a button.
-
-       Worse for a keyboard: the row's Enter/Space handler called r.click() on
-       the ROW, so pressing Enter while focused on a nested term both toggled
-       the row and fired the glossary.
-
-       Same shape as the fix on .pos-row. The row stays clickable for a pointer,
-       which is the affordance the handler below is written for; the symbol cell
-       becomes the real disclosure button and carries aria-expanded. A native
-       button gets Enter and Space for free, so the keydown handler goes. */
-    return `<div class="wx-row wx-data tier-${s.tier}${s.live ? ' live' : ''}` +
-      `${open.has(s.symbol) ? ' open' : ''}" data-sym="${esc(s.symbol)}">` +
-      `<button class="wx-sym wx-toggle" title="${esc(s.symbol)}"` +
-      ` aria-expanded="${open.has(s.symbol)}"><span>${esc(shortName(s.symbol))}</span></button>` +
-      cells +
-      `<div class="wx-mean"><span class="wx-arrow" aria-hidden="true">&rarr;</span>` +
-      `<span>${teach(s.meaning)}</span></div>` +
-      `<div class="wx-why">${teach(s.why)}</div></div>`;
-  }
+     What this module still owns: the sentence that says whether a quiet rail
+     is correct, and the Bitcoin backdrop. */
+  let backdropOpen = false;
 
   /* ---------- Bitcoin cycle backdrop ----------
      The nested-cycle model has been computed and served since S31 and rendered
@@ -239,11 +194,6 @@
      for whoever is debugging a reading, not for whoever is reading it. */
   function render(d) {
     lastWeather = d;
-    const rows = showAll ? d.symbols : d.symbols.slice(0, COLLAPSED);
-    const hidden = d.symbols.length - rows.length;
-    // The GRID lists every row — tradeable, shadow and warming. Its own
-    // counts must say so, or "top 8 of 19" would sit above a 29-row table.
-    const rowTotal = d.n_rows != null ? d.n_rows : d.symbols.length;
     // The sentence that does the actual explaining. Regime eligibility is
     // necessary, not sufficient — price still has to arrive at a zone — and
     // saying so is the difference between "quiet" and "broken".
@@ -256,8 +206,8 @@
     const shadow = d.n_shadow || 0, warming = d.n_warming || 0;
     const shadowLive = d.n_shadow_live || 0;
     const footer = d.n_live === 0
-      ? 'No symbol is in a condition any playbook trades right now. An empty ' +
-        'Setup Deck is the correct answer to that, not a fault.'
+      ? 'No symbol is in a condition any playbook trades right now. Empty ' +
+        'Mission Briefs are the correct answer to that, not a fault.'
       : `${d.n_live} of ${d.n_total} tradeable symbols are in a condition a ` +
         `playbook trades. Even then a setup only appears once price returns to ` +
         `one of that symbol's zones and confirms there, so quiet days are normal.`;
@@ -281,39 +231,36 @@
        So the sentence stays on screen and the grid goes behind a disclosure.
        The reader who wants to know WHY still gets everything, one click away
        and with its state remembered. */
+    /* THE ANSWER GOES WHERE THE QUESTION IS ASKED.
+       This sentence is the only thing on the surface that says whether an
+       empty rail is correct or broken, and it used to sit two thousand
+       pixels below the empty rail it was explaining. It now renders into
+       #missionLede, directly under the Mission Briefs — the operator reads
+       "nothing is in a tradeable condition" in the same glance as the
+       nothing. Owned here still: one authority, new address. */
+    const lede = document.getElementById('missionLede');
+    if (lede) {
+      lede.innerHTML = `${teach(footer)}${aside}`;
+      lede.className = 'mb-lede' + (d.n_live === 0 ? ' quiet' : '');
+    }
+
+    /* The per-symbol grid is GONE from here. It listed the same markets the
+       At-a-level sweep listed, one screen apart, so the operator had to hold
+       a regime in their head while scrolling to find whether price was
+       anywhere near a level in it. Both halves are one card per market in
+       Overwatch now (shell.js renderNear), which reads this very payload
+       from the shared cache — so the words on those cards are still these
+       words, from this response. What is left here is the backdrop: the
+       longest-horizon context, demoted and closed, exactly as before. */
     root.innerHTML = `<div class="panel wx">
       <div class="panel-head">
         <span class="t-section">Market Weather</span>
-        <span class="wx-sub">what the market is doing &middot; and whether anything can be traded</span>
+        <span class="wx-sub">the longer rhythm behind today's reading</span>
         <span class="chip">${d.n_live} of ${d.n_total} tradeable</span>
       </div>
-      <div class="wx-lead">${teach(footer)}${aside}</div>
-      <details class="wx-details"${tableOpen ? ' open' : ''}>
-        <summary class="wx-summary">Per-symbol breakdown${
-          showAll ? '' : ` &middot; top ${Math.min(COLLAPSED, rowTotal)} of ${rowTotal}`}</summary>
-        <div class="wx-body">
-          <div class="wx-row wx-head">
-            <span class="t-label">Symbol</span>
-            ${d.timeframes.map(tf => `<span class="t-label">${esc(tf)}</span>`).join('')}
-            <span class="t-label mean">what this means</span>
-          </div>
-          ${rows.map(rowHtml).join('')}
-        </div>
-        <div class="wx-foot">
-          <p><span style="color:var(--fg-4)">Click a row for the full reason.</span></p>
-          ${hidden > 0 || showAll
-            ? `<button class="btn" id="wxMore">${showAll ? 'Show fewer' : 'Show all ' + rowTotal}</button>`
-            : ''}
-
-        </div>
-      </details>
       ${cycleLede(cyc, backdropOpen)}
     </div>`;
 
-    const more = document.getElementById('wxMore');
-    if (more) more.addEventListener('click', () => { showAll = !showAll; render(d); });
-    const det = root.querySelector('.wx-details');
-    if (det) det.addEventListener('toggle', () => { tableOpen = det.open; });
     const cyd = root.querySelector('.cy-details');
     if (cyd) cyd.addEventListener('toggle', () => { backdropOpen = cyd.open; });
   }
@@ -329,32 +276,18 @@
       <div class="wx-failbody">
         <b>Market Weather could not load.</b>
         <code>${esc(msg)}</code>
-        <div>No market condition is being reported. Do not read the empty Setup
-        Deck above as &ldquo;nothing to trade&rdquo; until this is fixed &mdash;
+        <div>No market condition is being reported. Do not read empty Mission
+        Briefs above as &ldquo;nothing to trade&rdquo; until this is fixed &mdash;
         this is a failed request, not a quiet market.</div>
       </div>
     </div>`;
   }
 
-  /* Rows expand on click anywhere, and by keyboard through .wx-toggle — the
-     symbol cell, which is a real <button> and therefore gets Enter and Space
-     from the platform. The hand-rolled keydown handler that used to live here
-     fired r.click() on the ROW, so Enter on a nested glossary term toggled the
-     row as well as opening the definition. */
-  root.addEventListener('click', e => {
-    const r = e.target.closest('.wx-data');
-    if (!r || e.target.closest('.term')) return;   // let the glossary have its own taps
-    const sym = r.dataset.sym;
-    const now = !open.has(sym);
-    if (now) open.add(sym); else open.delete(sym);
-    r.classList.toggle('open', now);
-    // the state lives on the control that announces it, not on the container
-    const t = r.querySelector('.wx-toggle');
-    if (t) t.setAttribute('aria-expanded', String(now));
-  });
+  /* The expand-a-row handler went with the rows it operated on. Nothing this
+     module renders is expandable any more except the backdrop, which is a
+     native <details> and needs no handler.
 
-
-  /* The cadence is SSData's now, not this module's. It was the only file
+     The cadence is SSData's now, not this module's. It was the only file
      checking document.hidden; that check is in the layer, so every consumer
      gets it rather than only the one that remembered. Subscribing also means
      this strip repaints from the same /api/weather response any other reader

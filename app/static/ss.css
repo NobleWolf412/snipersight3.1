@@ -19,7 +19,12 @@
   --bg-2:oklch(0.22 0.010 125);
   --card:oklch(0.26 0.012 125);
   --card-2:oklch(0.30 0.012 125);
-  --border:oklch(0.36 0.015 130);
+  /* Lifted from 0.36. Every surface here is a near-black on a near-black and
+     the border is the ONLY thing separating them, so at 0.36 against a 0.18
+     page the edge was barely a suggestion and whole sections read as one
+     continuous dark field. This is a border colour only — no text is drawn
+     on it and no contrast note depends on it. */
+  --border:oklch(0.44 0.016 130);
   --border-soft:oklch(0.32 0.015 130 / 0.6);
   /* foreground ramp */
   --fg:oklch(0.94 0.012 150);
@@ -117,6 +122,12 @@
 [data-mode="paper"]{--accent:var(--amber);--accent-rgb:255,194,102}
 [data-mode="live"] {--accent:var(--red);  --accent-rgb:255,100,100}
 [data-mode="idle"] {--accent:var(--green);--accent-rgb:0,255,170}
+/* Before the book has answered. A muted foreground rather than any of the
+   three signal colours, because each of those is a CLAIM about the
+   operator's exposure and the app does not know yet. The page opened in
+   `idle` green for a second or two on every launch and then flipped to
+   amber, which told a trader holding two positions that they were flat. */
+[data-mode="unknown"]{--accent:var(--fg-3);--accent-rgb:170,178,168}
 
 /* ---------- the confirmation at the money ----------
 
@@ -172,6 +183,16 @@
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
+/* Announced, never drawn. The clip-rect form rather than display:none, which
+   removes the node from the accessibility tree and would silence the very
+   region that exists to speak. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+/* Raises the first letter where a shared phrase is used as a SENTENCE. The
+   refusal reasons come from one dictionary that also fills table cells,
+   where lower case is right; capitalising the data would fix the card and
+   break the column. Done in CSS, at the one site that needs it. */
+.cap::first-letter{text-transform:uppercase}
 /* Off-screen until focused, then the first thing a keyboard reaches. */
 .skip-link{position:fixed;left:var(--shell-x);top:-60px;z-index:9500;
   padding:9px 14px;border-radius:var(--r-md);background:var(--card);
@@ -263,9 +284,26 @@ body{
   background:var(--accent);flex:none}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
-/* ---------- panel: scanlines as a 2-bit overlay, not a hero effect ---------- */
-.panel{position:relative;border:1px solid var(--border-soft);border-radius:var(--r-xl);
-  background:linear-gradient(135deg,rgba(0,0,0,.55),oklch(0.22 0.010 125 / 0.6));overflow:hidden}
+/* ---------- panel: scanlines as a 2-bit overlay, not a hero effect ----------
+
+   DEPTH, BECAUSE EDGES ALONE WERE NOT ENOUGH. Every surface in this app is a
+   near-black on a near-black, separated by one hairline at 0.32 lightness —
+   so on a real screen the panels dissolved into the page and the operator
+   could not tell where one section stopped and the next began.
+
+   The fix is elevation and edge, never a lighter fill. This file's contrast
+   notes are measured against --bg and --card; washing the panel ground out
+   to make it "pop" would silently drop --fg-3 and --fg-4 below the AA they
+   were explicitly lifted to clear, which is the same mistake the row-opacity
+   bug made and cost three review rounds to find.
+
+   So: a real shadow with an offset and a soft blur, a top highlight where
+   the light would actually catch a raised edge, and a border a step up in
+   contrast. Nothing behind the text changes. */
+.panel{position:relative;border:1px solid var(--border);border-radius:var(--r-xl);
+  background:linear-gradient(135deg,rgba(0,0,0,.55),oklch(0.22 0.010 125 / 0.6));
+  box-shadow:0 10px 26px -14px rgba(0,0,0,.85),0 1px 0 rgba(255,255,255,.04) inset;
+  overflow:hidden}
 .panel::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:.35;
   background:repeating-linear-gradient(0deg,rgba(0,0,0,.20) 0 1px,transparent 1px 3px)}
 .panel>*{position:relative}
@@ -273,10 +311,54 @@ body{
    carries the emphasis; the shadow now has an offset and does what a shadow
    does. */
 .panel-accent{border-color:rgba(var(--accent-rgb),.45);
-  box-shadow:0 2px 10px -4px rgba(0,0,0,.5)}
+  box-shadow:0 10px 26px -12px rgba(0,0,0,.85),
+             0 1px 0 rgba(var(--accent-rgb),.10) inset}
+/* The header is a BAND, not a line of text above a rule. It is the thing
+   that says "a new section starts here", and it was carrying that job with a
+   single hairline. */
 .panel-head{display:flex;align-items:center;gap:var(--sm);padding:var(--md) var(--lg);
-  border-bottom:1px solid var(--border-soft)}
+  border-bottom:1px solid var(--border);
+  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012))}
+.panel-head .t-section{color:var(--fg)}
 .panel-body{padding:var(--lg)}
+
+/* ══ FLOATING SECTIONS ══
+   A section whose content is CARDS does not get a container. The cards are
+   already objects with their own edge and their own shadow, and wrapping
+   them in a second box put a black rectangle between the 3D rail and the
+   page — a frame around the one thing on this surface that is supposed to
+   feel like it is sitting on top of everything.
+
+   So these sections have no ground of their own: heading, then content,
+   straight onto the page. Separation comes from the cards' elevation and
+   from the space around the heading, which is what was doing the work
+   anyway. The earlier depth pass still stands for the CONTROL panels above
+   (Scanner, Rules of engagement) — those are surfaces you operate, and a
+   surface you operate should look like one. */
+.panel.floating{background:none;border:0;border-radius:0;box-shadow:none;
+  overflow:visible}
+.panel.floating::before{display:none}          /* no scanline overlay */
+.panel.floating > .panel-head{background:none;border-bottom:0;
+  padding:var(--md) var(--lg) var(--sm)}
+.panel.floating > .panel-head .t-section{font-size:var(--fs-5);
+  font-family:var(--f-display);letter-spacing:.06em}
+/* A section of CARDS needs no ground — the cards are the objects. A section
+   of CONTROLS still does: inputs, toggles and meters are not objects, they
+   are a form, and a form with nothing behind it reads as loose parts on a
+   page. So the body keeps a quiet inset surface while the section around it
+   floats. This is the one place the two halves of the vibe meet. */
+.panel.floating > .panel-body,
+.panel.floating > .budget-grid,
+.panel.floating > .gate-list{
+  background:linear-gradient(180deg,rgba(255,255,255,.022),rgba(0,0,0,.16));
+  border:1px solid var(--border-soft);border-radius:var(--r-lg);
+  box-shadow:0 1px 0 rgba(255,255,255,.04) inset}
+/* rails and lists inside a floating section are already carded — no ground */
+.panel.floating > .wheel-rail,
+.panel.floating > .mb-shell,
+.panel.floating > .mw-tabs{background:none;border:0;box-shadow:none}
+/* the disclosure arrow on a floating <details> section */
+details.panel.floating > summary{padding-left:var(--lg)}
 
 /* corner brackets — "armed and watching" */
 .bracket{position:relative}
@@ -1138,30 +1220,360 @@ body:not(.dev) #consolePanel{display:none}
 .tk-open .good{color:var(--green)}
 .tk-open .bad{color:var(--red)}
 
-/* Row geometry lives here, not in a style attribute, because renderDeck now
-   creates the wrapper element once and patches only its contents. */
-.deck-row{display:grid;grid-template-columns:120px 92px 1fr 150px auto;
-  gap:var(--md);align-items:center;padding:var(--md) var(--lg);
-  border-bottom:1px solid var(--border-soft)}
-/* Every sibling row collapses at 900 — .jnl-row, .pos-row, .radar-row,
-   .budget-grid — and the deck was simply missed, which is why it survived the
-   responsive pass: its neighbours all looked done. It is the worst one to
-   miss. 120 + 92 + 150 plus three gaps and two gutters is a 454px floor asked
-   to fit 356px, and the track that gives is the `1fr` carrying the engine's
-   REASONING — the sentence explaining why the setup exists, on the first thing
-   the operator looks at, crushed to nothing on the surface whose whole job is
-   to justify a trade. */
+/* ═══════════════ MISSION BRIEFS — the rail ═══════════════
+   The Setup Deck's rows became dossier cards on one horizontal, snap-scrolled
+   rail. Geometry lives here, not in a style attribute, because renderDeck
+   still creates each wrapper element once and patches only its contents —
+   and because the rail's whole promise is that a repaint never moves a card
+   under the pointer: emphasis is transform-only, layout never changes.
+
+   Scroll is the platform's. `scroll-snap-type:x mandatory` gives a phone
+   real swipe physics with no library and no momentum code to get wrong; the
+   arrows and drag in shell.js are additive chrome for a mouse. */
+.mb-shell{position:relative}
+/* The stage. The rail sits in its own lit space — a low accent glow pooled
+   where the front card stands, falling off to the panel's black. Background
+   sits on the scroll container's own box, so it holds still while the cards
+   move through it like a spotlight. */
+/* Inline padding is half the track less half a card, so the FIRST and LAST
+   card can reach the spotlight too — without it the most urgent card, which
+   sorts first, could never be centered and the stack would open on its
+   second-best. The +34px squares the first card's own negative margin. */
+/* THE STAGE. Not a scroll container — there is no scrolling here at all.
+   Cards are absolutely placed and driven entirely by transform, so the rail
+   turns like a wheel rather than sliding like a strip.
+
+   `touch-action:pan-y` is what makes it behave on a phone: a vertical swipe
+   still scrolls the page, a horizontal one turns the wheel, and the browser
+   decides which within a few pixels. Without it the carousel eats vertical
+   gestures and the page feels stuck. */
+/* The hero stage adds only what is its own: the room its heavier shadow
+   needs, and the pool of light. Depth, cursor and clipping come from
+   .wheel-rail, which every carousel shares. */
+.mb-track{
+  /* The clip is deliberate — cards must not spill sideways across the page —
+     so the plate's 30px-offset shadow has to fit inside the padding or the
+     card looks pasted onto the rail rather than lifted off it. */
+  padding:var(--xl) 0 calc(var(--xl) + 28px);margin:0;
+  /* LIGHT, NOT A BOX. This carried a dark linear gradient with hard top and
+     bottom edges, which read as a black tray under the cards and was the
+     thing flattening the rail against the page. What is left is a single
+     soft pool of accent light with no edge anywhere — it lands under the
+     front card and fades out long before it reaches a boundary, so it reads
+     as the cards being lit rather than as a container holding them. */
+  background:radial-gradient(46% 62% at 50% 62%,
+    rgba(var(--accent-rgb),.075),transparent 72%)}
+/* Both feeds (#deck, #radar) render into one wheel; the segments are grouping
+   only and must not introduce a box of their own. */
+.mb-seg{display:contents}
+/* An Overwatch rail is the same stage at a lighter weight: less room needed
+   because its cards cast a smaller shadow, and its own faint pool of light. */
+.wl-rail{padding:var(--lg) 0 calc(var(--lg) + 20px);
+  background:radial-gradient(42% 58% at 50% 60%,
+    rgba(var(--accent-rgb),.045),transparent 72%)}
+
+/* The card, STACKED IN DEPTH. Not scaled — rotated. The track carries a
+   perspective, so a card turned on its Y axis and pushed back on Z is
+   genuinely further away: its far edge foreshortens, its near edge stays
+   tall, and the two sides of the rail mirror each other into a vanishing
+   point. Scaling alone reads as "smaller card"; this reads as "card facing
+   away", which is the whole difference between flat and dimensional.
+
+   `--d` is the signed distance from the rail's centre in card-widths and
+   `--ad` its magnitude; shell.js writes both on every scrolled frame, so
+   every value below is continuous — nothing pops at a class boundary. The
+   overlap itself is plain negative margin, i.e. fixed layout, so a repaint
+   or a scroll never moves a card's hit area mid-reach. */
+/* THE CARD. Absolutely placed at the stage's centre and moved out from there
+   by transform alone. Every card sits in exactly the same spot in layout
+   terms; what separates them is depth, and depth costs no reflow.
+
+   NOTHING here transitions. shell.js writes transform, opacity and filter on
+   every frame the wheel is awake, so a CSS transition would fight the
+   physics for control of the same properties and turn a crisp drag into
+   mush. The smoothness comes from the integrator, not from easing. */
+/* --mc-w is declared once and used for both the width and the half-width
+   that centres it. Writing the negative half as `min(-170px,-43vw)` looked
+   symmetrical and was wrong — min() picks the MORE negative of the two, so
+   at a 1027px viewport the card was 340px wide and offset by -441px. */
+/* THE CARD IS ONE COMPONENT. `.mc` is what a card LOOKS like — material,
+   edge, corner, rhythm — and nothing about where it sits. The wheel's
+   placement lives under `.mb-track .mc` below, so the same card can be laid
+   out in a wheel, a scrolling rail, or a flat strip and still be the same
+   object. Splitting these is what let the Overwatch cards stop being a
+   second, smaller, differently-shaped design. */
+.mc{position:relative;
+  --mc-w:min(340px,86vw);
+  display:flex;flex-direction:column;gap:10px;
+  padding:var(--md) var(--lg) var(--lg);
+  background:linear-gradient(160deg,rgba(255,255,255,.03),rgba(0,0,0,.28)),var(--card);
+  border:1px solid var(--border);border-radius:var(--r-lg);
+  box-shadow:0 1px 0 rgba(255,255,255,.06) inset,
+             0 18px 44px -12px rgba(0,0,0,.55)}
+/* THE WHEEL STAGE, wherever it appears. Every carousel on the surface wears
+   this class and gets the same depth, the same grab cursor, the same
+   touch-action contract — the Overwatch groups were plain scroll rails and
+   read as a different interaction from the hero for exactly as long as this
+   was scoped to one element. */
+.wheel-rail{position:relative;overflow:hidden;touch-action:pan-y;cursor:grab;
+  perspective:1150px;perspective-origin:50% 46%}
+.wheel-rail.is-dragging{cursor:grabbing;user-select:none}
+.wheel-rail:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.wheel-rail .mc{position:absolute;left:50%;top:var(--xl);
+  width:var(--mc-w);margin-left:calc(var(--mc-w) / -2);
+  transform-origin:50% 50%;backface-visibility:hidden;
+  will-change:transform,opacity,filter}
+/* The far face catches less light than the near one — a wash over the turned
+   card, strongest on the edge pointing away. Without it a rotated rectangle
+   still reads as a sticker; this is what makes it read as a solid. It rides
+   on opacity driven by the same class the placement sets, so it costs one
+   compositor property and no per-frame string. */
+.wheel-rail .mc::before{content:'';position:absolute;inset:0;border-radius:inherit;
+  pointer-events:none;z-index:2;opacity:.85;
+  background:linear-gradient(90deg,rgba(0,0,0,.42),transparent 58%);
+  transition:opacity .25s ease}
+.wheel-rail .mc.flip-r::before{background:linear-gradient(270deg,rgba(0,0,0,.42),transparent 58%)}
+.wheel-rail .mc.is-center::before{opacity:0}
+.mc.is-center{border-color:rgba(var(--accent-rgb),.35);
+  box-shadow:0 26px 60px -14px rgba(0,0,0,.8);
+  background:
+    linear-gradient(180deg,rgba(var(--accent-rgb),.07),transparent 45%),
+    linear-gradient(160deg,rgba(255,255,255,.02),rgba(0,0,0,.28)),var(--card)}
+
+/* ══ A TRADE YOU ARE IN: MACHINED PLATE ══
+   These cards carry the operator's actual money, and they are the only thing
+   on this surface that does. So they are built out of a different material
+   from everything around them — brushed platinum rather than the matte
+   near-black every other card uses. Not decoration: material IS the
+   hierarchy here, and it means one thing only, "this is live".
+
+   The brushing is a repeating micro-gradient at a shallow angle, the bevel
+   is a light top edge over a dark bottom one, and the whole plate sits on a
+   deeper shadow than its neighbours. All flat paint — no blur, no filter —
+   so it costs nothing per frame while the wheel is turning. */
+.mc.mission{
+  background:
+    repeating-linear-gradient(96deg,
+      rgba(255,255,255,.035) 0 1px, transparent 1px 3px),
+    linear-gradient(163deg,
+      oklch(0.44 0.008 140) 0%, oklch(0.32 0.006 140) 34%,
+      oklch(0.38 0.007 140) 58%, oklch(0.28 0.005 140) 100%);
+  border-color:oklch(0.56 0.010 140);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.18) inset,
+    0 -1px 0 rgba(0,0,0,.55) inset,
+    0 22px 50px -16px rgba(0,0,0,.85)}
+.mc.mission.is-center{border-color:oklch(0.68 0.012 140);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.26) inset,
+    0 -1px 0 rgba(0,0,0,.6) inset,
+    0 30px 66px -16px rgba(0,0,0,.9)}
+/* The plate reads lighter than the app's normal ground, so its text steps up
+   with it — the contrast notes elsewhere are measured against --card and do
+   not describe this surface. */
+.mc.mission .mc-tok{color:oklch(0.98 0.008 140)}
+.mc.mission .mc-sub,.mc.mission .mc-id,.mc.mission .mc-exp{color:oklch(0.86 0.010 140)}
+.mc.mission .mc-nums{color:oklch(0.88 0.010 140)}
+.mc.mission .mc-nums b{color:oklch(0.98 0.008 140)}
+.mc.mission .lad-lv b{color:oklch(0.98 0.008 140)}
+.mc.mission .lad-lv.en{color:oklch(0.88 0.010 140)}
+.mc.mission .mc-ring-track{stroke:rgba(0,0,0,.32)}
+.mc.mission .mc-ring-label b{color:oklch(0.98 0.008 140)}
+.mc.mission .mc-ring-label span{color:oklch(0.84 0.010 140)}
+.mc.mission .mc-ladder{border-left-color:rgba(255,255,255,.22);
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 1px,transparent 1px 27px)}
+.mc.mission .btn{background:rgba(0,0,0,.3);border-color:oklch(0.60 0.010 140);
+  color:oklch(0.94 0.008 140)}
+.mc.mission .btn:hover{border-color:var(--accent);color:var(--accent)}
+/* the stamp on a live trade is a machined tag, not a printed one */
+.st-live{color:oklch(0.20 0.02 150);border-color:oklch(0.80 0.10 155);
+  background:linear-gradient(180deg,oklch(0.92 0.16 155),oklch(0.74 0.14 155));
+  box-shadow:0 1px 0 rgba(255,255,255,.4) inset,0 1px 3px rgba(0,0,0,.5)}
+.st-rest{color:oklch(0.22 0.03 85);border-color:oklch(0.80 0.10 85);
+  background:linear-gradient(180deg,oklch(0.90 0.14 85),oklch(0.72 0.13 85));
+  box-shadow:0 1px 0 rgba(255,255,255,.4) inset,0 1px 3px rgba(0,0,0,.5)}
+/* The empty state and the loading skeleton are NOT cards and do not ride the
+   wheel — there is nothing to turn. They sit centred in the stage, flat. */
+.wheel-rail > .mb-seg > .empty,
+.wheel-rail > .mb-seg > .skeleton,
+.wheel-rail > .empty{
+  position:absolute;left:50%;top:var(--xl);transform:translateX(-50%);
+  width:min(430px,86vw)}
+.wheel-rail > .mb-seg > .empty,
+.wheel-rail > .empty{text-align:left;border:1px dashed var(--border);
+  border-radius:var(--r-lg);display:flex;flex-direction:column;justify-content:center}
+/* with cards on the wheel, a stale skeleton must not hang behind them */
+.wheel-rail.has-wheel > .mb-seg > .skeleton{display:none}
+/* the corner brackets — the app's own "armed and watching" mark, on the card
+   currently under the eye. Same recipe as .bracket::after. */
+.mc.is-center::after{content:'';position:absolute;inset:0;pointer-events:none;
+  border-radius:inherit;
+  background:
+    linear-gradient(var(--accent),var(--accent)) 0 0/12px 1px no-repeat,
+    linear-gradient(var(--accent),var(--accent)) 0 0/1px 12px no-repeat,
+    linear-gradient(var(--accent),var(--accent)) 100% 100%/12px 1px no-repeat,
+    linear-gradient(var(--accent),var(--accent)) 100% 100%/1px 12px no-repeat;
+  opacity:.55}
+
+/* stamp row: the verdict, worn like a dossier stamp — rectangular on purpose,
+   so it cannot be mistaken for the pill chips that carry data everywhere
+   else. FORMING is dashed: a plan not yet cleared wears an unfinished mark. */
+.mc-top{display:flex;align-items:center;justify-content:space-between;gap:var(--sm)}
+.mc-stamp{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;
+  letter-spacing:.2em;text-transform:uppercase;padding:3px 9px;
+  border:1px solid;border-radius:3px;flex:none}
+.st-go{color:var(--green);border-color:rgba(0,255,170,.55);background:rgba(0,255,170,.06)}
+.st-warn{color:var(--amber);border-color:rgba(255,194,102,.55);background:rgba(255,194,102,.06)}
+.st-dead{color:var(--red-2);border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.05)}
+.st-wait{color:var(--fg-3);border-color:var(--border)}
+/* The threat steps wear the same stamp as a mission verdict — one badge
+   language across every card in the app, four fixed hues that do not move
+   when the exposure accent does. */
+.st-t3{color:var(--green);border-color:rgba(0,255,170,.55);background:rgba(0,255,170,.07)}
+.st-t2{color:var(--amber);border-color:rgba(255,194,102,.5);background:rgba(255,194,102,.06)}
+.st-t1{color:var(--cyan);border-color:rgba(34,211,238,.45);background:rgba(34,211,238,.06)}
+.st-t0{color:var(--fg-3);border-color:var(--border)}
+.st-form{color:var(--amber-2);border-color:rgba(251,191,36,.55);border-style:dashed;
+  background:rgba(251,191,36,.05)}
+.mc-id{color:var(--fg-4);font-size:var(--fs-1);letter-spacing:.06em;text-align:right}
+
+/* identity + the ring */
+.mc-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--md)}
+.mc-idy{min-width:0}
+.mc-tok{font-family:var(--f-display);font-size:var(--fs-6);line-height:1;
+  letter-spacing:.06em;color:var(--fg)}
+.mc-sub{margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mc-dirline{display:flex;align-items:center;gap:var(--sm);margin-top:9px;flex-wrap:wrap}
+.mc-ringcol{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px}
+.mc-exp{text-align:center;color:var(--amber)}
+.mc.forming .mc-exp{color:var(--fg-4)}
+
+/* The ring holds a measurement, never a score: life remaining on a ready
+   card, ATR distance on a forming one. The unit is printed inside the ring
+   so the number cannot be read as a confidence percentage — this product
+   does not have one. */
+.mc-ring{position:relative;width:76px;height:76px}
+.mc-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.mc-ring-track{fill:none;stroke:rgba(255,255,255,.07);stroke-width:5}
+.mc-ring-fill{fill:none;stroke:var(--green);stroke-width:5;stroke-linecap:round}
+.ring-mid .mc-ring-fill{stroke:var(--amber)}
+.ring-low .mc-ring-fill{stroke:var(--red-2)}
+.ring-form .mc-ring-fill{stroke:var(--amber-2)}
+/* the two lower threat steps, so the ring agrees with the card's own bar */
+.ring-cy .mc-ring-fill{stroke:var(--cyan)}
+.ring-dim .mc-ring-fill{stroke:var(--fg-4)}
+.mc-ring-label{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;line-height:1.15;text-align:center}
+.mc-ring-label b{font-family:var(--f-display);font-size:var(--fs-3);color:var(--fg)}
+/* the unit is what stops the ring reading as a score — it gets the brighter
+   step, not the dimmest one */
+.mc-ring-label span{font-family:var(--f-mono);font-size:var(--fs-1);color:var(--fg-3)}
+
+/* The trade ladder: stop, entry and target drawn to scale. This is the
+   card's picture, and it is real geometry off the engine's own three prices
+   — not a decorative chart. Bands carry the claim: green is what the trade
+   is reaching for, red is what it is risking, and their heights ARE the R:R. */
+.mc-ladder{position:relative;height:108px;margin:2px 0;
+  border-left:1px solid var(--border-soft);
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 27px)}
+.lad-band{position:absolute;left:0;right:0}
+.lad-band.reward{background:rgba(0,255,170,.07)}
+.lad-band.risk{background:rgba(248,113,113,.08)}
+.lad-lv{position:absolute;left:0;right:0;transform:translateY(-50%);
+  display:flex;align-items:center;gap:8px;padding:0 2px 0 8px;font-size:var(--fs-1)}
+.lad-lv::after{content:'';order:2;flex:1;border-top:1px dashed currentColor;opacity:.4}
+.lad-name{order:1;flex:none;font-family:var(--f-mono);font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase}
+.lad-lv b{order:3;flex:none;font-size:var(--fs-2);color:var(--fg)}
+.lad-lv.tp{color:var(--green)}
+.lad-lv.en{color:var(--fg-3)}
+.lad-lv.en::after{border-top-style:solid}
+.lad-lv.sl{color:var(--red-2)}
+/* Where price actually is, on a trade that is live. A solid rule against the
+   three dashed plan levels, so "the market" and "the plan" cannot be
+   confused for each other at a glance. */
+.lad-now{position:absolute;left:0;right:0;transform:translateY(-50%);
+  display:flex;align-items:center;justify-content:flex-end;gap:6px;
+  border-top:2px solid var(--fg);padding:0 2px 0 8px}
+.lad-now b{font-size:var(--fs-2);color:var(--fg);background:var(--bg-2);
+  padding:0 5px;border-radius:3px;transform:translateY(-50%)}
+.mc.mission .lad-now{border-top-color:oklch(0.98 0.008 140)}
+.mc.mission .lad-now b{color:oklch(0.16 0.01 140);background:oklch(0.94 0.008 140)}
+
+.mc-nums{font-size:var(--fs-2);color:var(--fg-3)}
+.mc-story{min-width:0}
+.mc-acts{display:flex;gap:var(--sm);margin-top:auto}
+.mc-acts .btn{flex:1;justify-content:center;text-align:center}
+.mc-say{flex:1}
+
+/* THE ARRIVAL. One authored moment, spent only when a card appears mid-
+   session: the card lands, the stamp presses in, the ring sweeps out to its
+   reading. Page load is excluded in shell.js, and reduced-motion turns the
+   whole sequence off below. The recorded system says nothing celebrates;
+   this is the operator-approved exception, and it runs once per arrival. */
+.mc-new{animation:mcLand .45s cubic-bezier(.22,.9,.3,1) backwards}
+.mc-new .mc-stamp{animation:mcStamp .5s cubic-bezier(.22,.9,.3,1) .3s backwards}
+.mc-new .mc-ring-fill{animation:mcRing .9s cubic-bezier(.22,.9,.3,1) .4s backwards}
+/* The arrival moves the card with the standalone `translate` property, NOT
+   with `transform` — `transform` belongs to the depth system above, and a
+   keyframe touching it replaces the card's whole rotation for the duration.
+   That is not theoretical: it flattened every arriving card to a plain 2D
+   scale, and a card whose animationend never fired (a backgrounded tab
+   suspends animations) stayed flattened. These two properties compose, so
+   the card can land and be turned at the same time. */
+@keyframes mcLand{from{opacity:0;translate:26px}}
+@keyframes mcStamp{0%{opacity:0;transform:scale(2.1) rotate(-8deg)}
+  55%{opacity:1;transform:scale(.95) rotate(-1deg)}100%{transform:scale(1) rotate(0)}}
+@keyframes mcRing{from{stroke-dashoffset:163.36}}
+
+/* the rail's mouse chrome — a phone swipes instead, so it never sees these */
+.mb-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:3;
+  width:34px;height:60px;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.55);border:1px solid var(--border);border-radius:var(--r-md);
+  color:var(--fg-2);cursor:pointer;backdrop-filter:blur(4px);
+  transition:border-color .15s,color .15s}
+.mb-prev{left:8px}.mb-next{right:8px}
+.mb-nav:hover{border-color:var(--accent);color:var(--accent)}
+.mb-nav:disabled{opacity:.3;cursor:default}
+.mb-nav:disabled:hover{border-color:var(--border);color:var(--fg-2)}
+.mb-nav:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:640px){.mb-nav{display:none}}
+
+.mb-track .skeleton{padding:0}
+
+/* the refused strip: same cards, filed below the rail, dimmer ground.
+   .deck-row.dead rules further down own the de-emphasis. */
+/* The refused-setups disclosure that used to sit here is gone. Those cards
+   are a tab in Market Watch now: they are evidence about why nothing fired,
+   and they were sitting inside the panel that answers "what should I do
+   right now", where a four-day-dead trade occupied the slot where advice
+   goes. */
+#passed{padding:var(--lg) 0 calc(var(--lg) + 20px)}
+/* Refused cards ride their own wheel like every other group — the flat
+   strip they used to lie in was the last place on this surface where a card
+   behaved differently from its neighbours. */
+
+/* Thumb targets on the card actions. Same floor the ticket and position rows
+   already hold: 48px where a thumb does the pressing. */
 @media(max-width:900px){
-  .deck-row{grid-template-columns:1fr;gap:var(--sm)}
-  /* ...and its buttons, which measured 34px with real rows on screen. The
-     earlier pass raised the controls that WRITE — Arm, and CLOSE on a live
-     position — and stopped there, on the reasoning that a mis-tap only costs
-     money at those two. That is right about the stakes and wrong about the
-     traffic: "Ask copilot" and "Open chart" are the first things a thumb
-     reaches for on the first surface the app opens, and a target under the
-     floor is a target you hit twice. They stack full-width because the row is
-     already one column here, so the space costs nothing. */
-  .deck-row .btn{min-height:48px;width:100%;justify-content:center}
+  .deck-row .btn,.mc .btn{min-height:48px}
+}
+/* On a phone the card nearly fills the width, so the stack shows as edges
+   peeking either side of the front card — the wallet pattern a thumb already
+   knows. Shallower overlap keeps those edges wide enough to read as cards. */
+@media(max-width:640px){
+  .mc{margin-inline:-20px}
+  .mb-track{padding-inline:calc(50% - 43vw + 20px)}
+}
+@media (prefers-reduced-motion: reduce){
+  .mc,.mb-nav,.mc::before{transition:none}
+  .mc-new,.mc-new .mc-stamp,.mc-new .mc-ring-fill{animation:none}
+  /* Depth is motion here — the turn only reads while cards travel through
+     it. Reduced-motion gets the rail flat and evenly lit, which is the same
+     information without the parallax. */
+  .mb-track{perspective:none}
+  .mc{transform:none;filter:none}
+  .mc::before{display:none}
 }
 
 /* An expired setup fades where it stands and holds its slot for the duration,
@@ -1294,18 +1706,11 @@ body:not(.dev) #consolePanel{display:none}
   letter-spacing:.08em;color:var(--fg)}
 .pos-open:hover{color:var(--accent)}
 
-/* The out-of-range half of "At a level", folded. The summary IS the divider —
-   same class, so the boundary reads exactly as it did when twenty rows sat
-   open beneath it, and the marker is the only thing that changes. */
-.near-beyond{border-top:1px solid var(--border-soft);margin-top:var(--sm)}
-.near-beyond > summary{cursor:pointer;list-style:none;display:flex;
-  align-items:center;gap:var(--sm)}
-.near-beyond > summary::-webkit-details-marker{display:none}
-.near-beyond > summary::before{content:"▸";color:var(--fg-4);flex:none;
-  transition:transform .15s}
-.near-beyond[open] > summary::before{content:"▾"}
-.near-beyond > summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.near-beyond-say{padding:0 var(--lg) var(--sm)}
+/* The out-of-range markets used to hide behind a `<details>` titled "Beyond
+   the 1 ATR the engine looks" — a sentence doing a label's job, on a control
+   a reader had to discover. It is a tab now ("Out of reach") and the bound is
+   stated properly in the group's own opening line, where there is room for
+   it. Nothing is folded away in this panel any more. */
 /* The track is NEUTRAL. It was a red-to-green gradient over stop->target
    price space, which meant a 3:1 trade — whose entry sits at 25% from the
    stop end by construction — always painted its marker "in the red", and a
@@ -1354,23 +1759,208 @@ body:not(.dev) #consolePanel{display:none}
   .pos-r{text-align:left}
 }
 
-/* ---------- approaching (Command) ----------
-   Forming setups: price closing on a zone. The meter fills as distance in
-   ATR shrinks — anticipation drawn as position, like the open-trade track. */
-.radar-row{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:var(--lg);
-  align-items:center;padding:12px var(--lg);border-bottom:1px solid var(--border-soft)}
-.radar-row:last-child{border-bottom:0}
-.radar-sym{font-family:var(--f-display);font-size:var(--fs-4);letter-spacing:.08em;color:var(--fg-2)}
-.radar-say{font-family:var(--f-body);font-size:var(--fs-2);color:var(--fg-3);margin-bottom:7px}
+/* ---------- watch cards (Command: At a level) ----------
+   Where price is standing near structure. Deliberately a size down from the
+   mission cards above: these are places, not plans, and the chrome must not
+   promote them. The meter fills as distance in ATR shrinks — anticipation
+   drawn as position, like the open-trade track. */
+.radar-say{font-family:var(--f-body);font-size:var(--fs-2);color:var(--fg-3)}
 .radar-say b{color:var(--fg-2);font-weight:500}
-.radar-meter{height:4px;border-radius:var(--r-pill);background:rgba(255,255,255,.06);overflow:hidden}
+.radar-meter{height:4px;border-radius:var(--r-pill);background:rgba(255,255,255,.06);
+  overflow:hidden;flex:none}
 .radar-meter i{display:block;height:100%;border-radius:var(--r-pill);
   background:linear-gradient(90deg,rgba(255,194,102,.25),var(--amber));}
-.radar-dist{text-align:right;font-family:var(--f-mono);font-size:var(--fs-2);color:var(--amber);
-  font-variant-numeric:tabular-nums;min-width:64px}
-.radar-dist .t-sub{display:block;text-align:right}
-@media(max-width:900px){.radar-row{grid-template-columns:1fr;gap:var(--sm)}
-  .radar-dist{text-align:left}.radar-dist .t-sub{text-align:left}}
+/* Room above and below for the cards' shadows and their hover lift. It has
+   to come from PADDING, not from overflow: a scroll container with
+   `overflow-x:auto` computes `overflow-y:visible` to `auto`, so asking for
+   visible here silently gets you a clip. Padding is inside the scroll box,
+   so a shadow that fits within it is never cut — and a rail clipped tight to
+   its cards puts a hard edge back under them, which is exactly the container
+   this section just lost. The bottom clears the 22px-offset shadow. */
+/* The flex scroll rail is gone: these are wheels now, and a wheel places
+   its cards absolutely. Geometry lives in .wheel-rail; what is left below
+   is only what this rail sizes differently. */
+/* THE CARD, LIFTED OFF THE PANEL. It used to be a darker rectangle on a dark
+   panel on a dark page — three near-blacks with a hairline between them, and
+   the complaint that sections were hard to tell apart was exactly right. The
+   card is now LIGHTER than what it sits on and carries a real shadow, so the
+   edge is a depth cue rather than a line someone has to look for.
+
+   --card is used unchanged rather than a new lighter surface: this file's
+   contrast notes are measured against it, and inventing a lighter ground
+   would silently drop --fg-3 and --fg-4 below the AA they were lifted to
+   clear. Depth here comes from elevation and edges, never from washing the
+   text's background out. */
+/* It IS a `.mc`. Everything about how it looks — material, edge, corner,
+   padding, internal rhythm — comes from that one component; this rule only
+   says how wide it is in a scrolling rail and how it answers the cursor.
+   Same width as a mission card, deliberately: two card sizes on one surface
+   is what made these read as a different design. */
+/* Width only. Everything else — material, placement, depth, the turn — is
+   `.mc` and `.wheel-rail`, exactly as it is for a mission brief. No hover
+   transform: the wheel writes `transform` every frame and a CSS hover rule
+   would be fighting the physics for the same property, which is the bug
+   that flattened the arrival animation. The lift is the wheel's job now,
+   and the card in front is already the lifted one. */
+.wl-card{--mc-w:min(340px,86vw);
+  transition:box-shadow .18s ease,border-color .18s ease}
+.wl-card.is-center{border-color:oklch(0.58 0.014 130);
+  box-shadow:0 1px 0 rgba(255,255,255,.11) inset,
+             0 22px 42px -16px rgba(0,0,0,.9)}
+@media (prefers-reduced-motion: reduce){.wl-card{transition:none}}
+
+/* ══ THREAT LEVEL ══
+   Four steps, one per state of the engine's own `engine_reach` verdict. No
+   fifth invented, no number, and no score.
+
+   FIXED HUES, NEVER var(--accent). This is the bug that made the panel read
+   as two levels instead of four: the reach chips used .chip-accent, and the
+   Dynamic Accent Rule reassigns --accent to amber the moment the operator
+   holds a position. With money on the book, "in the zone now" and "waits for
+   price" rendered the identical yellow — two different readings, one colour,
+   on the panel whose entire job is telling them apart. A threat scale that
+   changes meaning when you open a trade is not a scale.
+
+   The ramp is a real one: green is contact, amber is closing, steel is
+   standing off, grey is distant. Four hues, four steps, legible at a glance
+   and unaffected by exposure.
+
+   Drawn across the card's TOP edge, not down its side: a thick coloured left
+   border is the most recognizable tell of a generated UI, and this app
+   already uses an inset left stripe to mean "your money is on this".
+   Reusing that edge would make the one signal that costs money ambiguous. */
+.wl-card::after{content:'';position:absolute;left:0;right:0;top:0;height:3px;
+  border-radius:var(--r-lg) var(--r-lg) 0 0;background:var(--fg-4)}
+.wl-card.t3::after{background:var(--green);box-shadow:0 0 12px rgba(0,255,170,.6)}
+.wl-card.t2::after{background:var(--amber)}
+.wl-card.t1::after{background:var(--cyan)}
+.wl-card.t0::after{background:var(--fg-4);opacity:.5}
+/* Contact — price is actually inside the zone. The one state worth catching
+   an eye across the room, and the only one that tints its whole card. */
+.wl-card.t3{border-color:rgba(0,255,170,.4);
+  background:linear-gradient(180deg,rgba(0,255,170,.08),transparent 42%),var(--card)}
+.wl-card.t2{border-color:rgba(255,194,102,.3)}
+.wl-card.t1{border-color:rgba(34,211,238,.24)}
+
+/* The reach chips carry the same four hues, also fixed. */
+.chip-t3{background:rgba(0,255,170,.12);color:var(--green)}
+.chip-t2{background:rgba(255,194,102,.12);color:var(--amber)}
+.chip-t1{background:rgba(34,211,238,.12);color:var(--cyan)}
+.chip-t0{background:rgba(255,255,255,.05);color:var(--fg-3)}
+
+/* A market a playbook actually covers, in the every-market group. Uses the
+   accent deliberately — "the engine would trade this condition" IS the
+   operating state the accent rule exists to signal. */
+.wl-card.wl-live{border-color:rgba(var(--accent-rgb),.3)}
+.wl-card .mc-id{font-variant-numeric:tabular-nums}
+/* the zone sentence sits where a mission card puts its price line */
+.wl-card .mc-nums{color:var(--fg-3);line-height:1.4}
+
+/* ── THE MANUAL-TRADE GRADE ──
+   A letter for a hand-trade candidate, from two engine facts: where price
+   stands relative to the zone, and whether a playbook covers the condition.
+   The line beneath it always states which — a grade whose basis is not on
+   screen is the uncalibrated score this product exists to refuse. */
+.wl-grade{flex:none;width:26px;height:26px;border-radius:var(--r-sm);
+  display:inline-flex;align-items:center;justify-content:center;
+  font-family:var(--f-display);font-size:var(--fs-4);line-height:1;
+  border:1px solid currentColor}
+.g-a{color:var(--green);background:rgba(0,255,170,.14)}
+.g-b{color:var(--amber);background:rgba(255,194,102,.14)}
+.g-c{color:var(--cyan);background:rgba(34,211,238,.12)}
+.g-d{color:var(--fg-3);background:rgba(255,255,255,.05)}
+.wl-grade-why{color:var(--fg-3);line-height:1.35;flex:1;min-width:0}
+.mc-dirline .wl-grade-why{font-size:var(--fs-1)}
+/* Reasons is the explanatory control, so it reads as one rather than as an
+   equal partner to "Open chart". */
+.btn-why{border-color:rgba(248,113,113,.4);color:var(--red-2)}
+.btn-why:hover{border-color:var(--red-2);color:var(--fg)}
+
+/* Engaged — detail: the same book as the rail, folded, so one book is not
+   two panels of equal weight. */
+details.panel > summary{cursor:pointer;list-style:none}
+details.panel > summary::-webkit-details-marker{display:none}
+details.panel > summary::after{content:'';flex:none;width:8px;height:8px;
+  border-right:1.5px solid var(--fg-4);border-bottom:1.5px solid var(--fg-4);
+  transform:rotate(-45deg);margin-left:var(--sm);transition:transform .15s ease}
+details.panel[open] > summary::after{transform:rotate(45deg)}
+details.panel > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media (prefers-reduced-motion: reduce){details.panel > summary::after{transition:none}}
+/* The weather half of a watch card: what condition this market is in, above
+   the line about where price is standing in it. Divided by a rule rather
+   than a gap because they are two different claims from two different
+   authorities, and the card should not blur that. */
+.wl-wx{padding-bottom:7px;border-bottom:1px solid var(--border-soft)}
+.wl-regs{display:flex;gap:5px;flex-wrap:wrap}
+.wl-reg{display:inline-flex;align-items:baseline;gap:5px;padding:2px 7px;
+  border-radius:var(--r-sm);background:rgba(255,255,255,.04);
+  font-family:var(--f-mono);font-size:var(--fs-1);color:var(--fg-3)}
+.wl-reg b{color:var(--fg-4);font-weight:600;letter-spacing:.1em}
+.wl-reg.up{background:rgba(0,255,170,.09);color:var(--green-soft)}
+.wl-reg.dn{background:rgba(248,113,113,.09);color:var(--red-2)}
+.wl-mean{margin-top:6px;font-family:var(--f-body);font-size:var(--fs-2);
+  line-height:1.45;color:var(--fg-3)}
+/* A market a playbook actually covers is the one worth the operator's eye */
+.wl-mean.live{color:var(--fg-2)}
+
+/* The quiet-market sentence, directly beneath the rail it explains. */
+/* ── the stat wheel (Results) ──
+   The same card and the same wheel as a Mission Brief; only the content is a
+   statistic instead of a trade. The figure is the hero, at display scale,
+   because on this surface the number IS the subject. */
+.stat-card{min-height:236px}
+/* The trade card's subtitle is a symbol and truncates on purpose; a stat's
+   subtitle is a SENTENCE and has to wrap, or "3 more to a confidence
+   interval" becomes "3 more to a confidence …" and the card stops explaining
+   the number it exists to explain. */
+.stat-card .mc-sub{white-space:normal;overflow:visible;text-overflow:clip;
+  line-height:1.4;margin-top:8px;max-width:24ch}
+.stat-big{font-family:var(--f-display);font-size:var(--fs-7);line-height:1;
+  letter-spacing:.04em;color:var(--fg)}
+.stat-note{font-family:var(--f-body);font-size:var(--fs-2);line-height:1.5;
+  color:var(--fg-3);margin-top:auto}
+.prog-title{font-family:var(--f-display);font-size:var(--fs-5);letter-spacing:.06em;
+  color:var(--fg)}
+/* An earned milestone is lit from within; a locked one is the same card in the
+   dark. No gold, no confetti — this is a record of work done, and most of
+   these rows are gates the operator has not reached yet. */
+.prog-card.earned{border-color:rgba(0,255,170,.4);
+  background:linear-gradient(180deg,rgba(0,255,170,.07),transparent 46%),
+             linear-gradient(160deg,rgba(255,255,255,.03),rgba(0,0,0,.28)),var(--card)}
+.prog-card:not(.earned) .prog-title{color:var(--fg-3)}
+/* Going live: the same card, on the one surface that is otherwise a form. */
+.gate-card{min-height:210px}
+.gate-card.earned{border-color:rgba(0,255,170,.4);
+  background:linear-gradient(180deg,rgba(0,255,170,.07),transparent 46%),
+             linear-gradient(160deg,rgba(255,255,255,.03),rgba(0,0,0,.28)),var(--card)}
+.gate-card:not(.earned) .prog-title{color:var(--fg-3)}
+.gate-body{padding-bottom:var(--sm)}
+.gate-body > .wheel-rail{padding:var(--md) 0 var(--xl);margin:0 calc(var(--lg) * -1)}
+.gate-foot{padding:0 0 var(--sm);color:var(--fg-4);max-width:60ch}
+
+.mb-lede{padding:var(--md) var(--lg);font-family:var(--f-body);
+  font-size:var(--fs-3);line-height:1.55;color:var(--fg-3);max-width:78ch}
+.mb-lede:empty{display:none}
+.mb-lede.quiet{color:var(--fg-2)}
+
+/* ── Market Watch: four groups, four tabs, nothing buried ── */
+/* The tab strip is the only thing left carrying a surface in this section,
+   so it gets one of its own rather than borrowing the panel's — a control
+   should look like a control even when nothing around it is a container. */
+.mw-tabs{padding:var(--xs) var(--lg) 0}
+.mw-tabs .seg{flex-wrap:wrap;background:rgba(0,0,0,.3);
+  box-shadow:0 6px 16px -10px rgba(0,0,0,.8)}
+/* The count rides IN the tab, so an empty group is visible before it is
+   opened rather than after. */
+.mw-tabs .seg button b{margin-left:6px;font-weight:800;color:var(--fg-2);
+  font-variant-numeric:tabular-nums}
+.mw-tabs .seg button.on b{color:var(--accent)}
+.mw-tabs .seg button.empty b{color:var(--fg-4)}
+.mw-lede{padding:var(--md) var(--lg) 0;color:var(--fg-3);max-width:78ch}
+.mw-note{padding:var(--md) var(--lg) 0;color:var(--fg-3);max-width:78ch}
+.mw-empty{padding:var(--xl) var(--lg)}
+/* .wl-btn and .wl-say went with the bespoke layout — the card uses
+   .mc-acts and .mc-story now, like every other card. */
 @media (prefers-reduced-motion: reduce){.radar-meter i{transition:none}}
 
 /* settings rows */

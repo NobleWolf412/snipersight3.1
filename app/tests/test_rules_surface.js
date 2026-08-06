@@ -103,11 +103,19 @@ ok('LOCKED points at where the condition is written down', () => {
     'condition is stated nowhere is an unfinished thought, not caution');
 });
 
-ok('every criterion renders a bar that can move', () => {
-  assert(/gate-bar/.test(SHELL) && /gate-bar/.test(CSS),
-    'progress has no bar — "how close am I" is the only question worth ' +
-    'asking of a lock');
-  assert(/c\.progress/.test(SHELL), 'the bar is not driven by measured progress');
+ok('every criterion shows how close it is, proportionally', () => {
+  /* The bar became a ring when the gates moved onto the app's shared card.
+     The PROPERTY is unchanged and is what this pins: a lock must show its
+     distance, not just its state, because "how close am I" is the only
+     question worth asking of one. Either shape satisfies it; a bare
+     MET/NOT MET does not. */
+  assert(/gate-card/.test(SHELL) && /gate-card/.test(CSS),
+    'the criteria no longer render as cards — check this test still ' +
+    'describes the code');
+  assert(/ringSvg\(\(c\.progress/.test(SHELL) || /gate-bar/.test(SHELL),
+    'progress is not drawn — a lock that shows only its state tells the ' +
+    'operator nothing about how far off it is');
+  assert(/c\.progress/.test(SHELL), 'the indicator is not driven by measured progress');
 });
 
 ok('the build gate is stated apart from the evidence gate', () => {

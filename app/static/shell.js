@@ -144,6 +144,23 @@
     pendingJump = j.dataset.jump;
     go((j.getAttribute('href') || '#command').slice(1));
   });
+  /* SKIP TO CONTENT, to the content you are actually looking at.
+
+     The anchor's href is hard-coded to #s-command and cannot know which surface
+     is open, so on its own it navigated away from four surfaces out of five and
+     left document.activeElement on <body>. Both halves were measured from every
+     surface. This handler cancels the navigation entirely and moves focus into
+     whichever surface is on, which is what the control has always claimed to
+     do. The href stays as the no-JS fallback. */
+  const skip = document.querySelector('.skip-link');
+  if(skip) skip.addEventListener('click', e => {
+    const target = document.querySelector('.surface.on') || $('s-command');
+    if(!target) return;
+    e.preventDefault();
+    target.focus({preventScroll: true});
+    target.scrollIntoView({block: 'start'});
+  });
+
   addEventListener('hashchange', () => go(location.hash.slice(1) || 'command'));
   go(location.hash.slice(1) || 'command');
 
@@ -529,6 +546,10 @@
       $('baselineChip').textContent = o.baseline.label || 'forward window';
     }
     renderDeck(active, o.rejection_funnel || {});
+    /* The rail needs BOTH payloads: the book from the portfolio and the live
+       price from here. Whichever lands second has to repaint, or the ring and
+       the ladder marker sit at "no price" until the next 30s poll. */
+    renderMissions();
     renderRadar(o.approaching, o.prox_atr);
     renderFunnel(o.rejection_funnel || {});
   }
@@ -555,7 +576,7 @@
   function expiresIn(ts, now){
     if(!ts) return '';
     const m = Math.round((ts - now) / 60);
-    if(m <= 0) return 'expiring now';
+    if(m <= 0) return 'Expiring now';
     if(m < 60) return `expires in ${m}m`;
     const h = Math.round(m / 60);
     return h < 48 ? `expires in ${h}h` : `expires in ${Math.round(h / 24)}d`;
@@ -693,7 +714,7 @@
         '<span class="term" data-t="playbook">playbook</span> has a play for — ' +
         'Market Weather below shows which regimes they are in.</span>';
     }
-    return '<div class="empty">no setups right now' + body + '</div>';
+    return '<div class="empty">No setups right now.' + body + '</div>';
   }
 
   /* ONE AUTHORITY FOR "HOW MANY SETUPS".
@@ -712,7 +733,7 @@
     const expiry = s => s.expires_at_ts || Infinity;   // no expiry -> sorts last
     const best = new Map();            // token -> the one expiring soonest
     for(const s of setups || []){
-      /* Keyed by TOKEN, not by symbol. The header promises "One per token"
+      /* Keyed by TOKEN, not by symbol. The header promises one card per coin
          and the deck was showing PF_UNIUSD and UNIUSDT — the same coin on two
          venues — as two near-identical cards, because a venue prefix or a
          quote suffix made them different keys. The surviving card names its
@@ -767,7 +788,22 @@
      branch should never fire. It is wired anyway: if that constant ever flips,
      every accent in the app turns red before a single order is sent, and
      nobody has to remember to add the warning. */
+  /* DO NOT CLAIM A MODE BEFORE THE BOOK HAS ANSWERED.
+
+     shell.html used to ship `data-mode="idle"` as a literal, so every launch
+     painted the whole shell GREEN — the accent that means "nothing of yours
+     is in the market" — and then flipped to amber a second or two later when
+     the portfolio arrived and said otherwise. Green first, on a trader's home
+     screen, is not a neutral placeholder: it is the app asserting the SAFE
+     state before it has any facts, and asserting it in the one channel whose
+     entire job is answering "is my money on the line".
+
+     `unknown` is the honest opening state and renders a muted accent that
+     claims nothing. It resolves once, the moment /api/portfolio lands, and
+     never appears again. */
+  let bookKnown = false;
   function setAccentMode(){
+    if(!bookKnown) return;             // stay `unknown`; say nothing yet
     const manualExposed =
       (+MINE.open_risk_usd || 0) > 0 || (+MINE.pending_risk_usd || 0) > 0 ||
       (MINE.open || []).length > 0;
@@ -822,12 +858,149 @@
     el.textContent = text;
   }
 
+  /* ═══════════════ THE MISSION RAIL IS THE BOOK, NOT THE PLAN ═══════════════
+
+     This rail used to render `SSState.deck()` — VALIDATED setups still
+     PENDING — and it was empty every single time anyone looked at it. Not
+     usually. Structurally.
+
+     `engine/pipeline.py` runs `setups -> execsim` back to back inside ONE
+     cycle, and execsim paper-fills every VALIDATED setup at entry on its
+     trigger bar. So PENDING exists for the microseconds between two engines
+     in the same pass and is never observable between cycles. Measured on the
+     live store while this was written: 36 setups, 18 VALIDATED, 18 EXPIRED,
+     30 already carrying an exec result, 0 pending orders, 0 PENDING.
+
+     The operator's question is different when the engine trades for itself.
+     Not "what should I take" — it has been taken. "What am I IN, and what
+     did it just do." So the rail carries the book: filled positions first,
+     resting orders behind them. Those are on screen every day there is
+     exposure, which is the point.
+
+     The refused setups still render, through renderDeck below, into
+     Overwatch's own tab. They are the record of what did NOT happen, and
+     that is a different question from what is happening. */
+  function renderMissions(){
+    const el = $('deck');
+    if(!el) return;
+    const p = lastPortfolio || {};
+    const open = p.active_positions || [], resting = p.pending_orders || [];
+    const rows = open.concat(resting);
+    if(!rows.length){
+      missionRows.forEach(r => r.el.remove());
+      missionRows.clear();
+      if(!el.querySelector('.empty'))
+        el.innerHTML = '<div class="empty">No position open.<br>' +
+          '<span style="color:var(--fg-3)">The engine enters on its own as ' +
+          'setups confirm. Nothing is open right now, and nothing needs you.</span></div>';
+      missionRailSync();
+      return;
+    }
+    el.querySelectorAll(':scope > .empty, :scope > .skeleton').forEach(n => n.remove());
+    /* Current price per symbol, off the overview the tiles already read. Used
+       only to POSITION the live marker between stop and target — the same
+       geometry the ladder draws — never to compute an R or a P&L. Those have
+       an authority and it is not this file. */
+    const px_ = new Map();
+    for(const s of ((lastOverview || {}).symbols) || [])
+      if(s.price != null) px_.set(s.symbol, +s.price);
+
+    const now = Date.now() / 1000;
+    const seen = new Set();
+    rows.forEach(t => {
+      const key = t.setup_id || (t.symbol + '|' + t.tf);
+      seen.add(key);
+      const filled = open.includes(t);
+      const html = missionCardInner(t, filled, px_.get(t.symbol), now);
+      const cls = 'deck-row mc mission' + (filled ? ' filled' : ' resting');
+      let rec = missionRows.get(key);
+      if(!rec){
+        const node = document.createElement('div');
+        node.className = cls;
+        node.innerHTML = html;
+        rec = {el: node, html, cls};
+        missionRows.set(key, rec);
+      }else{
+        if(rec.cls !== cls){ rec.el.className = cls; rec.cls = cls; }
+        if(rec.html !== html){ rec.el.innerHTML = html; rec.html = html; }
+      }
+      el.appendChild(rec.el);
+    });
+    for(const [key, rec] of missionRows){
+      if(seen.has(key)) continue;
+      rec.el.remove(); missionRows.delete(key);
+    }
+    wireCardActions(el);
+    missionRailSync();
+  }
+  const missionRows = new Map();
+
+  /* A live trade, in the dossier card's own anatomy. The ladder is the hero
+     here in a way it never was for a plan: stop, entry and target to scale
+     with a marker showing where price actually stands between them. */
+  function missionCardInner(t, filled, price, now){
+    const long = t.direction === 'LONG';
+    const held = Math.max(0, now - (t.updated_at || now));
+    const d = Number(t.decision) === 0 ? null : t.decision;
+    return `
+      <div class="mc-top">
+        <span class="mc-stamp ${filled ? 'st-live' : 'st-rest'}">${
+          filled ? 'IN TRADE' : 'ORDER RESTING'}</span>
+        <span class="mc-id t-mono">${filled ? 'Held ' + agoText(held) : 'Not filled yet'}</span>
+      </div>
+      <div class="mc-hero">
+        <div class="mc-idy">
+          <div class="mc-tok t-mono">${esc(tokenOf(t.symbol))}</div>
+          <div class="mc-sub t-label" title="${esc(t.symbol)}">${
+            esc(String(t.symbol).replace('-USD',''))} · ${esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
+          <div class="mc-dirline">
+            <span class="chip ${long ? 'chip-green' : 'chip-red'}">${esc(t.direction)}</span>
+            ${d ? `<span class="chip ${d === 'REDUCED' ? 'chip-amber' : 'chip-green'}">${
+              esc(DECISION_LABELS[d] || d)}</span>` : ''}
+          </div>
+        </div>
+        <div class="mc-ringcol">
+          ${ladderRing(t, price)}
+          <div class="t-label mc-exp">${price != null ? 'Toward target' : 'No live price'}</div>
+        </div>
+      </div>
+      ${ladderHtml(t, price)}
+      <div class="mc-nums t-mono">Risk <b style="color:var(--fg)">${
+        t.risk_usd == null ? '—' : money(t.risk_usd)}</b>${
+        t.notional_usd == null ? '' : ` · Size <b style="color:var(--fg)">${money(t.notional_usd)}</b>`}</div>
+      <div class="mc-acts">
+        <button class="btn" data-why="${esc(t.setup_id || '')}"
+                title="what this trade passed, gate by gate">Reasons</button>
+        <button class="btn btn-amber" data-sym="${esc(t.symbol)}" data-tf="${esc(t.tf)}"
+                title="open the chart — the ticket manages this position">Manage</button>
+      </div>`;
+  }
+
+  /* Where price stands between stop and target, as a ring. Pure geometry on
+     four known prices — the same thing the ladder draws — and labelled as
+     position, never as profit. */
+  function ladderRing(t, price){
+    const e = parseFloat(t.entry), tp = parseFloat(t.tp), sl = parseFloat(t.sl);
+    if(price == null || !isFinite(e) || !isFinite(tp) || !isFinite(sl) || tp === sl)
+      return ringSvg(0, 'ring-form', '—', 'no price');
+    const f = Math.max(0, Math.min(1, (price - sl) / (tp - sl)));
+    const cls = f > 0.66 ? 'ring-ok' : f > 0.33 ? 'ring-mid' : 'ring-low';
+    return ringSvg(f, cls, Math.round(f * 100) + '%', 'stop→target');
+  }
+
   function renderDeck(setups, funnel){
     lastDeckArgs = [setups, funnel];
     const el = $('deck');
+    /* The refused cards live in Overwatch now, under its "Not taken" tab.
+       They are evidence about why nothing fired, which belongs with the other
+       things being watched — not in the panel that answers "what should I do
+       right now", where a four-day-dead card was sitting in the slot where
+       advice goes. */
+    const strip = $('passed');
     if(!setups.length){
-      el.innerHTML = deckEmptyHtml(funnel);
-      deckRows.clear();          // the differ's nodes went with that innerHTML
+      deckRows.clear();
+      if(strip) strip.innerHTML = deckEmptyHtml(funnel);
+      mwCounts({passed: 0});
       return;
     }
 
@@ -860,27 +1033,20 @@
     /* The differ only ever APPENDS rows, so the placeholder the markup ships
        with (`loading…`) was never removed on the path where setups exist — it
        sat above the first card until the deck happened to empty out once. */
-    el.querySelectorAll(':scope > .empty').forEach(n => n.remove());
-
     /* The differ APPENDS row nodes; anything else in the container survives
-       every render. So the loading skeleton — and the empty state, when a quiet
-       market wakes up — must be removed by hand, or they sit ABOVE the first
-       real rows forever. This was live: a PF_ZECUSD setup rendered underneath
-       the skeleton, and the same hole existed for the old "loading…" div. It
-       went unseen because the deck was empty in every test until a real setup
-       finally fired. */
-    el.querySelectorAll(':scope > .skeleton, :scope > .empty').forEach(n => n.remove());
-    el.querySelectorAll(':scope > .deck-divider').forEach(n => n.remove());
+       every render, so the placeholder and the empty state must be removed by
+       hand or they sit ABOVE the first real card forever. This was live: a
+       PF_ZECUSD setup rendered underneath the skeleton, and it went unseen
+       because the deck was empty in every test until a real setup fired. */
+    if(strip) strip.querySelectorAll(':scope > .skeleton, :scope > .empty')
+      .forEach(n => n.remove());
 
-    /* Nothing actionable: say so FIRST, in the same words the fully-empty
-       deck uses, and let the refusals follow under a heading that names them.
-       Before this, the refusals WERE the answer to "what should I do right
-       now" — the top card of the primary surface was four days dead. */
-    if(!ordered.length && passed.length){
-      el.insertAdjacentHTML('afterbegin', deckEmptyHtml(funnel));
-      el.insertAdjacentHTML('beforeend',
-        '<div class="deck-divider">Looked at, not taken</div>');
-    }
+    /* EVERY card this function makes is a card that did NOT become a
+       position. `ordered` is PENDING setups, which execsim makes unreachable
+       (see renderMissions), so in practice this is `passed` — refused and
+       expired. Both go to the same tab: the question they answer is "why did
+       nothing fire", and that is not the question the rail answers. */
+    mwCounts({passed: ordered.length + passed.length});
 
     /* SECONDS, because that is what the row's two clocks compare against.
        `foundAgo` subtracts `market_time` and `expiresIn` subtracts
@@ -908,7 +1074,8 @@
       seen.add(key);
       const held = heldSids.has(s.setup_id || '') || pendSids.has(s.setup_id || '');
       const done = doneSids.has(s.setup_id || '');
-      const cls = 'deck-row' + (s.risk && s.risk.decision === 'REJECTED' ? ' dead' : '')
+      const spent = s.risk && s.risk.decision === 'REJECTED';
+      const cls = 'deck-row mc' + (spent ? ' dead' : '')
                 + (held ? ' held' : done ? ' done'
                    : heldSyms.has(s.symbol) ? ' held-sym' : '');
       const html = deckRowInner(s, now);
@@ -920,13 +1087,21 @@
         node.innerHTML = html;
         rec = {el: node, html, cls};
         deckRows.set(key, rec);
+        /* THE ARRIVAL, EARNED ONCE. A card that appears while the operator is
+           in the session is the event this surface exists for, and it lands
+           like one: the stamp presses in, the ring sweeps to its reading.
+           First paint is excluded — every card "arriving" on every page load
+           would spend the moment on nothing — and prefers-reduced-motion
+           turns the whole thing off in CSS, where the animation lives. */
       }else{
         rec.el.classList.remove('expiring');
         if(rec.cls !== cls){ rec.el.className = cls; rec.cls = cls; }
         if(rec.html !== html){ rec.el.innerHTML = html; rec.html = html; }
       }
-      el.appendChild(rec.el);          // appendChild MOVES an existing node
+      // every card here is a card that did not become a position
+      (strip || el).appendChild(rec.el);   // appendChild MOVES an existing node
     });
+    deckPainted = true;
 
     for(const [key, rec] of deckRows){
       if(seen.has(key)) continue;
@@ -935,8 +1110,18 @@
       setTimeout(() => { rec.el.remove(); deckRows.delete(key); }, 900);
     }
 
-    el.querySelectorAll('button[data-sym]').forEach(b => {
-      if(b.dataset.wired) return;      // survivors keep their handler
+    wireCardActions(strip || el);
+    mountRails(strip || el);
+  }
+
+  /* One wiring pass for every card in the app, whichever container it lives
+     in. `dataset.wired` survives a node being moved between containers, so a
+     card the differ relocates keeps its handlers instead of losing them or
+     collecting a second copy. */
+  function wireCardActions(box){
+    if(!box) return;
+    box.querySelectorAll('button[data-sym]').forEach(b => {
+      if(b.dataset.wired) return;
       b.dataset.wired = '1';
       b.addEventListener('click', () => {
         if(b.dataset.copilot){
@@ -951,15 +1136,52 @@
     });
     /* The verdict is a claim; the trace is its evidence. SSTracer has existed
        since Wave 3.5 and NOTHING opened it — a drawer that answers "why did
-       this trade / why was this refused" gate by gate, wired to no click.
-       The verdict cell is now that click. */
-    el.querySelectorAll('[data-trace]').forEach(d => {
-      if(d.dataset.wired || !d.dataset.trace) return;
+       this trade / why was this refused" gate by gate, wired to no click. */
+    box.querySelectorAll('[data-trace],button[data-why]').forEach(d => {
+      const id = d.dataset.trace || d.dataset.why;
+      if(d.dataset.wired || !id) return;
       d.dataset.wired = '1';
-      activatable(d);
+      if(!d.matches('button')) activatable(d);
       d.addEventListener('click', () => {
-        if(window.SSTracer) SSTracer.open(d.dataset.trace);
+        if(window.SSTracer) SSTracer.open(id);
       });
+    });
+    // the plain-English refusal, in a dialog, for the card that was refused
+    box.querySelectorAll('button[data-reasons]').forEach(b => {
+      if(b.dataset.wired) return;
+      b.dataset.wired = '1';
+      b.addEventListener('click', () => explainRefusal(b.dataset.reasons, b.dataset.rsym));
+    });
+  }
+
+  /* WHY IT DID NOT TAKE, IN WORDS.
+     funnel.js already carries a `means` sentence and a "go here to fix it"
+     link for every refusal code the engine can emit — written for someone who
+     has never traded, and until now readable only on Diagnostics, the surface
+     a trader has least reason to open. This puts it one button from the card
+     it explains. No jargon reaches the dialog: an unknown code degrades to its
+     own de-underscored text rather than being guessed at. */
+  function explainRefusal(codesCsv, sym){
+    const codes = String(codesCsv || '').split('|').filter(Boolean);
+    if(!codes.length || !window.SSConfirm) return;
+    /* One block per reason: the short sentence, then the paragraph that says
+       what it actually means. `explain()` returns null for a code funnel.js
+       has no entry for, and that degrades to the de-underscored code rather
+       than to a guess — describing a refusal we do not understand would be
+       worse than showing the raw one. */
+    const rows = [];
+    codes.forEach((c, i) => {
+      if(i) rows.push('');                       // a spacer between reasons
+      const e = SSFunnel.explain ? SSFunnel.explain(c) : null;
+      rows.push(SSFunnel.plain(c).replace(/^./, m => m.toUpperCase()));
+      if(e && e.means) rows.push(e.means);
+    });
+    SSConfirm({
+      title: `Why ${sym || 'this setup'} was not taken`,
+      lead: codes.length > 1 ? `${codes.length} things stopped it.` : '',
+      rows,
+      note: 'Nothing was risked on this.',
+      confirmLabel: 'Close',
     });
   }
 
@@ -982,6 +1204,227 @@
   }
 
   const deckRows = new Map();          // token -> {el, html, cls}
+  let deckPainted = false;             // first paint is not an "arrival"
+
+  /* ---------- the mission rail ----------
+     A rotating wheel, not a slider. SSWheel (static/wheel.js) owns the
+     physics and one number: `pos`, a continuous position in card-units. This
+     file owns what that number LOOKS like, and nothing else. The two do not
+     know about each other beyond that number, which is what makes the engine
+     reusable for the next carousel this app grows.
+
+     Every frame, every card is placed as a function of its distance from the
+     wheel's current position — never as a function of which card is
+     "selected". So nothing is ever assigned a state and nothing jumps: the
+     whole rail interpolates because there is only ever one input.
+
+     Per-frame writes are transform, opacity, filter and z-index only. No
+     layout property is touched and no layout property is READ; the two
+     measurements the placement needs (card width, track width) are taken in
+     measureRail() when the DOM actually changes, and cached. That is what
+     keeps this at frame rate with a dozen cards on screen. */
+  const RAIL = {
+    gap: 0.62,        // horizontal travel per card-unit, as a fraction of pitch
+    depth: 210,       // px pushed back per card-unit away
+    turn: 27,         // degrees of Y rotation per card-unit
+    shrink: 0.11,     // scale lost per card-unit, to 1 unit
+    dim: 0.34,        // brightness lost per card-unit, to 1 unit
+    blur: 1.5,        // px of blur per card-unit, to 2 units
+    fade: 0.30,       // opacity lost per card-unit, from unit 1 outward
+    visible: 3.4,     // beyond this many units a card is not rendered at all
+  };
+  /* ONE RAIL IMPLEMENTATION, MANY RAILS.
+     wheel.js owns the physics and knows nothing about cards; this owns what
+     the physics LOOK like and knows nothing about which rail it is driving.
+     Every carousel on the surface — the mission wheel and all four Overwatch
+     groups — is an instance of this, so they cannot drift into behaving
+     differently, and the next one costs a single call. */
+  const rails = new Map();          // track element -> instance
+
+  function makeRail(track, opts){
+    opts = opts || {};
+    const st = {track, cards: [], pitch: 320, wheel: null, tilt: {x: 0, y: 0}};
+
+    /* The only place that reads layout. Called when cards arrive or the
+       viewport changes — never from the frame loop. */
+    function measure(){
+      st.cards = [...track.querySelectorAll('.mc')];
+      const w = st.cards.length ? st.cards[0].getBoundingClientRect().width : 0;
+      st.pitch = Math.max(120, w || Math.min(340, track.clientWidth * 0.86));
+      let h = 0;
+      for(const c of st.cards) h = Math.max(h, c.offsetHeight);
+      const flat = track.querySelector(':scope > .empty, :scope > .mb-seg > .empty, ' +
+                                       ':scope > .mb-seg > .skeleton');
+      if(flat) h = Math.max(h, flat.offsetHeight);
+      /* Padding has to be added on: `* { box-sizing: border-box }` is global,
+         so a bare height makes the CONTENT box that tall and the card hangs
+         out of a track whose overflow:hidden then cuts it — losing exactly
+         the shadow the lift exists to show. */
+      if(h){
+        const cs = getComputedStyle(track);
+        track.style.height =
+          (h + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)) + 'px';
+      }
+      track.classList.toggle('has-wheel', st.cards.length > 0);
+    }
+
+    function place(c, d){
+      const ad = Math.abs(d);
+      if(ad > RAIL.visible){
+        if(c.style.display !== 'none') c.style.display = 'none';
+        return;
+      }
+      if(c.style.display === 'none') c.style.display = '';
+      const near = Math.min(ad, 1);
+      const tw = opts.tilt ? Math.max(0, 1 - ad * 2) : 0;
+      const tx = st.tilt.x * tw, ty = st.tilt.y * tw;
+      c.style.transform =
+        `translate3d(${(d * st.pitch * RAIL.gap).toFixed(2)}px,0,${
+          (-ad * RAIL.depth + (tw ? tw * 14 : 0)).toFixed(2)}px) rotateY(${
+          (-d * RAIL.turn + ty).toFixed(3)}deg) rotateX(${
+          tx.toFixed(3)}deg) scale(${(1 - near * RAIL.shrink).toFixed(4)})`;
+      c.style.opacity = (1 - Math.min(Math.max(ad - 1, 0), 2) * RAIL.fade).toFixed(3);
+      const blur = Math.round(Math.min(ad, 2) * RAIL.blur * 10) / 10;
+      const bright = (1 - near * RAIL.dim).toFixed(3);
+      const f = blur > 0.05 ? `blur(${blur}px) brightness(${bright})`
+                            : `brightness(${bright})`;
+      if(c.style.filter !== f) c.style.filter = f;
+      c.style.zIndex = String(Math.max(1, 100 - Math.round(ad * 30)));
+      c.classList.toggle('flip-r', d > 0);
+      const centered = ad < 0.5;
+      c.classList.toggle('is-center', centered);
+      c.style.pointerEvents = centered ? '' : 'none';
+      c.setAttribute('aria-hidden', centered ? 'false' : 'true');
+    }
+
+    function navState(){
+      if(!st.wheel) return;
+      const i = st.wheel.nearest();
+      const prev = opts.prev && $(opts.prev), next = opts.next && $(opts.next);
+      if(prev){ prev.hidden = st.cards.length < 2; prev.disabled = i <= 0; }
+      if(next){ next.hidden = st.cards.length < 2; next.disabled = i >= st.cards.length - 1; }
+      const live = opts.status && $(opts.status);
+      if(live && st.cards[i]){
+        const tok = st.cards[i].querySelector('.mc-tok');
+        const stamp = st.cards[i].querySelector('.mc-stamp');
+        live.textContent = tok
+          ? `${tok.textContent}, ${stamp ? stamp.textContent.toLowerCase() : ''}, ` +
+            `${i + 1} of ${st.cards.length}`
+          : '';
+      }
+    }
+
+    st.sync = function(){
+      /* A hidden track measures as zero and would place every card at the
+         same spot. Skip, and let whoever reveals it sync then. */
+      if(!track.offsetParent && track.style.display !== '') return;
+      measure();
+      if(st.wheel) st.wheel.resync();
+      else st.cards.forEach((c, i) => place(c, i));
+      navState();
+    };
+
+    st.wheel = window.SSWheel.create(track, {
+      count: () => st.cards.length,
+      pitch: () => st.pitch * RAIL.gap,
+      onFrame: pos => {
+        for(let i = 0; i < st.cards.length; i++) place(st.cards[i], i - pos);
+      },
+      onRest: navState,
+    });
+
+    const prev = opts.prev && $(opts.prev), next = opts.next && $(opts.next);
+    if(prev) prev.addEventListener('click', () => st.wheel.goTo(st.wheel.nearest() - 1));
+    if(next) next.addEventListener('click', () => st.wheel.goTo(st.wheel.nearest() + 1));
+
+    /* Click a card that is not in front and it comes to the front. Its own
+       controls are pointer-inert while it is behind, so that is the only
+       thing a click on a side card can mean. */
+    track.addEventListener('click', e => {
+      const card = e.target.closest('.mc');
+      if(!card) return;
+      const i = st.cards.indexOf(card);
+      if(i < 0 || i === st.wheel.nearest()) return;
+      e.preventDefault(); e.stopPropagation();
+      st.wheel.goTo(i);
+    });
+
+    track.addEventListener('keydown', e => {
+      const k = e.key;
+      if(k !== 'ArrowLeft' && k !== 'ArrowRight' && k !== 'Home' && k !== 'End') return;
+      e.preventDefault();
+      const n = st.cards.length - 1;
+      st.wheel.goTo(k === 'ArrowLeft' ? st.wheel.nearest() - 1
+                  : k === 'ArrowRight' ? st.wheel.nearest() + 1
+                  : k === 'Home' ? 0 : n);
+    });
+
+    // tabbing into a card behind the front one must bring it forward
+    track.addEventListener('focusin', e => {
+      const card = e.target.closest('.mc');
+      if(!card) return;
+      const i = st.cards.indexOf(card);
+      if(i >= 0 && i !== st.wheel.nearest()) st.wheel.goTo(i);
+    });
+
+    if(opts.tilt && matchMedia('(hover: hover) and (pointer: fine)').matches &&
+       !matchMedia('(prefers-reduced-motion: reduce)').matches){
+      track.addEventListener('pointermove', e => {
+        if(st.wheel.isDragging()) return;
+        const card = st.cards[st.wheel.nearest()];
+        if(!card) return;
+        const r = card.getBoundingClientRect();
+        const nx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
+        const ny = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
+        st.tilt.y = Math.max(-1, Math.min(1, nx)) * 3.2;
+        st.tilt.x = Math.max(-1, Math.min(1, -ny)) * 2.2;
+        st.wheel.resync();
+      });
+      track.addEventListener('pointerleave', () => {
+        if(!st.tilt.x && !st.tilt.y) return;
+        st.tilt.x = st.tilt.y = 0;
+        st.wheel.resync();
+      });
+    }
+
+    rails.set(track, st);
+    return st;
+  }
+
+  /* Attach a wheel to any track that does not have one yet, and re-sync the
+     ones that do. renderNear replaces its rails wholesale on every poll, so
+     the map is swept of tracks the document no longer holds — otherwise each
+     30s cycle would leak an engine and its listeners. */
+  function mountRails(root){
+    for(const [el, st] of rails){
+      if(!el.isConnected){ st.wheel.destroy(); rails.delete(el); }
+    }
+    const seen = [];
+    if(root && root.classList && root.classList.contains('wheel-rail')) seen.push(root);
+    (root || document).querySelectorAll('.wheel-rail').forEach(el => seen.push(el));
+    seen.forEach(el => {
+      const st = rails.get(el) || makeRail(el, {});
+      st.sync();
+    });
+  }
+
+  /* The mission wheel is just an instance of the shared rail, with the extras
+     only the hero earns: nav buttons, a live region, and the cursor tilt. */
+  let missionRail = null;
+  function missionRailSync(){
+    const track = $('mbTrack');
+    if(!track || !window.SSWheel) return;
+    if(!missionRail)
+      missionRail = makeRail(track, {prev: 'mbPrev', next: 'mbNext',
+                                     status: 'mbStatus', tilt: true});
+    missionRail.sync();
+  }
+
+  let railResizeT = 0;
+  addEventListener('resize', () => {
+    clearTimeout(railResizeT);
+    railResizeT = setTimeout(() => { missionRailSync(); mountRails(); }, 120);
+  });
 
   /* The COIN behind a venue's symbol. `PF_UNIUSD` (Kraken perp), `UNIUSDT`
      (Phemex perp) and `UNI-USD` (Coinbase spot) are three listings of one
@@ -1144,6 +1587,65 @@
         <div class="why-rows">${rows}</div></details>`;
   }
 
+  /* ---------- the mission ring ----------
+     One SVG ring, two real numbers, zero scores. A ready card's ring is the
+     fraction of its life remaining (expiry minus now, over expiry minus
+     found); a forming card's ring is how close price stands to the zone,
+     scaled against the engine's own proximity bound. Both are live facts the
+     engine already publishes — this app records no confidence percentage and
+     the ring must never be mistaken for one, which is why the label inside it
+     names the unit every time. */
+  function ringSvg(frac, cls, big, small){
+    const f = Math.max(0, Math.min(1, frac));
+    const C = 2 * Math.PI * 26;               // r=26 viewBox circle
+    return `<div class="mc-ring ${cls}" aria-hidden="true">
+      <svg viewBox="0 0 64 64">
+        <circle class="mc-ring-track" cx="32" cy="32" r="26"/>
+        <circle class="mc-ring-fill" cx="32" cy="32" r="26"
+          stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${(C * (1 - f)).toFixed(2)}"/>
+      </svg>
+      <div class="mc-ring-label"><b>${big}</b><span>${small}</span></div>
+    </div>`;
+  }
+
+  /* ---------- the trade ladder ----------
+     Stop, entry and target drawn where they actually sit, to scale. This is
+     the card's picture and it is deliberately NOT a price chart: the payload
+     carries no candles, and a decorative squiggle would be the one dishonest
+     pixel on the surface. The three numbers are the engine's own strings
+     through px(); the floats below position them and are never displayed —
+     presentation geometry, not a second authority on price. */
+  function ladderHtml(s, price){
+    const e = parseFloat(s.entry), t = parseFloat(s.tp), l = parseFloat(s.sl);
+    if(!isFinite(e) || !isFinite(t) || !isFinite(l) || t === l) return '';
+    /* On a live trade the ladder gains a marker for where price actually is.
+       The scale stretches to include it, so a trade that has run past its
+       target still draws honestly instead of pinning the marker to an edge
+       and implying it stopped there. */
+    const live = price != null && isFinite(price) ? +price : null;
+    const hi = Math.max(e, t, l, live == null ? -Infinity : live);
+    const lo = Math.min(e, t, l, live == null ? Infinity : live);
+    // map price -> 10%..90% of the column so edge labels keep their room
+    const y = p => 10 + (1 - (p - lo) / (hi - lo)) * 80;
+    const band = (a, b, cls) => {
+      const top = Math.min(y(a), y(b));
+      return `<div class="lad-band ${cls}" style="top:${top.toFixed(1)}%;height:${
+        Math.abs(y(a) - y(b)).toFixed(1)}%"></div>`;
+    };
+    const lv = (p, cls, name, val) =>
+      `<div class="lad-lv ${cls}" style="top:${y(p).toFixed(1)}%">
+        <span class="lad-name">${name}</span><b class="t-mono">${val}</b></div>`;
+    return `<div class="mc-ladder">
+      ${band(e, t, 'reward')}${band(e, l, 'risk')}
+      ${lv(t, 'tp', 'target', px(s.tp))}
+      ${lv(e, 'en', 'entry', px(s.entry))}
+      ${lv(l, 'sl', 'stop', px(s.sl))}
+      ${live == null ? '' :
+        `<div class="lad-now" style="top:${y(live).toFixed(1)}%"><b class="t-mono">${
+          px(String(live))}</b></div>`}
+    </div>`;
+  }
+
   function deckRowInner(s, now){
     {
       const long = s.direction === 'LONG';
@@ -1168,46 +1670,82 @@
       const verdict = dec
         ? `<span class="chip ${chip}">${DECISION_LABELS[dec] || dec}</span>` +
           (dec === 'REJECTED'
-            ? `<div class="t-label" style="margin-top:4px;color:var(--red-2)">${
+            ? `<div class="t-label cap" style="margin-top:4px;color:var(--red-2)">${
                 reasonText(r.reasons)}</div>`
             : `<div class="t-label" style="margin-top:4px">risks ${moneyOr(r.risk_usd) || '—'}${
                 r.units ? ' · ' + Number(r.units).toLocaleString() + ' units' : ''}</div>`)
         : '<span class="chip">awaiting decision</span>' +
           '<div class="t-label" style="margin-top:4px">the risk rules have not ruled on this one yet</div>';
 
+      /* The banner states what the card IS before a single number is read:
+         the risk verdict, in the deck's own established words. A card with no
+         verdict yet says so. The stamp is the differentiation the rail runs
+         on — READY draws the accent, REDUCED is amber, NOT TRADED is grey-red
+         and only ever appears in the refused strip below the rail. */
+      const stamp = dec === 'APPROVED' ? ['st-go', 'READY']
+                  : dec === 'REDUCED'  ? ['st-warn', 'REDUCED SIZE']
+                  : dec === 'REJECTED' ? ['st-dead', 'NOT TRADED']
+                  : ['st-wait', 'AWAITING VERDICT'];
+
+      /* Life remaining, as a fraction of this setup's own window. Both ends
+         come off the fact (found + expiry, epoch seconds); a card with no
+         expiry renders a full quiet ring rather than inventing an urgency. */
+      const born = s.armed_at || s.confirmed_bar_ts || s.market_time;
+      const exp = s.expires_at_ts;
+      const lifeFrac = (exp && born && exp > born)
+        ? (exp - now) / (exp - born) : 1;
+      const expTxt = expiresIn(exp, now);                 // "expires in 4h"
+      const expBig = exp ? expTxt.replace(/^expires in /, '').replace(/^expiring now$/, 'now') : '—';
+      const urgency = lifeFrac <= 0.25 ? 'ring-low' : lifeFrac <= 0.5 ? 'ring-mid' : 'ring-ok';
+
       // wrapper element and its .dead class are owned by renderDeck's differ;
-      // this returns the row's CONTENTS only
+      // this returns the card's CONTENTS only
       return `
+        <div class="mc-top">
+          <span class="mc-stamp ${stamp[0]}">${stamp[1]}</span>
+          <span class="mc-id t-mono" title="${foundTitle(s)}">${foundAgo(s, now)}</span>
+        </div>
         ${heldBadge(s)}
-        <div>
-          <div class="t-mono" style="font-size:13px;color:var(--fg)">${s.symbol.replace('-USD','')}</div>
-          <div class="t-label">${s.tf} · ${playbookLabel(s.strategy)}</div>
-          <div class="t-label" title="${foundTitle(s)}">${foundAgo(s, now)}</div>
-          <!-- The sort key, made visible. A deck ordered by something the
-               operator cannot see is worse than one ordered by a bad score. -->
-          <div class="t-label" style="color:var(--amber)" title="how long this setup stays live"><span class="term" data-t="horizon">${expiresIn(s.expires_at_ts, now)}</span></div>
+        <div class="mc-hero">
+          <div class="mc-idy">
+            <div class="mc-tok t-mono">${esc(tokenOf(s.symbol))}</div>
+            <div class="mc-sub t-label" title="${esc(s.symbol)}">${s.symbol.replace('-USD','')} · ${s.tf} · ${playbookLabel(s.strategy)}</div>
+            <div class="mc-dirline">
+              <span class="chip ${long ? 'chip-green' : 'chip-red'}">${s.direction}</span>
+              <span class="t-label">${htfChip(s)}</span>
+            </div>
+          </div>
+          <div class="mc-ringcol">
+            ${ringSvg(lifeFrac, urgency, esc(expBig), exp ? 'left' : 'no expiry')}
+            <!-- The sort key, made visible. A rail ordered by something the
+                 operator cannot see is worse than one ordered by a bad score. -->
+            <div class="t-label mc-exp" title="how long this setup stays live"><span class="term" data-t="horizon">${expTxt}</span></div>
+          </div>
         </div>
-        <div>
-          <span class="chip ${long ? 'chip-green' : 'chip-red'}">${s.direction}</span>
-          <div class="t-label" style="margin-top:4px">${htfChip(s)}</div>
-        </div>
-        <div class="t-mono" style="color:var(--fg-3)">
+        ${ladderHtml(s) || `<div class="mc-nums t-mono">
           entry <b style="color:var(--fg)">${px(s.entry)}</b> ·
           tp <b style="color:var(--green)">${px(s.tp)}</b> ·
-          sl <b style="color:var(--red-2)">${px(s.sl)}</b> ·
-          <span class="term" data-t="rr">R:R</span> ${s.rr}
-          ${storyOf(s)}
-        </div>
+          sl <b style="color:var(--red-2)">${px(s.sl)}</b>
+        </div>`}
+        <div class="mc-nums t-mono"><span class="term" data-t="rr">R:R</span>
+          <b style="color:var(--fg)">${s.rr}</b></div>
+        <div class="mc-story">${storyOf(s)}</div>
         <div class="traceable" data-trace="${esc(s.setup_id || '')}"
              title="click to see what this setup passed and what it failed — the zone, the confirmation, and every check">${verdict}</div>
-        <button class="btn" data-copilot="1" data-sym="${s.symbol}" data-tf="${s.tf}"
-                data-sid="${esc(s.setup_id || '')}"
-                title="ask the copilot about this setup — it reads the trace and cannot arm">Ask copilot</button>
-        <button class="btn${mine ? ' btn-amber' : ''}" data-sym="${s.symbol}" data-tf="${
-          mine ? heldSyms.get(s.symbol).tf : s.tf}"
-                title="${mine ? 'open the chart on the trade you are holding — the ticket manages it'
-                              : 'open this plan on the chart'}">${
-          mine ? 'Manage trade' : 'Open chart'}</button>`;
+        <div class="mc-acts">
+          ${dec === 'REJECTED' && r && (r.reasons || []).length
+            ? `<button class="btn btn-why" data-reasons="${esc((r.reasons || []).join('|'))}"
+                       data-rsym="${esc(tokenOf(s.symbol))}"
+                       title="the plain-English reason this was refused">Reasons</button>`
+            : `<button class="btn" data-copilot="1" data-sym="${s.symbol}" data-tf="${s.tf}"
+                       data-sid="${esc(s.setup_id || '')}"
+                       title="ask the copilot about this setup — it reads the trace and cannot arm">Ask copilot</button>`}
+          <button class="btn${mine ? ' btn-amber' : ''}" data-sym="${s.symbol}" data-tf="${
+            mine ? heldSyms.get(s.symbol).tf : s.tf}"
+                  title="${mine ? 'open the chart on the trade you are holding — the ticket manages it'
+                                : 'open this plan on the chart'}">${
+            mine ? 'Manage trade' : 'Open chart'}</button>
+        </div>`;
     }
   }
 
@@ -1234,12 +1772,23 @@
      means price is at the zone's edge. Watch-only: nothing here can be armed,
      so the only control is the chart. */
   function renderRadar(list, prox){
-    const panel = $('radarPanel'), box = $('radar');
+    const box = $('radar'), chip = $('radarCount');
     list = list || [];
-    if(!list.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
-    panel.style.display = '';
-    $('radarCount').textContent = list.length + ' near a zone';
-    box.innerHTML = list.map(s => {
+    if(chip){
+      chip.hidden = !list.length;
+      chip.textContent = list.length + ' forming';
+    }
+    if(!list.length){
+      box.innerHTML = ''; radarRows.clear(); missionRailSync(); return;
+    }
+    /* Keyed diff, same discipline as the deck differ above and for the same
+       reason: this rail repaints on a 30s poll, and a wholesale innerHTML
+       rebuilt every forming card — destroying the button under a pointer
+       already on its way down, on the rail whose CSS promises a repaint
+       never moves a card. Survivors keep their node; only a card whose
+       content actually changed is patched. */
+    const seenR = new Set();
+    list.forEach(s => {
       const long = s.direction === 'LONG';
       const d = parseFloat(s.distance_atr);
       /* Scaled against the engine's OWN proximity bound (setups.PROX_ATR, sent
@@ -1260,26 +1809,69 @@
       const zm = /\b(SUPPLY|DEMAND) zone ([\d.,]+-[\d.,]+)/.exec(s.why || '');
       const zone = zm ? `${zm[1].toLowerCase()} at ${zm[2]}` : 'a zone the engine is watching';
       const verb = long ? 'Pulling back toward' : 'Rising into';
-      return `<div class="radar-row">
-        <div>
-          <div class="radar-sym">${esc(String(s.symbol).replace('-USD',''))}</div>
-          <div class="t-label" style="margin-top:3px">${s.tf} · ${long ? 'long' : 'short'} · ${playbookLabel(s.strategy)}</div>
+      /* A forming card wears the same dossier silhouette as a ready one and
+         earns none of its controls: no verdict, no arm, nothing to trace.
+         The amber stamp and the watch-only tag are the differentiation, and
+         the ring is the radar meter promoted — same fill, same bound, drawn
+         where the ready card draws its countdown so the two reads sit in the
+         same place on every card. */
+      const html = `
+        <div class="mc-top">
+          <span class="mc-stamp st-form">FORMING</span>
+          <span class="mc-id t-mono">watch-only</span>
         </div>
-        <div>
-          <div class="radar-say">${verb} <b>${esc(zone)}</b>. Becomes a trade only if price
-            gets there and a candle confirms.</div>
-          <div class="radar-meter"><i style="width:${fill.toFixed(0)}%"></i></div>
+        <div class="mc-hero">
+          <div class="mc-idy">
+            <div class="mc-tok t-mono">${esc(tokenOf(s.symbol))}</div>
+            <div class="mc-sub t-label" title="${esc(s.symbol)}">${esc(String(s.symbol).replace('-USD',''))} · ${s.tf} · ${playbookLabel(s.strategy)}</div>
+            <div class="mc-dirline">
+              <span class="chip ${long ? 'chip-green' : 'chip-red'}">${long ? 'LONG' : 'SHORT'}</span>
+            </div>
+          </div>
+          <div class="mc-ringcol">
+            ${ringSvg(fill / 100, 'ring-form', isNaN(d) ? '—' : d.toFixed(1),
+              /* "at arm", not "away": the reading is a one-shot measurement
+                 taken when the setup armed, and the ring must not restate a
+                 dated fact in the present tense. The caption below carries
+                 the full dated sentence. */
+              'ATR at arm')}
+            <div class="t-label mc-exp">${isNaN(d) ? '' : d.toFixed(1) + ' ATR away' + esc(agoTxt)}</div>
+          </div>
         </div>
-        <div class="radar-dist">${isNaN(d) ? '—' : d.toFixed(1)}<span class="t-sub">ATR away${esc(agoTxt)}</span>
-          <button class="btn" style="margin-top:6px" data-rsym="${esc(s.symbol)}" data-rtf="${esc(s.tf)}">Chart</button></div>
-      </div>`;
-    }).join('');
-    box.querySelectorAll('button[data-rsym]').forEach(b =>
+        <div class="radar-say mc-say">${verb} <b>${esc(zone)}</b>. Becomes a trade only if price
+          gets there and a candle confirms.</div>
+        <div class="mc-acts">
+          <button class="btn" data-rsym="${esc(s.symbol)}" data-rtf="${esc(s.tf)}">Open chart</button>
+        </div>`;
+      const key = s.symbol + '|' + s.tf;
+      seenR.add(key);
+      let rec = radarRows.get(key);
+      if(!rec){
+        const node = document.createElement('article');
+        node.className = 'mc forming radar-card';
+        node.innerHTML = html;
+        rec = {el: node, html};
+        radarRows.set(key, rec);
+      }else if(rec.html !== html){
+        rec.el.innerHTML = html; rec.html = html;
+      }
+      box.appendChild(rec.el);         // appendChild MOVES an existing node
+    });
+    for(const [key, rec] of radarRows){
+      if(seenR.has(key)) continue;
+      rec.el.remove(); radarRows.delete(key);
+    }
+    box.querySelectorAll('button[data-rsym]').forEach(b => {
+      if(b.dataset.wired) return;      // survivors keep their handler
+      b.dataset.wired = '1';
       b.addEventListener('click', () => {
         go('chart');
         if(window.SSChart) SSChart.open(b.dataset.rsym, b.dataset.rtf);
-      }));
+      });
+    });
+    missionRailSync();
   }
+  const radarRows = new Map();         // symbol|tf -> {el, html}
 
   /* At a level: where price is standing near structure, across every tradeable
      market at once.
@@ -1297,40 +1889,111 @@
      distance here. The bounds it is derived from (setups.PROX_ATR,
      FORMING_TFS) are the engine's, and a second copy in the client is a second
      answer waiting to drift. */
+  /* The label is the threat step; the sentence under it is what that step
+     MEANS. Both are needed and neither substitutes for the other — a
+     newcomer cannot decode "CONTACT" alone, and "Price is inside the zone"
+     alone does not rank against the card beside it. Labels are short because
+     they are labels; sentences are one line because the old ones ran to
+     three and nobody read the third.
+
+     Colours are FIXED here (chip-t3..t0), never chip-accent — see the threat
+     block in ss.css for why that mattered. */
   const NEAR_SAY = {
     AT_ZONE: () =>
-      ['in the zone now', 'chip-accent',
-       'Price is inside the zone. If the engine takes it, it arrives on the Deck above.'],
+      ['CONTACT', 'chip-t3',
+       'Price is in the zone. If the engine takes it, it appears in Mission Briefs.'],
     IN_RANGE: () =>
-      ['engine is watching', 'chip-accent',
-       'Near enough that the engine is considering this zone. It becomes a setup ' +
-       'only if a strategy covers the conditions, and most do not.'],
+      ['TRACKING', 'chip-t2',
+       'Close enough that the engine is considering this zone. Most never become setups.'],
     NO_FORMING_ON_TF: (r) =>
-      ['waits for price', 'chip-amber',
-       `Near, but the engine does not plan ahead on ${r.tf} — it only acts once ` +
-       'price actually reaches the zone.'],
+      ['HOLDING', 'chip-t1',
+       `The engine does not plan ahead on ${r.tf}. It acts only once price arrives.`],
     OUT_OF_RANGE: (r, prox) =>
-      ['engine is not looking', 'chip-amber',
-       `Further out than the ${prox} ATR the engine looks. It is not considering ` +
-       'this zone; anything the chart draws here is the chart\'s, not the engine\'s.'],
+      ['OUT OF REACH', 'chip-t0',
+       `Past the ${prox} ATR the engine looks, so it is not considering this ` +
+       'zone. Anything the chart draws here is the chart\'s, not the engine\'s.'],
   };
 
-  function renderNear(d){
+  /* ---------- Overwatch: the two halves of "what is this market doing" ----
+     Market Weather answered "what condition is this market in"; At-a-level
+     answered "is price anywhere near a level in it". They listed the SAME
+     symbols in two tables a screen apart, so answering the obvious combined
+     question meant holding one in your head while scrolling to the other.
+
+     One card per market now. Neither number is re-derived here — the regime
+     and its bias are quoted from /api/weather exactly as weather.js quotes
+     them, the distance and the reach chip from /api/near-levels, which stays
+     the only authority on whether the engine is even looking at that zone.
+     This function decides layout and nothing else. */
+  function weatherIndex(w){
+    const by = new Map();
+    for(const s of (w && w.symbols) || []) by.set(s.symbol, s);
+    return by;
+  }
+
+  /* ---------- threat level ----------
+     How loudly a card should read, derived from the engine's OWN reach
+     verdict and nothing else. Four steps, because `engine_reach` has four
+     states and inventing a fifth would be inventing a claim.
+
+     Deliberately NOT a score, and deliberately not renamed. The colour is
+     the only thing added here; the words on the chip stay the plain-language
+     sentences NEAR_SAY already writes, because a newcomer can decode "in the
+     zone now" and cannot decode "THREAT: ALPHA". Colour carries urgency,
+     language carries meaning, and neither is asked to do the other's job. */
+  const THREAT = {
+    AT_ZONE:          {lvl: 3, cls: 't3', stamp: 'st-t3', ring: 'ring-ok'},
+    IN_RANGE:         {lvl: 2, cls: 't2', stamp: 'st-t2', ring: 'ring-mid'},
+    NO_FORMING_ON_TF: {lvl: 1, cls: 't1', stamp: 'st-t1', ring: 'ring-cy'},
+    OUT_OF_RANGE:     {lvl: 0, cls: 't0', stamp: 'st-t0', ring: 'ring-dim'},
+  };
+  const threatOf = reach => THREAT[reach] || THREAT.OUT_OF_RANGE;
+
+  /* ---------- the manual-trade grade ----------
+     A letter for a hand-trade candidate, from TWO facts the engine already
+     publishes and nothing else:
+
+       · where price stands relative to the zone   (engine_reach)
+       · whether any playbook covers this market's condition   (weather.live)
+
+     It grades SITUATION, not outcome, and the card says so in the line under
+     the letter — because a grade with no stated basis is exactly the
+     uncalibrated score this product refuses to ship. Nothing here predicts a
+     win rate; the forward record is the only thing allowed to talk about
+     that, and it currently says no strategy clears zero. */
+  function gradeOf(reach, playbookLive){
+    const t = threatOf(reach).lvl;
+    if(t === 3 && playbookLive) return {g: 'A', cls: 'g-a',
+      why: 'Price is in the zone and a playbook trades this condition.'};
+    if(t === 3) return {g: 'B', cls: 'g-b',
+      why: 'Price is in the zone, but no playbook covers this condition.'};
+    if(t === 2 && playbookLive) return {g: 'B', cls: 'g-b',
+      why: 'Close to the zone and a playbook trades this condition.'};
+    if(t === 2) return {g: 'C', cls: 'g-c',
+      why: 'Close to the zone; no playbook covers this condition.'};
+    if(t === 1) return {g: 'C', cls: 'g-c',
+      why: 'Near, but the engine does not plan ahead on this timeframe.'};
+    return {g: 'D', cls: 'g-d',
+      why: 'Further out than the engine looks. It is not considering this.'};
+  }
+
+  function renderNear(d, weather){
     const panel = $('nearPanel'), box = $('near');
     const rows = (d && d.rows) || [];
     if(!rows.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
     panel.style.display = '';
     const c = d.counts || {};
     const prox = d.prox_atr, max = d.max_distance_atr;
-    $('nearCount').textContent = `${c.in_engine_range || 0} of ${rows.length} in range`;
-    /* Says what was scanned and what was left out, in the panel rather than in
-       a tooltip. A list that cannot say what it excluded reads as a complete
-       one, and the shadow half is 11 of the 30 symbols the universe carries. */
+    const wx = weatherIndex(weather);
+    $('nearCount').textContent = `${c.in_engine_range || 0} in reach`;
+    /* Two short sentences, not the 296-character block this was. It still
+       says what was scanned and what was left out — a list that cannot name
+       its exclusions reads as a complete one, and the shadow half is a third
+       of the universe — but it says it in a breath. Everything cut from here
+       is on the cards themselves or on the tab that owns it. */
     $('nearLede').textContent =
-      `${c.symbols} tradeable markets across ${(d.timeframes || []).length} timeframes. ` +
-      `${rows.length} are within ${max} ATR of a live zone, ` +
-      `${c.in_engine_range || 0} of them inside the ${prox} ATR the engine itself looks at. ` +
-      `${c.shadow_excluded} shadow symbols are not listed — the risk authority will not size them.`;
+      `${c.symbols} markets swept, ${rows.length} standing within ${max} ATR of a zone. ` +
+      `${c.shadow_excluded} shadow markets are excluded — the risk authority never sizes them.`;
     /* Degraded loudly (§4): a market whose structure could not be read is
        MISSING from this list, and silence would read as "price is not near a
        level there" — the strongest possible wrong answer. */
@@ -1365,6 +2028,11 @@
     const beyond  = rows.filter(r => r.engine_reach === 'OUT_OF_RANGE');
     const bound = parseFloat(max) || 3;
 
+    /* A watch card, not a mission card — deliberately smaller and quieter
+       than the rail above, because these are places price is standing, not
+       plans the engine cleared. Same honesty as the rows they replace: reach
+       off the payload, the say-sentence on the card, zone and distance and
+       never a bracket. */
     const rowHtml = (r, withSay) => {
       const dist = parseFloat(r.distance_atr);
       const fill = isNaN(dist) ? 10 : Math.max(8, Math.min(96, (1 - dist / bound) * 100));
@@ -1381,52 +2049,243 @@
          while the other does not. A wording change in draft.py makes this
          match nothing and the sentence renders as it does today — the
          degradation is a longer number, never a broken row. */
-      const zone = ((r.basis || [])[0] || 'a live zone')
-        .replace(/([\d.]+)–([\d.]+)/, (m, a, b) => `${px(a)}–${px(b)}`);
+      /* draft.py's own sentence for the zone, with its lead-in trimmed and
+         its first letter raised. Every one of these rendered as "nearest
+         live DEMAND zone 0.68–0.68 (WEAKENED, strength 41)" — a lowercase
+         fragment repeated down the whole panel, restating "nearest live" on
+         a card whose entire subject is the nearest live zone. The engine's
+         words are still the engine's; only the redundant lead-in goes. */
+      const zone = ((r.basis || [])[0] || 'A live zone')
+        .replace(/([\d.]+)–([\d.]+)/, (m, a, b) => `${px(a)}–${px(b)}`)
+        .replace(/^nearest live /, '')
+        .replace(/^./, ch => ch.toUpperCase());
       /* The reach chip lives in the WIDE column, not beside the timeframe.
          Its natural width is ~144px and the identity column is 150px, so
          sitting there it wrapped to two lines on every one of 23 rows and
          pushed the row to 110px tall. Same crush the Deck's reasoning column
          took: a label narrower than its own content is not a label. */
-      return `<div class="radar-row">
-        <div>
-          <div class="radar-sym">${esc(String(r.symbol).replace('-USD', ''))}</div>
-          <div class="t-label" style="margin-top:3px">${esc(r.tf)} · ${r.direction === 'LONG' ? 'long' : 'short'} side</div>
+      /* The weather half. Quoted, never recomputed: `label` and `meaning` are
+         the engine's own words for this market's condition, and `live` is
+         its own verdict on whether a playbook covers it. A symbol the
+         weather payload does not carry simply renders without this strip —
+         an absent reading must never be drawn as a flat or neutral one. */
+      const w = wx.get(r.symbol);
+      const wxHtml = w ? `
+        <div class="wl-wx">
+          <div class="wl-regs">${(w.timeframes || []).map(t =>
+            `<span class="wl-reg${t.bias === 'LONG' ? ' up' : t.bias === 'SHORT' ? ' dn' : ''}">
+              <b>${esc(t.tf)}</b>${esc(t.label || '—')}</span>`).join('')}</div>
+          <div class="wl-mean${w.live ? ' live' : ''}">${esc(w.meaning || '')}</div>
+        </div>` : '';
+      /* THE SAME CARD AS A MISSION BRIEF. Not "similar to" — the same
+         component, the same classes, the same order: stamp row, hero (big
+         symbol left, ring right), the evidence, the actions. The only things
+         that differ are the material, which is reserved for a trade you are
+         actually in, and what the ring is measuring.
+
+         It was a second, smaller, differently-shaped design before: 252px
+         against 344, nine loose children against five, no hero row and no
+         ring at all. Two card designs on one surface is two things to learn. */
+      const th = threatOf(r.engine_reach);
+      const gr = gradeOf(r.engine_reach, !!(w && w.live));
+      return `<div class="mc wl-card ${th.cls}">
+        <div class="mc-top">
+          <span class="mc-stamp ${th.stamp}">${esc(say[0])}</span>
+          <span class="mc-id t-mono">${esc(r.tf)} · ${r.direction === 'LONG' ? 'Long' : 'Short'}</span>
         </div>
-        <div>
-          <div style="margin-bottom:6px"><span class="chip ${say[1]}">${esc(say[0])}</span></div>
-          ${withSay ? `<div class="radar-say">${esc(say[2])}</div>` : ''}
-          <div class="t-label" style="margin-bottom:7px;color:var(--fg-4)">${esc(zone)}</div>
-          <div class="radar-meter"><i style="width:${fill.toFixed(0)}%"></i></div>
+        <div class="mc-hero">
+          <div class="mc-idy">
+            <div class="mc-tok t-mono">${esc(tokenOf(r.symbol))}</div>
+            <div class="mc-sub t-label" title="${esc(r.symbol)}">${
+              esc(String(r.symbol).replace('-USD', ''))}</div>
+            <div class="mc-dirline">
+              <span class="wl-grade ${gr.cls}" title="${esc(gr.why)}">${gr.g}</span>
+              <span class="t-label wl-grade-why">${esc(gr.why)}</span>
+            </div>
+          </div>
+          <div class="mc-ringcol">
+            ${ringSvg(fill / 100, th.ring, isNaN(dist) ? '—' : dist.toFixed(2), 'ATR away')}
+            <div class="t-label mc-exp">To the zone</div>
+          </div>
         </div>
-        <div class="radar-dist">${isNaN(dist) ? '—' : dist.toFixed(2)}<span class="t-sub">ATR away</span>
-          <button class="btn" style="margin-top:6px" data-nsym="${esc(r.symbol)}" data-ntf="${esc(r.tf)}">Chart</button></div>
+        ${wxHtml}
+        <div class="mc-nums t-mono">${esc(zone)}</div>
+        ${withSay ? `<div class="mc-story radar-say">${esc(say[2])}</div>` : ''}
+        <div class="mc-acts">
+          <button class="btn" data-nsym="${esc(r.symbol)}" data-ntf="${esc(r.tf)}">Open chart</button>
+        </div>
       </div>`;
     };
 
     /* The group's shared sentence, printed once. Every OUT_OF_RANGE row
        returned the identical string from NEAR_SAY, so it was rendered once per
-       row and read as noise by the third repetition. */
+       row and read as noise by the third repetition. Its whole job is to
+       state the engine's bound in words, which matters more now that the tab
+       is called "Out of reach" — the tab is the label, this is the meaning. */
     const beyondSay = beyond.length
       ? (NEAR_SAY.OUT_OF_RANGE(beyond[0], prox) || [])[2] || '' : '';
 
+    /* EVERY MARKET — the weather universe, one card each. The two groups
+       above are keyed on the zone sweep, so a market with no live zone
+       anywhere near it appeared in neither and its regime read had nowhere
+       to go. This carries it: condition first, and the nearest zone only
+       where the sweep actually found one.
+
+       Nearest row per SYMBOL, because the sweep is per symbol AND timeframe
+       and a market can be near a zone on the 15m while standing nowhere on
+       the 4H. Showing the closest is the honest summary; the tab above lists
+       every pair for whoever wants them. */
+    const nearestBySym = new Map();
+    for(const r of rows){
+      const dv = parseFloat(r.distance_atr);
+      const cur = nearestBySym.get(r.symbol);
+      if(!cur || (!isNaN(dv) && dv < cur.d)) nearestBySym.set(r.symbol, {d: isNaN(dv) ? 99 : dv, r});
+    }
+    const allHtml = [...wx.values()].map(w => {
+      const hit = nearestBySym.get(w.symbol);
+      const th = hit ? threatOf(hit.r.engine_reach) : threatOf('OUT_OF_RANGE');
+      const gr = gradeOf(hit ? hit.r.engine_reach : 'OUT_OF_RANGE', !!w.live);
+      /* `live` is the engine's own verdict that a playbook covers this
+         market's condition — quoted, never inferred from the regime here. */
+      // the same component again — one card design, three kinds of content
+      return `<div class="mc wl-card ${th.cls}${w.live ? ' wl-live' : ''}">
+        <div class="mc-top">
+          <span class="mc-stamp ${w.live ? 'st-go' : 'st-wait'}">${
+            w.live ? 'PLAYABLE' : 'NO PLAY'}</span>
+          <span class="mc-id t-mono">${esc(w.state || '')}${
+            w.rank != null ? ' · Rank ' + esc(String(w.rank)) : ''}</span>
+        </div>
+        <div class="mc-hero">
+          <div class="mc-idy">
+            <div class="mc-tok t-mono">${esc(tokenOf(w.symbol))}</div>
+            <div class="mc-sub t-label" title="${esc(w.symbol)}">${
+              esc(String(w.symbol).replace('-USD', ''))}</div>
+            <div class="mc-dirline">
+              <span class="wl-grade ${gr.cls}" title="${esc(gr.why)}">${gr.g}</span>
+              <span class="t-label wl-grade-why">${esc(gr.why)}</span>
+            </div>
+          </div>
+          <div class="mc-ringcol">
+            ${ringSvg(hit ? Math.max(0.06, 1 - Math.min(hit.d / 3, 1)) : 0, th.ring,
+              hit ? hit.d.toFixed(2) : '—', hit ? 'ATR away' : 'no zone')}
+            <div class="t-label mc-exp">To the zone</div>
+          </div>
+        </div>
+        <div class="wl-wx">
+          <div class="wl-regs">${(w.timeframes || []).map(t =>
+            `<span class="wl-reg${t.bias === 'LONG' ? ' up' : t.bias === 'SHORT' ? ' dn' : ''}">
+              <b>${esc(t.tf)}</b>${esc(t.label || '—')}</span>`).join('')}</div>
+          <div class="wl-mean${w.live ? ' live' : ''}">${esc(w.meaning || '')}</div>
+        </div>
+        <div class="mc-story radar-say">${teachTxt(w.why || '')}</div>
+        <div class="mc-acts">
+          <button class="btn" data-nsym="${esc(w.symbol)}" data-ntf="${
+            esc((w.timeframes && w.timeframes[0] && w.timeframes[0].tf) || '4H')}">Open chart</button>
+        </div>
+      </div>`;
+    }).join('');
+
     box.innerHTML = warn
-      + inRange.map(r => rowHtml(r, true)).join('')
-      + (beyond.length ? `<details class="near-beyond">
-          <summary class="deck-divider">Beyond the ${esc(String(prox))} ATR the engine looks — ${
-            beyond.length} market${beyond.length === 1 ? '' : 's'}</summary>
-          <div class="near-beyond-say t-note">${esc(beyondSay)}</div>
-          ${beyond.map(r => rowHtml(r, false)).join('')}
-        </details>` : '');
-    box.querySelectorAll('button[data-nsym]').forEach(b =>
-      b.addEventListener('click', () => {
-        go('chart');
-        if(window.SSChart) SSChart.open(b.dataset.nsym, b.dataset.ntf);
-      }));
+      + (inRange.length
+          ? `<div class="wl-rail wheel-rail" tabindex="0">${inRange.map(r => rowHtml(r, true)).join('')}</div>`
+          : '<div class="empty mw-empty">Nothing is standing at a level the engine watches right now.</div>');
+    /* The bound's own sentence leads the group it describes — the tab says
+       "Out of reach", this says out of reach OF WHAT. */
+    $('nearFar').innerHTML = beyond.length
+      ? `<p class="t-note mw-note">${esc(beyondSay)}</p>` +
+        `<div class="wl-rail wheel-rail" tabindex="0">${beyond.map(r => rowHtml(r, false)).join('')}</div>`
+      : '<div class="empty mw-empty">Every market with a live zone is inside the engine’s reach.</div>';
+    $('allMarkets').innerHTML = allHtml
+      ? `<div class="wl-rail wheel-rail" tabindex="0">${allHtml}</div>`
+      : '<div class="empty mw-empty">No market condition has been reported yet.</div>';
+
+    [box, $('nearFar'), $('allMarkets')].forEach(el =>
+      el.querySelectorAll('button[data-nsym]').forEach(b =>
+        b.addEventListener('click', () => {
+          go('chart');
+          if(window.SSChart) SSChart.open(b.dataset.nsym, b.dataset.ntf);
+        })));
+    mwCounts({level: inRange.length, far: beyond.length, all: wx.size});
+    /* The groups were just rebuilt from scratch, so their old wheels are
+       attached to elements the document no longer holds. mountRails sweeps
+       those and gives every new rail an engine of its own. */
+    mountRails();
   }
 
+  /* Glossary underlining for a plain string, matching what weather.js did
+     with the same sentences before they moved here. Falls back to escaped
+     text — losing an underline is acceptable, rendering raw HTML is not. */
+  const teachTxt = t => window.SSTeach ? window.SSTeach(t) : esc(t);
+
+  /* ---------- Overwatch groups ----------
+     Four lists, four toggles, nothing buried. Two of these used to be
+     `<details>` a reader had to discover: the out-of-range markets, and the
+     refused setups, which were worse off still — they sat inside Mission
+     Briefs, putting dead trades in the panel that answers "what should I do
+     right now". Being a tab is the demotion they needed; being hidden was
+     not.
+
+     Only counts and visibility live here. Every card is rendered by whoever
+     owns its data — renderNear for the three market groups, renderDeck for
+     the refused ones — so this switch never becomes a second authority on
+     what any of them say. */
+  const MW_GROUPS = {level: 'near', far: 'nearFar', all: 'allMarkets', passed: 'passed'};
+  let mwActive = 'level';
+
+  function mwShow(key){
+    if(!MW_GROUPS[key]) return;
+    mwActive = key;
+    for(const [k, id] of Object.entries(MW_GROUPS)){
+      const el = $(id);
+      if(el) el.hidden = k !== key;
+    }
+    document.querySelectorAll('#mwSeg button[data-mw]').forEach(b => {
+      const on = b.dataset.mw === key;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
+    });
+    /* A hidden track measures zero, so its wheel could not place anything
+       while the tab was closed. Sync on reveal, not on render. */
+    const shown = $(MW_GROUPS[key]);
+    if(shown) mountRails(shown);
+  }
+
+  function mwCounts(n){
+    for(const [k, v] of Object.entries(n)){
+      const b = document.querySelector(`#mwSeg button[data-mw="${k}"] b`);
+      if(b) b.textContent = v;
+      const btn = b && b.parentElement;
+      /* An empty group says so on its own tab rather than opening onto
+         nothing — the same `.seg button.empty` treatment the chart's overlay
+         picker already uses for a timeframe with no facts recorded. */
+      if(btn) btn.classList.toggle('empty', !v);
+    }
+  }
+
+  (function wireMarketWatch(){
+    const seg = $('mwSeg');
+    if(!seg) return;
+    seg.addEventListener('click', e => {
+      const b = e.target.closest('button[data-mw]');
+      if(b) mwShow(b.dataset.mw);
+    });
+    mwShow('level');
+  })();
+
   async function loadNearLevels(){
-    renderNear(await api('/api/near-levels'));
+    /* Weather comes from the SHARED cache, never a second fetch. weather.js
+       already subscribes to this path on a 30s cadence, so SSData hands back
+       the very payload that module is rendering from — which is the whole
+       point of that layer. Two fetches would also mean two moments, and the
+       merged card would show a regime from one instant beside a distance
+       from another. maxAge is generous for the same reason: this rail wants
+       the payload on screen, not a fresher one. */
+    const [levels, weather] = await Promise.all([
+      api('/api/near-levels'),
+      window.SSData ? window.SSData.get('/api/weather', 60000).catch(() => null)
+                    : Promise.resolve(null),
+    ]);
+    renderNear(levels, weather);
   }
 
   /* Open trades, drawn on the surface that asks what to do next.
@@ -1461,6 +2320,11 @@ weighed in. Name the facts you used.`;
 
   async function renderPositions(p){
     lastPortfolio = p || {};
+    /* The book IS the mission rail now — see renderMissions. Repainted from
+       here rather than on the overview's clock, because this is the payload
+       that changes when a position opens or fills, and the rail must not
+       carry a trade the portfolio has already closed. */
+    renderMissions();
     const panel = $('posPanel'), box = $('positions');
     const list = p.active_positions || [];
     /* Armed orders that have not filled yet. Same payload, same builder — the
@@ -1522,7 +2386,7 @@ weighed in. Name the facts you used.`;
             data-managetf="${esc(t.tf)}"
             title="open this trade on the chart — drag the stop or target and press Update trade"
             >${esc(tokenOf(t.symbol))}</button>
-          <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
+          <div class="t-label" style="margin-top:3px">${long ? 'Long' : 'Short'} · ${
             esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
         </div>
         <div>
@@ -1577,7 +2441,7 @@ weighed in. Name the facts you used.`;
             data-managetf="${esc(t.tf)}"
             title="open this order on the chart"
             >${esc(tokenOf(t.symbol))}</button>
-          <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
+          <div class="t-label" style="margin-top:3px">${long ? 'Long' : 'Short'} · ${
             esc(t.tf)} · ${playbookLabel(t.strategy)}</div>
         </div>
         <div>
@@ -1671,7 +2535,7 @@ weighed in. Name the facts you used.`;
         r => `${Math.round(+r.fraction * 100)}% off at ${px(+r.price)}`).join(' · ');
       const head = `<div>
           <div class="pos-sym">${esc(sym)}</div>
-          <div class="t-label" style="margin-top:3px">${long ? 'long' : 'short'} · ${
+          <div class="t-label" style="margin-top:3px">${long ? 'Long' : 'Short'} · ${
             esc(t.tf)} · yours${+t.leverage > 1 ? ' · ' + esc(t.leverage) + 'x' : ''}</div>
           ${plan ? `<div class="t-sub">${esc(plan)}</div>` : ''}
         </div>`;
@@ -2061,7 +2925,7 @@ weighed in. Name the facts you used.`;
     if(!rows.length){
       tile.classList.remove('up', 'down');
       val.textContent = '—';
-      sub.textContent = 'no trades closed yet today';
+      sub.textContent = 'No trades closed yet today';
       return;
     }
     const pnl = rows.reduce((s, j) => s + j.pnl_usd, 0);
@@ -2237,6 +3101,11 @@ weighed in. Name the facts you used.`;
     indexHeld(p);
     engineExposed = (p.active_positions || []).length > 0 ||
                     (p.pending_orders   || []).length > 0;
+    /* The engine's book is the authority on exposure, so this is the moment
+       the accent is allowed to speak. The operator's own orders adjust it
+       afterwards; they cannot be the thing that unlocks it, because a reader
+       with no hand-armed orders would then never leave `unknown`. */
+    bookKnown = true;
     setAccentMode();
     renderRiskBudget(p);
     renderPositions(p).catch(() => {});
@@ -2617,6 +3486,15 @@ weighed in. Name the facts you used.`;
     const tone = healthTone(h);
     $('healthOrb').className = 'orb ' + tone;
     $('healthTxt').textContent = h.status;
+    /* Keyed off the STATE, not off one branch that happens to set a class.
+       ss.css sheds this chip below 900px unless it carries .degraded, and only
+       markDegraded() — the fetch-failure path — was adding it. The pipeline
+       audit's own verdict lands here, so DEGRADED and BLOCKED were shed on
+       every phone and tablet while the chip's text said DEGRADED and its rect
+       measured 0x0. The comment beside that CSS rule said "shell.js adds
+       .degraded when a refresh fails", which was true and was the tell: one
+       path of two had been considered. A clean audit still sheds. */
+    $('healthChip').classList.toggle('degraded', tone !== 'good');
     /* A STATUS WITH NO CONSEQUENCE IS NOT A STATUS. This chip read DEGRADED on
        every surface with nothing to say whether that meant "do not trade
        today" or "a background check is noisy". The newcomer freezes; the
@@ -2998,6 +3876,181 @@ weighed in. Name the facts you used.`;
           `A confidence interval needs at least 10.`
         : `${n} trades — enough to compute, not enough to trust. Settings ` +
           `wants 100 before the record argues for real money.`;
+
+    lastScore = {n, win: wins.length / n, avg,
+                 pf: loss > 0 ? gross / loss : null,
+                 best: Math.max(...rs), worst: Math.min(...rs)};
+    renderStatWheel();
+    renderProgression();
+  }
+  let lastScore = null;
+
+  /* ---------- the stat wheel ----------
+     Eight figures, each DRAWN as well as printed. The ring is the same
+     component the Mission Briefs use, so a reader who has learned to read one
+     ring on Command can read these without being taught twice.
+
+     Every `frac` below is a stated proportion of a stated bound, and the bound
+     is on the card — a ring filled against an invented denominator is a
+     progress bar pretending to be a measurement. Where a figure has no honest
+     bound (equity, profit factor) the ring is omitted rather than faked. */
+  function statCards(){
+    const s = lastScore, p = lastPortfolio || {};
+    if(!s) return [];
+    const pct = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+    const ret = p.return_pct == null ? null : Number(p.return_pct);
+    const dd  = p.max_drawdown_pct == null ? null : Number(p.max_drawdown_pct);
+    const halts = p.kill_switch_days ?? 0;
+    return [
+      {k: 'trades', label: 'Trades closed', big: String(s.n),
+       sub: s.n < 10 ? `${10 - s.n} more to a confidence interval`
+                     : s.n < 100 ? `${100 - s.n} more before the record argues for real money`
+                                 : 'a sample worth reading',
+       frac: Math.min(s.n / 100, 1), ringLabel: 'of 100', tone: 'ring-mid',
+       note: 'The forward window only. Diagnostics measures the whole book.'},
+      {k: 'win', label: 'Win rate', big: Math.round(s.win * 100) + '%',
+       sub: 'of closed trades ended positive',
+       frac: s.win, ringLabel: 'won', tone: s.win >= 0.5 ? 'ring-ok' : 'ring-low',
+       note: 'A high win rate is not an edge on its own — size of win against ' +
+             'size of loss is what decides it. That is average R, next.'},
+      {k: 'avgr', label: 'Average R', big: (s.avg >= 0 ? '+' : '') + s.avg.toFixed(2) + 'R',
+       sub: s.avg > 0 ? 'each trade returned more than it risked, on average'
+                      : 'each trade lost a fraction of what it risked, on average',
+       frac: null, tone: s.avg > 0 ? 'ring-ok' : 'ring-low',
+       note: 'R is the multiple of the money put at risk. −0.27R means about a ' +
+             'quarter of the risk was lost per trade on average.'},
+      {k: 'pf', label: 'Profit factor', big: s.pf == null ? '—' : s.pf.toFixed(2),
+       sub: s.pf == null ? 'no losing trades to divide by'
+          : s.pf >= 1 ? 'won more than it lost' : 'lost more than it won',
+       frac: null, tone: (s.pf != null && s.pf >= 1) ? 'ring-ok' : 'ring-low',
+       note: 'Gross winnings divided by gross losses. Above 1.00 is profitable ' +
+             'before costs of being wrong about the sample.'},
+      {k: 'best', label: 'Best trade', big: (s.best >= 0 ? '+' : '') + s.best.toFixed(2) + 'R',
+       sub: 'the most any single trade returned', frac: null, tone: 'ring-ok',
+       note: 'One trade. It is the ceiling of the record, not evidence about it.'},
+      {k: 'worst', label: 'Worst trade', big: s.worst.toFixed(2) + 'R',
+       sub: 'the most any single trade lost', frac: null, tone: 'ring-low',
+       note: 'A stop doing its job looks like this. Worse than −1R means the ' +
+             'stop was jumped, not respected.'},
+      {k: 'dd', label: 'Max drawdown', big: dd == null ? '—' : dd + '%',
+       sub: 'the deepest fall from a high-water mark',
+       frac: dd == null ? null : Math.min(dd / 20, 1), ringLabel: 'of 20%',
+       tone: dd != null && dd > 10 ? 'ring-low' : 'ring-mid',
+       note: 'Scaled against 20%, the depth at which a strategy is usually ' +
+             'considered to have failed rather than dipped.'},
+      {k: 'halt', label: 'Halt days', big: String(halts),
+       sub: halts ? 'days the automatic loss limit stopped new entries'
+                  : 'the daily loss limit has never had to fire',
+       frac: null, tone: halts ? 'ring-low' : 'ring-ok',
+       note: 'The kill switch stopping you is the system working. It is listed ' +
+             'because it should be rare, not because it is bad.'},
+      ...(ret == null ? [] : [{k: 'ret', label: 'Return', big: pct(ret),
+       sub: 'against the starting equity of this window', frac: null,
+       tone: ret >= 0 ? 'ring-ok' : 'ring-low',
+       note: 'Money, not method. Average R is the one that says whether the ' +
+             'rules work; this says what happened to the account.'}]),
+    ];
+  }
+
+  function renderStatWheel(){
+    const el = $('statTrack');
+    if(!el) return;
+    const cards = statCards();
+    if(!cards.length){
+      el.innerHTML = '<div class="empty">No closed trades in this window yet.</div>';
+      return;
+    }
+    el.innerHTML = cards.map(c => `<div class="mc stat-card">
+      <div class="mc-top">
+        <span class="mc-stamp ${c.tone === 'ring-ok' ? 'st-go'
+                              : c.tone === 'ring-low' ? 'st-dead' : 'st-wait'}">${esc(c.label)}</span>
+      </div>
+      <div class="mc-hero">
+        <div class="mc-idy">
+          <div class="stat-big t-mono">${esc(c.big)}</div>
+          <div class="mc-sub t-label">${esc(c.sub)}</div>
+        </div>
+        ${c.frac == null ? '' : `<div class="mc-ringcol">
+          ${ringSvg(c.frac, c.tone, Math.round(c.frac * 100) + '%', esc(c.ringLabel || ''))}
+        </div>`}
+      </div>
+      <div class="mc-story stat-note">${esc(c.note)}</div>
+    </div>`).join('');
+    if(!statRail) statRail = makeRail(el, {prev: 'statPrev', next: 'statNext',
+                                           status: 'statStatus', tilt: true});
+    statRail.sync();
+  }
+  let statRail = null, progRail = null;
+
+  /* ---------- progression ----------
+     Real thresholds only. Each row is a gate this system already enforces or
+     already needs, so "locked" means something concrete rather than a game
+     designer's pacing. Nothing here is awarded for winning: the forward record
+     does not say the method works, and a badge claiming otherwise would be the
+     one thing this product must never print. */
+  function progressionRows(){
+    const s = lastScore, p = lastPortfolio || {};
+    if(!s) return [];
+    const dd = p.max_drawdown_pct == null ? null : Number(p.max_drawdown_pct);
+    const halts = p.kill_switch_days ?? 0;
+    const rows = [
+      {t: 'First blood', done: s.n >= 1, have: Math.min(s.n, 1), need: 1,
+       d: 'One trade closed and recorded.',
+       locked: 'Closes when the engine finishes its first trade.'},
+      {t: 'Readable sample', done: s.n >= 10, have: Math.min(s.n, 10), need: 10,
+       d: 'Ten closed trades — the minimum a confidence interval can be computed from.',
+       locked: 'The maths cannot bound an edge on fewer than ten.'},
+      {t: 'Arguable record', done: s.n >= 100, have: Math.min(s.n, 100), need: 100,
+       d: 'One hundred closed trades — what Settings wants before the record argues for real money.',
+       locked: 'Settings → Going live holds real orders until this lands.'},
+      {t: 'Discipline held', done: halts === 0 && s.n > 0, have: halts === 0 ? 1 : 0, need: 1,
+       d: 'The daily loss limit has never had to stop you.',
+       locked: 'The kill switch has fired. It working is good; needing it is the note.'},
+      {t: 'Shallow water', done: dd != null && dd < 10, have: dd != null && dd < 10 ? 1 : 0, need: 1,
+       d: 'Deepest drawdown still under 10%.',
+       locked: dd == null ? 'No drawdown recorded yet.'
+                          : `Currently ${dd}% down from the high-water mark.`},
+    ];
+    return rows;
+  }
+
+  function renderProgression(){
+    const el = $('progTrack');
+    if(!el) return;
+    const rows = progressionRows();
+    const done = rows.filter(r => r.done).length;
+    const chip = $('progCount');
+    if(chip) chip.textContent = `${done} of ${rows.length}`;
+    const lede = $('progLede');
+    if(lede) lede.textContent =
+      'Milestones for the record itself, not for winning. None of these say the ' +
+      'method works — that is what average R and the confidence interval are for.';
+    if(!rows.length){
+      el.innerHTML = '<div class="empty">Nothing recorded yet.</div>';
+      return;
+    }
+    el.innerHTML = rows.map(r => {
+      const frac = Math.max(0, Math.min(1, r.have / r.need));
+      return `<div class="mc stat-card prog-card${r.done ? ' earned' : ''}">
+        <div class="mc-top">
+          <span class="mc-stamp ${r.done ? 'st-go' : 'st-wait'}">${r.done ? 'EARNED' : 'LOCKED'}</span>
+          <span class="mc-id t-mono">${r.need > 1 ? r.have + ' / ' + r.need : ''}</span>
+        </div>
+        <div class="mc-hero">
+          <div class="mc-idy">
+            <div class="prog-title t-mono">${esc(r.t)}</div>
+            <div class="mc-sub t-label">${esc(r.d)}</div>
+          </div>
+          <div class="mc-ringcol">
+            ${ringSvg(frac, r.done ? 'ring-ok' : 'ring-mid',
+                      Math.round(frac * 100) + '%', r.done ? 'done' : 'to go')}
+          </div>
+        </div>
+        <div class="mc-story stat-note">${esc(r.done ? r.d : r.locked)}</div>
+      </div>`;
+    }).join('');
+    if(!progRail) progRail = makeRail(el, {});
+    progRail.sync();
   }
 
   /* ---------- going live: the criteria, and where the record stands ----------
@@ -3038,18 +4091,38 @@ weighed in. Name the facts you used.`;
         : c.key === 'edge' ? `${c.have > 0 ? '+' : ''}${c.have}R lower bound`
         : c.key === 'drawdown' ? `${c.have}% of ${c.need}%`
         : String(c.have);
-      return `<div class="gate-row${c.pass ? ' ok' : ''}">
-        <div class="gate-head">
-          <span class="gate-mark">${c.pass ? '✓' : '·'}</span>
-          <span class="gate-label">${esc(c.label)}</span>
-          <span class="gate-have">${esc(have)}</span>
+      /* THE ONE CARD-SHAPED THING ON SETTINGS. Four gates that must each be
+         true before real money is possible — a genuine progression track, and
+         the most motivating screen in the app. It rides the same wheel and
+         wears the same card as everything else, so the language the operator
+         learned on Command reads here without being taught twice.
+
+         Everything else on Settings stays a form. A wheel is a fine way to
+         look at four things in turn and a poor way to change a number, and
+         the point of the carousel was never to put every surface on one. */
+      return `<div class="mc gate-card${c.pass ? ' earned' : ''}">
+        <div class="mc-top">
+          <span class="mc-stamp ${c.pass ? 'st-go' : 'st-wait'}">${c.pass ? 'MET' : 'NOT MET'}</span>
+          <span class="mc-id t-mono">${esc(have)}</span>
         </div>
-        <div class="gate-bar"><i style="width:${pct}%"></i></div>
-        <div class="gate-note">${esc(c.note)}</div>
+        <div class="mc-hero">
+          <div class="mc-idy">
+            <div class="prog-title t-mono">${esc(c.label)}</div>
+          </div>
+          <div class="mc-ringcol">
+            ${ringSvg((c.progress || 0), c.pass ? 'ring-ok' : 'ring-mid',
+                      pct + '%', c.pass ? 'met' : 'to go')}
+          </div>
+        </div>
+        <div class="mc-story stat-note">${esc(c.note)}</div>
       </div>`;
-    }).join('') +
-      `<div class="gate-foot">${esc(g.build_note)}</div>`;
+    }).join('');
+    const foot = $('gateFoot');
+    if(foot) foot.textContent = g.build_note || '';
+    if(!gateRail) gateRail = makeRail(root, {});
+    gateRail.sync();
   }
+  let gateRail = null;
 
   /* `input`, not `change`: the dirty flag should follow typing, not wait for
      blur. The handler patches state and never re-renders — calling the full

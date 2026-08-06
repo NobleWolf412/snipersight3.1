@@ -73,6 +73,30 @@ window.SSChart = (() => {
   let refreshTimer = null, refreshing = false;   // see startAutoRefresh()
   let loadedAt = null, freshTimer = null;        // see showFreshness()
   let loadSeq = 0;                            // guards out-of-order responses
+  /* THE FLOOR UNDER THE RACE GUARD. A load that bails because a newer one
+     started is normal and silent — but it leaves "Loading X · Y…" on screen,
+     and only the winner takes that down. If no winner arrives, the pane holds
+     a loading message that will never resolve, which is indistinguishable
+     from a hung request and was exactly the "no candles" report.
+
+     So every bail schedules a check. If the message is still up a beat later
+     and nothing has painted since, the chart says it gave up rather than
+     pretending it is still trying. One timer, replaced each time, because a
+     burst of superseded loads is one stall, not five. */
+  let stallTimer = 0;
+  function noteStalledLoad(){
+    clearTimeout(stallTimer);
+    const seqAtBail = loadSeq;
+    stallTimer = setTimeout(() => {
+      const box = $('chartEmpty');
+      if(!box || box.style.display === 'none') return;   // something painted
+      if(loadSeq !== seqAtBail) return;                  // a newer load is running
+      if(!/^Loading /.test(box.textContent || '')) return;
+      clearChart('Could not finish loading ' + sym + ' · ' + tf,
+                 'the request was superseded and nothing replaced it — ' +
+                 'pick the timeframe again to retry');
+    }, 4000);
+  }
   // Which market the screen currently DESCRIBES — set only when a load paints,
   // nulled whenever the screen is cleared. load() compares against it to tell
   // a switch (clear first, everything on screen is the old market) from a
@@ -904,14 +928,20 @@ window.SSChart = (() => {
       if(seq === loadSeq) clearChart('Could not load ' + sym + ' · ' + tf, err.message);
       return;
     }
-    if(seq !== loadSeq) return;                 // a newer symbol/tf won the race
+    /* A newer symbol/tf won the race. Bailing is right — this response
+       describes a market the header no longer names — but the "Loading …"
+       message this load wrote is still on screen, and only the winner clears
+       it. If the winner is gone (it bailed too, or never ran), the pane sits
+       on that message forever. Say so instead: an unresolved load is a
+       degraded path, and degraded paths in this app are audible. */
+    if(seq !== loadSeq){ noteStalledLoad(); return; }
     // Costs are per VENUE, so the config must be re-read per symbol. Spot fees
     // on a perp chart would flip the sign of the net-R decision.
     try{
       cfg = await api('/api/trade-config?symbol=' + encodeURIComponent(sym));
       setLock();
     }catch(err){ /* keep whatever we had; the ticket labels its source */ }
-    if(seq !== loadSeq) return;
+    if(seq !== loadSeq){ noteStalledLoad(); return; }
     const [c, swing, struct, zone, liq, regime, setupF, cycle, riskF] = res;
     candles = c;
     facts = {swing, struct, zone, liq, regime, setupF, cycle, riskF};
@@ -2404,15 +2434,40 @@ window.SSChart = (() => {
     }, 60000);
   }
 
-  async function populate(){
-    let o;
-    try{ o = await api('/api/overview'); }
-    catch(err){ $('chartEmpty').textContent = 'symbol list unavailable'; return; }
-    allSymbols = o.symbols.filter(s => s.state !== 'WARMING');
-    symMeta = {};
-    for(const s of allSymbols) symMeta[s.symbol] = s;
-    if(!sym) sym = allSymbols.length ? allSymbols[0].symbol : null;
-    if(sym){ paintSymBtn(); await load(); }
+  /* ONE POPULATE AT A TIME, and one load out of it.
+
+     Opening a chart from Command runs BOTH entry points: `go('chart')` fires
+     onShow(), which populates when there is no symbol yet, and the click
+     handler then calls open(), which populates when the symbol list is still
+     empty. On a cold page both conditions are true at once, so two populates
+     ran, each awaiting the same /api/overview and each calling load() when it
+     came back.
+
+     Two loads race. The loser bails at the `seq !== loadSeq` guard — which is
+     correct, that guard is what stops one market's candles landing under
+     another market's name — but it bails AFTER clearChart() has already
+     written "Loading AAVEUSDT · 4H…" into the pane, and nothing else ever
+     clears that. The chart sat on the loading message forever while the
+     ticket beside it filled in from the same response. Reproduced live on
+     AAVEUSDT · 4H opening from an Overwatch card.
+
+     Sharing the in-flight promise collapses the two into one, the same way
+     SSData dedupes a path. There is then exactly one load, and it is by
+     definition the newest, so it always reaches the paint. */
+  let populating = null;
+  function populate(){
+    if(populating) return populating;
+    populating = (async () => {
+      let o;
+      try{ o = await api('/api/overview'); }
+      catch(err){ $('chartEmpty').textContent = 'symbol list unavailable'; return; }
+      allSymbols = o.symbols.filter(s => s.state !== 'WARMING');
+      symMeta = {};
+      for(const s of allSymbols) symMeta[s.symbol] = s;
+      if(!sym) sym = allSymbols.length ? allSymbols[0].symbol : null;
+      if(sym){ paintSymBtn(); await load(); }
+    })().finally(() => { populating = null; });
+    return populating;
   }
 
   /* One searchable list replaces the <select> + scope toggle. The OS-native
@@ -2505,7 +2560,11 @@ window.SSChart = (() => {
     boot();
     document.querySelectorAll('#cTfs button').forEach(b =>
       b.classList.toggle('on', b.dataset.tf === tf));
-    if(!allSymbols.length) await populate();          // handles load itself
+    /* `sym` is assigned above, so a populate already running for onShow()
+       will load THIS symbol — awaiting it is the whole job. Starting a second
+       one here is what produced the two racing loads. */
+    if(populating) await populating;
+    else if(!allSymbols.length) await populate();     // handles load itself
     else{ paintSymBtn(); await load(); }
   }
 

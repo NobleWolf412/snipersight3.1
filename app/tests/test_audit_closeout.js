@@ -104,11 +104,25 @@ ok('the data tables are tables', () => {
          'cells carry no scope, so columns are shapes rather than answers');
   assert(/\.data-table\{/.test(CSS),
          'tables have no styling — the semantics changed and the pixels broke');
-  // the weather grid is exempt BY DESIGN: its rows are buttons that expand
+  /* The weather grid USED to be the exemption here — a symbol x timeframe
+     table whose rows were expanding buttons, so it announced as a disclosure
+     list rather than as a table.
+
+     That grid no longer exists. It listed the same markets the At-a-level
+     sweep listed, one screen apart, and both halves are now one card per
+     market in Market Watch. So the exemption is retired and replaced by the
+     property that has to hold in its place: weather renders no grid at all,
+     and the card that absorbed it keeps each regime label bound to the
+     timeframe it belongs to. A bare "Bear weakening" with the "4H" lost is
+     the accessibility failure this assertion exists to catch — it is the
+     same claim the old table made with a column header. */
   const W = S('weather.js');
-  assert(/role="button"/.test(W),
-         'weather rows lost their button role — they are an interactive '
-         + 'disclosure list, not a table, and must announce as one');
+  assert(!/wx-row|wx-data/.test(W),
+         'weather still renders its per-symbol grid — it moved into Market '
+         + 'Watch, and two copies of one reading is how they drift');
+  assert(/class="wl-reg/.test(JS) && /<b>\$\{esc\(t\.tf\)\}<\/b>/.test(JS),
+         'the watch card prints a regime label without its timeframe beside '
+         + 'it, so the reading cannot be attributed to a timeframe');
 });
 
 ok('the served shell is version-stamped by the server', () => {
