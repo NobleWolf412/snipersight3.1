@@ -2886,7 +2886,14 @@ weighed in. Name the facts you used.`;
     const up = p.return_pct >= 0;
 
     $('equityTxt').textContent = money(p.equity);
-    $('equityRet').textContent = ruled ? '  ' + (up ? '+' : '') + p.return_pct + '%' : '';
+    /* THROUGH pct(), not concatenated. This printed `p.return_pct + '%'` raw
+       while every other reader formats the same field through the shared
+       helper, so the top bar said -5.84% with the Ledger card saying -5.8%
+       forty pixels below it — one number, two renderings, on one screen.
+       That is the defect test_one_source_of_truth.js exists for, and its own
+       comment names the ancestor: "$193 / $195 / 194.68 / $194". */
+    $('equityRet').textContent = ruled
+      ? '  ' + (up ? '+' : '') + pct(p.return_pct) : '';
     $('equityChip').title = `account equity (paper) — start ${money(p.start_equity)}, ` +
       `open risk ${money(p.open_risk_usd || 0)}`;
     $('rEquity').textContent = money(p.equity);
