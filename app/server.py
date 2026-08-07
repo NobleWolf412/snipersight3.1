@@ -268,6 +268,246 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
         con.close()
 
 
+def _trace_stage(key: str, label: str, status: str, value=None,
+                 expected=None, detail: str = "", facts: dict | None = None) -> dict:
+    """One gate in a setup's journey.
+
+    `value` is mandatory-by-convention rather than by type: a stage that renders
+    only a tick tells the operator the gate ran, not why it decided what it
+    decided. Every caller below passes the number the gate actually compared.
+    """
+    return {"key": key, "label": label, "status": status,
+            "value": value, "expected": expected, "detail": detail,
+            "facts": facts or {}}
+
+
+@app.get("/api/setup-trace/{setup_id}")
+def setup_trace(setup_id: str):
+    """One setup's stage-by-stage journey — "why didn't THIS one fire?".
+
+    The rejection funnel answers the aggregate question ("why is nothing
+    firing?"). This answers the one an operator actually asks, about the single
+    setup in front of them, and it carries the ACTUAL value at each gate —
+    the R:R that was measured against the minimum, the regime the playbook was
+    chosen for, the equity the risk authority sized against.
+
+    Read-only join over immutable facts, exactly like /api/setup-telemetry.
+    Nothing here is consulted by any engine. An unknown id is a 404 rather than
+    an empty skeleton: a trace that renders blank looks like "this setup sailed
+    through", which is the opposite of the truth.
+    """
+    con = store.connect()
+    try:
+        baseline = store.get_active_baseline(con)
+
+        # Facts are keyed by (symbol, tf, kind) and the setup_id lives inside the
+        # payload, so there is no index to seek on. Scanning the four relevant
+        # kinds is cheap at this store's size and keeps the query honest — no
+        # LIKE-matching on serialized JSON, which would silently miss a payload
+        # written with different separators.
+        def payloads(kind: str, versions: tuple[str, ...]) -> list[dict]:
+            out = []
+            marks = ",".join("?" * len(versions))
+            rows = con.execute(
+                f"SELECT symbol,tf,market_time,confirmed_at,algo_version,payload "
+                f"FROM facts WHERE kind=? AND algo_version IN ({marks}) "
+                f"ORDER BY confirmed_at,id", (kind, *versions)).fetchall()
+            for sym, timeframe, market_time, confirmed_at, algo_version, raw in rows:
+                p = json.loads(raw)
+                if p.get("setup_id") != setup_id:
+                    continue
+                out.append({"symbol": sym, "tf": timeframe,
+                            "market_time": market_time,
+                            "confirmed_at": confirmed_at,
+                            "algo_version": algo_version, **p})
+            return out
+
+        setup_facts = payloads("setup", (setups.SETUP_VERSION, scalein.SCALE_VERSION))
+        if not setup_facts:
+            raise HTTPException(
+                404, f"no setup recorded with id {setup_id!r}")
+
+        # The last fact is the setup's current truth; the earlier ones are its
+        # state history (FORMING -> VALIDATED, or -> CANCELLED).
+        setup = setup_facts[-1]
+        risk_facts = [p for p in payloads("risk", (risk.RISK_VERSION,))
+                      if p.get("event") == "DECISION"]
+        order_facts = payloads("order", (execsim.EXEC_VERSION,))
+        exec_facts = payloads("exec", (execsim.EXEC_VERSION,))
+        risk_fact = risk_facts[-1] if risk_facts else None
+        order_fact = order_facts[-1] if order_facts else None
+        exec_fact = exec_facts[-1] if exec_facts else None
+
+        # One authority for the lifecycle verdict: the same telemetry builder the
+        # funnel counts with, so the drawer can never disagree with the funnel.
+        record = telemetry.build_record(setup, risk_fact, order_fact, exec_fact)
+        lifecycle = {k: record[k] for k in
+                     ("stage", "failure_code", "failure_owner", "detail",
+                      "classification")}
+
+        state = setup.get("state")
+        rr = record.get("computed_rr")
+        min_rr = float(setups.MIN_RR)
+        stages = [
+            _trace_stage(
+                "CANDIDATE", "Candidate found", "pass",
+                value=f"{setup['symbol']} {setup['tf']}",
+                detail=setup.get("why") or "a price zone was touched",
+                facts={"zone_id": setup.get("zone_id"),
+                       "zone_strength": setup.get("zone_strength"),
+                       "market_time": setup["market_time"],
+                       "confirmed_at": setup["confirmed_at"]}),
+            _trace_stage(
+                "PLAYBOOK", "Strategy matched", "pass",
+                value=f"{setup.get('strategy') or 'UNKNOWN'} · {setup.get('direction') or '—'}",
+                expected="a strategy whose conditions cover this regime",
+                detail=f"regime at the time was {setup.get('regime') or 'unrecorded'}",
+                facts={"strategy": setup.get("strategy"),
+                       "direction": setup.get("direction"),
+                       "regime": setup.get("regime"),
+                       "rank": setup.get("rank")}),
+            _trace_stage(
+                "BRACKET", "Entry, stop and target",
+                "pass" if record["stop_distance"] else "fail",
+                value=(f"entry {setup.get('entry')} · stop {setup.get('sl')} "
+                       f"· target {setup.get('tp')}"),
+                expected="a stop a non-zero distance from the entry",
+                detail=("stop is "
+                        f"{record['stop_distance']} away, target is "
+                        f"{record['reward_distance']} away"),
+                facts={"entry": setup.get("entry"), "sl": setup.get("sl"),
+                       "tp": setup.get("tp"),
+                       "stop_distance": record["stop_distance"],
+                       "reward_distance": record["reward_distance"]}),
+            _trace_stage(
+                "RR_GATE", "Reward against risk",
+                "pass" if rr is not None and rr >= min_rr else "fail",
+                value=rr, expected=f">= {min_rr}",
+                detail=(f"the target is {rr}x the stop distance"
+                        if rr is not None else
+                        "R:R could not be computed from this setup's bracket"),
+                facts={"computed_rr": rr, "recorded_rr": setup.get("rr"),
+                       "min_rr": str(setups.MIN_RR)}),
+            _trace_stage(
+                "VALIDATION", "Setup validated",
+                {"VALIDATED": "pass", "FORMING": "pending",
+                 "CANCELLED": "fail"}.get(state, "skip"),
+                value=state, expected="VALIDATED",
+                detail={"VALIDATED": "price reached the zone and every entry gate passed",
+                        "FORMING": "price is approaching the zone but has not reached it",
+                        "CANCELLED": "the structure this setup relied on broke first"
+                        }.get(state, "no recorded state"),
+                facts={"state": state, "armed": setup.get("armed"),
+                       "expires_at_ts": setup.get("expires_at_ts")}),
+        ]
+
+        if risk_fact:
+            decision = risk_fact.get("decision")
+            reasons = risk_fact.get("reasons") or []
+            stages.append(_trace_stage(
+                "RISK", "Risk authority",
+                {"APPROVED": "pass", "REDUCED": "warn",
+                 "REJECTED": "fail"}.get(decision, "skip"),
+                value=decision,
+                expected="APPROVED or REDUCED to place an order",
+                detail=" · ".join(reasons) if reasons else "no reason recorded",
+                facts={"decision": decision, "reasons": reasons,
+                       "risk_usd": risk_fact.get("risk_usd"),
+                       "intended_risk_usd": risk_fact.get("intended_risk_usd"),
+                       "equity_at": risk_fact.get("equity_at"),
+                       "units": risk_fact.get("units"),
+                       "notional_usd": risk_fact.get("notional_usd"),
+                       "implied_leverage": risk_fact.get("implied_leverage")}))
+        else:
+            stages.append(_trace_stage(
+                "RISK", "Risk authority", "skip", value=None,
+                expected="APPROVED or REDUCED to place an order",
+                detail="the risk authority has not ruled on this setup yet"))
+
+        if order_fact:
+            event = order_fact.get("event")
+            stages.append(_trace_stage(
+                "ORDER", "Order placed",
+                "pass" if event in ("PLACED", "FILLED") else "fail",
+                value=event, expected="PLACED",
+                detail=(f"{order_fact.get('order_type') or 'order'} at "
+                        f"{order_fact.get('limit_price')}"),
+                facts={"event": event, "order_type": order_fact.get("order_type"),
+                       "limit_price": order_fact.get("limit_price"),
+                       "available_at": order_fact.get("available_at"),
+                       "max_entry_bars": order_fact.get("max_entry_bars"),
+                       # every order in this build is a shadow simulation; the
+                       # drawer must never imply a real order went to a venue
+                       "scope": "SHADOW_SIMULATION"}))
+            filled = event == "FILLED"
+            stages.append(_trace_stage(
+                "FILL", "Filled", "pass" if filled else "fail",
+                value=order_fact.get("fill_price") if filled else "not filled",
+                expected="price trades through the limit inside the entry window",
+                detail=("filled after "
+                        f"{order_fact.get('bars_to_fill')} bars" if filled else
+                        "price never came back to the entry before the order expired"),
+                facts={"fill_price": order_fact.get("fill_price"),
+                       "bars_to_fill": order_fact.get("bars_to_fill")}))
+        else:
+            for key, label in (("ORDER", "Order placed"), ("FILL", "Filled")):
+                stages.append(_trace_stage(
+                    key, label, "skip", value=None,
+                    detail="no order simulated for this setup"))
+
+        if exec_fact:
+            outcome = exec_fact.get("outcome")
+            net_r = exec_fact.get("r_multiple")
+            won = record["failure_code"] == "WINNER"
+            stages.append(_trace_stage(
+                "EXIT", "Closed",
+                "pass" if won else ("skip" if outcome == "MISSED" else "fail"),
+                value=f"{outcome} · {net_r}R net",
+                expected="a positive net R after costs",
+                detail=lifecycle["detail"],
+                facts={"outcome": outcome, "net_r": net_r,
+                       "gross_r": exec_fact.get("r_gross"),
+                       "costs_r": exec_fact.get("costs_r"),
+                       "mae_r": exec_fact.get("mae_r"),
+                       "mfe_r": exec_fact.get("mfe_r"),
+                       "bars_held": exec_fact.get("bars_held"),
+                       "exit_price": exec_fact.get("exit_price")}))
+        else:
+            stages.append(_trace_stage(
+                "EXIT", "Closed", "skip", value=None,
+                detail="no terminal exit fact recorded yet"))
+
+        return {
+            "diagnostic_only": True,
+            "setup_id": setup_id,
+            "symbol": setup["symbol"], "tf": setup["tf"],
+            "market_time": setup["market_time"],
+            "confirmed_at": setup["confirmed_at"],
+            "algo_version": setup["algo_version"],
+            "strategy": setup.get("strategy"), "direction": setup.get("direction"),
+            "state": state, "regime": setup.get("regime"),
+            "rank": setup.get("rank"), "why": setup.get("why"),
+            "baseline": baseline,
+            # A setup confirmed before the active baseline is real history, not a
+            # missing record. Say which it is rather than hiding it.
+            "in_baseline": setup["confirmed_at"] >= baseline["started_at"],
+            "lifecycle": lifecycle,
+            "stages": stages,
+            "history": [{"state": f.get("state"),
+                         "market_time": f["market_time"],
+                         "confirmed_at": f["confirmed_at"]} for f in setup_facts],
+            "risk": risk_fact, "order": order_fact, "execution": exec_fact,
+            "diagnostics": record["diagnostics"],
+            "missing_evidence": record["missing_evidence"],
+            "thresholds": {"min_rr": str(setups.MIN_RR)},
+            "versions": {"setup": setup["algo_version"],
+                         "risk": risk.RISK_VERSION,
+                         "execution": execsim.EXEC_VERSION},
+        }
+    finally:
+        con.close()
+
+
 @app.get("/api/portfolio")
 def portfolio():
     """Paper account state from risk-authority facts (§9/§13 dashboard)."""
@@ -503,6 +743,244 @@ def performance():
                 "by_strategy": rows(by_strat)}
     finally:
         con.close()
+
+
+# ── Playbook catalogue ──────────────────────────────────────────────────────
+# The catalogue answers the three questions a new operator actually has: what
+# strategies exist, how does each one work, and is it working. The third is why
+# this endpoint calls performance() rather than counting exec facts itself — a
+# catalogue with its own arithmetic could disagree with the Results page, and
+# the operator would have no way to know which one was lying.
+#
+# The prose below lives here, beside the endpoint that serves it, but every
+# NUMBER and every rule with a constant behind it is read from the engine. A
+# card describing rules the code stopped following is worse than no card.
+
+# `record_key` on each card is the strategy name the engines stamp on a fact,
+# and it is what joins the card to its row in performance()'s by_strategy
+# bucket. A planned playbook has no record_key because it has produced nothing.
+#
+# A planned playbook has to justify itself with a measured gap, not a promise.
+# Each one names the regime whose rejections size it. The regime is the design
+# decision; the percentage is counted at request time (see below).
+_PLANNED_GAP = {
+    "range_fade": ("RANGE", "a market going sideways, with no trend to follow"),
+    "reversal_rework": ("TRANSITION", "a market between trends"),
+}
+
+
+def _entry_rules() -> dict:
+    """CONFIRMS / STOP GOES text, read from whichever entry model is loaded.
+
+    setups.py is mid-version: v0.6 opened the trade on the zone touch, v0.7
+    waits for a closing bar to prove the level held. The catalogue has to
+    describe the engine that is actually running, so the branch tests for a
+    capability the module either has or does not, never a version string.
+    """
+    if hasattr(setups, "confirms"):
+        # 0.66 of the range measured from the far side == a close in the top 34%
+        tail = int(round((1 - float(setups.REJECTION_FRACTION)) * 100))
+        return {
+            "confirms": (
+                f"A candle has to close back OUT of the zone and finish in the "
+                f"last {tail}% of its own range — the top {tail}% to buy, the "
+                f"bottom {tail}% to sell. That is the market rejecting the "
+                f"level, not drifting off it. It gets {setups.CONFIRM_MAX_BARS} "
+                f"bars to do it, or the setup is dropped."),
+            "stop_goes": (
+                f"Just past the candle that did the rejecting: "
+                f"{setups.SL_BUFFER_ATR} ATR beyond its low to buy, its high to "
+                f"sell. A price the market has already tested and turned away "
+                f"from, rather than a round number."),
+        }
+    return {
+        "confirms": (
+            "Nothing beyond the touch itself: the trade opens the moment price "
+            "reaches the zone. This is the weakest part of the current engine "
+            "and the entry rework exists to fix it."),
+        "stop_goes": (
+            f"{setups.SL_ATR} ATR beyond the far edge of the zone — the price "
+            f"at which the reason for the trade has been proven wrong."),
+    }
+
+
+def _rejection_regime_share(con) -> dict:
+    """How the candidates the scanner turned down split by market condition.
+
+    This is what lets a PLANNED playbook state its own size instead of
+    promising value. The percentages are COUNTED on every request and never
+    written down: a hard-coded "27% of candidates are ranging" would go on
+    claiming 27% long after the market moved, which is precisely the kind of
+    confident stale number this surface exists to replace.
+    """
+    rows = con.execute(
+        "SELECT payload FROM facts WHERE kind='setup_rejection' "
+        "AND algo_version=?", (setups.SETUP_VERSION,)).fetchall()
+    basis = setups.SETUP_VERSION
+    if not rows:
+        # A version bump leaves the new engine with no rejection history of its
+        # own for a while. Falling back to the whole corpus keeps the gap
+        # measurable AND says which corpus produced it — reporting 0% here
+        # would read as "this gap does not exist", which is a different claim.
+        rows = con.execute(
+            "SELECT payload FROM facts WHERE kind='setup_rejection'").fetchall()
+        basis = "every recorded setup version"
+    by_regime, no_playbook = Counter(), 0
+    for (raw,) in rows:
+        p = json.loads(raw)
+        if p.get("reason") != "NO_ELIGIBLE_PLAYBOOK":
+            continue
+        no_playbook += 1
+        by_regime[(p.get("details") or {}).get("regime") or "UNCLASSIFIED"] += 1
+    total = len(rows)
+    return {"total": total, "no_playbook": no_playbook, "basis": basis,
+            "by_regime": {k: {"n": v, "pct": round(100 * v / total, 1)}
+                          for k, v in by_regime.items()}}
+
+
+@app.get("/api/playbooks")
+def playbooks():
+    """Every strategy: what it hunts, how it works, and its live record.
+
+    The record comes from /api/performance, scoped to the active baseline like
+    everything else on Results. Losing strategies report their losses — a
+    catalogue that hid them would be a sales page, and the operator would be
+    choosing between strategies on advertising rather than evidence.
+    """
+    from engine import settings as _settings
+    con = store.connect()
+    try:
+        values = _settings.all_settings(con)
+        share = _rejection_regime_share(con)
+        baseline = store.get_active_baseline(con)
+    finally:
+        con.close()
+
+    perf = performance()
+    by_strategy = {r["key"]: r for r in perf["by_strategy"]}
+
+    def record(name):
+        r = by_strategy.get(name)
+        if r is None:
+            # No closed trade under this baseline. n=0 with a null win rate,
+            # because a "0% win rate" is a claim about trades that happened.
+            return {"n": 0, "win_pct": None, "pf": None, "sum_r": 0.0,
+                    "sized": 0, "pnl_usd": 0.0}
+        return {k: v for k, v in r.items() if k != "key"}
+
+    def gap(key):
+        regime, plain = _PLANNED_GAP[key]
+        entry = share["by_regime"].get(regime)
+        if not entry or not share["total"]:
+            # Loud fallback: no measurement means no percentage. Inventing one
+            # to make the card look finished is the failure this rule prevents.
+            return {"gap": "Not measured yet — the scanner has recorded no "
+                           "rejections to size this gap against.",
+                    "gap_pct": None, "gap_n": 0}
+        return {"gap": (f"{entry['pct']}% of every candidate the scanner turned "
+                        f"down was {plain} ({entry['n']:,} of "
+                        f"{share['total']:,}). No live playbook covers one."),
+                "gap_pct": entry["pct"], "gap_n": entry["n"]}
+
+    rules = _entry_rules()
+    scanned = ", ".join(importer.TF_SECONDS)
+    horizon = (f"As long as the timeframe that found it: a 15m setup can be "
+               f"over inside a day, a 1D setup can run for weeks. Scanned on "
+               f"{scanned}.")
+
+    cards = [
+        {"key": "pullback", "name": "Pullback", "status": "live",
+         "record_key": "PULLBACK", "setting": "strategy_pullback",
+         "one_liner": "Buy the dip in an uptrend, sell the bounce in a downtrend.",
+         "hunts": ("Trending markets. The engine's read of the chart has to be "
+                   "an uptrend to buy and a downtrend to sell, including trends "
+                   "that are weakening but not yet broken."),
+         "triggers": ("Price comes back to a zone that turned it before — a "
+                      "demand zone underneath in an uptrend, a supply zone "
+                      "overhead in a downtrend."),
+         "confirms": rules["confirms"], "stop_goes": rules["stop_goes"],
+         "holds_for": horizon,
+         "timeframes": list(importer.TF_SECONDS),
+         "notes": (f"Needs at least {setups.MIN_RR} of reward for every 1 of "
+                   f"risk, and enough risk that fees do not eat the trade "
+                   f"({setups.MIN_RISK_COST_MULT}x the estimated round trip).")},
+        {"key": "reversal", "name": "Reversal", "status": "live",
+         "record_key": "REVERSAL", "setting": "strategy_reversal",
+         "one_liner": "Fade a move that has just run out of buyers, or sellers.",
+         "hunts": ("Markets in transition — the old trend has broken down and "
+                   "a new one has not formed yet."),
+         "triggers": (f"A zone touch while the market is in transition, and "
+                      f"only if a liquidity sweep printed within the last "
+                      f"{setups.SWEEP_LOOKBACK_BARS} bars: price reached past a "
+                      f"high or low, took the stops there, and came straight "
+                      f"back. Without that sweep there is no trade."),
+         "confirms": rules["confirms"], "stop_goes": rules["stop_goes"],
+         "holds_for": horizon,
+         "timeframes": list(importer.TF_SECONDS),
+         "notes": ("Starts 10 rank points below Pullback. Catching a turn is a "
+                   "harder claim than following a trend, and the ranking says so.")},
+        {"key": "scale_in", "name": "Scale In", "status": "live",
+         "record_key": "SCALE_IN", "setting": "strategy_scale_in",
+         "one_liner": "Add to a trade that is already working, at no extra risk.",
+         "hunts": "Trades this system already has open and already in profit.",
+         "triggers": (f"A {scalein.TRIGGER_TF} break of structure in the same "
+                      f"direction as an open "
+                      f"{' or '.join(scalein.PARENT_TFS)} trade, once that "
+                      f"trade has already moved a full R your way. The add is "
+                      f"bought with the market's progress, not with hope."),
+         "confirms": (f"The break itself: a {scalein.TRIGGER_TF} candle closing "
+                      f"beyond the previous structure, inside the window the "
+                      f"parent trade is open."),
+         "stop_goes": ("At the original trade's entry price. If the add fails, "
+                       "the position it was added to is already at breakeven."),
+         "holds_for": ("Until the parent trade closes. It shares that trade's "
+                       f"target and never outlives it. At most "
+                       f"{scalein.MAX_ADDS} adds per trade."),
+         "timeframes": [scalein.TRIGGER_TF],
+         "notes": ("Adds are sized as fresh exposure by the risk authority, so "
+                   "two winners in a row cannot quietly become one oversized bet.")},
+        {"key": "range_fade", "name": "Range Fade", "status": "planned",
+         "record_key": None, "setting": None,
+         "one_liner": "Sell the ceiling and buy the floor while a market goes nowhere.",
+         "hunts": "Markets stuck between a ceiling and a floor, with no trend.",
+         "triggers": ("Planned: price reaching the edge of an established range "
+                      "rather than a trend continuation zone."),
+         "confirms": "Planned. Nothing is being traded on this yet.",
+         "stop_goes": "Planned: beyond the range edge, where the range is broken.",
+         "holds_for": "Planned.",
+         "timeframes": [], "notes": None},
+        {"key": "reversal_rework", "name": "Reversal, Reworked",
+         "status": "planned", "record_key": None, "setting": None,
+         "one_liner": ("Trade the turn in a market between trends, without "
+                       "needing a stop hunt first."),
+         "hunts": ("The same transitioning markets Reversal hunts, but the ones "
+                   "it currently walks away from."),
+         "triggers": (f"Planned. Reversal today needs a liquidity sweep inside "
+                      f"{setups.SWEEP_LOOKBACK_BARS} bars, and most "
+                      f"transitioning markets never print one, so the candidate "
+                      f"is dropped with no play against it."),
+         "confirms": "Planned. Nothing is being traded on this yet.",
+         "stop_goes": "Planned.",
+         "holds_for": "Planned.",
+         "timeframes": [], "notes": None},
+    ]
+
+    out = []
+    for c in cards:
+        card = dict(c)
+        if card["status"] == "live":
+            card["enabled"] = bool(values.get(card["setting"], True))
+            card["record"] = record(card["record_key"])
+        else:
+            card["enabled"] = None
+            card["record"] = None
+            card.update(gap(card["key"]))
+        out.append(card)
+
+    return {"baseline": baseline, "playbooks": out,
+            "entry_model": getattr(setups, "ENTRY_MODEL", "ZONE_TOUCH_LIMIT"),
+            "setup_version": setups.SETUP_VERSION,
+            "rejection_sample": share}
 
 
 @app.get("/api/cycles")
