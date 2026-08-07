@@ -222,7 +222,28 @@ EXPECTED = {
     # NO CASCADE, for the reason `manual` has no CONSUMERS entry: no strategy
     # engine may read `manual-*`, so no setup, exec, risk or cooldown fact
     # differs. Only `/api/portfolio`'s reading of its own book changes.
-    "manual": "manual-v0.3-draft",
+    # manual-v0.4: an open intent now resolves against the FINEST series the
+    # store holds for its symbol rather than against its own chart, so a 4H
+    # order fills on the 15m bar that actually traded through it. Causality is
+    # unchanged — only bars opening at or after the fill anchor are eligible.
+    #
+    # THE UNIT MOVED, and that is the part to read twice. `bars_held` and
+    # `bars_to_fill` on the exit fact now count RESOLUTION bars, not the
+    # intent's own: a 4H trade settled on 15m reports 96 where v0.3 reported 6
+    # for the same twenty-four hours. `atr_at_exit` is read off the same series
+    # and changes scale with it, and three fields are new — `resolution_tf`,
+    # `resolution_tf_seconds`, `resolution_degraded`. A v0.3 reader of a v0.4
+    # fact is not merely missing fields, it is wrong about how long the trade
+    # was held, which is the condition this file exists to make visible.
+    #
+    # The live rows from `manual.status` are NOT affected: they divide back by
+    # `res["scale"]` and stay in the chart's own bars, because the screen
+    # prints that count beside a 4H chart. Only the stored fact carries the
+    # finer unit, and `resolution_tf` on the fact names it.
+    #
+    # Landed while nothing on disk was ambiguous: 9 facts under v0.1, 5 under
+    # v0.2, ZERO under v0.3. NO CASCADE, same reason as above.
+    "manual": "manual-v0.4-draft",
 }
 
 # Who reads whose facts. Bumping a key REQUIRES considering every value.

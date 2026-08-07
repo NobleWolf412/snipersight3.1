@@ -276,6 +276,128 @@ class ManualCase(unittest.TestCase):
         manual.create_intent(self.con, PERP, "1H", "SHORT", entry=100, tp=96,
                              sl=102, created_at=TF, risk_usd=200)
 
+    # ---------- the refusal and the book must agree ----------
+    #
+    # The operator's report: "i do remember getting an error when trying to
+    # place the trade saying i already had one waiting or something but it
+    # still shows as a pending order." An error surfaced and an order exists,
+    # and on the surface where money is committed those two readings cannot be
+    # left to be reconciled by guesswork. Either the refusal is real and the
+    # pen is empty, or the request landed and it is a receipt. Nothing between.
+
+    def _rows(self):
+        """Every fact and every manifest — the whole of what a write is."""
+        return (self.con.execute("SELECT COUNT(*) FROM facts").fetchone()[0],
+                self.con.execute("SELECT COUNT(*) FROM manifests").fetchone()[0])
+
+    def test_a_refused_arm_writes_nothing_at_all(self):
+        """Not "no second intent" — NOTHING. The guard sits ahead of the cost
+        manifest as well as the fact, and a refusal that still left a row
+        behind would be the same defect one table over."""
+        self.load(self.flat(6), symbol=PERP)
+        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+                             sl=98, created_at=0, risk_usd=200)
+        before = self._rows()
+        with self.assertRaises(manual.IntentRejected):
+            manual.create_intent(self.con, PERP, "1H", "LONG", entry=101,
+                                 tp=105, sl=99, created_at=TF, risk_usd=200)
+        self.assertEqual(self._rows(), before,
+                         "a refused arm wrote something")
+
+    def test_the_refusal_names_the_order_that_blocked_it(self):
+        """"You already have one waiting" is not findable. The operator has to
+        be able to walk to the row it means, so it carries the market, the
+        timeframe, the entry, the stop and the moment it was armed — and leads
+        with the fact that this attempt was not recorded."""
+        self.load(self.flat(6), symbol=PERP)
+        manual.create_intent(self.con, PERP, "1H", "SHORT", entry=100, tp=96,
+                             sl=102, created_at=0, risk_usd=200)
+        with self.assertRaises(manual.IntentRejected) as cm:
+            manual.create_intent(self.con, PERP, "1H", "SHORT", entry=101,
+                                 tp=95, sl=103, created_at=TF, risk_usd=200)
+        msg = str(cm.exception)
+        self.assertIn("nothing was armed", msg)
+        for token in (PERP, "1H", "100", "102"):          # symbol, tf, entry, stop
+            self.assertIn(token, msg, f"the refusal does not name {token}")
+
+    def test_the_same_order_arriving_twice_is_a_receipt_not_a_refusal(self):
+        """THE REPORTED BUG. `created_at` is chosen by the caller so a retry
+        rebuilds the same intent_id and the same plan — the whole point of
+        letting a phone name the moment. The same-side guard sat in front of
+        that and refused, so a request that had already succeeded came back as
+        an error while its order rested on the book."""
+        self.load(self.flat(6), symbol=PERP)
+        kw = dict(entry=100, tp=104, sl=98, created_at=0, risk_usd=200)
+        first = manual.create_intent(self.con, PERP, "1H", "LONG", **kw)
+        self.assertFalse(first["already_armed"])
+        self.assertTrue(first["written"])
+        before = self._rows()
+        again = manual.create_intent(self.con, PERP, "1H", "LONG", **kw)
+        self.assertTrue(again["already_armed"], "a retry was not recognised")
+        self.assertFalse(again["written"], "a retry wrote a second intent")
+        self.assertEqual(again["intent_id"], first["intent_id"])
+        self.assertEqual(self._rows(), before, "a retry wrote something")
+
+    def test_the_receipt_is_the_recorded_plan_not_the_second_request(self):
+        """A retry is answered with what the book HOLDS. Anything else and the
+        ticket would read back a number that was never armed."""
+        self.load(self.flat(6), symbol=PERP)
+        kw = dict(entry=100, tp=104, sl=98, created_at=0, risk_usd=200)
+        manual.create_intent(self.con, PERP, "1H", "LONG", note="first", **kw)
+        again = manual.create_intent(self.con, PERP, "1H", "LONG",
+                                     note="typed something else", **kw)
+        self.assertEqual(again["note"], "first")
+
+    def test_a_changed_plan_is_not_the_same_order(self):
+        """Same second, different levels — a nudge between two taps. That is
+        not the order on the book and must not be reported as it."""
+        self.load(self.flat(6), symbol=PERP)
+        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+                             sl=98, created_at=0, risk_usd=200)
+        before = self._rows()
+        with self.assertRaises(manual.IntentRejected):
+            manual.create_intent(self.con, PERP, "1H", "LONG", entry=100.5,
+                                 tp=104, sl=98, created_at=0, risk_usd=200)
+        self.assertEqual(self._rows(), before)
+
+    def test_a_settled_order_id_is_not_answered_as_still_armed(self):
+        """The receipt is only a receipt while the order is still on the book.
+        Repeating an id whose trade has closed cannot be written — the id is
+        spent — and must not be answered "already armed" either, which would
+        point the operator at a position that no longer exists."""
+        bars = self.flat(2) + [(100, 105, 99, 104)] + self.flat(3)
+        self.load(bars, symbol=PERP)
+        kw = dict(entry=100, tp=104, sl=98, created_at=0, risk_usd=200)
+        manual.create_intent(self.con, PERP, "1H", "LONG", **kw)
+        self.run_engine(symbol=PERP)
+        self.assertTrue(self.execs(symbol=PERP), "fixture did not settle")
+        before = self._rows()
+        with self.assertRaises(manual.IntentRejected) as cm:
+            manual.create_intent(self.con, PERP, "1H", "LONG", **kw)
+        self.assertIn("has since settled", str(cm.exception))
+        self.assertEqual(self._rows(), before)
+
+    def test_two_plans_cannot_share_one_order_id(self):
+        """A LONG and a SHORT armed on one chart within the same second is a
+        legitimate hedge that the same-side guard does not look at — and they
+        carry the same `symbol|tf|MANUAL|created_at`. Both used to be written.
+        `unresolved` keys its work list on intent_id and `run` keys its
+        done-set on it, so one of the two would be dropped by whichever read
+        last: armed, unresolvable, invisible on every surface, and liable to be
+        marked settled by the other one's exit."""
+        self.load(self.flat(6), symbol=PERP)
+        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+                             sl=98, created_at=0, risk_usd=200)
+        before = self._rows()
+        with self.assertRaises(manual.IntentRejected) as cm:
+            manual.create_intent(self.con, PERP, "1H", "SHORT", entry=100,
+                                 tp=96, sl=102, created_at=0, risk_usd=200)
+        self.assertIn("nothing was armed", str(cm.exception))
+        self.assertEqual(self._rows(), before)
+        ids = [p["intent_id"]
+               for plans in manual.unresolved(self.con).values() for p in plans]
+        self.assertEqual(len(ids), len(set(ids)), "two intents share one id")
+
     def test_a_resolved_order_stops_blocking_the_next_one(self):
         """The guard reads UNRESOLVED intents. Once a trade settles, the same
         side must be armable again or the chart is permanently spent."""
@@ -873,7 +995,7 @@ class ManualCase(unittest.TestCase):
     #: list is the assertion — naming only the newest one made the test fail
     #: on the NEXT bump for being a bump, which is not what it guards.
     SHIPPED_MANUAL_TAGS = ("manual-v0.1-draft", "manual-v0.2-draft",
-                           "manual-v0.3-draft")
+                           "manual-v0.3-draft", "manual-v0.4-draft")
 
     def test_the_retired_tags_are_read_and_never_written(self):
         """The read set only ever grows. Dropping a tag strands every order
@@ -1371,6 +1493,496 @@ class ManualCase(unittest.TestCase):
                 self.assertEqual(
                     store.get_facts(self.con, PERP, "1H", kind, version), [],
                     f"a cancelled manual order surfaced under {kind}/{version}")
+
+
+FINE = 900          # 15m
+COARSE = 14400      # 4H
+SCALE = COARSE // FINE
+# Every fixture below plans the same trade: LONG, entry 100, stop 98, target
+# 104. These three bar shapes are the whole vocabulary, and they sit inside the
+# bracket so that a bar which is not meant to do anything does nothing — a
+# "quiet" bar that dipped under 98 would stop every trade out on the bar after
+# its fill and every assertion here would be about that instead.
+QUIET = ("101", "101.5", "100.5", "101")    # touches neither entry, stop nor tp
+TOUCH = ("101", "101.2", "99.9", "101")     # contains the entry, nothing else
+THROUGH = ("101", "105", "99.9", "101")     # contains the entry AND the target
+
+
+class FinestTimeframeCase(unittest.TestCase):
+    """An OPEN intent resolves on the finest series the store actually holds.
+
+    The rule being fixed is not the causality rule — that one is right and
+    every test here re-asserts it. It is that the rule was being applied at the
+    CHART's timeframe: a 4H order armed four minutes into a bar threw away the
+    whole four hours, because OHLC could not say whether that bar's high came
+    before or after the arm. Fifteen minutes of granularity answers the same
+    question outright, and a real exchange would have filled the order.
+
+    Every fixture here is a 15m series with a 4H series AGGREGATED FROM IT, so
+    the two timeframes are two readings of one market rather than two invented
+    ones. Where a test needs them to disagree it says so.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.con = store.connect(Path(self.tmp.name) / "test.db")
+
+    def tearDown(self):
+        self.con.close()
+        self.tmp.cleanup()
+
+    # ---------- fixtures ----------
+
+    def fine(self, n=96, special=None):
+        """`n` 15m bars from ts 0, quiet except where `special` names one."""
+        special = special or {}
+        return [(i * FINE, *special.get(i * FINE, QUIET)) for i in range(n)]
+
+    def coarse(self, fine):
+        """The 4H series those 15m bars aggregate to — same market, one view.
+
+        Only whole buckets: a half-formed 4H bar is not a bar the store holds.
+        """
+        out, buckets = [], {}
+        for ts, o, h, l, c in fine:
+            buckets.setdefault(ts - ts % COARSE, []).append((ts, o, h, l, c))
+        for ts0 in sorted(buckets):
+            rows = buckets[ts0]
+            if len(rows) < SCALE:
+                continue
+            out.append((ts0, rows[0][1],
+                        str(max(Decimal(r[2]) for r in rows)),
+                        str(min(Decimal(r[3]) for r in rows)),
+                        rows[-1][4]))
+        return out
+
+    def write(self, symbol, tf, bars):
+        for ts, o, h, l, c in bars:
+            self.con.execute(
+                "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (symbol, tf, ts, str(o), str(h), str(l), str(c),
+                 "1", "test", ts))
+        self.con.commit()
+
+    def arm(self, symbol=SPOT, armed_at=15000, **kw):
+        return manual.create_intent(self.con, symbol, "4H", "LONG",
+                                    entry=100, tp=104, sl=98,
+                                    created_at=armed_at, risk_usd=100, **kw)
+
+    def resolve(self, symbol=SPOT):
+        return manual.run(self.con, symbol, "4H", COARSE)
+
+    def execs(self, symbol=SPOT):
+        import json
+        return [json.loads(r["payload"]) for r in store.get_facts(
+            self.con, symbol, "4H", manual.EXEC_KIND, manual.MANUAL_VERSION)]
+
+    def notes(self):
+        return [r[0] for r in self.con.execute(
+            "SELECT notes FROM engine_runs WHERE engine='manual' "
+            "ORDER BY id DESC LIMIT 1")]
+
+    # ---------- the fix ----------
+
+    def test_the_finest_stored_timeframe_is_what_an_open_intent_resolves_on(self):
+        """The operator's ADAUSDT case, in miniature.
+
+        Armed at 15000 — four minutes into the 15m bar that opened at 14400 and
+        an hour into the 4H bar that opened at the same moment. The entry is
+        touched by the NEXT 15m bar, 15300, which opened after the order did.
+        At 4H granularity the whole 14400 bar is discarded and price never
+        returns, so the order dies MISSED; at 15m it fills, because 15300 is
+        provably clean.
+        """
+        fine = self.fine(special={
+            # in progress when armed: trades through the entry AND the target.
+            # If this bar is ever admitted the trade reports a fast winner.
+            14400: THROUGH,
+            # the first bar that OPENS after the arm, and it touches the entry
+            15300: TOUCH})
+        self.write(SPOT, "15m", fine)
+        self.write(SPOT, "4H", self.coarse(fine))
+        self.arm()
+
+        out = self.resolve()
+        self.assertEqual(out["resolution"], {"15m": 1})
+        self.assertEqual(out["OPEN"], 1)
+        self.assertEqual(self.execs(), [], "an open position settles nothing")
+
+        row = manual.status(self.con, SPOT, "4H", COARSE)[0]
+        self.assertEqual(row["state"], "OPEN")
+        self.assertEqual(row["fill_price"], "100")
+        self.assertEqual(row["resolution_tf"], "15m")
+        self.assertIsNone(row["resolution_degraded"])
+        # the REAL bar: 15300 opens, 16200 closes. Not the arm time, and not a
+        # boundary of the 4H chart it was armed on.
+        self.assertEqual(row["fill_ts"], 15300 + FINE)
+        # and it is emphatically not the target, which only the discarded
+        # in-progress bar ever reached
+        self.assertNotIn("TP", [e["outcome"] for e in self.execs()])
+
+    def test_a_fill_still_needs_a_bar_that_opened_after_the_order(self):
+        """No-lookahead, re-asked at the finer grid where it now applies.
+
+        The ONLY bar that ever touches the entry is the 15m bar in progress
+        when the order was armed. Finer granularity must not admit it: OHLC
+        still cannot say whether that touch came before or after the arm.
+        """
+        fine = self.fine(special={14400: THROUGH})
+        self.write(SPOT, "15m", fine)
+        self.write(SPOT, "4H", self.coarse(fine))
+        self.arm()
+
+        times = [b[0] for b in fine]
+        self.assertEqual(manual._first_eligible_bar(times, FINE, 15000), 17,
+                         "bar 16 opened at 14400 and was already running")
+        self.assertEqual(times[16], 14400, "bar 16 is the one with the touch")
+
+        self.resolve()
+        rows = self.execs()
+        self.assertEqual([r["outcome"] for r in rows], ["MISSED"])
+        self.assertEqual(rows[0]["resolution_tf"], "15m",
+                         "it missed ON the finer series, not by falling back")
+        self.assertIsNone(rows[0]["resolution_degraded"])
+
+    def test_the_entry_window_keeps_its_length_in_time_not_in_bars(self):
+        """4 bars of 4H is sixteen hours, however the bars are cut.
+
+        Left at the raw constant the window would become 4 bars of 15m — one
+        hour — and would kill fifteen out of every sixteen resting orders.
+        """
+        order_i = 17                      # first 15m bar opening after 15000
+        for symbol, offset, expect in ((SPOT, 63, "OPEN"), (PERP, 64, "MISSED")):
+            with self.subTest(symbol=symbol, offset=offset):
+                ts = (order_i + offset) * FINE
+                fine = self.fine(special={ts: TOUCH})
+                self.write(symbol, "15m", fine)
+                self.write(symbol, "4H", self.coarse(fine))
+                self.arm(symbol=symbol)
+                self.resolve(symbol=symbol)
+                if expect == "OPEN":
+                    self.assertEqual(self.execs(symbol), [],
+                                     "the last bar of the window still fills")
+                    self.assertEqual(
+                        manual.status(self.con, symbol, "4H", COARSE)[0]["state"],
+                        "OPEN")
+                else:
+                    self.assertEqual(
+                        [r["outcome"] for r in self.execs(symbol)], ["MISSED"],
+                        "one bar past the window is past the window")
+
+    def test_a_pending_row_counts_its_remaining_bars_in_the_chart_bars(self):
+        """The screen prints these beside a 4H chart, so they must be 4H bars.
+
+        The exact count on the resolving grid lives on the settled fact, where
+        `resolution_tf` names its unit. A row that said "40 bars left" next to a
+        4H chart would be a true number under a unit nobody would guess.
+        """
+        fine = self.fine(n=41)            # last close 36900, nothing touched
+        self.write(SPOT, "15m", fine)
+        self.write(SPOT, "4H", self.coarse(fine))
+        self.arm()
+        self.resolve()
+        row = manual.status(self.con, SPOT, "4H", COARSE)[0]
+        self.assertEqual(row["state"], "PENDING")
+        self.assertEqual(row["resolution_tf"], "15m")
+        # 17 + 64 - 41 = 40 fifteen-minute bars, which is 2.5 four-hour bars,
+        # rounded UP so the row never promises less time than the order has.
+        self.assertEqual(row["bars_left"], 3)
+
+    # ---------- the fallback, and it must be audible ----------
+
+    def test_with_no_finer_series_it_falls_back_and_says_so(self):
+        """The old behaviour exactly — plus a sentence saying that is what ran.
+
+        Same fixture as the fix's own test with the 15m series simply absent.
+        The order dies MISSED, which is what every 4H order armed mid-bar used
+        to do, and the fact and the run log both name the reason.
+        """
+        fine = self.fine(special={
+            14400: THROUGH,
+            15300: TOUCH})
+        self.write(SPOT, "4H", self.coarse(fine))     # no 15m series at all
+        self.arm()
+
+        out = self.resolve()
+        self.assertEqual(out["resolution"],
+                         {"4H<no series finer than 4H is stored": 1})
+        rows = self.execs()
+        self.assertEqual([r["outcome"] for r in rows], ["MISSED"])
+        self.assertEqual(rows[0]["resolution_tf"], "4H")
+        self.assertEqual(rows[0]["resolution_degraded"],
+                         "no series finer than 4H is stored")
+        self.assertIn("res:4H<no series finer than 4H is stored=1",
+                      self.notes()[0], "a silent fallback is a bug")
+
+    def test_a_finer_series_that_begins_after_the_order_is_refused_audibly(self):
+        """Its first stored bar is not the first bar after the arm.
+
+        It is only the earliest one we happen to hold, so the fill window would
+        start from there and the order would appear to have rested through
+        hours it never rested through.
+        """
+        fine = self.fine(special={15300: TOUCH})
+        self.write(SPOT, "4H", self.coarse(fine))
+        self.write(SPOT, "15m", [b for b in fine if b[0] >= 43200])
+        self.arm()
+
+        out = self.resolve()
+        self.assertEqual(
+            out["resolution"],
+            {"4H<15m history begins after the order was armed": 1})
+        rows = self.execs()
+        self.assertEqual(rows[0]["resolution_tf"], "4H")
+        self.assertEqual(rows[0]["resolution_degraded"],
+                         "15m history begins after the order was armed")
+
+    def test_a_finer_series_that_stopped_being_ingested_is_refused_audibly(self):
+        """A stale mark is the harm here, so the coarse series is the truth."""
+        fine = self.fine()
+        self.write(SPOT, "4H", self.coarse(fine))
+        self.write(SPOT, "15m", [b for b in fine if b[0] < 14400])
+        self.arm()
+        out = self.resolve()
+        self.assertEqual(
+            out["resolution"],
+            {"4H<15m bars have not reached the newest 4H bar": 1})
+        self.assertEqual(self.execs()[0]["resolution_tf"], "4H")
+
+    def test_one_cycle_of_ingestion_lag_does_not_downgrade_the_grid(self):
+        """The staleness guard is loose on purpose.
+
+        Trip it tightly and it fires whenever the two timeframes land in a
+        different order inside one ingestion cycle — and a fill resolved on the
+        coarse grid during that flap would be settled on the coarse grid
+        forever. A transient race must not permanently downgrade a trade.
+        """
+        fine = self.fine(special={15300: TOUCH})
+        self.write(SPOT, "4H", self.coarse(fine))
+        # the newest 4H bar has landed; the 15m bars inside it have not yet
+        self.write(SPOT, "15m", [b for b in fine if b[0] < 72000])
+        self.arm()
+        out = self.resolve()
+        self.assertEqual(out["resolution"], {"15m": 1})
+
+    # ---------- history does not move ----------
+
+    def test_a_settled_trade_is_not_touched_when_finer_bars_arrive(self):
+        """The operator chose the option that leaves history alone.
+
+        A trade settled on 4H bars keeps its stored fact, byte for byte, when
+        a 15m series for the same symbol appears afterwards — even though the
+        finer series would have filled it on a different bar. Settled intents
+        are skipped before any series is chosen, so there is no path by which
+        an outcome can move; this pins that there is no other one.
+        """
+        import json
+        fine = self.fine(special={
+            # fills inside the FIRST eligible 4H bar at 15m granularity, but
+            # only reaches the entry and the target on the 4H bar after it
+            43200: TOUCH,
+            60300: ("101", "104", "100.5", "104")})
+        self.write(SPOT, "4H", self.coarse(fine))
+        intent = self.arm()
+        self.resolve()
+        before = [dict(r) for r in store.get_facts(
+            self.con, SPOT, "4H", manual.EXEC_KIND, manual.MANUAL_VERSION)]
+        self.assertEqual([json.loads(r["payload"])["outcome"] for r in before],
+                         ["TP"], "precondition: it settled on the 4H bars")
+        self.assertEqual(json.loads(before[0]["payload"])["fill_ts"],
+                         43200 + COARSE, "it filled on the close of a 4H bar")
+        book_before = manual.book(self.con)
+
+        self.write(SPOT, "15m", fine)     # the finer series arrives late
+        # ...and it really would have answered differently, or this test is
+        # asserting that nothing changed about nothing.
+        finer = manual._finer_series(self.con, SPOT, "4H", COARSE)
+        w = manual._walk(intent, finer["candles"], finer["candle_times"], FINE,
+                         max_entry_bars=4 * SCALE, max_bars=100 * SCALE)
+        self.assertEqual(
+            finer["candles"][w["fill_i"]]["open_ts"] + FINE, 43200 + FINE,
+            "the 15m walk fills on a different bar entirely")
+
+        self.resolve()
+        self.resolve()
+        after = [dict(r) for r in store.get_facts(
+            self.con, SPOT, "4H", manual.EXEC_KIND, manual.MANUAL_VERSION)]
+        self.assertEqual(after, before, "a settled fact was rewritten")
+        self.assertEqual(manual.book(self.con), book_before,
+                         "a settled outcome moved")
+
+    # ---------- an adopted position is located by ITS OWN fill ----------
+
+    def adopt(self, fill_ts, adopted_at=50000, symbol=SPOT):
+        """An engine LONG the operator takes custody of, filled at `fill_ts`.
+
+        Entry 100 with the bracket outside every fixture bar, so the position
+        simply stays OPEN and any exit an assertion sees is a fabricated one.
+        """
+        return manual.adopt_position(
+            self.con, "ENG|ADOPTED", symbol, "4H", "LONG",
+            entry=100, sl=98, tp=104,
+            fill_ts=fill_ts, adopted_at=adopted_at, risk_usd=100)
+
+    def half_fine(self, fine):
+        """The 15m series as it really is on the store: shorter than the chart.
+
+        15m history is retained for weeks and 1D history for years, so an
+        adopted position whose engine fill is older than a few weeks routinely
+        predates every 15m bar the store holds.
+        """
+        return [b for b in fine if b[0] >= 43200]
+
+    def test_a_finer_series_that_begins_after_an_ADOPTED_fill_is_refused(self):
+        """The fill is INDEXED, not hunted, so a short series cannot be late.
+
+        `armed_at` on an adopted position is when custody was taken; the fill
+        is `adopted_fill_ts` and can be months earlier. Judged on `armed_at`
+        the 15m series looked usable, and then `bisect_left` on a timestamp
+        before its first bar returned 0 and pinned the fill to whatever bar
+        the series happens to begin on — a price and a time with no relation
+        to the trade, written with `resolution_degraded` null.
+        """
+        fine = self.fine()
+        self.write(SPOT, "4H", self.coarse(fine))
+        self.write(SPOT, "15m", self.half_fine(fine))     # begins at 43200
+        self.adopt(fill_ts=10000)                         # engine filled before that
+
+        out = self.resolve()
+        self.assertEqual(
+            out["resolution"],
+            {"4H<15m history begins after the position filled": 1},
+            "the finer series was admitted on a moment this fill never had")
+        self.assertEqual(out["OPEN"], 1)
+        self.assertEqual(self.execs(), [],
+                         "an open position settled itself on fabricated bars")
+        self.assertIn("res:4H<15m history begins after the position filled=1",
+                      self.notes()[0], "a silent fallback is a bug")
+
+        row = manual.status(self.con, SPOT, "4H", COARSE)[0]
+        self.assertEqual(row["state"], "OPEN")
+        self.assertEqual(row["resolution_tf"], "4H")
+        self.assertEqual(row["resolution_degraded"],
+                         "15m history begins after the position filled")
+        # the first 4H bar OPENING at or after the real fill, closing 28800 —
+        # not 44100, which is where the 15m series merely begins.
+        self.assertEqual(row["fill_ts"], 14400 + COARSE)
+
+    def test_an_adopted_fill_the_finer_series_covers_still_resolves_finely(self):
+        """The guard must refuse the uncovered fill, not adopted positions.
+
+        Same fixture, same short 15m series, a fill inside it: the finer grid
+        is used, and it locates the fill on its own bar.
+        """
+        fine = self.fine()
+        self.write(SPOT, "4H", self.coarse(fine))
+        self.write(SPOT, "15m", self.half_fine(fine))
+        self.adopt(fill_ts=46800)
+
+        out = self.resolve()
+        self.assertEqual(out["resolution"], {"15m": 1})
+        row = manual.status(self.con, SPOT, "4H", COARSE)[0]
+        self.assertEqual(row["resolution_tf"], "15m")
+        self.assertIsNone(row["resolution_degraded"])
+        self.assertEqual(row["fill_ts"], 46800 + FINE)
+
+    def test_a_series_beginning_exactly_on_the_fill_is_covered(self):
+        """The boundary the guard is drawn at: `>`, not `>=`.
+
+        A series whose first bar opens at the fill moment holds that fill, and
+        index 0 is then the right answer rather than an accident of where the
+        history starts.
+        """
+        fine = self.fine()
+        self.write(SPOT, "4H", self.coarse(fine))
+        self.write(SPOT, "15m", self.half_fine(fine))
+        self.adopt(fill_ts=43200)
+        self.assertEqual(self.resolve()["resolution"], {"15m": 1})
+        row = manual.status(self.con, SPOT, "4H", COARSE)[0]
+        self.assertEqual(row["fill_ts"], 43200 + FINE)
+
+    def test_the_series_is_admitted_and_the_fill_indexed_by_ONE_timestamp(self):
+        """The property, stated structurally rather than by example.
+
+        The bug was two timestamps: the guard asked `armed_at` and the index
+        asked `adopted_fill_ts`. Any answer at all is safe as long as both
+        sides ask the SAME question, so this replaces the question with one of
+        its own and requires both sides to have moved.
+
+        A re-inlined `p["armed_at"]` in `_resolution` or `p["adopted_fill_ts"]`
+        in `_walk` stops consulting `_fill_anchor` and fails here, which is
+        exactly the regression this pins.
+        """
+        from unittest import mock
+        fine = self.fine()
+        self.write(SPOT, "4H", self.coarse(fine))
+        self.write(SPOT, "15m", self.half_fine(fine))
+        p = self.adopt(fill_ts=46800)                 # covered by the 15m series
+        base_rows = [dict(r) for r in store.get_candles(self.con, SPOT, "4H")]
+        base = {"tf": "4H", "tf_seconds": COARSE, "candles": base_rows,
+                "candle_times": [c["open_ts"] for c in base_rows],
+                "scale": 1, "atr": None}
+        finer = manual._finer_series(self.con, SPOT, "4H", COARSE)
+
+        # unpatched: covered, so the finer grid is used and locates the fill
+        res, degraded = manual._resolution(base, finer, p)
+        self.assertEqual((res["tf"], degraded), ("15m", None))
+        w = manual._walk(p, res["candles"], res["candle_times"],
+                         res["tf_seconds"], max_entry_bars=4 * res["scale"],
+                         max_bars=100 * res["scale"])
+        self.assertEqual(res["candles"][w["fill_i"]]["open_ts"], 46800)
+
+        # move the anchor to before the 15m history and BOTH sides must follow:
+        # the guard refuses, and the walk on what is left indexes the new
+        # moment rather than the old one.
+        with mock.patch.object(manual, "_fill_anchor", return_value=10000):
+            res2, degraded2 = manual._resolution(base, finer, p)
+            self.assertEqual(res2["tf"], "4H",
+                             "_resolution did not ask _fill_anchor")
+            self.assertEqual(degraded2,
+                             "15m history begins after the position filled")
+            w2 = manual._walk(p, res2["candles"], res2["candle_times"],
+                              res2["tf_seconds"],
+                              max_entry_bars=4 * res2["scale"],
+                              max_bars=100 * res2["scale"])
+            self.assertEqual(res2["candles"][w2["fill_i"]]["open_ts"], 14400,
+                             "_walk did not ask _fill_anchor")
+
+    def test_an_ordinary_order_is_still_anchored_to_when_it_was_armed(self):
+        """A resting order has no fill yet, so its moment is the arm — and the
+        wording on the fallback still says so."""
+        self.assertEqual(manual._fill_anchor({"armed_at": 15000}), 15000)
+        self.assertEqual(
+            manual._fill_anchor({"armed_at": 15000, "adopted_fill_ts": None}),
+            15000)
+        self.assertEqual(
+            manual._fill_anchor({"armed_at": 50000, "adopted_fill_ts": 10000}),
+            10000)
+        fine = self.fine(special={15300: TOUCH})
+        self.write(SPOT, "4H", self.coarse(fine))
+        self.write(SPOT, "15m", self.half_fine(fine))
+        self.arm()
+        self.assertEqual(
+            self.resolve()["resolution"],
+            {"4H<15m history begins after the order was armed": 1})
+
+    # ---------- the guards that read the walk ----------
+
+    def test_cancel_sees_a_fill_that_landed_on_the_finer_series(self):
+        """Cancelling a filled position at 0R would erase a real result.
+
+        The guard asks the walk whether the intent is OPEN. Asked at the
+        chart's timeframe it would not yet see a fill the resolver already has,
+        and the operator could un-take a live trade.
+        """
+        fine = self.fine(special={15300: TOUCH})
+        self.write(SPOT, "15m", fine)
+        self.write(SPOT, "4H", self.coarse(fine))
+        intent = self.arm()
+        self.assertEqual(manual.status(self.con, SPOT, "4H", COARSE)[0]["state"],
+                         "OPEN", "precondition")
+        with self.assertRaises(manual.IntentRejected):
+            manual.cancel_intent(self.con, intent["intent_id"])
 
 
 if __name__ == "__main__":

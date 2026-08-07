@@ -355,7 +355,8 @@ ok('the version moved, and every old one is still read', () => {
   /* Every tag this book has SHIPPED. Append on a bump; never remove. Dropping
    * one strands every order still open under it: never settled, never expired,
    * absent from every surface. */
-  for (const shipped of ['manual-v0.1-draft', 'manual-v0.2-draft']) {
+  for (const shipped of ['manual-v0.1-draft', 'manual-v0.2-draft',
+                         'manual-v0.3-draft']) {
     assert(set[1].includes('"' + shipped + '"'),
       `the read set dropped ${shipped} — orders under it are stranded armed forever`);
   }

@@ -1,6 +1,6 @@
 """Manual (operator) paper book — trades the operator arms by hand.
 
-algo manual-v0.3-draft.
+algo manual-v0.4-draft.
 
 WHY THIS IS A SEPARATE BOOK, which is the whole design and not a filing
 preference. The forward paper record on `setup-*`/`exec-*` is the evidence that
@@ -59,20 +59,49 @@ is a property rather than a calibration result. That is the lesson
 `test_one_walk.py` opens with, applied before the drift can happen instead of
 after.
 
+RESOLUTION TIMEFRAME (v0.4), and why it is a bump rather than a fix. An open
+intent is now walked against the FINEST series the store holds for its symbol
+instead of against its own chart, so a 4H order fills on the 15m bar that
+actually traded through it. The causality rule is untouched — only bars opening
+at or after the fill anchor are eligible — but the UNIT of two recorded numbers
+moves with the series: `bars_held` and `bars_to_fill` count resolution bars, so
+a 4H trade settled on 15m reports sixteen times the count for the same elapsed
+time. `atr_at_exit` is taken from the same series and changes scale with it, and
+three fields are new on the fact: `resolution_tf`, `resolution_tf_seconds` and
+`resolution_degraded`. A v0.3 reader of a v0.4 fact would read "held 96 bars"
+as four hundred hours instead of twenty-four. That is a change in what the fact
+MEANS under an unchanged label, which is the whole reason a version exists —
+the same test `trail_r` passed and partial exits failed.
+
+The window this bump had to land in was narrow and is worth recording: the
+store held nine facts under v0.1, five under v0.2 and NONE under v0.3, so no
+fact on disk is ambiguous. The first trade to settle on the new resolver under
+the old tag would have made it permanently so.
+
 MIGRATION, because the bump is the dangerous part. The resolver finds work by
 querying `algo_version`, so moving the constant would strand every intent still
 open under v0.1 — armed, unresolvable, invisible on every surface — and would
 blank the settled book with it. So the read set and the write set are different
 things and are named separately: `MANUAL_VERSIONS` is everything this book has
 ever written and is what every query filters on; `MANUAL_VERSION` is what new
-facts carry. A v0.1 intent therefore settles into a v0.2 exec fact, and that is
-the honest record: the version on a fact names the code that PRODUCED it, and
-v0.2 is what settled it. It cannot change the answer — a v0.1 intent carries no
-partials, so its walk is byte-identical and `blend_r` over its single leg is the
-same quotient v0.1 wrote — but it is stated rather than assumed.
+facts carry. A v0.1 intent therefore settles into a `MANUAL_VERSION` exec fact,
+and that is the honest record: the version on a fact names the code that
+PRODUCED it, not the code that armed the order.
+
+And it CAN change the answer, which is why it is stated here rather than left
+to be assumed. At v0.2 it could not — a v0.1 intent carries no ladder, so its
+walk was byte-identical and `blend_r` over its single leg was the quotient v0.1
+would have written. v0.4 broke that: an intent still open under any old tag is
+now walked on the finest stored series, so it may fill on a bar its own chart
+never showed and its recorded `bars_held` is in that series' unit. Facts
+ALREADY SETTLED are untouched — they are skipped before any of this — so
+nothing on disk moves; what changes is how a still-open old order resolves from
+here, and the fact it produces says `manual-v0.4-draft` because v0.4 is what
+decided it.
 """
 import json
 import re
+import time
 from bisect import bisect_left
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -83,13 +112,14 @@ from .runlog import RunRecorder
 # with it — that is the point of the two books differing only in the plan.
 from .execsim import MAX_BARS, MAX_ENTRY_BARS, FUNDING_RATE_PER_SETTLEMENT
 
-MANUAL_VERSION = "manual-v0.3-draft"
+MANUAL_VERSION = "manual-v0.4-draft"
 #: Every version this book has EVER written, oldest first. Reads filter on this
 #: tuple; writes only ever carry `MANUAL_VERSION`. The distinction is the whole
 #: migration: a bump that moved both would strand every intent still open under
 #: the old tag, because `unresolved` — the resolver's work list — finds work by
 #: version and would simply stop seeing them. See the module docstring.
-MANUAL_VERSIONS = ("manual-v0.1-draft", "manual-v0.2-draft", MANUAL_VERSION)
+MANUAL_VERSIONS = ("manual-v0.1-draft", "manual-v0.2-draft",
+                   "manual-v0.3-draft", MANUAL_VERSION)
 Q2 = Decimal("0.01")
 
 #: Scale-out bounds. The cap is not a capacity limit — it is a statement about
@@ -341,11 +371,78 @@ def _same_side_open(con, symbol: str, tf: str, direction: str):
     return None
 
 
+def _intent_by_id(con, symbol: str, tf: str, intent_id: str):
+    """Any intent already recorded under this exact `intent_id`, or None.
+
+    Settled ones included, and that is the point. `intent_id` is the primary
+    key of this book in every way that matters — `unresolved` keys a dict on
+    it and `run` keys its done-set on it — but nothing enforced it, so two
+    facts could share one and both structures would silently keep whichever
+    they read last. The order they dropped would be armed, unresolvable and
+    invisible on every surface. Reachable in one second flat: LONG and SHORT
+    armed on the same chart within the same second are a legitimate hedge with
+    the same `symbol|tf|MANUAL|created_at`, which the same-side guard does not
+    look at because they are not the same side.
+    """
+    for r in _facts(con, INTENT_KIND, symbol, tf):
+        p = json.loads(r["payload"])
+        if p.get("intent_id") == intent_id:
+            return p
+    return None
+
+
+def _terms(direction, entry, tp, sl, leverage, risk_usd, size_units,
+           trail_r, partials) -> tuple:
+    """The plan reduced to the things that decide the trade, normalized.
+
+    Used to answer one question: is this request the SAME ORDER arriving twice,
+    or a different order wearing the same id? Compared as Decimals rather than
+    as text, so `0.2089` and `0.20890` are the one plan they obviously are.
+
+    `note` is deliberately absent. It changes nothing the trade does, and a
+    retry whose note was edited on the way is still the same trade — the
+    recorded one stands, notes included.
+    """
+    def d(v):
+        return None if v in (None, "") else Decimal(str(v))
+    try:
+        rows = [partials] if isinstance(partials, dict) else list(partials or [])
+        rungs = tuple(sorted((d(r["fraction"]), d(r["price"])) for r in rows))
+    except (KeyError, TypeError, ArithmeticError, ValueError):
+        # Malformed, so it cannot be the same order as anything already on the
+        # book. `validate_partials` owns saying what is wrong with it.
+        rungs = (object(),)
+    return (str(direction).upper(), d(entry), d(tp), d(sl),
+            d(leverage) or Decimal(1), d(risk_usd), d(size_units),
+            d(trail_r), rungs)
+
+
+def _stored_terms(p: dict) -> tuple:
+    return _terms(p.get("direction"), p.get("entry"), p.get("tp"), p.get("sl"),
+                  p.get("leverage"), p.get("risk_usd"), p.get("size_units"),
+                  p.get("trail_r"), p.get("partials"))
+
+
+def _when(ts) -> str:
+    """A timestamp the operator can match against a row on their own screen."""
+    try:
+        return time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(int(ts)))
+    except (TypeError, ValueError, OSError):
+        return "an unknown time"
+
+
 def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
                   created_at: int, risk_usd=None, size_units=None,
                   note: str = "", leverage=1, trail_r=None,
                   partials=None) -> dict:
     """Record one operator intent. Validated first; nothing is written on reject.
+
+    Three outcomes, and the caller can tell them apart without reading prose:
+    a new order (`already_armed` False, `written` True), the SAME order
+    arriving a second time (`already_armed` True, `written` False, and the
+    payload is the recorded one, not this request's), or `IntentRejected` —
+    which is always a refusal with an empty pen behind it. Nothing partial in
+    between, because the surface reporting this is where money is committed.
 
     `created_at` is the causal boundary and is stored as `confirmed_at` — the
     resolver will not fill this on any bar that closed at or before it.
@@ -385,20 +482,70 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
                 f"trail distance must be at least 0.1R, got {trail_r} — a "
                 f"tighter trail than that is stopped by the same bar that "
                 f"moves it")
-    dup = _same_side_open(con, symbol, tf, direction)
-    if dup is not None:
-        raise IntentRejected(
-            f"you already have an unresolved {direction} on {symbol} {tf} — "
-            f"entry {dup['entry']}, stop {dup['sl']}. Arming again would open a "
-            f"second position on the same side, doubling the risk the budget "
-            f"thinks you took. Let it resolve, or close it first.")
-    meta = validate(symbol, direction, entry, tp, sl, leverage)
-    partials = validate_partials(direction, entry, sl, tp, partials)
+    # Derived here rather than after the guards because the duplicate test
+    # compares it. Pure arithmetic over numbers already normalized above, and
+    # it writes nothing.
     per_unit = risk_per_unit(direction, entry, sl)
     if size_units is None and risk_usd is not None:
         size_units = (Decimal(str(risk_usd)) / per_unit) if per_unit > 0 else Decimal(0)
-    profile = costs.profile_for(symbol)
     intent_id = f"{symbol}|{tf}|MANUAL|{created_at}"
+
+    # THE SAME ORDER ARRIVING TWICE IS A RECEIPT, NOT A REFUSAL.
+    #
+    # `created_at` is chosen by the caller so a retry rebuilds the identical
+    # intent_id and the identical payload, which the content-hashed store
+    # collapses onto the row it already holds — that is what was supposed to
+    # make arming from a phone safe to retry. It never worked: the same-side
+    # guard sat in front of it and refused, so the operator's own order was
+    # reported back to them as an error while resting on their book. Message
+    # and state disagreed on the one surface where money is committed, and the
+    # natural reading of "you already have one waiting" is that this tap did
+    # nothing — which invites a third.
+    #
+    # So the id is answered before the side is. Same id, same terms: this is
+    # that order, said plainly, with nothing written.
+    same_id = _intent_by_id(con, symbol, tf, intent_id)
+    if same_id is not None:
+        same_plan = _stored_terms(same_id) == _terms(
+            direction, entry, tp, sl, leverage, risk_usd, size_units,
+            trail_r, partials)
+        still_open = any(p["intent_id"] == intent_id
+                         for p in unresolved(con).get((symbol, tf), []))
+        if same_plan and still_open:
+            return {**same_id, "intent_id": intent_id, "written": False,
+                    "already_armed": True}
+        if same_plan:
+            # The same plan under an id the book has already CLOSED. Answering
+            # "already armed" would point at a trade that is over, and writing
+            # it would mint a second fact under a settled id — so it is a
+            # refusal, and the refusal has to say which of those it is.
+            raise IntentRejected(
+                f"nothing was armed — this exact order was already placed on "
+                f"{symbol} {tf} at {_when(created_at)} and has since settled. "
+                f"Its order id belongs to a closed trade and cannot be reused. "
+                f"Wait a second and arm again to place a new one.")
+        # Same id, DIFFERENT plan. Both would be written and both structures
+        # that key on intent_id — `unresolved`'s work list and `run`'s
+        # done-set — keep only one, so the other is armed, unresolvable and
+        # invisible forever. Refused instead, with nothing written.
+        raise IntentRejected(
+            f"nothing was armed — an order was already placed on {symbol} {tf} "
+            f"at this exact second ({_when(created_at)}) with different terms: "
+            f"{same_id.get('direction')} entry {same_id.get('entry')}, stop "
+            f"{same_id.get('sl')}, target {same_id.get('tp')}. Two plans cannot "
+            f"share one order id. Wait a second and arm again.")
+    dup = _same_side_open(con, symbol, tf, direction)
+    if dup is not None:
+        raise IntentRejected(
+            f"nothing was armed — you already have an unresolved {direction} on "
+            f"{symbol} {tf}: entry {dup['entry']}, stop {dup['sl']}, target "
+            f"{dup['tp']}, armed {_when(dup.get('armed_at'))}. This one was NOT "
+            f"recorded. Arming again would open a second position on the same "
+            f"side, doubling the risk the budget thinks you took. Let it "
+            f"resolve, cancel it, or close it first.")
+    meta = validate(symbol, direction, entry, tp, sl, leverage)
+    partials = validate_partials(direction, entry, sl, tp, partials)
+    profile = costs.profile_for(symbol)
     payload = {
         "intent_id": intent_id,
         # Marks provenance on the fact itself, so a row read in isolation still
@@ -434,7 +581,8 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
         con, symbol=symbol, tf=tf, kind=INTENT_KIND, market_time=created_at,
         confirmed_at=created_at, algo_version=MANUAL_VERSION, payload=payload)
     con.commit()
-    return {"intent_id": intent_id, "written": bool(written), **payload}
+    return {"intent_id": intent_id, "written": bool(written),
+            "already_armed": False, **payload}
 
 
 #: The trailing component of a `setup_id`: an engine version tag such as
@@ -721,7 +869,20 @@ def cancel_intent(con, intent_id: str, at: int | None = None) -> dict:
             tf_seconds = _tf_seconds_of(tf)
             candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
             if candles:
-                w = _walk(p, candles, [c["open_ts"] for c in candles], tf_seconds)
+                # Resolved on the same series the book settles on. Asked at the
+                # chart's timeframe instead, this guard would not yet see a fill
+                # the resolver already has, and the operator would "cancel" an
+                # open position at 0R — erasing a real result, which is the one
+                # thing this function refuses to do.
+                base = {"tf": tf, "tf_seconds": tf_seconds, "candles": candles,
+                        "candle_times": [c["open_ts"] for c in candles],
+                        "scale": 1, "atr": None}
+                res, _degraded = _resolution(
+                    base, _finer_series(con, symbol, tf, tf_seconds), p)
+                w = _walk(p, res["candles"], res["candle_times"],
+                          res["tf_seconds"],
+                          max_entry_bars=MAX_ENTRY_BARS * res["scale"],
+                          max_bars=MAX_BARS * res["scale"])
                 if w["phase"] == "OPEN":
                     raise IntentRejected(
                         f"{symbol} {tf} has already filled at {p['entry']} — "
@@ -803,13 +964,22 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
     open_here = unresolved(con).get((symbol, tf), [])
     if not open_here:
         return []
-    candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
-    if not candles:
+    base_candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
+    if not base_candles:
         return []
-    candle_times = [c["open_ts"] for c in candles]
-    last_close = Decimal(candles[-1]["close"])
+    base = {"tf": tf, "tf_seconds": tf_seconds, "candles": base_candles,
+            "candle_times": [c["open_ts"] for c in base_candles],
+            "scale": 1, "atr": None}
+    # The SAME series `run` settles on, chosen by the same function — see
+    # `run`. If this used the chart's own bars while the resolver used finer
+    # ones, the screen would say PENDING about a position the book had already
+    # filled, which is the exact drift `_walk` exists to make impossible.
+    finer = _finer_series(con, symbol, tf, tf_seconds)
     out = []
     for p in open_here:
+        res, degraded = _resolution(base, finer, p)
+        candles, candle_times = res["candles"], res["candle_times"]
+        last_close = Decimal(candles[-1]["close"])
         direction, long = p["direction"], p["direction"] == "LONG"
         entry, sl = Decimal(p["entry"]), Decimal(p["sl"])
         # Same denominator the settlement uses, for the same reason: a
@@ -818,7 +988,9 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
         risk = _risk_of(p, direction, entry, sl)
         # The SAME walk that settles the trade — see _walk. status() only
         # reports its live phases, so screen and settlement cannot disagree.
-        w = _walk(p, candles, candle_times, tf_seconds)
+        w = _walk(p, candles, candle_times, res["tf_seconds"],
+                  max_entry_bars=MAX_ENTRY_BARS * res["scale"],
+                  max_bars=MAX_BARS * res["scale"])
         row = {"intent_id": p["intent_id"], "direction": direction,
                "entry": str(entry), "sl": str(sl), "tp": p["tp"],
                "trail_r": p.get("trail_r"),
@@ -827,9 +999,19 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
                "partials_planned": p.get("partials") or [],
                "risk_usd": p.get("risk_usd"), "leverage": p.get("leverage"),
                "liquidation": p.get("liquidation"),
+               # Which bars this row was computed from. `last_close`,
+               # `bars_left` and `bars_held` are all in this timeframe, and
+               # `resolution_degraded` is the reason when it is not the finest
+               # one stored — null when it is.
+               "resolution_tf": res["tf"],
+               "resolution_tf_seconds": res["tf_seconds"],
+               "resolution_degraded": degraded,
                "last_close": str(last_close), "armed_at": p["armed_at"]}
         if w["phase"] == "PENDING":
-            row.update(state="PENDING", bars_left=w["bars_left"])
+            # Rounded UP, so "fills if touched within N more bars" never
+            # promises less time than the order actually has.
+            row.update(state="PENDING",
+                       bars_left=-(-w["bars_left"] // res["scale"]))
             out.append(row)
             continue
         if w["phase"] != "OPEN":
@@ -849,8 +1031,17 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
         blended = realized + open_frac * r_open
         usd = p.get("risk_usd")
         row.update(state="OPEN",
-                   bars_held=len(candles) - 1 - w["fill_i"],
+                   # In the CHART's bars, not the resolving grid's. The screen
+                   # prints this beside a 4H chart and "held 96 bars" of a
+                   # trade opened this morning would be a true number under a
+                   # unit nobody reading it would guess. The exact count is on
+                   # the exit fact, where `resolution_tf` names its unit.
+                   bars_held=(len(candles) - 1 - w["fill_i"]) // res["scale"],
                    fill_price=str(entry),
+                   # The real close of the real bar that filled it — which on a
+                   # finer grid is not a boundary of the chart's own bars, and
+                   # is the only place that moment is visible.
+                   fill_ts=candles[w["fill_i"]]["open_ts"] + res["tf_seconds"],
                    # The stop as it stands NOW, ratchet included — this is the
                    # number the gold SL line must draw. Showing the original
                    # stop on a trailed trade would misstate where it dies.
@@ -909,11 +1100,139 @@ def _first_eligible_bar(candle_times: list, tf_seconds: int,
 
     So the in-progress bar is discarded whole. It costs at most one bar of
     latency and buys a book whose every fill is provably after its own order.
+
+    THE FINER TIMEFRAME DOES NOT WEAKEN ANY OF THAT, and this is the one thing
+    to be sure of before reading `_finer_series`. The guarantee is a property of
+    each individual bar — "this bar opened at or after the order existed" — not
+    of the grid the bars are cut on. Run this same test over 15m bars and every
+    admitted bar still opened after `armed_at`; every price inside it still
+    printed after the plan was made. What changes is only how much is thrown
+    away to reach the first such bar: a 4H order armed at 16:16 discarded the
+    whole 16:00-20:00 bar and waited until 20:00, when 16:30, 16:45 and 17:00
+    were each provably clean. Coarse granularity was being conservative about
+    time the data was never ambiguous about.
     """
     return bisect_left(candle_times, armed_at)
 
 
-def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
+def _fill_anchor(p: dict) -> int:
+    """The ONE timestamp this intent's fill is located by.
+
+    `armed_at` for a resting order — the fill is hunted from the first bar that
+    opened after it. `adopted_fill_ts` for an adopted position — the fill
+    already happened, at a moment the engine recorded, and the walk indexes
+    straight to it.
+
+    It exists so that `_resolution` and `_walk` cannot disagree about which
+    moment they are talking about. They did: the finer series was admitted on
+    the strength of covering `armed_at` and then indexed at `adopted_fill_ts`,
+    and for an adopted position those are different timestamps — `armed_at` is
+    when custody was taken, `adopted_fill_ts` can be months earlier. When the
+    finer series began between the two, `bisect_left` returned 0 and the fill
+    was pinned to whatever bar the series happened to start on. That is not a
+    late fill, it is a fabricated one: on the live store a position adopted
+    today with a fill 148 days old was written out as a settled TIMEOUT at
+    0.1646, held 1599 bars, r_multiple -2.38, with `resolution_degraded` null.
+
+    So both sides ask this function, and `test_manual.py` pins that they do.
+    """
+    fill_ts = p.get("adopted_fill_ts")
+    return int(fill_ts if fill_ts is not None else p["armed_at"])
+
+
+def _finer_series(con, symbol: str, tf: str, tf_seconds: int) -> dict | None:
+    """The finest STORED series strictly finer than `tf`, or None if none is.
+
+    WHY: see `_first_eligible_bar`. The in-progress-bar rule is right and stays;
+    applying it at the CHART's timeframe is what cost a 4H order four hours to
+    settle an ambiguity that fifteen minutes of granularity settles outright.
+
+    NOT hard-coded to 15m. The store holds whatever the ingester has onboarded
+    for a symbol, which differs between them; naming one timeframe would quietly
+    resolve some symbols finely and others not at all, with nothing saying which.
+    Finest first, and the first one that actually has bars wins.
+
+    Only exact divisors are eligible. The entry and holding windows are counted
+    in BARS, and they are carried to the finer grid by multiplying by `scale`;
+    a grid that did not divide the intent's own timeframe would make that
+    conversion a rounding exercise and would move the window without saying so.
+
+    `atr` is left unfilled — it costs a pass over the whole series and only the
+    settlement path needs it, so `run` fills it on first use.
+    """
+    from .importer import TF_SECONDS
+    for name, secs in sorted(TF_SECONDS.items(), key=lambda kv: kv[1]):
+        if secs >= tf_seconds:
+            break
+        if tf_seconds % secs:
+            continue
+        rows = [dict(r) for r in store.get_candles(con, symbol, name)]
+        if not rows:
+            continue
+        return {"tf": name, "tf_seconds": secs, "candles": rows,
+                "candle_times": [c["open_ts"] for c in rows],
+                "scale": tf_seconds // secs, "atr": None}
+    return None
+
+
+def _resolution(base: dict, finer: dict | None, p: dict) -> tuple:
+    """`(series, degraded_reason)` — which bars THIS intent resolves against.
+
+    Decided per INTENT rather than per chart, because both disqualifiers are
+    about the order's own moment in time rather than about the symbol. Takes
+    the intent, not a timestamp, so that the moment it tests is `_fill_anchor`'s
+    — the same one `_walk` indexes the fill by. Handed a bare `armed_at` it
+    admitted a series for an adopted position on the strength of a moment that
+    position's fill had nothing to do with; see `_fill_anchor`.
+
+    Two ways the finer series is refused, and neither is silent — the caller
+    puts the reason in the run log and on the status row, because a fill that
+    is four hours late for a reason nobody can read is the same bug in a
+    quieter costume:
+
+      · ITS HISTORY BEGINS AFTER THE FILL MOMENT. Then its first stored bar is
+        not "the first bar at or after the moment that locates this fill", it
+        is merely the earliest one we happen to hold. For a resting order that
+        means the fill window would start from there — the order would appear
+        to have rested through hours it never rested through. No lookahead is
+        possible either way, but the window would be wrong, and a wrong window
+        fabricates MISSED and TIMEOUT. For an ADOPTED position it is worse,
+        because there is no window to be wrong: the fill is indexed directly
+        and would land on the first stored bar, at a price and a time months
+        from the real ones, and the holding window would be counted from there.
+      · IT HAS NOT REACHED THE COARSE SERIES' NEWEST BAR. Ingestion for that
+        timeframe has stopped, and resolving on it would mark an open position
+        against stale closes. The coarse series is then the fresher truth.
+
+        Missing bars are SAFE in the settlement direction — fewer bars can only
+        delay a fill, a miss or a timeout, never fabricate one — so this is a
+        guard about the MARK, not about causality, and it is deliberately loose:
+        one whole coarse bar of tolerance. Tight, it would trip on nothing worse
+        than the two timeframes landing in a different order inside one
+        ingestion cycle, and a fill that resolved on the coarse grid during that
+        flap would be settled on the coarse grid FOREVER. A transient race must
+        not be able to permanently downgrade a trade's resolution.
+    """
+    if finer is None:
+        return base, f"no series finer than {base['tf']} is stored"
+    times = finer["candle_times"]
+    if not times or times[0] > _fill_anchor(p):
+        # Named for what it actually missed. An adopted position's anchor is
+        # the engine's own fill, so "after the order was armed" would be a true
+        # sentence about the wrong moment — the operator would read it beside a
+        # position adopted an hour ago and conclude the guard had misfired.
+        moment = ("the position filled" if p.get("adopted_fill_ts") is not None
+                  else "the order was armed")
+        return base, f"{finer['tf']} history begins after {moment}"
+    base_times = base["candle_times"]
+    if base_times and times[-1] + finer["tf_seconds"] < base_times[-1]:
+        return base, f"{finer['tf']} bars have not reached the newest {base['tf']} bar"
+    return finer, None
+
+
+def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int,
+          max_entry_bars: int = MAX_ENTRY_BARS,
+          max_bars: int = MAX_BARS) -> dict:
     """ONE simulation of an intent against the bars, used by run() AND status().
 
     This function exists so the trade that settles and the trade on screen are
@@ -943,6 +1262,14 @@ def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
     rungs that filled, in the order they filled. `outcome` still names one
     terminal rule, because the remainder still settles by exactly one; the
     partials are what happened to the rest of the size on the way there.
+
+    `max_entry_bars`/`max_bars` are counted in the bars being WALKED, which are
+    not always the intent's own. When an open intent is resolved on a finer
+    stored series (`_finer_series`) the caller multiplies both by `scale`, so
+    the fill window and the holding window stay the same length of WALL-CLOCK
+    TIME they always were — 4 bars of 4H is 16 hours whether it is counted as
+    4 bars or as 64 fifteen-minute ones. Left at the constants they would
+    silently shrink a 16-hour window to one hour.
     """
     direction = p["direction"]
     long = direction == "LONG"
@@ -959,7 +1286,25 @@ def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
     # at a price the engine recorded, and a failed search would mark a live
     # position as never entered.
     if p.get("adopted_fill_ts") is not None:
-        fi = bisect_left(candle_times, p["adopted_fill_ts"])
+        # `_fill_anchor`, not the raw field, so the moment this walk indexes by
+        # is the same one `_resolution` weighed the series against. That fixed
+        # the FINER-series case, where a 15m history starting after the engine
+        # filled would pin the fill to wherever the fine data happened to begin.
+        #
+        # IT IS NOT A GUARANTEE ABOUT THE BASE SERIES, and an earlier draft of
+        # this comment claimed it was. `_resolution` tests only the finer
+        # candidate; when it declines, `base` is returned untested. So an
+        # adopted position whose engine fill predates EVERY stored bar still
+        # lands at index 0 and settles against a price it never traded at.
+        #
+        # That behaviour is unchanged from before this function existed — the
+        # same unguarded bisect_left is at HEAD — so nothing here made it worse.
+        # It is left alone deliberately: refusing, falling back further, or
+        # holding the position open unwalked are all defensible, they differ in
+        # what the operator sees on money they are still holding, and no intent
+        # on the live book carries `adopted_fill_ts` to check against. Flagged
+        # rather than guessed at.
+        fi = bisect_left(candle_times, _fill_anchor(p))
         if fi >= len(candles):
             return {"phase": "PENDING", "bars_left": 0}
         # The operator's levels apply from when they were SET, not from the
@@ -972,25 +1317,25 @@ def _walk(p: dict, candles: list, candle_times: list, tf_seconds: int) -> dict:
             return {"phase": "OPEN", "fill_i": fi, "order_i": fi,
                     "current_stop": Decimal(p["sl"]), "best": entry,
                     "trailed": False, "partials": []}
-        return _exit_walk(p, candles, start, fi, fi)
+        return _exit_walk(p, candles, start, fi, fi, max_bars=max_bars)
 
-    order_i = _first_eligible_bar(candle_times, tf_seconds, p["armed_at"])
+    order_i = _first_eligible_bar(candle_times, tf_seconds, _fill_anchor(p))
     if order_i >= len(candles):
-        return {"phase": "PENDING", "bars_left": MAX_ENTRY_BARS}
+        return {"phase": "PENDING", "bars_left": max_entry_bars}
     fill_i = None
-    for k in range(order_i, min(order_i + MAX_ENTRY_BARS, len(candles))):
+    for k in range(order_i, min(order_i + max_entry_bars, len(candles))):
         lo, hi = Decimal(candles[k]["low"]), Decimal(candles[k]["high"])
         if lo <= entry <= hi:
             fill_i = k
             break
     if fill_i is None:
-        if order_i + MAX_ENTRY_BARS > len(candles):
+        if order_i + max_entry_bars > len(candles):
             return {"phase": "PENDING",
-                    "bars_left": order_i + MAX_ENTRY_BARS - len(candles)}
-        return {"phase": "MISSED", "miss_i": order_i + MAX_ENTRY_BARS - 1,
+                    "bars_left": order_i + max_entry_bars - len(candles)}
+        return {"phase": "MISSED", "miss_i": order_i + max_entry_bars - 1,
                 "order_i": order_i}
 
-    return _exit_walk(p, candles, fill_i, fill_i, order_i)
+    return _exit_walk(p, candles, fill_i, fill_i, order_i, max_bars=max_bars)
 
 
 def _ladder(p: dict) -> list:
@@ -1005,7 +1350,7 @@ def _ladder(p: dict) -> list:
 
 
 def _exit_walk(p: dict, candles: list, start_i: int, fill_i: int,
-               order_i: int) -> dict:
+               order_i: int, max_bars: int = MAX_BARS) -> dict:
     """The hold: stop, target, scale-outs, trail and timeout, from the fill on.
 
     Shared by the ordinary path and the adopted one so a position taken over
@@ -1040,7 +1385,7 @@ def _exit_walk(p: dict, candles: list, start_i: int, fill_i: int,
     pending = _ladder(p)
     taken: list = []
     stop, best, trailed = sl, entry, False
-    for j in range(start_i, min(fill_i + MAX_BARS, len(candles))):
+    for j in range(start_i, min(fill_i + max_bars, len(candles))):
         hi, lo = Decimal(candles[j]["high"]), Decimal(candles[j]["low"])
         hit_stop = lo <= stop if long else hi >= stop
         hit_tp = hi >= tp if long else lo <= tp
@@ -1063,8 +1408,8 @@ def _exit_walk(p: dict, candles: list, start_i: int, fill_i: int,
             cand = (best - trail * risk) if long else (best + trail * risk)
             if (cand > stop) if long else (cand < stop):
                 stop, trailed = cand, True
-    if fill_i + MAX_BARS <= len(candles):
-        j = fill_i + MAX_BARS - 1
+    if fill_i + max_bars <= len(candles):
+        j = fill_i + max_bars - 1
         # The timeout bar is the last bar of the window and the loop has already
         # walked it, so any rung it covered is in `taken` — the remainder is what
         # closes at the window's close, and nothing here re-tests that bar.
@@ -1171,15 +1516,34 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
     nothing and is retried on the next pass, exactly as `execsim` treats OPEN.
 
     Resolves intents from EVERY version this book has written and writes the
-    result under the CURRENT one, which is the migration's live half. A v0.1
-    intent carries no ladder, so its walk and its blend are the same numbers
-    v0.1 would have produced; the version on the exit fact names the code that
-    settled it, which after the bump is honestly v0.2.
+    result under the CURRENT one, which is the migration's live half. The
+    version on the exit fact names the code that SETTLED it, not the code that
+    armed it — so an intent armed under v0.1 settles into a `MANUAL_VERSION`
+    fact and that is the honest record rather than a relabelling.
+
+    RESOLUTION TIMEFRAME. An intent that is still open is walked against the
+    finest series the store actually holds for its symbol, not against its own
+    chart — see `_first_eligible_bar` for why that is not a relaxation of the
+    causality rule and `_finer_series` for how the series is picked. Every
+    number that comes out of the walk is then in THAT series' bars, so
+    `tf_seconds`, the ATR the slippage is priced from, and both windows are
+    taken from it too. `resolution_tf` is written onto the fact so `bars_held`
+    and `bars_to_fill` name their own unit instead of leaving a reader to
+    assume the chart's.
+
+    An ALREADY-SETTLED intent is not walked at all — it is in `done` and is
+    skipped before any of this — so no stored outcome can move.
     """
     with RunRecorder(con, "manual", MANUAL_VERSION, symbol, tf) as rec:
         candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
         candle_times = [c["open_ts"] for c in candles]
         atr = compute_atr(candles)
+        base = {"tf": tf, "tf_seconds": tf_seconds, "candles": candles,
+                "candle_times": candle_times, "scale": 1, "atr": atr}
+        # Memo, not a value: the finer series costs a whole-series read and a
+        # chart whose every intent has already settled must not pay for it.
+        # `[]` means unasked; `[None]` means asked and there is none.
+        finer_memo: list = []
         profile = costs.profile_for(symbol)
         cost_manifest_hash = costs.record(con, profile)
 
@@ -1204,10 +1568,24 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         # rather than leaving it to be inferred from a payload.
         counts = {"TP": 0, "SL": 0, "TRAIL_STOP": 0, "TIMEOUT": 0,
                   "OPEN": 0, "MISSED": 0, "SCALED": 0}
+        # Which series each still-open intent actually got, counted so the run
+        # log says it. A fallback that only showed up as a fill arriving four
+        # hours late would be a silent degraded path, which is the thing this
+        # repo does not allow.
+        res_seen: dict = {}
         n_out = 0
         for iid, s in intents.items():
             if iid in done:
                 continue
+            if not finer_memo:
+                finer_memo.append(_finer_series(con, symbol, tf, tf_seconds))
+            res, degraded = _resolution(base, finer_memo[0], s)
+            note = res["tf"] if degraded is None else f"{res['tf']}<{degraded}"
+            res_seen[note] = res_seen.get(note, 0) + 1
+            if res["atr"] is None:
+                res["atr"] = compute_atr(res["candles"])
+            candles, candle_times = res["candles"], res["candle_times"]
+            atr, res_secs = res["atr"], res["tf_seconds"]
             direction = s["direction"]
             long = direction == "LONG"
             entry = Decimal(s["entry"])
@@ -1218,8 +1596,11 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             risk = _risk_of(s, direction, entry, Decimal(s["sl"]))
 
             # ONE walk settles and displays — see _walk. run() only turns its
-            # terminal phases into facts.
-            w = _walk(s, candles, candle_times, tf_seconds)
+            # terminal phases into facts. Both windows are carried onto the
+            # resolving grid so they keep their wall-clock length.
+            w = _walk(s, candles, candle_times, res_secs,
+                      max_entry_bars=MAX_ENTRY_BARS * res["scale"],
+                      max_bars=MAX_BARS * res["scale"])
             if w["phase"] in ("PENDING", "INVALID"):
                 if w["phase"] == "PENDING":
                     counts["OPEN"] += 1
@@ -1228,7 +1609,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 counts["OPEN"] += 1
                 continue
             if w["phase"] == "MISSED":
-                miss_ts = candles[w["miss_i"]]["open_ts"] + tf_seconds
+                miss_ts = candles[w["miss_i"]]["open_ts"] + res_secs
                 if store.insert_fact(
                         con, symbol=symbol, tf=tf, kind=EXEC_KIND,
                         market_time=s["market_time"], confirmed_at=miss_ts,
@@ -1239,6 +1620,9 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                                  "r_multiple": "0", "r_gross": "0",
                                  "bars_held": 0, "fill_ts": None,
                                  "ambiguous_bar": False,
+                                 "resolution_tf": res["tf"],
+                                 "resolution_tf_seconds": res_secs,
+                                 "resolution_degraded": degraded,
                                  "cost_manifest_hash": cost_manifest_hash}):
                     n_out += 1
                 counts["MISSED"] += 1
@@ -1247,7 +1631,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             i, j = w["fill_i"], w["exit_i"]
             outcome, exit_price = w["outcome"], w["exit_price"]
             ambiguous = w["ambiguous"]
-            exit_ts = candles[j]["open_ts"] + tf_seconds
+            exit_ts = candles[j]["open_ts"] + res_secs
 
             # EVERY settled trade is a list of legs, a one-item list when
             # nothing was scaled out. One shape means one costing path and one
@@ -1263,8 +1647,8 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 # A rung is a resting order at a price the operator chose. It
                 # earns maker and pays no slippage, exactly as the target does.
                 order_type="LIMIT", atr_at_exit=None,
-                bars_held=f["exit_i"] - i, tf_seconds=tf_seconds,
-                exit_ts=candles[f["exit_i"]]["open_ts"] + tf_seconds)
+                bars_held=f["exit_i"] - i, tf_seconds=res_secs,
+                exit_ts=candles[f["exit_i"]]["open_ts"] + res_secs)
                 for f in filled]
             remainder = Decimal(1) - sum((f["fraction"] for f in filled),
                                          Decimal(0))
@@ -1274,7 +1658,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 # Every stop is a market order when it fires — the initial one
                 # and the trailed one alike — and so is the timeout.
                 order_type="LIMIT" if outcome == "TP" else "MARKET",
-                atr_at_exit=atr[j], bars_held=j - i, tf_seconds=tf_seconds,
+                atr_at_exit=atr[j], bars_held=j - i, tf_seconds=res_secs,
                 exit_ts=exit_ts))
             counts[outcome] += 1
             if filled:
@@ -1317,8 +1701,19 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                              # the last of it is out.
                              "bars_held": j - i,
                              "bars_to_fill": i - w["order_i"],
-                             "fill_ts": candles[i]["open_ts"] + tf_seconds,
+                             "fill_ts": candles[i]["open_ts"] + res_secs,
                              "ambiguous_bar": ambiguous,
+                             # The grid the three fields above are counted in,
+                             # and the real close of the real bar that filled
+                             # it. Named on the fact rather than inferred from
+                             # `tf`, because after this change they are not the
+                             # same thing and a reader who assumed they were
+                             # would be wrong by the ratio between them.
+                             "resolution_tf": res["tf"],
+                             "resolution_tf_seconds": res_secs,
+                             # Null when the finest series was used. A string
+                             # naming why it was not, when it was not.
+                             "resolution_degraded": degraded,
                              # Which exit RULE settled this — recorded so the
                              # book can grade trailing against holding, which
                              # is the only way this feature earns permanence.
@@ -1338,8 +1733,10 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
         con.commit()
         rec.n_new_facts = n_out
-        rec.notes = " ".join(f"{k}={v}" for k, v in counts.items() if v)
-        return {"symbol": symbol, "tf": tf, **counts}
+        rec.notes = " ".join(
+            [f"{k}={v}" for k, v in counts.items() if v] +
+            [f"res:{k}={v}" for k, v in sorted(res_seen.items())])
+        return {"symbol": symbol, "tf": tf, "resolution": res_seen, **counts}
 
 
 def book(con, limit: int = 200) -> dict:

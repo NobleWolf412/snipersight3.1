@@ -27,6 +27,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -60,18 +61,26 @@ class RetryingAnArmIsSafe(unittest.TestCase):
 
     def test_the_same_moment_twice_leaves_one_trade(self):
         """The retry case, exactly: the operator taps Arm, the reply is lost,
-        the client sends the identical request again."""
+        the client sends the identical request again.
+
+        RE-PINNED, and the loosening is the bug. This used to accept a refusal
+        as an equally good answer — "refusing the second is also one trade" —
+        and a refusal is what the code actually did, because the same-side
+        guard ran before the store could collapse anything. One trade, yes, and
+        an error message about it, which is the operator's report verbatim:
+        an error saying they already had one waiting, and a pending order.
+        The tolerated half was the defect. Both halves are asserted now.
+        """
         kw = dict(entry=100, tp=104, sl=98, created_at=1_700_000_000)
         manual.create_intent(self.con, SPOT, "1H", "LONG", **kw)
         before = len(self._intents())
-        try:
-            manual.create_intent(self.con, SPOT, "1H", "LONG", **kw)
-        except manual.IntentRejected:
-            # Equally acceptable: refusing the second is also "one trade".
-            # What must never happen is a second one being written.
-            pass
+        again = manual.create_intent(self.con, SPOT, "1H", "LONG", **kw)
         self.assertEqual(len(self._intents()), before,
                          "a retry with the same created_at wrote a second intent")
+        self.assertTrue(again["already_armed"],
+                        "a retry was answered as something other than the order "
+                        "it repeats")
+        self.assertFalse(again["written"])
 
     def test_a_different_moment_is_a_different_intent_id(self):
         """The property the retry safety rests on. If intent_id stopped
@@ -156,6 +165,98 @@ class TheServerDoesNotTrustThePhonesClock(unittest.TestCase):
         exists to enable stops working exactly when it is needed."""
         self.assertGreaterEqual(server.ARM_CLOCK_SKEW_S, 60)
         self.assertLessEqual(server.ARM_CLOCK_SKEW_S, 900)
+
+
+class TheTicketIsToldWhichOfTheThreeThingsHappened(unittest.TestCase):
+    """The endpoint, over HTTP, against a SCRATCH book.
+
+    The operator's report was "an error saying I already had one waiting, but
+    it still shows as a pending order". That is a message and a state
+    disagreeing, and the only place the disagreement is visible is this
+    response — so it is asserted here rather than one layer down.
+
+    NOTHING HERE MAY REACH THE REAL BOOK. `store.connect` is replaced for the
+    duration, and `server.py` reaches the database through exactly that call.
+    The scratch connection is handed out by a factory that fails loudly if it
+    is ever asked for a different path, so a patch that silently stopped
+    applying cannot quietly become a live arm — it becomes a red test.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Path(self.tmp.name) / "arm.db"
+        self._connect = store.connect
+        self.con = self._connect(self.db)
+        for i in range(40):
+            self.con.execute(
+                "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (SPOT, "1H", i * TF_S, "100", "101", "99", "100",
+                 "1", "test", i * TF_S))
+        self.con.commit()
+        self._patch = patch("engine.store.connect", side_effect=self._scratch)
+        self._patch.start()
+        self.client = TestClient(server.app)
+
+    def tearDown(self):
+        self._patch.stop()
+        self.con.close()
+        self.tmp.cleanup()
+
+    def _scratch(self, db_path=None):
+        if db_path not in (None, self.db):
+            raise AssertionError(
+                f"the arm suite was asked to open {db_path} — every connection "
+                f"in this suite must be the scratch book")
+        return self._connect(self.db)
+
+    def _arm(self, created_at, entry=100, tp=104, sl=98):
+        return self.client.post("/api/manual/arm", json={
+            "symbol": SPOT, "tf": "1H", "direction": "LONG", "entry": entry,
+            "tp": tp, "sl": sl, "risk_usd": 200, "created_at": created_at})
+
+    def _intents(self):
+        return store.get_facts(self.con, SPOT, "1H", "manual_intent",
+                               manual.MANUAL_VERSION)
+
+    def test_the_scratch_book_really_is_the_one_being_written(self):
+        """The guard on every other test in this class. If the patch stops
+        applying, this fails before anything else can quietly go live."""
+        now = int(time.time())
+        self.assertEqual(self._arm(now).status_code, 200)
+        self.assertEqual(len(self._intents()), 1)
+
+    def test_a_retry_is_a_200_that_says_it_created_nothing(self):
+        now = int(time.time())
+        self.assertEqual(self._arm(now).status_code, 200)
+        r = self._arm(now)
+        self.assertEqual(r.status_code, 200,
+                         "a retry of an order that landed was reported as a failure")
+        body = r.json()
+        self.assertTrue(body["ok"])
+        self.assertTrue(body["already_armed"])
+        self.assertEqual(len(self._intents()), 1)
+
+    def test_a_first_arm_says_it_created_something(self):
+        body = self._arm(int(time.time())).json()
+        self.assertTrue(body["ok"])
+        self.assertFalse(body["already_armed"])
+
+    def test_a_second_different_order_is_a_400_with_an_empty_pen(self):
+        """The refusal the operator actually met. It must be a refusal all the
+        way through: a non-OK status, a reason naming the order that blocked
+        it, and not one row written."""
+        now = int(time.time())
+        self.assertEqual(self._arm(now).status_code, 200)
+        before = self.con.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+        r = self._arm(now + 1, entry=101, tp=105, sl=99)
+        self.assertEqual(r.status_code, 400)
+        detail = r.json()["detail"]
+        self.assertIn("nothing was armed", detail)
+        for token in (SPOT, "1H", "100", "98"):     # symbol, tf, entry, stop
+            self.assertIn(token, detail, f"the refusal does not name {token}")
+        self.assertEqual(
+            self.con.execute("SELECT COUNT(*) FROM facts").fetchone()[0], before,
+            "a refused arm wrote a fact")
 
 
 class TheStaleGateKnowsHowLongABarIs(unittest.TestCase):

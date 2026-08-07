@@ -2302,11 +2302,15 @@ def manual_arm(payload: dict):
     # THE CALLER MAY NAME THE MOMENT, WITHIN REASON.
     #
     # `create_intent` builds its intent_id as `symbol|tf|MANUAL|created_at`, so
-    # a client that reuses one created_at across a retry produces an identical
-    # intent_id and an identical payload, which the content-hashed store
-    # collapses onto the row it already holds. That is what makes arming from a
-    # phone safe to retry: a request whose REPLY was lost can simply be sent
-    # again instead of the operator guessing whether it landed.
+    # a client that reuses one created_at across a retry rebuilds the identical
+    # intent_id, which `create_intent` recognises as THIS order arriving again
+    # and answers with the recorded one — `already_armed`, nothing written.
+    # That is what makes arming from a phone safe to retry: a request whose
+    # REPLY was lost can simply be sent again instead of the operator guessing
+    # whether it landed. (It used to be the content-hashed store that collapsed
+    # the second write, which was never reached: the same-side guard refused
+    # first, so the retry-safe design reported the operator's own resting order
+    # back to them as an error.)
     #
     # But created_at is written into an append-only fact and is the moment the
     # record will forever claim the plan was authored. A phone with a wrong
@@ -2347,21 +2351,51 @@ def manual_arm(payload: dict):
         except manual.IntentRejected as exc:
             # A refused plan is a 400 carrying the REASON. The operator needs to
             # know which rule stopped them, not that "something went wrong".
+            # Logged as well as returned: a refusal is a path the operator took
+            # and could not act on, and one that leaves no trace cannot be
+            # matched afterwards against what the book actually holds.
+            from engine.runlog import get_logger
+            get_logger().info(f"MANUAL ARM REFUSED {symbol} {tf} "
+                              f"{str(payload.get('direction') or '').upper()} "
+                              f"— nothing written — {exc}")
             raise HTTPException(400, str(exc))
         except (ValueError, ArithmeticError) as exc:
             raise HTTPException(400, str(exc))
+        from engine.runlog import get_logger
         # Resolve immediately, so the response reflects bars that have already
         # closed. Usually a no-op — the order was just placed and no eligible
         # bar exists yet — which is the correct causal answer, not a failure.
-        manual.run(con, symbol, tf, importer.TF_SECONDS[tf])
-        from engine.runlog import get_logger
+        #
+        # AFTER the intent is committed, so a resolver failure is not an arming
+        # failure and must not be reported as one. Raising here would answer a
+        # request that succeeded with a 500, and the ticket would say the trade
+        # was refused while the order rested on the book — the same message/
+        # state disagreement the duplicate guard used to produce, arriving by
+        # the other door. Said out loud instead: the order stands, its first
+        # resolution pass did not.
+        resolve_failed = None
+        try:
+            manual.run(con, symbol, tf, importer.TF_SECONDS[tf])
+        except Exception as exc:                      # noqa: BLE001 - see above
+            resolve_failed = f"{type(exc).__name__}: {exc}"
+            get_logger().error(
+                f"MANUAL ARM {symbol} {tf} recorded, but the first resolve pass "
+                f"failed: {resolve_failed}")
         rungs = intent.get("partials") or []
         get_logger().info(
-            f"MANUAL ARM {symbol} {tf} {intent['direction']} "
+            ("MANUAL ARM ALREADY ARMED (no new order) " if intent.get("already_armed")
+             else "MANUAL ARM ")
+            + f"{symbol} {tf} {intent['direction']} "
             f"entry={intent['entry']} tp={intent['tp']} sl={intent['sl']}"
             + ("".join(f" scale={r['fraction']}@{r['price']}" for r in rungs))
             + " (paper)")
-        return {"ok": True, "intent": intent, "book": manual.book(con)}
+        return {"ok": True,
+                # The request landed either way; this says whether it CREATED
+                # anything. The ticket words its receipt off this, so a retry
+                # cannot be announced as a second trade.
+                "already_armed": bool(intent.get("already_armed")),
+                "resolve_failed": resolve_failed,
+                "intent": intent, "book": manual.book(con)}
     finally:
         con.close()
 

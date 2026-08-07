@@ -2198,17 +2198,20 @@ window.SSChart = (() => {
             risk_usd: isFinite(riskUsd) && riskUsd > 0 ? riskUsd : null})});
         const d = await r.json().catch(() => ({}));
         if(!r.ok){
-          /* A REFUSAL THAT IS REALLY A RECEIPT. The engine rejects a second
-             unresolved intent on the same market and side — correctly — but
-             on a phone the commonest way to meet that rule is tapping Arm
-             again because the first tap looked like it did nothing on a slow
-             connection. Reporting the operator's own successful trade back to
-             them as an error is how someone talks themselves into a third
-             tap. Say what is true: it landed. */
+          /* A 400 IS NOW A REFUSAL AND NOTHING ELSE, so this says so and does
+             not guess.
+
+             It used to pattern-match "already have an unresolved" and answer
+             "your earlier tap landed — this is the trade you already have",
+             which was right for a retry of the SAME order and flatly wrong for
+             a second, different plan on the same side: that one is refused,
+             nothing is recorded, and telling the operator it landed reports
+             success for a trade that does not exist. The retry case never
+             reaches here any more — the server recognises the repeated
+             intent_id and answers 200 with `already_armed` — so the only thing
+             left behind a non-OK status is a plan that was NOT written. */
           const detail = d.detail || ('HTTP ' + r.status);
-          out.textContent = /already have an unresolved/i.test(detail)
-            ? `your earlier tap landed — this is the trade you already have. ${detail}`
-            : 'refused — ' + detail;
+          out.textContent = 'refused, nothing armed — ' + detail;
           return;
         }
         const n = d.book ? d.book.n : 0;
@@ -2222,9 +2225,25 @@ window.SSChart = (() => {
         // would be missing from "Your trades" until the cache aged out.
         window.SSData.invalidate('/api/manual/live');
         await load({keepTicket: true});
-        out.textContent =
-          `armed on paper · ${armedDir} ${sym} ${tf} · entry ${pf(armedEntry)} · ` +
-          `your book: ${n} settled, ${openN} open`;
+        /* "Armed" and "already armed" are different events and the receipt has
+           to name which one happened. A retry announced as a fresh arm is the
+           same lie as a refusal announced for one that worked — it tells the
+           operator they now hold two. The entry quoted on the already-armed
+           line is the RECORDED one, not what the ticket currently shows, so a
+           level nudged between the two taps cannot be read back as fact. */
+        const armedIntent = d.intent || {};
+        out.textContent = d.already_armed
+          ? `already armed — this is the order you placed, not a second one · ` +
+            `${armedDir} ${sym} ${tf} · entry ${armedIntent.entry} · ` +
+            `your book: ${n} settled, ${openN} open`
+          : `armed on paper · ${armedDir} ${sym} ${tf} · entry ${pf(armedEntry)} · ` +
+            `your book: ${n} settled, ${openN} open`;
+        // The resolver failing is not the arm failing, and the order is on the
+        // book either way — but a silent degraded path is a bug here as
+        // everywhere, so it rides the receipt.
+        if(d.resolve_failed)
+          out.textContent += ` · it has not been checked against the bars yet ` +
+            `(${d.resolve_failed})`;
       }catch(err){
         /* THIS USED TO CLAIM SOMETHING IT CANNOT KNOW. fetch() rejects both
            when the request never left and when it arrived, was recorded, and

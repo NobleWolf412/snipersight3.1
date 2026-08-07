@@ -740,4 +740,40 @@ ok('the track it sits in still clips, which is why the above matters', () => {
             'if this height changes, re-check the tag line-height against it');
 });
 
+/* The arm receipt says which of the three things happened.
+
+   Reported: "an error saying I already had one waiting, but it still shows as
+   a pending order." The server side of that is fixed and pinned in
+   test_manual.py / test_arm_from_a_phone.py. This is the other half — the
+   ticket used to READ A REFUSAL AND ANNOUNCE A SUCCESS, pattern-matching the
+   engine's duplicate message and replying "your earlier tap landed". For a
+   retry of the same order that was true; for a second, different plan on the
+   same side it was the opposite of true, and the operator was told a trade
+   existed that had just been refused. */
+/* Comments stripped first, deliberately: the code below is documented with the
+   wrong sentence it used to print, and a text assertion that cannot tell a
+   quotation from a behaviour would read that history as the bug returning. */
+const armSrc = () => {
+  const i = CHART.indexOf("fetch('/api/manual/arm'");
+  assert.ok(i > 0, 'chart.js no longer arms through /api/manual/arm');
+  return CHART.slice(i, i + 6000).replace(/\/\*[\s\S]*?\*\//g, '');
+};
+ok('a non-OK arm is reported as a refusal, with nothing claimed for it', () => {
+  const arm = armSrc();
+  const bad = arm.slice(arm.indexOf('if(!r.ok)'), arm.indexOf('const n = d.book'));
+  assert.ok(/refused/.test(bad), 'a refused arm no longer says it was refused');
+  assert.ok(!/landed|already have an unresolved/.test(bad),
+            'the ticket is guessing again that a refusal was really a success');
+});
+ok('a retry is announced as the order it repeats, not as a second one', () => {
+  const arm = armSrc();
+  assert.ok(/d\.already_armed/.test(arm),
+            'the ticket does not read the flag that distinguishes a retry, so ' +
+            'a repeated tap is announced as a fresh arm');
+  assert.ok(/already armed/.test(arm), 'nothing on screen says it was a repeat');
+  assert.ok(/d\.resolve_failed/.test(arm),
+            'a first resolve pass that failed is silent — the order is on the ' +
+            'book unchecked and the receipt does not say so');
+});
+
 console.log(`  ${passed} passed`);
