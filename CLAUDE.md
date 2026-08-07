@@ -231,6 +231,7 @@ than guessing.
 
 ## Not part of this project
 
-`AGENTS.md` used to bootstrap the **Apex** persona system before any project
-work. Apex is a separate project; `foundation.md` and `personas/` remain on disk
-but are not SniperSight and should not be loaded to work on it.
+**Apex**, a persona system that once shared this working directory, was removed
+on 2026-08-07 (`foundation.md`, `personas/`, and the old `war-room/` notes —
+all recoverable in git history). `engine/apexbridge.py` keeps the `brief`
+command and recreates `war-room/` on demand when it writes a dossier.

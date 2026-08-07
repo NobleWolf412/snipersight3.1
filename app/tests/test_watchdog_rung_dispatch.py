@@ -1,6 +1,6 @@
 """Watchdog dispatches by Kill-Switch rung, not by hardcoded code lists —
 so every new finding in quality.py auto-inherits its response with no
-watchdog edit. See war-room/ideas-2026-07-26 items #2, #4, #9, #12."""
+watchdog edit. Born of the 2026-07-26 war-room review (notes in git history)."""
 import importlib
 import sys
 import time

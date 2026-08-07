@@ -12,10 +12,9 @@ than no document — it is the thing someone checks *instead of* the code.
 
 It bootstrapped the **Apex** persona system: read `foundation.md`, resolve a
 persona from `personas/`, load that persona's memory, and only then start
-project work. Apex is a separate project that happens to share this working
-directory. `foundation.md` and `personas/` are still on disk and are left
-alone, but they are not SniperSight, and loading them to work on SniperSight
-only spends context.
+project work. Apex was a separate project that happened to share this working
+directory; its files (`foundation.md`, `personas/`) were removed on 2026-08-07
+and live only in git history.
 
 That version also forbade writing to Claude Code's own memory store. That rule
 belonged to Apex's single-memory-system policy and does not apply here.

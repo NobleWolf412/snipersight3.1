@@ -45,7 +45,6 @@ in these docs cite each other by path.
 
 - [alerts.example.json](alerts.example.json) — example alert config.
 
-Related directories that are **not** docs: `war-room/` is written by the app
-(`brief` drops dossiers there — see `engine/apexbridge.py`), and
-`sources/ss3_v0.1.txt` is the product constitution. `PROGRAM-PLAN.md` §
-"historical artefacts" says war-room, personas and sources stay as-is.
+Related: `sources/ss3_v0.1.txt` is the product constitution. `war-room/` may
+appear at the repo root at runtime — the `brief` command drops dossiers there
+(see `engine/apexbridge.py`, which recreates the directory on demand).

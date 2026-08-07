@@ -1,7 +1,0 @@
-<!-- Architect memory index. One line per entry: `- [Title](path) — hook`. Keep under 200 lines. -->
-
-- [Audit Process — Constitution & v0 Spec](projects/snipersight3.1/audit-process-constitution-v0.1.md) — delegable audit protocol (Phases A–J, findings schema) for handing SniperSight3 doc review to an auditor persona.
-- [Remediation Plan v0.1](projects/snipersight3.1/remediation-plan-v0.1.md) — Architect's response to Auditor NO-GO. Re-sequences the 8-item queue by author + dependency; splits §30 into user-judgment vs mechanism items.
-- [Determinism Policy Draft §4.1 (v0.3)](projects/snipersight3.1/determinism-policy-draft.md) — v0.3: closes re-verification R-01…R-07 (Decimal-zero branch, finite-Decimal guard, ATR recursion i≥15, D1 context-vs-user rounding wording, negative-zero → "0", GNU-tar pin, BLAKE2b/SHA-256 rationale). v0.2 closed re-audit A-01…A-08.
-- [Layer Boundary Schemas Draft §3.1 (v0.2)](projects/snipersight3.1/layer-boundary-schemas-draft.md) — v0.2: provenance carries timeframe tags, bar_close_ts is exclusive-end, content_hash inputs cross-ref §D8. Closes re-audit B-01/B-02/B-03.
-- [SS4 Blueprint Reconciliation (Item I)](projects/snipersight3.1/ss4-blueprint-reconciliation.md) — new queue item: adopt platform/stack + M1–M4 + design annex from sources/ss4_blueprint/; user rulings needed on scope (stocks) and naming (SS3 vs SS4); tokens.json stale, regenerate from home.html.
