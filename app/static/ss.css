@@ -2268,7 +2268,18 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .layers-pop{position:absolute;top:calc(100% + 6px);right:0;z-index:60;
   display:flex;flex-direction:column;min-width:190px;background:var(--card);
   border:1px solid var(--accent);border-radius:var(--r-lg);
-  box-shadow:0 16px 40px rgba(0,0,0,.55);padding:6px;gap:2px}
+  box-shadow:0 16px 40px rgba(0,0,0,.55);padding:6px;gap:2px;
+  /* IT MUST NEVER RUN OFF THE BOTTOM. This list grew from nine switches to
+     eleven and is 436px tall; the chart surface is height-locked and must not
+     scroll, so a popup taller than the room beneath the button cannot be
+     reached by scrolling the page — the entries below the fold were simply
+     unusable. It caps to the space actually available and scrolls inside
+     itself, which costs nothing on a tall window and is the difference
+     between a usable control and half a control on a short one.
+     180px covers the top bar, the chart header the button sits in, and the
+     status bar. `overscroll-behavior` keeps a flick from scrolling the
+     surface behind it once the list hits its end. */
+  max-height:calc(100vh - 180px);overflow-y:auto;overscroll-behavior:contain}
 .layers-pop button{display:flex;align-items:center;gap:8px;background:none;border:0;
   border-radius:var(--r-md);padding:7px 10px;cursor:pointer;color:var(--fg-3);
   font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.08em;text-align:left}
