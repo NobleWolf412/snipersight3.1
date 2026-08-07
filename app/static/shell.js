@@ -2370,10 +2370,6 @@
     mountRails(box);
   }
 
-  /* Glossary underlining for a plain string, matching what weather.js did
-     with the same sentences before they moved here. Falls back to escaped
-     text — losing an underline is acceptable, rendering raw HTML is not. */
-  const teachTxt = t => window.SSTeach ? window.SSTeach(t) : esc(t);
 
   /* The four Overwatch tabs are gone. They were never a partition — the
      all-markets list was a superset of the near-level list — so the same
