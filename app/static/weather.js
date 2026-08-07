@@ -230,15 +230,42 @@
       : `${d.n_live} of ${d.n_total} tradeable symbols are in a condition a ` +
         `playbook trades. Even then a setup only appears once price returns to ` +
         `one of that symbol's zones and confirms there, so quiet days are normal.`;
-    // Said plainly rather than folded into the count above. A watched symbol
-    // that can never be sized is evidence about a venue, not an opportunity.
-    const aside = (shadow || warming)
-      ? ` <span style="color:var(--fg-4)">${
-          shadow ? `${shadow} more are <span class="term" data-t="shadow">shadow</span>`
-                 + ` symbols — watched and scored, never sized${
-                     shadowLive ? `, and ${shadowLive} of those are live` : ''}` : ''}${
-          shadow && warming ? '; ' : ''}${
-          warming ? `${warming} still <span class="term" data-t="warming">warming</span>` : ''}.</span>`
+    /* Said plainly rather than folded into the count above. A watched symbol
+       that can never be sized is evidence about a venue, not an opportunity.
+
+       ONE CLAUSE PER STATE, and each one ends. Joining shadow and warming with
+       a semicolon read as one fact about one group — "12 more are shadow
+       symbols, watched and scored, never sized, and 10 of those are live; 1
+       still warming" says, to anyone reading it, that the warming symbol is
+       the twelfth shadow. It is not: all twelve shadows are Kraken perps being
+       warmed for a venue switch, and the warming one is a separate symbol
+       still short of history. Read as a subset, that sentence also loses a
+       symbol — 11 of 12 accounted for, and no clue which was missing.
+
+       `other` closes the last hole. The universe holds states beyond these
+       three and one of them (REJECTED, below the liquidity floor) appeared in
+       no count at all: 18 + 12 + 1 against 32 rows. It is deliberately not
+       named "rejected" here — the server counts it as the remainder, so a
+       state invented later is reported as unexplained rather than vanishing,
+       which is the failure this whole comment exists about. */
+    const other = d.n_other || 0;
+    const parts = [];
+    if (shadow) {
+      parts.push(`${shadow} more ${shadow === 1 ? 'is a' : 'are'} `
+        + `<span class="term" data-t="shadow">shadow</span> `
+        + `symbol${shadow === 1 ? '' : 's'} — watched and scored, never sized`
+        + `${shadowLive ? `, and ${shadowLive} of those are live` : ''}`);
+    }
+    if (warming) {
+      parts.push(`${warming} ${warming === 1 ? 'is' : 'are'} still `
+        + `<span class="term" data-t="warming">warming</span>, waiting on history`);
+    }
+    if (other) {
+      parts.push(`${other} ${other === 1 ? 'is' : 'are'} in neither group — `
+        + `scanned and held, but outside every state above`);
+    }
+    const aside = parts.length
+      ? ` <span style="color:var(--fg-4)">${parts.join('. ')}.</span>`
       : '';
 
     /* THE ANSWER GOES WHERE THE QUESTION IS ASKED.

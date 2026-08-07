@@ -336,6 +336,63 @@ class TestOneWordingForOneRegime(TempStore):
         self.assertEqual(row["label"], server._regime_label(None))
 
 
+class TestEveryRowIsAccountedFor(TempStore):
+    """The panel's counts have to add up to the panel's rows.
+
+    They did not. The lede named ADMITTED, SHADOW and WARMING; the universe
+    also holds REJECTED, and a symbol in it was reported by nothing. Measured
+    against the live store on 2026-08-06: 18 + 12 + 1 = 31 against 32 rows,
+    with u1000SHIBUSDT (below_liquidity_floor) explained by no count on the
+    surface whose whole job is explaining why the screen is empty.
+
+    Asserted as a SUM rather than by checking REJECTED is present, because the
+    defect is not about that word — it is about a state the counts do not know.
+    A seventh state added tomorrow fails this test instead of disappearing.
+    """
+
+    def snapshot(self):
+        self.universe([
+            {"symbol": "BTCUSDT", "rank": 1, "state": "ADMITTED"},
+            {"symbol": "ETHUSDT", "rank": 2, "state": "ADMITTED"},
+            {"symbol": "PF_XBTUSD", "rank": 3, "state": "SHADOW"},
+            {"symbol": "GWEI-USD", "rank": 4, "state": "WARMING"},
+            {"symbol": "SHIBUSDT", "rank": 5, "state": "REJECTED"},
+        ])
+        for sym in ("BTCUSDT", "ETHUSDT", "PF_XBTUSD", "GWEI-USD", "SHIBUSDT"):
+            for tf in ("1D", "4H"):
+                self.regime_fact(sym, tf, "BULL_TREND")
+        return self.weather()
+
+    def test_the_four_buckets_sum_to_the_rows(self):
+        w = self.snapshot()
+        named = w["n_total"] + w["n_shadow"] + w["n_warming"] + w["n_other"]
+        self.assertEqual(named, w["n_rows"],
+                         f"{w['n_rows'] - named} row(s) are in no bucket the "
+                         f"panel reports — that is a symbol the operator is "
+                         f"never told about")
+
+    def test_a_state_outside_the_three_named_ones_is_counted_not_dropped(self):
+        w = self.snapshot()
+        self.assertEqual(w["n_other"], 1, "REJECTED must land in n_other")
+        self.assertEqual(w["n_total"], 2)
+        self.assertEqual(w["n_shadow"], 1)
+        self.assertEqual(w["n_warming"], 1)
+
+    def test_an_unknown_future_state_lands_in_other_rather_than_nowhere(self):
+        """The point of counting the remainder instead of naming REJECTED."""
+        self.universe([
+            {"symbol": "BTCUSDT", "rank": 1, "state": "ADMITTED"},
+            {"symbol": "WEIRDUSDT", "rank": 2, "state": "SOME_FUTURE_STATE"},
+        ])
+        for tf in ("1D", "4H"):
+            self.regime_fact("BTCUSDT", tf, "BULL_TREND")
+            self.regime_fact("WEIRDUSDT", tf, "BULL_TREND")
+        w = self.weather()
+        self.assertEqual(w["n_other"], 1)
+        self.assertEqual(w["n_total"] + w["n_shadow"] + w["n_warming"]
+                         + w["n_other"], w["n_rows"])
+
+
 class TestTheUiDoesNotRestateTheRules(unittest.TestCase):
     """weather.js is allowed to decide how a verdict LOOKS, never what it is."""
 

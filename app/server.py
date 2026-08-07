@@ -1957,6 +1957,20 @@ def weather():
             "n_warming": sum(1 for s in out if s["state"] == "WARMING"),
             "n_shadow_live": sum(1 for s in out
                                  if s["state"] == "SHADOW" and s["live"]),
+            # EVERY ROW LANDS IN EXACTLY ONE BUCKET, and this is the one that
+            # makes that true. The three above name ADMITTED, SHADOW and
+            # WARMING; the universe also holds REJECTED, and a symbol in it
+            # appeared in no count the panel reported. Measured 2026-08-06:
+            # 18 + 12 + 1 = 31 against 32 rows, with u1000SHIBUSDT
+            # (below_liquidity_floor) explained by nothing.
+            #
+            # Counted as the REMAINDER rather than by naming REJECTED, so a
+            # state added to the universe later cannot fall through this the
+            # way REJECTED did — a new word costs the reader precision here,
+            # never a silent disappearance. test_weather.py asserts the four
+            # sum to n_rows.
+            "n_other": sum(1 for s in out if s["state"]
+                           not in ("ADMITTED", "SHADOW", "WARMING")),
             "n_rows": len(out),
             "enabled_strategies": sorted(enabled) if enabled else None,
             "regime_version": regime.REGIME_VERSION,
