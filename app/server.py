@@ -965,11 +965,30 @@ def portfolio():
                 # float, so a book whose every close was unpriceable reported
                 # $0.00 — which reads as "broke even" rather than "could not
                 # be priced", and the UI's `== null` guard could never fire.
+                # THREE ANSWERS, NOT TWO, and the middle one is the whole
+                # point. `if any(priceable) else None` collapsed the first two:
+                #
+                #   nothing closed at all        -> 0.00, a REAL zero. You
+                #                                   closed nothing, so you made
+                #                                   nothing. Saying "unknown"
+                #                                   here is its own lie.
+                #   closed, none priceable       -> None. The money is not
+                #                                   knowable, and 0.00 would
+                #                                   read as "broke even".
+                #   closed, some priceable       -> the sum.
+                #
+                # An empty book therefore reported "unknown" on a surface whose
+                # rule is that null and zero are different claims. Caught by
+                # test_ledger_field_contract's own sentence — "no closes is a
+                # real zero, but only when there are no closes" — which fails
+                # against an empty store and passes against a populated one,
+                # so it only ever fired where nobody was looking: CI.
                 "operator_closed_usd": (
-                    float(sum((Decimal(str(o["usd_at_close"]))
-                               for o in overrides.values()
-                               if o.get("usd_at_close") is not None), Decimal(0))
-                          .quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+                    0.0 if not overrides
+                    else float(sum((Decimal(str(o["usd_at_close"]))
+                                    for o in overrides.values()
+                                    if o.get("usd_at_close") is not None), Decimal(0))
+                               .quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
                     if any(o.get("usd_at_close") is not None
                            for o in overrides.values()) else None),
                 # How many closes that sum leaves out. A close recorded against
