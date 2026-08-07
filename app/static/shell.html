@@ -430,6 +430,21 @@
           <button class="btn" id="cLayersBtn" aria-haspopup="true"
                   aria-expanded="false">Layers</button>
           <div class="layers-pop" id="cLayersPop" hidden>
+            <!-- THE LOUDEST THING ON THIS CHART, and until now the only thing
+                 on it with no switch. Open a filled manual trade and six price
+                 lines land at once: three gold ones that are yours, three the
+                 engine drew. Two switches rather than one, deliberately —
+                 turning YOUR levels off to look at the engine's idea on its
+                 own is exactly the comparison the operator is trying to make,
+                 and a single "levels" toggle would take that away. Both
+                 default ON: the ask was a volume knob, not a mute. -->
+            <!-- "any bracket you DREW or DRAGGED" was wrong for two of the
+                 four brackets this switch owns: a draft the engine built from
+                 live structure, and the plain 2:1 ruler, are both yours to arm
+                 without your having drawn either. The note says whose it is,
+                 which is the question the switch asks. -->
+            <button data-o="yours"     data-label="Your levels" class="on" data-note="the gold lines of the trade you are in, plus the ticket bracket whenever it is yours to arm rather than the engine's — a draft, the ruler, or a level you have dragged">Your levels</button>
+            <button data-o="engine"    data-label="Engine plan" class="on" data-note="the engine's own untouched levels — the setup it is waiting on, or the trade it is already in">Engine plan</button>
             <button data-o="swings"    data-label="Swings"    class="on">Swings</button>
             <button data-o="structure" data-label="Structure" class="on">Structure</button>
             <button data-o="zones"     data-label="Zones"     class="on">Zones</button>
@@ -678,6 +693,16 @@
              closed bar. Without it a trade vanished into the book the
              moment it was armed — no line, no P&L, nowhere to watch it. -->
         <div class="t-mono tk-open" id="tkOpen"></div>
+        <!-- THE SECOND OPINION, in words. The engine having its own plan on
+             the same symbol and timeframe as your open trade was legible only
+             as three extra coloured lines and their colours — the operator had
+             to infer a disagreement from six plotted points. This names it and
+             says which way it goes. It never gates Arm and never disables it:
+             the engine may simply have the better entry, and that is the
+             operator's call. Written by chart.js, and it goes quiet with the
+             Engine plan layer, because the point is that they control how loud
+             the second opinion is. -->
+        <div class="t-mono tk-second" id="tkSecond" hidden></div>
         <div class="t-mono tk-armed" id="tkArmed"></div>
         <!-- The live-execution lock is STANDING context: it never changes
              between trades and the status bar states it permanently on every

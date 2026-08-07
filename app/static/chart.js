@@ -31,6 +31,11 @@ window.SSChart = (() => {
   // scope state died with the scope toggle: the picker lists everything, grouped
   let draftPlan = null;                       // engine/draft.py bracket, or null
   let openPos = [];                           // open manual trades on this chart
+  /* WHICH MARKET that book is for, echoed by the endpoint rather than assumed
+     from the request. The second-opinion line refuses to compare an engine
+     plan against a position from another symbol or another timeframe, and a
+     guard that trusts the variable it was fetched with is not a guard. */
+  let posKey = null;                          // 'SYM|TF' openPos belongs to
   let enginePos = null;                       // the ENGINE's open trade here, if any
   let posLines = [];                          // their price lines, redrawn per load
   let tradeLines = [];                        // a CLOSED trade, opened from Results
@@ -69,6 +74,20 @@ window.SSChart = (() => {
   let priceLines = {}, zoneLines = [], handles = {};
   // what the grab tags say and whether they go gold — applyLevels owns these
   let lvlSpec = null, lvlLive = false;
+  /* Whether the ticket bracket is switched off right now, and whose switch it
+     answers to. A hidden line must take its DRAG HANDLE with it: a grab tag
+     naming a price with no line under it is worse than the clutter it was
+     hidden to fix. applyLevels owns both. */
+  let lvlHidden = false, bracketMine = true;
+  /* TWO bracket tallies, because one number cannot answer both questions.
+     `bracketN` is the bracket after de-duplication against the operator's own
+     order — what its switch draws while the gold lines are up. `bracketRaw` is
+     before it — what it draws once those gold lines are gone and the shared
+     prices are its to show. Neither depends on the bracket's OWN switch, which
+     is the property that makes the Layers tally honest while a layer is off. */
+  let bracketN = 0, bracketRaw = 0;
+  let posN = 0;                  // level lines the operator's own position draws
+  let lastCounts = null;         // the last per-layer tally drawOverlays made
   let drawnKind = null;          // 'engine' | 'draft' — see applyLevels()
   let refreshTimer = null, refreshing = false;   // see startAutoRefresh()
   let loadedAt = null, freshTimer = null;        // see showFreshness()
@@ -114,9 +133,25 @@ window.SSChart = (() => {
   let extraKey = null;            // 'SYM|TF' the cache belongs to
   const LAZY = {gaps: 'fvg', shelf: 'volprofile', ranges: 'range',
                 signals: 'momentum|volume|volatility'};
-  const overlays = {swings: true, structure: true, zones: true,
+  /* LEVELS ARE A LAYER TOO, and they were the only thing on this chart with
+     no switch. A filled manual trade puts six price lines on screen at once —
+     three gold ones that are the operator's, three the ticket's — and the
+     operator's report was simply that they could not read it.
+
+     TWO keys, not one. A single "levels" toggle would hide both sets together
+     and take away the one view that answers the question being asked: the
+     engine's idea, alone, with yours out of the way. Both default ON, because
+     the ask was a volume knob and not a mute — the engine may well have the
+     better entry, and it cannot say so from behind a switch nobody found. */
+  const overlays = {yours: true, engine: true,
+                    swings: true, structure: true, zones: true,
                     liquidity: false, cycle: false,
                     gaps: false, shelf: false, ranges: false, signals: false};
+  /* ...and they are drawn from the book and the ticket rather than from the
+     fact cache, so drawOverlays() cannot redraw them. Toggling one of these
+     goes through drawPosition()/applyLevels() instead — see the Layers
+     handler. */
+  const LEVEL_LAYERS = {yours: 1, engine: 1};
   const VISIBLE_BARS = 120;                   // the opening window, not the limit
 
   /* Through SSData. /api/overview, /api/portfolio and /api/trade-config are all
@@ -223,7 +258,9 @@ window.SSChart = (() => {
        way back short of reloading. Both endings release it now. */
   const FLING_FACTOR = 3;      // one gesture may not change risk by more than this
   function startDrag(key, ev){
-    if(levels[key] == null) return;
+    // A hidden handle is display:none and cannot be pressed, but the guard is
+    // stated rather than inherited: nothing may drag a level that is not drawn.
+    if(lvlHidden || levels[key] == null) return;
     if(ev.button != null && ev.button > 0) return;      // right-click is not a drag
     ev.preventDefault();
     const el = handles[key];
@@ -301,7 +338,11 @@ window.SSChart = (() => {
   function placeHandles(){
     if(!series) return;
     for(const k of ['entry', 'tp', 'sl']){
-      const el = handles[k], p = levels[k];
+      /* A LAYER SWITCHED OFF TAKES ITS HANDLES WITH IT. Hiding the line and
+         leaving the grab tag would put a draggable pill, naming a price, over
+         empty chart — which is the six-lines complaint with the lines removed
+         and the confusion kept. Treated exactly like "no such level". */
+      const el = handles[k], p = lvlHidden ? null : levels[k];
       const y = p == null ? null : series.priceToCoordinate(p);
       if(y == null){ el.style.display = 'none'; }
       else{
@@ -335,24 +376,71 @@ window.SSChart = (() => {
      levels and dragged ones both. Solid and bright therefore carries one
      meaning: this is the engine's plan, untouched. */
   function applyLevels(){
-    /* Three visual states, because they mean three different things:
-       LIVE (gold, solid) is money at stake right now; ENGINE (bright) is the
-       machine's untouched plan; DRAFT (dotted, dim) is a sketch. */
+    /* Three visual registers, because they mean three different things:
+       LIVE (gold, solid) is money at stake right now; ENGINE (bright) is a
+       plan the machine is still waiting on; DIM AND DOTTED is anything that
+       is not a trade about to be taken. */
     const live = !!enginePos;
     const draft = !live && (!base || base.kind !== 'engine' || modified);
+    /* WHOSE bracket is this? Every level on this chart already prints its
+       owner — YOURS and PLAN are the operator's, ENGINE is the machine's — so
+       the two Layers switches ask the same question the labels already answer,
+       and key off the same fact rather than a second rule. A live engine
+       position the operator has DRAGGED has passed into their custody, which
+       is why `modified` decides it on that branch — and it is also why LIVE,
+       the one label that names neither party, goes to `Engine plan` until it
+       is dragged and to `Your levels` after. */
+    bracketMine = live ? modified : draft;
+    const shown = bracketMine ? overlays.yours : overlays.engine;
+    lvlHidden = !shown;
+    /* AN ENGINE SETUP IS NOT AUTOMATICALLY A LIVE PLAN. Two ways it stops
+       being one, both of them facts the chart already holds and neither of
+       them visible in the setup itself (see setupFate):
+
+         · the risk authority REFUSED it — the ticket said NOT TRADED while
+           three bright ENGINE lines invited the operator to take it anyway;
+         · its entry has already FILLED, or its order MISSED and expired —
+           setups.py has no terminal state for "acted on", so a setup the
+           engine entered days ago stays VALIDATED until its zone breaks.
+
+       All three take the DIM DOTTED register the seeded ruler and the draft
+       already use, deliberately: it means "not a trade about to be taken",
+       which is exactly what these are. A fourth style would be a fourth thing
+       to learn for a distinction the operator does not need to make.
+
+       WHOSE stays with the ENGINE regardless — `bracketMine` is untouched
+       above, so a refused or spent engine setup still belongs to the `Engine
+       plan` switch and does not migrate into `Your levels`.
+
+       The label carries WHICH SORT, in the slot LIVE already uses for a state
+       rather than a party. The vocabulary on this chart is now PLAN (yours,
+       unarmed), ENGINE (its plan, still waiting), NOT TRADED / FILLED /
+       MISSED (its plan, over), YOURS (armed and resting), LIVE (filled). */
+    const fate = !live && !draft && base ? base.fate : null;
+    const spent = !!fate && fate !== 'live';
+    /* Written out, not assembled. These strings are what the operator reads,
+       and a label built from fragments cannot be found by grepping for the
+       phrase that is on the screen — which is how the suites pin them and how
+       the next session will look for them. Every key here is reachable: this
+       map is only read on the `draft || spent` branch below. */
+    const dim = {
+      draft:   {entry: 'PLAN · ENTRY',       tp: 'PLAN · TP',       sl: 'PLAN · SL'},
+      refused: {entry: 'NOT TRADED · ENTRY', tp: 'NOT TRADED · TP', sl: 'NOT TRADED · SL'},
+      filled:  {entry: 'FILLED · ENTRY',     tp: 'FILLED · TP',     sl: 'FILLED · SL'},
+      missed:  {entry: 'MISSED · ENTRY',     tp: 'MISSED · TP',     sl: 'MISSED · SL'},
+    }[draft ? 'draft' : fate];
     const spec = live ? {
       entry: {c: '#fbbf24', s: 0, t: 'LIVE · IN AT'},
       tp:    {c: '#fbbf24', s: 2, t: modified ? 'YOUR TARGET' : 'LIVE · TARGET'},
       sl:    {c: '#fbbf24', s: 2, t: modified ? 'YOUR STOP' : 'LIVE · STOP'},
-    } : draft ? {
+    } : draft || spent ? {
       /* "DRAFT" was jargon and an operator asked what it meant, fairly: it is
-         the app's word, not the market's. Every label now reads WHOSE · WHICH,
-         so the four states on this chart answer "what am I looking at" without
-         a legend — PLAN (yours, unarmed), ENGINE (its plan, unarmed), YOURS
-         (armed and resting on the book), LIVE (filled, money at stake). */
-      entry: {c: 'rgba(34,211,238,.40)',  s: 1, t: 'PLAN · ENTRY'},
-      tp:    {c: 'rgba(74,222,128,.40)',  s: 1, t: 'PLAN · TP'},
-      sl:    {c: 'rgba(248,113,113,.40)', s: 1, t: 'PLAN · SL'},
+         the app's word, not the market's. Every label reads STATE · WHICH, so
+         the states on this chart answer "what am I looking at" without a
+         legend. */
+      entry: {c: 'rgba(34,211,238,.40)',  s: 1, t: dim.entry},
+      tp:    {c: 'rgba(74,222,128,.40)',  s: 1, t: dim.tp},
+      sl:    {c: 'rgba(248,113,113,.40)', s: 1, t: dim.sl},
     } : {
       entry: {c: '#22d3ee', s: 0, t: 'ENGINE · ENTRY'},
       tp:    {c: '#4ade80', s: 2, t: 'ENGINE · TP'},
@@ -362,7 +450,7 @@ window.SSChart = (() => {
     // them — otherwise dragging an engine plan would keep its solid styling and
     // the distinction would silently stop working after the first edit.
     const want = live ? ('live' + (modified ? '-edited' : ''))
-               : draft ? 'draft' : 'engine';
+               : draft ? 'draft' : spent ? 'spent-' + fate : 'engine';
     if(drawnKind !== want){
       for(const k of Object.keys(priceLines)){
         series.removePriceLine(priceLines[k]);
@@ -377,15 +465,31 @@ window.SSChart = (() => {
        order is the authority wherever the two agree; drag a level and the plan
        line reappears, because then it is saying something different. */
     const taken = positionPrices();
+    /* The same prices again, but WITHOUT the `Your levels` short-circuit —
+       drawing and counting need different answers. Deduping the drawing
+       against lines that are not on screen would blank the chart (see
+       positionPrices), and counting against a list that empties when a switch
+       moves would make the tally jump by three the moment it was hidden. */
+    const held = bookPrices();
     const same = (a, b) => Math.abs(a - b) <= Math.abs(a) * 1e-9;
 
+    bracketN = 0; bracketRaw = 0;
     for(const k of ['entry', 'tp', 'sl']){
       const p = levels[k];
-      if(p != null && taken.some(v => same(v, p))){
+      if(p == null){
         if(priceLines[k]){ series.removePriceLine(priceLines[k]); delete priceLines[k]; }
         continue;
       }
-      if(p == null){
+      /* Counted BEFORE either guard below, and against `held` rather than
+         `taken`, so both tallies answer "what would this switch draw" and
+         neither changes when the switch itself moves. */
+      bracketRaw++;
+      if(!held.some(v => same(v, p))) bracketN++;
+      if(taken.some(v => same(v, p))){
+        if(priceLines[k]){ series.removePriceLine(priceLines[k]); delete priceLines[k]; }
+        continue;
+      }
+      if(!shown){
         if(priceLines[k]){ series.removePriceLine(priceLines[k]); delete priceLines[k]; }
         continue;
       }
@@ -406,6 +510,11 @@ window.SSChart = (() => {
     $('tkTp').value    = levels.tp    == null ? '' : pf(levels.tp);
     $('tkSl').value    = levels.sl    == null ? '' : pf(levels.sl);
     placeHandles();
+    paintLevelCounts();
+    /* The comparison depends on WHOSE plan is on screen, so it is repainted
+       wherever that can change. It writes one element and reads nothing the
+       ticket owns — it can never gate or disable Arm. */
+    paintSecondOpinion();
   }
 
   /* ---------- the ticket maths ---------- */
@@ -419,14 +528,24 @@ window.SSChart = (() => {
     /* One word each. The long forms ("structure draft", "operator-modified")
        overflowed the 268px head and wrapped it to two rows; the Why pane
        already carries the full sentence for every one of these states. */
+    /* THE CHIP AND THE LINES MUST AGREE. `chip-accent` is the ticket's bright
+       register and it said "engine" in it for a setup risk had refused, or one
+       whose entry filled days ago — the same over-claim applyLevels makes with
+       colour, in miniature and directly above it. One authority: both read
+       `base.fate`. */
+    const spent = kind === 'engine' && !modified && base.fate &&
+                  base.fate !== 'live';
     $('tkSrc').textContent = kind === 'position'
       ? (modified ? 'your exit — unsaved' : 'open position')
       : kind === 'engine'
-      ? (modified ? 'edited' : 'engine')
+      ? (modified ? 'edited'
+         : base.fate === 'refused' ? 'not traded'
+         : base.fate === 'filled' ? 'already entered'
+         : base.fate === 'missed' ? 'entry missed' : 'engine')
       : kind === 'draft' ? (modified ? 'edited' : 'your plan')
       : kind === 'seeded' ? 'manual' : 'no setup';
     $('tkSrc').className = 'chip ' +
-      (kind === 'engine' && !modified ? 'chip-accent' : 'chip-amber');
+      (kind === 'engine' && !modified && !spent ? 'chip-accent' : 'chip-amber');
     // Name what you are reverting TO. On a live position that is the levels
     // the trade is actually resting at, which is not the same promise as
     // "reset" on a plan that has never been committed to anything.
@@ -851,7 +970,7 @@ window.SSChart = (() => {
     painted = null;                 // the screen no longer describes any market
     candles = [];
     facts = {swing: [], struct: [], zone: [], liq: [], regime: [],
-             setupF: [], cycle: [], riskF: []};
+             setupF: [], cycle: [], riskF: [], orderF: []};
     levels = {entry: null, tp: null, sl: null};
     /* Nulling `levels` is not clearing them: applyLevels() is the only thing
        that removes the entry/tp/sl price lines from the series and blanks the
@@ -888,9 +1007,13 @@ window.SSChart = (() => {
     $('tkRiskPct').textContent = '';
     $('tkArmed').textContent = '';
     openPos = [];
+    // ...and the market it belonged to, or the second-opinion line would go on
+    // comparing against a position the screen no longer describes.
+    posKey = null;
     for(const l of posLines){ try{ series.removePriceLine(l); }catch(e){ /* line already gone with its series */ } }
     posLines = [];
     $('tkOpen').innerHTML = '';
+    try{ paintSecondOpinion(); }catch(e){ /* ticket may not be built yet */ }
     const el = $('chartEmpty');
     el.style.display = '';                    // the bug: only ever unset on success
     el.textContent = detail ? `${title} — ${detail}` : title;
@@ -935,7 +1058,21 @@ window.SSChart = (() => {
       res = await Promise.all([
         api(`/api/candles?symbol=${sym}&tf=${tf}&limit=${BARS}`),
         q('swing'), q('structure'), q('zone'), q('liquidity'),
-        q('regime'), q('setup'), q('cycle'), q('risk')]);
+        q('regime'), q('setup'), q('cycle'), q('risk'),
+        /* WHAT BECAME OF THE SETUP. `setups.py` has no terminal state meaning
+           "already acted on" — it emits FORMING, CONFIRMING, VALIDATED,
+           CANCELLED and EXPIRED, and EXPIRED fires when the ZONE breaks — so a
+           setup whose entry filled days ago stays VALIDATED and the chart kept
+           drawing it as a plan the engine is still waiting on. The order facts
+           answer it and always did: execsim writes PLACED, then FILLED or
+           MISSED, against the same setup_id and the same market_time, so this
+           rides the same 1500-bar window as the setup it describes.
+
+           In the SAME Promise.all as the rest on purpose. It decides whether
+           the bracket is drawn as a live plan, so a silent failure here would
+           re-create the exact lie it exists to end; failing with the other
+           nine puts "Could not load" on screen instead. */
+        q('order')]);
       // The draft is fetched, never computed here. Composing a bracket out of
       // zones and pools in the browser would be a second authority for what a
       // level is; `engine/draft.py` owns it and this only displays the answer.
@@ -956,8 +1093,12 @@ window.SSChart = (() => {
         if(seq === loadSeq){
           openPos = (op && op.open) || [];
           enginePos = (op && op.engine) || null;
+          // The market the SERVER answered for, not the one we asked about —
+          // the second-opinion guard is only worth something if it reads what
+          // came back.
+          posKey = op && op.symbol && op.tf ? op.symbol + '|' + op.tf : null;
         }
-      }catch(err){ if(seq === loadSeq){ openPos = []; enginePos = null; } }
+      }catch(err){ if(seq === loadSeq){ openPos = []; enginePos = null; posKey = null; } }
     }catch(err){
       // The failure path used to write into #chartEmpty and return — but
       // #chartEmpty is only ever un-hidden on the SUCCESS path below, so after
@@ -984,9 +1125,10 @@ window.SSChart = (() => {
       setLock();
     }catch(err){ /* keep whatever we had; the ticket labels its source */ }
     if(seq !== loadSeq){ noteStalledLoad(); return; }
-    const [c, swing, struct, zone, liq, regime, setupF, cycle, riskF] = res;
+    const [c, swing, struct, zone, liq, regime, setupF, cycle, riskF,
+           orderF] = res;
     candles = c;
-    facts = {swing, struct, zone, liq, regime, setupF, cycle, riskF};
+    facts = {swing, struct, zone, liq, regime, setupF, cycle, riskF, orderF};
 
     if(!candles.length){
       // "the venue served nothing here" is a different fact from "the request
@@ -1060,9 +1202,10 @@ window.SSChart = (() => {
      resolver will settle them whether or not anyone is watching. The readout
      marks to the LAST CLOSED bar and says so; a fresher number here than
      everywhere else would read as precision and be inconsistency. */
-  /* The prices the operator's own armed order is already drawing, so the
-     ticket does not label them a second time. Empty when nothing is armed. */
-  function positionPrices(){
+  /* Every price the operator's own order HOLDS, whether or not it is drawn.
+     Empty when nothing is armed. Two callers with two different questions —
+     see positionPrices below for the drawing one. */
+  function bookPrices(){
     if(!openPos.length) return [];
     const p = openPos[0];
     return [p.fill_price || p.entry, p.tp, p.current_stop || p.sl]
@@ -1071,6 +1214,244 @@ window.SSChart = (() => {
       // six-labels-for-three-prices defect with a fourth price added.
       .concat((p.partials_planned || []).map(r => r.price))
       .map(v => parseFloat(v)).filter(v => isFinite(v));
+  }
+
+  /* The prices the operator's own armed order is already drawing, so the
+     ticket does not label them a second time. Empty when nothing is armed. */
+  function positionPrices(){
+    /* Nothing is taken by a line that is not drawn. With `Your levels` off the
+       gold lines are gone, so deduping the ticket bracket against them would
+       delete BOTH copies of every shared price and leave the chart with no
+       entry, stop or target at all — hiding one layer silently emptying the
+       other is the worst thing this toggle could do. */
+    if(!overlays.yours) return [];
+    return bookPrices();
+  }
+
+  /* ═══════════════ WHAT BECAME OF A SETUP ═══════════════
+
+     ONE READING, used by three surfaces: the bracket's styling, the ticket's
+     rationale and the second opinion. Each of them was asking its own version
+     of "is the engine still waiting on this trade", and two of them were not
+     asking at all.
+
+     Two facts, both already on this chart:
+
+     · the RISK AUTHORITY's decision. A REJECTED setup is not a trade the
+       engine will take, and `pickSetup` set `base.kind = 'engine'` BEFORE it
+       looked the decision up — so a refusal reached the reader as a chip while
+       three full-brightness ENGINE lines said the opposite. This file's own
+       argument, made where the seeded ruler was given a dim register: three
+       horizontal price lines outweigh any caption.
+
+     · the ORDER's last word. FILLED means the entry already happened; MISSED
+       means the window expired without price coming back. Either way the
+       moment is gone, and neither is visible in the setup fact, which is still
+       VALIDATED and stays that way until the zone breaks.
+
+     FILLED beats MISSED because execsim stops at a fill, and REFUSED beats
+     both on the LINE — one label has room for one word, and "the book would
+     not have taken this" is the one that decides whether to act. The prose
+     under the ticket has room for both and says both.
+
+     Nothing here is inferred: it reports the facts or it returns 'live', and
+     'live' is the only state that keeps the bright register. */
+  function setupFate(id){
+    const d = (facts.riskF || []).filter(
+      r => r.event === 'DECISION' && r.setup_id === id).pop() || null;
+    let order = null, orderTs = null;
+    for(const o of (facts.orderF || [])){
+      if(o.setup_id !== id) continue;
+      if(o.event === 'FILLED'){ order = 'FILLED'; orderTs = o.confirmed_at; break; }
+      if(o.event === 'MISSED'){ order = 'MISSED'; orderTs = o.confirmed_at; }
+    }
+    const refused = !!d && d.decision === 'REJECTED';
+    return {d, refused, order, orderTs,
+            state: refused ? 'refused'
+                 : order === 'FILLED' ? 'filled'
+                 : order === 'MISSED' ? 'missed' : 'live'};
+  }
+
+  /* ═══════════════ THE SECOND OPINION ═══════════════
+
+     WHAT THE ENGINE ACTUALLY HAS HERE — and the four things that phrase can
+     mean are not interchangeable. `pickSetup` folds a structure draft, a
+     14-bar ruler and an edited plan into one dotted look, and only two of the
+     four are the machine saying "this trade, at these prices": a VALIDATED
+     setup fact, and a position the engine has already taken. Everything else
+     is a sketch, and quoting a sketch back as a second opinion would invent an
+     authority that does not exist.
+
+     Returns {kind:'sketch'} for the two that are not — the caller says so in
+     one sentence rather than staying silent, because the operator's whole
+     complaint is not knowing what the coloured lines mean. */
+  function enginePlanHere(){
+    if(enginePos && enginePos.symbol === sym && enginePos.tf === tf)
+      return {kind: 'position', dir: enginePos.direction,
+              entry: +enginePos.entry, tp: +enginePos.tp, sl: +enginePos.sl};
+    if(setup)
+      return {kind: 'setup', dir: setup.direction, id: setup.setup_id,
+              entry: +setup.entry, tp: +setup.tp, sl: +setup.sl};
+    if(base && (base.kind === 'draft' || base.kind === 'seeded'))
+      return {kind: 'sketch'};
+    return null;
+  }
+
+  /* Say the disagreement in words.
+
+     The operator's report: "there's six plotted data points on the chart" —
+     three gold ones that are their filled trade and three the engine drew, and
+     the only thing distinguishing a genuine difference of opinion from a
+     redraw of the same idea was the colour of the lines and the gap between
+     them. This names it: which level, which way, by how much.
+
+     Three properties this must keep:
+
+     · It never gates anything. Not one line here touches #tkArm, #tkBlock or
+       `armable`. The operator was explicit that the engine might simply have
+       the better entry, and a control that refuses a legitimate intent is
+       worse than one that informs it.
+     · Every figure goes through window.SSFormat. A percentage rounded locally
+       is the same defect as a locally rounded dollar, one surface later.
+     · It goes quiet with the layer that owns the lines it is talking about —
+       the Engine plan switch when it is quoting the engine's levels, Your
+       levels when it is describing your own dotted bracket. The point of the
+       two switches is that the operator sets how loud the second opinion is,
+       and a sentence that answers the wrong one of them is noise. */
+  function paintSecondOpinion(){
+    const el = $('tkSecond');
+    if(!el) return;
+    el.innerHTML = ''; el.hidden = true;
+    /* SAME SYMBOL, SAME TIMEFRAME, or nothing. `painted` is the market the
+       facts on screen describe and `posKey` is the market the open book was
+       answered for; comparing across either of them would put one market's
+       entry beside another market's, which is the wrong-price-under-the-right-
+       name failure this file has already been bitten by once. */
+    const here = sym + '|' + tf;
+    if(painted !== here || posKey !== here || !openPos.length) return;
+    const eng = enginePlanHere();
+    if(!eng) return;
+    if(eng.kind === 'sketch'){
+      /* ANSWER THE SWITCH THAT OWNS THE BRACKET. This sentence is not about
+         the engine's plan — it says there ISN'T one, and then describes the
+         dotted bracket, which on this branch is a DRAFT and therefore belongs
+         to `Your levels` (bracketMine in applyLevels). Gating it on `Engine
+         plan` answered the wrong switch both ways round: Your levels off left
+         "the dotted bracket is yours to drag" over an empty chart, and Engine
+         plan off took the sentence away while its bracket was still drawn.
+         `lvlHidden` is exactly "the bracket applyLevels drew is not on the
+         chart", whichever switch decided that, so it is the right question. */
+      if(lvlHidden) return;
+      el.innerHTML = '<b>No engine setup here</b> — the dotted bracket is ' +
+        'yours to drag, not a second opinion.';
+      el.hidden = false;
+      return;
+    }
+    // Past here the line quotes the ENGINE's own levels, so it answers the
+    // Engine plan switch.
+    if(!overlays.engine) return;
+    const F = window.SSFormat;
+    if(!F){
+      // Degraded, and audible: silence here would read as "the engine agrees".
+      el.innerHTML = '<b>Second opinion</b> — the engine has its own plan ' +
+        'here, but the shared number formatter did not load, so the ' +
+        'difference cannot be stated.';
+      el.hidden = false;
+      return;
+    }
+    const p = openPos[0];
+    const num = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+    const yours = {entry: num(p.fill_price != null ? p.fill_price : p.entry),
+                   sl: num(p.current_stop != null ? p.current_stop : p.sl),
+                   tp: num(p.tp)};
+    /* Signed distance as a percentage of YOUR price, which is the reference
+       the sentence names. Under 0.05% the formatter would print "0.0% above"
+       beside two visibly different numbers, so that band is called level.
+       Returns the sentence AND whether it was a difference at all, because the
+       headline has to know before it calls this a disagreement. */
+    const gap = (theirs, mine, label) => {
+      if(theirs == null || mine == null || !isFinite(theirs) || mine === 0)
+        return null;
+      const d = (theirs - mine) / Math.abs(mine) * 100;
+      const same = Math.abs(d) < 0.05;
+      const word = same ? 'level with yours'
+        : F.pct(Math.abs(d)) + (d > 0 ? ' above' : ' below');
+      return {label, same, txt: `${label} ${F.px(theirs)}, ${word}`};
+    };
+    const rows = [gap(eng.entry, yours.entry, 'entry'),
+                  gap(eng.sl, yours.sl, 'stop'),
+                  gap(eng.tp, yours.tp, 'target')].filter(Boolean);
+    if(!rows.length) return;
+    /* "HAS a validated setup" is a claim about NOW, and it was made for every
+       validated setup on the chart — including ones whose entry filled days
+       ago. Same reading as the bracket and the ticket (setupFate), so the
+       three cannot drift apart. */
+    const f = eng.kind === 'setup' ? setupFate(eng.id)
+                                   : {state: 'live', refused: false, d: null};
+    const head = eng.kind === 'position'
+      ? 'the engine is in its own trade on this chart'
+      : f.state === 'filled' ? 'the engine already entered its setup here'
+      : f.state === 'missed' ? 'the engine\'s setup here never filled'
+      : 'the engine has a validated setup on this chart';
+    /* PENDING is a limit resting on the book, not a trade. #tkOpen one row
+       above says so in as many words — "fills if touched … else missed" — and
+       this line calling the same order an open trade contradicted it on the
+       surface where the operator decides whether to arm another. */
+    const mineTxt = p.state === 'PENDING' ? 'your resting order'
+                                          : 'your open trade';
+    /* Opposite directions is the loudest thing this line can report and does
+       not belong buried behind three prices. NORMALISED on both sides, the way
+       the duplicate-arm guard and the book reconciliation already do it: the
+       engine's LONG against a book that spells it Long is not agreement, and a
+       raw !== would have called it one. */
+    const engDir = String(eng.dir || '').toUpperCase();
+    const myDir = String(p.direction || '').toUpperCase();
+    const flip = engDir && myDir && engDir !== myDir
+      ? ` It is ${engDir} where you are ${myDir}.` : '';
+    /* A setup risk REFUSED is not a trade the engine is waiting to take, and
+       neither is one it has already entered or already missed. Drawn at full
+       brightness both looked exactly like one. Both are stated in the Why pane
+       too; they are restated here because this is the sentence that calls the
+       setup a second opinion, and an opinion the machine has already acted on
+       is not one it is offering. */
+    let caveat = '';
+    if(f.refused){
+      const plain = c => window.SSFunnel
+        ? SSFunnel.plain(c) : String(c).replace(/_/g, ' ').toLowerCase();
+      caveat = ' Risk would not trade it (' +
+        ((f.d && f.d.reasons) || []).map(plain).join('; ') +
+        '), so this is analysis, not a trade the engine is waiting to take.';
+    }
+    /* Same rule, same reason: the practice fill says nothing about a setup
+       risk refused, and appending "its entry has already happened" to a
+       refusal claims an event that did not occur. The refusal caveat above
+       already says what this setup is. */
+    if(f.refused){ /* the caveat above stands alone */ }
+    else if(f.order === 'FILLED')
+      caveat += ' Its entry has already happened, so these are the levels it ' +
+        'went in on rather than a plan it is still waiting on.';
+    else if(f.order === 'MISSED')
+      caveat += ' Its entry window expired without a fill, so it is history ' +
+        'rather than a plan the engine is still waiting on.';
+    /* AGREEMENT IS NOT A DISAGREEMENT. Arm the engine's own setup at the
+       engine's own prices and the headline used to say the machine was set
+       AGAINST you, above three rows each reporting that a level was identical
+       to yours — an argument announced, then three pieces of evidence that
+       there wasn't one. When every level matches, one clause says so. A flip
+       is never agreement, whatever the prices do. */
+    const agreed = !flip && rows.every(r => r.same);
+    if(agreed){
+      const names = rows.map(r => r.label);
+      const list = names.length > 1
+        ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1]
+        : names[0];
+      el.innerHTML = `<b>Second opinion</b> — ${head}, and it agrees with ` +
+        `${mineTxt}: same ${list}.` + caveat;
+    }else{
+      el.innerHTML = `<b>Second opinion</b> — ${head}, compared with ` +
+        `${mineTxt}.${flip} ` + rows.map(r => r.txt).join(' · ') + '.' + caveat;
+    }
+    el.hidden = false;
   }
 
   /* A SETTLED TRADE, on the bars it happened on. Two lines and a jump to the
@@ -1127,8 +1508,19 @@ window.SSChart = (() => {
     for(const l of posLines){ try{ series.removePriceLine(l); }catch(e){ /* line already gone with its series */ } }
     posLines = [];
     const el = $('tkOpen');
-    if(!openPos.length){ el.innerHTML = ''; return; }
+    posN = 0;
+    if(!openPos.length){
+      el.innerHTML = '';
+      paintLevelCounts(); paintSecondOpinion();
+      return;
+    }
     const p = openPos[0];
+    /* The switch governs the CHART, not the ticket. Every line below is still
+       counted so the toggle can report what it holds, and the readout at the
+       end of this function still speaks either way — hiding the gold lines is
+       a request for a quieter chart, not for the app to stop telling the
+       operator they are in a trade. */
+    const drawn = overlays.yours;
     // A trailed trade's stop is wherever the ratchet has moved it — drawing
     // the original would misstate where the trade dies.
     const stopNow = p.current_stop || p.sl;
@@ -1137,7 +1529,9 @@ window.SSChart = (() => {
                                     ['sl', stopNow,
                                      p.trailed ? 'YOURS · TRAIL' : 'YOURS · SL']]){
       const v = parseFloat(price);
-      if(isFinite(v)) posLines.push(series.createPriceLine({
+      if(!isFinite(v)) continue;
+      posN++;
+      if(drawn) posLines.push(series.createPriceLine({
         price: v, color: '#fbbf24', lineWidth: 1, lineStyle: k === 'entry' ? 0 : 3,
         axisLabelVisible: true, title: label}));
     }
@@ -1149,12 +1543,15 @@ window.SSChart = (() => {
     for(const r of (p.partials_planned || [])){
       const v = parseFloat(r.price);
       if(!isFinite(v)) continue;
+      posN++;
       const filled = done.includes(String(r.price));
-      posLines.push(series.createPriceLine({
+      if(drawn) posLines.push(series.createPriceLine({
         price: v, color: filled ? 'rgba(251,191,36,.55)' : '#fbbf24',
         lineWidth: 1, lineStyle: filled ? 3 : 2, axisLabelVisible: true,
         title: `YOURS · ${Math.round(+r.fraction * 100)}% ${filled ? 'OFF' : 'AT'}`}));
     }
+    paintLevelCounts();
+    paintSecondOpinion();
     const more = openPos.length > 1 ? ` · +${openPos.length - 1} more` : '';
     if(p.state === 'PENDING'){
       el.innerHTML = `PENDING ${p.direction} · limit ${pf(+p.entry)} · ` +
@@ -1212,7 +1609,8 @@ window.SSChart = (() => {
   function drawOverlays(){
     const markers = [];
     const first = candles.length ? candles[0].time : 0;
-    const n = {swings: 0, structure: 0, zones: 0, liquidity: 0, cycle: 0};
+    const n = Object.assign({swings: 0, structure: 0, zones: 0, liquidity: 0,
+                             cycle: 0}, levelCounts());
 
     for(const s of facts.swing){
       // MICRO/LOCAL are the engine's noise tiers — thousands of them would
@@ -1482,7 +1880,39 @@ window.SSChart = (() => {
       lastMarkerDrop = 0;
     }
     series.setMarkers(drawn);
+    lastCounts = n;
     labelOverlays(n);
+  }
+
+  /* WHAT EACH LEVEL SWITCH WOULD DRAW — not what is on the chart right now.
+     The nine older layers count fact-store rows, which is a claim that stays
+     true while the layer is off; these two count lines the switch offers, for
+     the same reason. A tally that fell to zero the moment a layer was hidden
+     would mark the switch `.empty` and read as "there is nothing here", which
+     is the one thing it must not say about a layer you have just turned off.
+
+     The operator's position is always theirs. The ticket bracket goes to
+     whichever switch its own labels name — `bracketMine` in applyLevels — and
+     it draws its DE-DUPLICATED count while the gold lines are up and its raw
+     count once they are gone, which is why `engine` reads `overlays.yours`.
+     That is a real dependency, not a leak: hide your own lines and the
+     engine's coincident ones genuinely become its to draw. Neither figure
+     depends on its OWN switch, so neither changes when you flick it. */
+  function levelCounts(){
+    return {yours:  posN + (bracketMine ? bracketN : 0),
+            engine: bracketMine ? 0 : (overlays.yours ? bracketN : bracketRaw)};
+  }
+
+  /* The two level switches are drawn AFTER drawOverlays on every load — the
+     bracket does not exist until pickSetup has run — so their tallies are
+     folded back into the last one it made rather than recomputed from facts
+     they do not come from. Silent until drawOverlays has run once. */
+  function paintLevelCounts(){
+    if(!lastCounts) return;
+    const c = levelCounts();
+    if(lastCounts.yours === c.yours && lastCounts.engine === c.engine) return;
+    Object.assign(lastCounts, c);
+    labelOverlays(lastCounts);
   }
 
   /* Fetch a lazy layer's facts once per market, then redraw.
@@ -1534,13 +1964,30 @@ window.SSChart = (() => {
       b.setAttribute('aria-pressed', String(b.classList.contains('on')));
       // in the menu, absence is said in words — a struck-through control
       // reads as broken every time
-      if(!c) b.textContent = b.dataset.label + ' — no data';
+      /* "No data" is fact-store language and it is wrong for the two level
+         switches: nothing is ever recorded for them. It says TO DRAW rather
+         than "nothing here" for a reason found in the browser — edit the
+         ticket and the bracket passes to `Your levels`, leaving `Engine plan`
+         with no lines while the engine's setup plainly still exists and the
+         second opinion is still quoting it. The switch may say it has nothing
+         to draw; it may not say the engine has nothing. */
+      if(!c) b.textContent = b.dataset.label +
+        (LEVEL_LAYERS[k] ? ' — none to draw' : ' — no data');
       /* Composed, not replaced. Overwriting the title destroyed the authored
          notes on Liquidity and Cycle — the only place the chart says those
          overlays are INFERRED rather than measured — leaving a bare count in
-         their place. The note lives in data-note now and the count joins it. */
-      const count = c ? `${c} recorded on this timeframe`
-                      : `nothing recorded for ${k} on ${sym} ${tf}`;
+         their place. The note lives in data-note now and the count joins it.
+
+         WHAT THE COUNT CLAIMS. The nine say "recorded" — a fact-store claim,
+         true whether the layer is drawn or not. The two level switches said
+         "on this chart", which made it a claim about pixels, and a switched-
+         OFF layer then reported lines nobody could see. Same claim as the
+         nine now: what this switch holds, not what is painted. */
+      const count = LEVEL_LAYERS[k]
+        ? (c ? `${c} price line${c === 1 ? '' : 's'} while this switch is on`
+             : `nothing of ${k === 'yours' ? 'yours' : 'the engine\'s'} to draw on ${sym} ${tf} right now`)
+        : c ? `${c} recorded on this timeframe`
+            : `nothing recorded for ${k} on ${sym} ${tf}`;
       b.title = [b.dataset.note, count].filter(Boolean).join(' — ');
     });
     paintLayersBtn();
@@ -1587,13 +2034,21 @@ window.SSChart = (() => {
     }
 
     if(setup){
+      /* READ BEFORE DRESSED. `kind: 'engine'` is what earns the bright,
+         solid bracket in applyLevels, and it used to be set here with the
+         risk decision looked up four lines below it and the order never
+         looked up at all — so a setup the risk authority had refused, and a
+         setup whose entry filled two days ago, both drew the identical
+         full-brightness ENGINE lines as one the engine is still waiting on.
+         `fate` travels on `base` so the styling reads the same answer this
+         rationale does. */
+      const fate = setupFate(setup.setup_id);
       base = {entry: +setup.entry, tp: +setup.tp, sl: +setup.sl,
-              dir: setup.direction, kind: 'engine'};
+              dir: setup.direction, kind: 'engine', fate: fate.state};
       // The risk authority has the last word. If it refused this setup, the
       // ticket says so above the rationale — otherwise the chart would invite
       // the operator to size a trade the engine already rejected.
-      const d = (facts.riskF || []).filter(
-        r => r.event === 'DECISION' && r.setup_id === setup.setup_id).pop();
+      const d = fate.d;
       /* The verdict names what happened to the TRADE, not which component ruled
          on it. "RISK AUTHORITY: REJECTED / concurrent limit(2)" told the reader
          the name of an internal module and then a raw enum; neither is a thing
@@ -1608,11 +2063,44 @@ window.SSChart = (() => {
         `<div class="tk-verdict ${d.decision === 'APPROVED' ? 'ok'
            : d.decision === 'REDUCED' ? 'warn' : 'bad'}">` +
         `<b>${HEAD[d.decision] || d.decision}</b>` +
-        (d.decision === 'REJECTED'
+        // `fate.refused`, not a second comparison of the same field. The
+        // bracket's brightness and this paragraph have to be answering one
+        // question, or the chip can read NOT TRADED over lines that do not.
+        (fate.refused
           ? `<br>${(d.reasons || []).map(plain).join('; ')}` +
             '<br>This setup would not be traded. Anything below is analysis only.'
           : `<br>sizes ${usd(+d.risk_usd)} of risk`) + '</div>';
-      $('tkWhy').innerHTML = verdict +
+      /* AND WHETHER THE MOMENT HAS PASSED. Printed alongside the verdict
+         rather than instead of it: a refused setup whose entry has also
+         already filled is two separate things worth knowing, and the line
+         label can only carry one of them.
+         `entered`, not "the engine bought" — execsim simulates EVERY
+         validated setup for research and only the ones risk sized are
+         exposure (server.py: "shadow orders for strategy research"), so a
+         word implying a position on the book would be false on exactly the
+         setups this note fires most often for. */
+      const when = t => t != null && window.SSClock
+        ? ' ' + SSClock.ago(SSClock.ageOf(t)) : '';
+      /* A REFUSED SETUP WAS NEVER ENTERED. execsim places a practice order for
+         EVERY validated setup, before the risk authority has ruled — server.py
+         calls them "shadow orders for strategy research" and excludes them
+         from positions on exactly that basis. Reading the fill without asking
+         whether risk allowed it printed "The engine entered this setup 174
+         hours ago" directly under this app's own "This setup would not be
+         traded", on nine charts, while the line labels beside them read
+         NOT TRADED. The refusal is the earlier and stronger fact; it wins. */
+      const gone = fate.refused ? ''
+        : fate.order === 'FILLED'
+        ? '<div class="tk-verdict warn"><b>ENTRY ALREADY HAPPENED</b>' +
+          `<br>The engine entered this setup${when(fate.orderTs)}. These are ` +
+          'the levels it went in on — not a trade it is waiting to take.</div>'
+        : fate.order === 'MISSED'
+        ? '<div class="tk-verdict warn"><b>ENTRY WINDOW CLOSED</b>' +
+          `<br>The order expired${when(fate.orderTs)} without price coming ` +
+          'back, so the engine never took this setup. These levels are ' +
+          'history, not a plan.</div>'
+        : '';
+      $('tkWhy').innerHTML = verdict + gone +
         `<em>Why the engine took it</em>${setup.why || '—'}`;
     }else if(draftPlan){
       /* No engine setup, but price IS at a level the engine recognises. Draft
@@ -2048,6 +2536,11 @@ window.SSChart = (() => {
       // switching a layer OFF is instant.
       if(overlays[key] && LAZY[key]) await ensureLayer(key);
       if(candles.length) drawOverlays();
+      /* Levels come from the book and the ticket, not the fact cache, so
+         drawOverlays cannot redraw them. Both are called because the two
+         switches are coupled: hiding YOUR lines frees the ticket bracket to
+         draw prices its de-duplication had been suppressing. */
+      if(LEVEL_LAYERS[key] && series){ drawPosition(); applyLevels(); }
     });
     $('tkDir').addEventListener('click', e => {
       const b = e.target.closest('button'); if(!b) return;

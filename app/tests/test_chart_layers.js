@@ -137,6 +137,137 @@ ok('signal markers stay thin enough to read', () => {
     `text is the clutter, and only DIV needs a word`);
 });
 
+/* ─────────── LEVELS ARE A LAYER TOO ───────────
+
+   The operator's report, 7 Aug 2026: a filled manual trade opened from Manage
+   put six price lines on the chart — three gold ones that were theirs and
+   three the ticket drew — and the nine-switch Layers control governed none of
+   them. These pin the switches, and the one coupling that makes hiding a level
+   safe: nothing may be left stranded by a line that is not drawn. */
+
+ok('levels have two switches, with notes, and both start ON', () => {
+  for (const key of ['yours', 'engine']) {
+    assert(new RegExp(`data-o="${key}"`).test(HTML), `no toggle for ${key}`);
+    const row = HTML.match(new RegExp(`<button data-o="${key}"[^>]*>`))[0];
+    assert(/data-label="/.test(row), `${key} has no data-label`);
+    assert(/data-note="/.test(row),
+      `${key} has no note — a toggle whose meaning is not stated is the same ` +
+      `complaint the Liquidity and Cycle notes were written for`);
+    assert(/class="on"/.test(row),
+      `${key} starts switched off. The ask was a way to quiet a loud chart, ` +
+      `not for the operator's own trade or the engine's opinion to disappear ` +
+      `until someone finds a menu`);
+  }
+  const m = CHART.match(/const overlays = \{[\s\S]*?\};/)[0];
+  for (const key of ['yours', 'engine'])
+    assert(new RegExp(`${key}: true`).test(m),
+      `${key} is not a live overlay key with a default of ON`);
+});
+
+ok('the two level switches stay separate', () => {
+  /* Collapsing them into one "levels" toggle would remove the only view that
+     answers the question being asked: the engine's idea, on its own, with the
+     operator's own lines out of the way. Both keys must be read independently
+     by the drawing code, not through a shared flag. */
+  assert(/overlays\.yours/.test(CHART) && /overlays\.engine/.test(CHART),
+    'one of the two level keys is never read — the switches have been merged');
+  assert(/const LEVEL_LAYERS = \{yours: 1, engine: 1\}/.test(CHART),
+    'the level-layer set is gone; the Layers handler needs it to know which ' +
+    'switches redraw from the book rather than from the fact cache');
+});
+
+ok('a level switched off takes its drag handle with it', () => {
+  /* A grab tag is a draggable pill that names a price. Left over a line that
+     is not drawn it is worse than the clutter it was hidden to fix. */
+  assert(/lvlHidden \? null : levels\[k\]/.test(CHART),
+    'placeHandles still positions a grab tag from the raw level');
+  assert(/if\(lvlHidden \|\| levels\[key\] == null\) return;/.test(CHART),
+    'startDrag will still drag a level that is not on the chart');
+});
+
+ok('hiding YOUR levels does not empty the engine bracket too', () => {
+  /* The ticket bracket de-duplicates against the operator's own order lines —
+     that is what stopped "PLAN · TP" and "YOURS · TP" stacking on one pixel.
+     With those lines switched off, deduping against them would suppress the
+     shared prices on BOTH sides and leave the chart with no entry, stop or
+     target at all: one switch silently emptying the other. */
+  const at = CHART.indexOf('function positionPrices()');
+  assert(at > 0, 'positionPrices is gone');
+  assert(/if\(!overlays\.yours\) return \[\];/.test(CHART.slice(at, at + 900)),
+    'positionPrices still claims prices for lines it is no longer drawing');
+});
+
+ok('toggling a level layer actually redraws the levels', () => {
+  const h = CHART.slice(CHART.indexOf("$('cLayersPop').addEventListener"));
+  assert(/LEVEL_LAYERS\[key\][\s\S]{0,80}drawPosition\(\); applyLevels\(\);/.test(h),
+    'the Layers handler only calls drawOverlays, which draws from the fact ' +
+    'cache — levels come from the book and the ticket, so the switch would ' +
+    'report itself off and change nothing on screen');
+});
+
+ok('an empty level switch claims nothing bigger than "none to draw"', () => {
+  /* Caught in the browser. Edit the ticket and the bracket passes from the
+     Engine plan switch to Your levels, so Engine plan has no lines while the
+     engine's validated setup plainly still exists — and the second opinion is
+     still quoting it two rows below. The switch may say IT has nothing to
+     draw; it may not say the engine has nothing. */
+  assert(/LEVEL_LAYERS\[k\] \? ' — none to draw' : ' — no data'/.test(CHART),
+    'the empty level switch reads as "the engine has no plan here", which is ' +
+    'a claim about the world rather than about the switch, and it can be false ' +
+    'while the second opinion is quoting the setup it denies');
+  assert(/nothing of \$\{k === 'yours' \? 'yours' : 'the engine\\'s'\} to draw/.test(CHART),
+    'the empty tooltip makes the same over-claim the label used to');
+});
+
+ok('a level switch that is OFF does not claim its lines are on the chart', () => {
+  /* THE DEFECT THIS PINS. The tooltip read "N price lines on this chart" — a
+     claim about pixels — while the count behind it was what the switch is
+     RESPONSIBLE for, taken before every draw guard. Switch Your levels off and
+     it went on reporting lines with none drawn; worse, positionPrices() empties
+     when that switch is off, releasing the ticket bracket's de-duplication, so
+     the total went UP. The nine older layers say "recorded", which stays true
+     whether they are drawn or not. These two now make the same shape of claim
+     about the same shape of fact. */
+  assert(!/price line\$\{c === 1 \? '' : 's'\} on this chart/.test(CHART),
+    'the level tooltip is a claim about what is on the chart, made from a ' +
+    'count that ignores every draw guard — it is false whenever the switch ' +
+    'is off');
+  assert(/price line\$\{c === 1 \? '' : 's'\} while this switch is on/.test(CHART),
+    'the level tooltip no longer says the count is conditional on the switch');
+});
+
+ok('a level tally never moves when its own switch moves', () => {
+  /* `bracketN` de-duplicates against the operator's order lines, and
+     positionPrices() returns [] when Your levels is off — so counting through
+     it made the tally jump by three the moment the layer was hidden. The
+     drawing keeps that short-circuit (it is what stops the chart emptying);
+     the counting must not have it. */
+  const fn = CHART.slice(CHART.indexOf('function applyLevels('),
+                         CHART.indexOf('function recompute('));
+  assert(/const held = bookPrices\(\);/.test(fn),
+    'applyLevels counts the bracket through positionPrices(), whose answer ' +
+    'depends on the very switch the count is describing');
+  assert(/if\(!held\.some\(v => same\(v, p\)\)\) bracketN\+\+;/.test(fn),
+    'the de-duplicated tally is no longer taken against the book itself');
+  assert(/bracketRaw\+\+;/.test(fn),
+    'the pre-de-duplication tally is gone — Engine plan needs it to say what ' +
+    'it would draw once the gold lines are hidden');
+
+  const counts = CHART.slice(CHART.indexOf('function levelCounts('),
+                             CHART.indexOf('function paintLevelCounts('));
+  assert(/yours:\s*posN \+ \(bracketMine \? bracketN : 0\)/.test(counts),
+    'the Your-levels tally reads something other than its own de-duplicated ' +
+    'bracket, so it can change when the switch is flicked');
+  assert(/engine: bracketMine \? 0 : \(overlays\.yours \? bracketN : bracketRaw\)/
+    .test(counts),
+    'the Engine-plan tally ignores whether the gold lines are up — with them ' +
+    'hidden it really does draw the shared prices, and the count must say so');
+  assert(!/overlays\.engine/.test(counts),
+    'a level tally reads its own switch, so it will fall to zero when the ' +
+    'layer is hidden and mark the control .empty — which reads as "there is ' +
+    'nothing here" about a layer you have just turned off');
+});
+
 ok('a layer fetching its data says so', () => {
   assert(/classList\.add\('loading'\)/.test(CHART), 'no loading state');
   assert(/\.layers-pop button\.loading/.test(CSS), 'the loading state has no styling');

@@ -1127,6 +1127,18 @@ body:not(.dev) #consolePanel{display:none}
 .commit-bar .tk-open{border:0;border-left:2px solid rgba(251,191,36,.55);
   padding-left:9px}
 .commit-bar .tk-armed:empty,.commit-bar .tk-lock:empty{display:none;min-height:0}
+/* The second opinion. A CYAN rule, not the amber of .tk-open above it and not
+   the red of .tk-warn: amber on this bar means money at stake and red means
+   Arm is off, and this line is neither — it is the engine's opinion about a
+   trade that is already yours, and it stops nothing. Cyan is the same colour
+   the engine's own entry line is drawn in on the chart, so the words and the
+   lines they describe are visibly the same subject. */
+.commit-bar .tk-second{flex:1 1 100%;text-align:left;margin:0;
+  border:0;border-left:2px solid rgba(34,211,238,.55);padding:0 0 0 9px;
+  color:var(--fg-2);font-size:var(--fs-1);line-height:1.6}
+.commit-bar .tk-second b{color:var(--fg-3);letter-spacing:.14em;font-weight:400;
+  text-transform:uppercase}
+.tk-second[hidden]{display:none}
 
 .tk-out{display:flex;flex-direction:column;gap:1px;padding:0}
 /* Six rows of working, so a pixel of row padding costs twelve on the pane —
