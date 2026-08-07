@@ -26,12 +26,22 @@ The error is worst on Kraken, which is where funding matters most: 24
 settlements a day against Phemex's 3, and 58.9% of modelled cost on that half
 of the book.
 
-## The second error, which is not a magnitude
+## The sign, which is a DELIBERATE choice and not a bug
 
 REAL FUNDING HAS A SIGN. When the rate is negative the short side is PAID to
-hold. On PF_SOLUSD that was 53% of settlements — more than half. `execsim`
-subtracts funding as a cost in both directions, so on those settlements it is
-not merely too large, it is pointed the wrong way.
+hold, and on PF_SOLUSD that was 53% of settlements — more than half. `execsim`
+subtracts funding as a cost in both directions regardless.
+
+That is not an oversight, and this module must not be read as calling it one.
+`tests/test_funding.py::test_it_is_charged_to_both_directions_deliberately`
+pins it with the reasoning attached: "charging both is the pessimistic reading,
+which is this engine's standing rule for costs." The rule is sound — a cost
+model that flatters is the kind that survives review.
+
+What this measures is the PRICE of that pessimism, which nobody had. Being
+deliberately conservative is a choice; being conservative by an unknown
+multiple is not a choice, it is a blind spot, and the two are easy to confuse
+while the number is missing.
 
 ## What this module does NOT do
 
