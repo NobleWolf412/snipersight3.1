@@ -1607,7 +1607,14 @@ def multi_timeframe_context(
                 for row in store.get_facts(con, symbol, tf, "setup", ver, as_of):
                     p = json.loads(row["payload"])
                     setups_state[p["setup_id"]] = p["state"]
-            out.append({"tf": tf, "regime": reg,
+            # `regime` is the engine's enum and stays the machine-readable
+            # field; `label` is the SAME reading in the wording every other
+            # surface prints. Market Weather and Overwatch already read that
+            # noun off the server (_regime_label below), and the chart was the
+            # one surface de-underscoring the enum itself — so one recording
+            # appeared as "Bull weakening" on Command and "WEAKENING BULL" on
+            # the chart, forty pixels from the Arm button.
+            out.append({"tf": tf, "regime": reg, "label": _regime_label(reg),
                         "active_zones": sum(s != "BROKEN" for s in zone_state.values()),
                         "forming": sum(s == "FORMING" for s in setups_state.values()),
                         "ready": sum(s == "VALIDATED" for s in setups_state.values())})
@@ -1639,6 +1646,19 @@ REGIME_LABELS = {"BULL_TREND": "Bull trend", "BEAR_TREND": "Bear trend",
 
 def _cap(s: str) -> str:
     return s[:1].upper() + s[1:]
+
+
+def _regime_label(reg: str | None) -> str:
+    """The display noun for one recorded regime — the single authority for how
+    a regime is WORDED on screen.
+
+    It was inline in _tf_weather() and therefore reachable only through
+    /api/weather, so /api/context (the chart's reader) had no way to get the
+    noun and de-underscored the enum instead. Two registers for one field.
+    Anything that prints a regime calls this."""
+    if reg is None:
+        return "Not mapped"
+    return REGIME_LABELS.get(reg) or _cap(reg.replace("_", " ").lower())
 
 
 def _side_word(direction: str | None) -> str:
@@ -1732,8 +1752,7 @@ def _tf_weather(tf: str, reg: str | None, enabled: set | None) -> dict:
                           - {p["strategy"] for p in plays})
     live = [p for p in plays if not p["requires_sweep"]]
     gated = [p for p in plays if p["requires_sweep"]]
-    label = (REGIME_LABELS.get(reg) or
-             ("Not mapped" if reg is None else _cap(reg.replace("_", " ").lower())))
+    label = _regime_label(reg)
     dirs = {p["direction"] for p in live}
 
     because = detail = None

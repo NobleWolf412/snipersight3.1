@@ -17,6 +17,13 @@
   const root = document.getElementById('weatherRoot');
   if (!root) return;                 // no mount point, no module. Never inject one.
 
+  /* Second mount, on CHART. The Bitcoin backdrop is the only thing this module
+     still draws, and it does not draw it here — see the comment above
+     cycleLede(). Optional by design: if the chart surface is absent the module
+     still renders its lede and its fallback, it just has nowhere to put the
+     backdrop. Never injected, same rule as above. */
+  const cycleMount = document.getElementById('cycleRoot');
+
   /* The module carries its own stylesheet so a mistake in here cannot take out
      the sheet the other four surfaces depend on. */
   if (!document.getElementById('wxCss')) {
@@ -70,7 +77,8 @@
      cache — same response, same instant, same words.
 
      What this module still owns: the sentence that says whether a quiet rail
-     is correct, and the Bitcoin backdrop. */
+     is correct, and the Bitcoin backdrop — the first on Command beside the
+     rail, the second on Chart beside the decision. */
   let backdropOpen = false;
 
   /* ---------- Bitcoin cycle backdrop ----------
@@ -79,7 +87,17 @@
      glossary.js already defined `dcl`, `wcl` and `translation` — someone
      intended this and stopped.
 
-     It goes HERE, once, at the top of Market Weather, and it is BITCOIN ONLY.
+     It renders ONCE, on CHART, and it is BITCOIN ONLY.
+
+     It was on Command, which is the wrong surface for it. Command asks "what
+     should I do right now?", and this block cannot answer that by its own
+     admission — the footer below says nothing here opens, sizes or blocks a
+     trade. Chart asks "is this setup worth taking?", and long-horizon context
+     is precisely what that question takes. So it moved to a mount of its own at
+     the foot of the chart surface rather than being demoted a second time on a
+     surface it never belonged on. Still collapsed, still last, still
+     remembering its state.
+
      The alt basket correlates ~0.65 to BTC at lag 0, which licenses a shared
      BACKDROP and specifically forbids the alternative: a per-symbol cycle stage
      fanned across 33 deck rows would be 33 copies of one reading, each looking
@@ -90,8 +108,10 @@
      detected swings; `heuristic` means a community rule of thumb fitted to two
      or three samples. The engine labels these in its own docstring and the
      labels travel with the numbers rather than sitting in a footnote. */
+  /* The last /api/cycles payload. `lastWeather` used to sit beside it so the
+     backdrop could be redrawn out of render() when cycles arrived second; the
+     backdrop no longer renders out of render() at all, so it went. */
   let cyc = null;
-  let lastWeather = null;   // so the backdrop can re-render without a refetch
 
   const D = ts => new Date(ts * 1000).toLocaleDateString(undefined,
     {day: 'numeric', month: 'short', year: 'numeric'});
@@ -162,12 +182,12 @@
     }
 
     if (!rows.length) return '';
-    /* DEMOTED, deliberately. This block is explicitly observational — its own
-       footer says nothing here opens, sizes or blocks a trade — and it was
-       sitting ABOVE the weather table on the surface that answers "what should
-       I do right now?". Context outranking instruction is exactly backwards, so
-       it now sits last and starts closed. Nothing is removed: the reader who
-       wants the longer rhythm opens it, and it remembers that choice. */
+    /* CLOSED, deliberately. This block is explicitly observational — its own
+       footer says nothing here opens, sizes or blocks a trade — and it once
+       rendered open, at full height, above the thing it was context FOR.
+       Context outranking instruction is exactly backwards. It now starts closed
+       wherever it mounts. Nothing is removed: the reader who wants the longer
+       rhythm opens it, and it remembers that choice. */
     return `<details class="wx-lede cy-details"${isOpen ? ' open' : ''}>
       <summary class="cy-head">
         <span class="t-section">Bitcoin backdrop</span>
@@ -193,7 +213,6 @@
      the weather grid, on the surface a trader opens first. They are provenance
      for whoever is debugging a reading, not for whoever is reading it. */
   function render(d) {
-    lastWeather = d;
     // The sentence that does the actual explaining. Regime eligibility is
     // necessary, not sufficient — price still has to arrive at a zone — and
     // saying so is the difference between "quiet" and "broken".
@@ -222,15 +241,6 @@
           warming ? `${warming} still <span class="term" data-t="warming">warming</span>` : ''}.</span>`
       : '';
 
-    /* Command asks "what should I do right now?" and this panel's ANSWER is one
-       sentence — whether anything is in a tradeable condition, and that a quiet
-       deck is the correct result rather than a fault. The 8-row grid is the
-       evidence for that sentence, not the sentence itself, and on the surface
-       whose job is instruction it was outweighing the Setup Deck.
-
-       So the sentence stays on screen and the grid goes behind a disclosure.
-       The reader who wants to know WHY still gets everything, one click away
-       and with its state remembered. */
     /* THE ANSWER GOES WHERE THE QUESTION IS ASKED.
        This sentence is the only thing on the surface that says whether an
        empty rail is correct or broken, and it used to sit two thousand
@@ -244,24 +254,34 @@
       lede.className = 'mb-lede' + (d.n_live === 0 ? ' quiet' : '');
     }
 
-    /* The per-symbol grid is GONE from here. It listed the same markets the
-       At-a-level sweep listed, one screen apart, so the operator had to hold
-       a regime in their head while scrolling to find whether price was
-       anywhere near a level in it. Both halves are one card per market in
-       Overwatch now (shell.js renderNear), which reads this very payload
-       from the shared cache — so the words on those cards are still these
-       words, from this response. What is left here is the backdrop: the
-       longest-horizon context, demoted and closed, exactly as before. */
-    root.innerHTML = `<div class="panel wx">
-      <div class="panel-head">
-        <span class="t-section">Market Weather</span>
-        <span class="wx-sub">the longer rhythm behind today's reading</span>
-        <span class="chip">${d.n_live} of ${d.n_total} tradeable</span>
-      </div>
-      ${cycleLede(cyc, backdropOpen)}
-    </div>`;
+    /* NOTHING renders here on a healthy scan, and that is the finished state,
+       not an oversight.
 
-    const cyd = root.querySelector('.cy-details');
+       The per-symbol grid became one card per market in Overwatch (shell.js
+       renderNear), reading this very payload from the shared cache. The lede
+       moved to #missionLede above. The backdrop moved to Chart. What was left
+       was a panel head, a subtitle describing a block that is no longer under
+       it, and a "N of M tradeable" chip restating the lede's own first clause
+       — chrome around an absence, and a second copy of a count that already
+       has an authority forty pixels higher up.
+
+       The mount stays because fail() below needs it: a failed request has to
+       announce itself on the surface whose quiet it would otherwise be
+       mistaken for. Empty on success, loud on failure. */
+    root.innerHTML = '';
+  }
+
+  /* The backdrop repaints on the CHART mount and on its own data.
+
+     It used to be drawn inside render(), which meant a failed /api/weather
+     took the backdrop down with it — the subscription below already declares
+     that these two must not be able to fail together, and drawing one from
+     the other's handler quietly broke that. Now /api/cycles calls this and
+     /api/weather never touches it. Two mounts, two payloads, two failures. */
+  function renderBackdrop() {
+    if (!cycleMount) return;
+    cycleMount.innerHTML = cycleLede(cyc, backdropOpen);
+    const cyd = cycleMount.querySelector('.cy-details');
     if (cyd) cyd.addEventListener('toggle', () => { backdropOpen = cyd.open; });
   }
 
@@ -302,13 +322,13 @@
     render(d);
   }, 30000);
   /* The cycle backdrop is SUPPLEMENTARY, and subscribed SEPARATELY for that
-     reason: its failure must never take the strip down with it. The strip
-     answers "why is my screen empty?", which is the load-bearing question here.
-     A missing backdrop drops one block; a backdrop that could throw into the
-     weather's own path would drop the answer. On error `c` is undefined, the
-     lede renders nothing, and the strip stands on its own. */
+     reason: its failure must never take the strip down with it, and — now that
+     the two live on different surfaces — the strip's failure must not take the
+     backdrop down either. The strip answers "why is my screen empty?", which is
+     the load-bearing question. On error `c` is undefined, cycleLede() returns
+     the empty string, and each side stands on its own. */
   window.SSData.subscribe('/api/cycles', (c) => {
     cyc = c || null;
-    if (lastWeather) render(lastWeather);
+    renderBackdrop();
   }, 30000);
 })();

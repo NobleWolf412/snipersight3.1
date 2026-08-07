@@ -345,10 +345,13 @@
            ticket draws a bracket on every chart including ones the engine has
            never considered, and a card that could not say so read as an
            engine plan. -->
-      <!-- Market Weather: the quiet-market explainer and the Bitcoin backdrop.
-           Its per-symbol grid moved into Market Watch above; its lead sentence
-           moved to #missionLede, beside the rail it explains. weather.js owns
-           what is left. -->
+      <!-- Market Weather's mount. Everything it used to DRAW here has found a
+           better address: the per-symbol grid is one card per market in Market
+           Watch above, the lead sentence is #missionLede beside the rail it
+           explains, and the Bitcoin backdrop is on Chart beside the decision it
+           bears on. What is left is the loud fallback — if /api/weather fails,
+           it says so HERE, on the surface whose emptiness it would otherwise be
+           mistaken for. An empty div on a healthy scan is the correct render. -->
       <div id="weatherRoot"></div>
 
       <!-- The Backend Console used to sit here. It is developer telemetry —
@@ -663,6 +666,20 @@
              height. Kept in the DOM (chart.js writes it) but out of flow. -->
         <div class="t-mono tk-lock" id="tkLock" hidden></div>
       </div>
+
+      <!-- ─── BITCOIN BACKDROP ───
+           Long-horizon context for ONE decision, mounted where that decision is
+           made. It rendered on Command until now, and could not answer
+           Command's question: its own footer says nothing in it opens, sizes or
+           blocks a trade, so "what should I do right now?" was never a question
+           it could take. Chart asks "is this setup worth taking?", and a
+           four-year rhythm is exactly the kind of context that bears on that
+           one — read before arming, not instead of the rail.
+
+           Collapsed, last, below the commit bar, and it remembers being opened.
+           weather.js owns what goes in here; the mount point is the whole
+           contract, same as #weatherRoot. -->
+      <div id="cycleRoot"></div>
     </section>
 
     <!-- ─── RESULTS ─── -->
@@ -1066,13 +1083,6 @@
         </div></div>
         </div>
       </div>
-
-      <!-- The edge panel lived here until 2026-07-31 (audit B6). "Is the
-           recorded book distinguishable from zero?" is literally the Results
-           question, and keeping the answer one surface away meant someone
-           reading a 12-trade forward sample as a result had the correction
-           somewhere they were not looking. It now sits under the equity curve
-           on Results. -->
 
       <!-- static/diagnostics.html was a complete second application — its own
            header, stylesheet, and a searchable decision-provenance view this

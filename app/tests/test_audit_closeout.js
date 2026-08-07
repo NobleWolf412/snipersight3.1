@@ -72,6 +72,32 @@ ok('the per-timeframe context still reaches the chart', () => {
     'the context no longer lands anywhere the operator can find it');
 });
 
+ok('the chart says the regime in the words the rest of the app uses', () => {
+  /* Same field, two registers, two surfaces. The chip and its hover both used
+     to de-underscore the engine enum here, so a reading Overwatch called
+     "Bull weakening" appeared on the chart as WEAKENING BULL — forty pixels
+     from the Arm button, on the surface where the trade is committed.
+
+     server.py owns the noun (`_regime_label`) and /api/context now carries it.
+     This file prints what it is sent. The pin follows that property, not the
+     wording: the raw enum may survive ONLY as the stated fallback for an
+     unreachable endpoint. */
+  const i = CHART.indexOf('async function loadContext');
+  const fn = CHART.slice(i, i + 3000);
+  assert(/\.label/.test(fn),
+    'the chart no longer reads the display noun /api/context sends — it is '
+    + 'spelling the engine enum for itself again');
+  assert(/textContent/.test(fn),
+    'loadContext no longer writes the chip, so something else is deciding '
+    + 'how the regime is worded');
+  assert(/unavailable/.test(fn),
+    'the fallback to the raw enum is silent. A degraded path that does not '
+    + 'say it is degraded is indistinguishable from the defect this fixed');
+  const elsewhere = CHART.slice(0, i) + CHART.slice(i + 3000);
+  assert(!/cRegime'\)\.textContent = reg/.test(elsewhere),
+    'a second writer is spelling the regime chip from the raw facts again');
+});
+
 ok('the superseded routes are gone, with the reasoning recorded', () => {
   assert(!/@app\.get\("\/api\/swings"\)/.test(SERVER),
          '/api/swings is back — it is a strict subset of /api/facts?kind=swing');

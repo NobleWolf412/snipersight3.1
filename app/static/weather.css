@@ -16,8 +16,9 @@
    row/head/symbol/toggle cells, the per-timeframe cells and their agreement
    rule, the r-* regime tones and b-* bias colours, the meaning column, the
    click-to-open reason, and the strip footer. What is left below is what this
-   module still renders: the panel head, the orientation line, the Bitcoin
-   backdrop, and the loud fallback. */
+   module still renders: the Bitcoin backdrop (on CHART now — see the mount
+   rules further down), and the loud fallback on Command, which is the only
+   thing that still draws a panel head here. */
 .wx .panel-head{ gap: var(--md); }
 
 /* orientation line: what the strip is for, said once */
@@ -58,6 +59,34 @@
    from the rows above it. */
 .wx-lede{ padding: var(--md) var(--lg); border-top: 1px solid var(--border-soft);
   background: rgba(0,0,0,.18) }
+
+/* ---- the chart mount ----
+   #s-chart.on is a fixed-height flex column: its height is calculated from the
+   viewport minus the two chrome bars, and NOTHING on that surface scrolls —
+   the commit bar's own comment is explicit that the operator must never scroll
+   to reach the number that decides the trade. A disclosure at the foot of it
+   therefore has two obligations.
+
+   flex:none — it must not be handed 1fr and grow; the chart pane owns the
+   slack. Collapsed it costs one line, which is the whole reason it starts
+   closed.
+
+   max-height + overflow on the OPEN state — opened, its content is taller than
+   whatever height is left, and an unbounded flex item would either push the
+   chart to nothing or spill past the calculated height with no scrollbar to
+   reach it. Bounded, the backdrop scrolls INSIDE itself and the surface still
+   does not. Below 900 the surface is height:auto and the cap comes off. */
+#cycleRoot{ flex: none }
+/* Closed, it is a one-line strip and its padding is charged to the chart, so
+   it runs tighter than the same block did inside a panel. Opened, it is being
+   read and takes the panel's normal breathing room back. */
+#cycleRoot .wx-lede{ border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--bg-2); padding: 7px var(--md) }
+#cycleRoot .cy-details[open]{ padding: var(--md) var(--lg);
+  max-height: 34vh; overflow: auto }
+@media (max-width:900px){
+  #cycleRoot .cy-details[open]{ max-height: none; overflow: visible }
+}
 .cy-head{ display: flex; align-items: baseline; gap: var(--md); flex-wrap: wrap;
   cursor: pointer; list-style: none }
 .cy-head::-webkit-details-marker{ display: none }

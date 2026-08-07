@@ -705,23 +705,50 @@ window.SSChart = (() => {
 
      The coloured rung strip that once carried it is gone — see loadContext
      below for what replaced it. Its tone map went with it. */
-  async function loadContext(){
+  /* It also owns the chip's WORDING. /api/context reads the same regime row
+     this load already fetched and adds `label`, the display noun the server
+     owns — so Overwatch, Market Weather and this chip all say "Bull weakening"
+     and none of them says WEAKENING_BULL. The chip used to de-underscore the
+     enum here, which made one recording read in two registers on two surfaces.
+     The reading is unchanged; only who spells it has. */
+  async function loadContext(mySeq){
     /* The per-timeframe ladder read as a second timeframe picker — same
        shape, adjacent position, different meaning, hover-only explanation.
        The same facts now live on the regime chip's hover: context, priced
        at exactly the attention it deserves. */
     const el = $('cRegime');
     if(!el || !sym) return;
+    /* This load's own reading, straight off the facts already on screen. It is
+       the same row /api/context returns, and it is what the chip falls back to
+       if the endpoint that carries the wording cannot be reached. */
+    const own = facts.regime.length
+      ? facts.regime[facts.regime.length - 1].regime : null;
     try{
       const c = await api('/api/context?symbol=' + encodeURIComponent(sym));
-      el.title = 'regime by timeframe' + String.fromCharCode(10) + (c.timeframes || []).map(t => {
-        const label = t.regime ? t.regime.replace('_', ' ').toLowerCase() : 'no reading';
+      /* Same guard the candles get. This writes the chip now, not just a
+         hover, and a switch mid-fetch would otherwise land the old market's
+         regime under the new market's name. */
+      if(mySeq !== loadSeq) return;
+      const rows = c.timeframes || [];
+      const here = rows.find(t => t.tf === tf);
+      el.textContent = own ? ((here && here.label) || own.replace('_', ' '))
+                           : 'no regime';
+      el.title = 'regime by timeframe' + String.fromCharCode(10) + rows.map(t => {
+        const label = t.label || 'no reading';
         const extra = (t.active_zones ? ` · ${t.active_zones} zones` : '')
                     + (t.ready ? ` · ${t.ready} ready` : '');
         return `${t.tf === tf ? '▸' : ' '} ${t.tf}: ${label}${extra}`;
       }).join(String.fromCharCode(10));
     }catch(e){
-      el.title = '';                   // absent context beats stale context
+      if(mySeq !== loadSeq) return;
+      /* Degraded, and audible. The reading survives — it came from the facts —
+         but the wording authority did not answer, so the chip prints the
+         engine's own enum and the hover says why the ladder is missing.
+         Blanking both would read as "this market has no context", which is a
+         different and false claim. Absent context still beats stale context. */
+      el.textContent = own ? own.replace('_', ' ') : 'no regime';
+      el.title = 'regime by timeframe unavailable — this is the raw engine '
+               + 'reading, not the wording the other surfaces use';
     }
   }
 
@@ -981,9 +1008,10 @@ window.SSChart = (() => {
     $('cPrice').className = 'chip ' + (chg >= 0 ? 'chip-green' : 'chip-red');
     $('cPrice').title = 'last CLOSED candle — what the engines see. The live suffix is for the eye only; the dot is data freshness.';
     startTicker();
-    loadContext();
-    const reg = regime.length ? regime[regime.length - 1].regime : null;
-    $('cRegime').textContent = reg ? reg.replace('_', ' ') : 'no regime';
+    /* Writes both the chip and its hover — one writer for one element. The
+       regime it prints is `facts.regime`, which this load just fetched; what
+       the call goes out for is the display noun the rest of the app uses. */
+    loadContext(seq);
 
     drawOverlays();
     pickSetup(!!(opts && opts.keepTicket));
@@ -2081,8 +2109,12 @@ window.SSChart = (() => {
         b.disabled = false; b.removeAttribute('aria-busy');
       }
     });
-    /* Arm -> the OPERATOR's paper book (`manual-v0.1-draft`), never the
-       strategy record. The reply is reported literally: if the server refuses
+    /* Arm -> the OPERATOR's paper book, never the strategy record. The version
+       the write carries is engine/manual.py's MANUAL_VERSION and is deliberately
+       not named here: this comment said `manual-v0.1-draft` for two bumps after
+       the store had moved on, because a version copied into prose has no test
+       and no reader to keep it honest.
+       The reply is reported literally: if the server refuses
        the plan it names the rule that refused it, because "failed" tells an
        operator nothing about what to change. */
     $('tkArm').addEventListener('click', async () => {

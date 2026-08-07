@@ -286,6 +286,56 @@ class TestWhatTheStripSays(TempStore):
         self.assertEqual(out["timeframes"], list(server.WEATHER_TFS))
 
 
+class TestOneWordingForOneRegime(TempStore):
+    """A regime has ONE display noun, and the server writes it.
+
+    /api/weather feeds Market Weather and the Overwatch cards; /api/context
+    feeds the chart. Both read the same recorded fact. Until `_regime_label`
+    existed only the first of them carried the wording, so chart.js
+    de-underscored the enum itself — and one recording read as "Bull weakening"
+    on Command and "WEAKENING BULL" on the chart, forty pixels from Arm.
+
+    These tests do not pin the words. They pin that both endpoints emit the
+    SAME ones, for every regime regime.py can produce.
+    """
+
+    def context(self, symbol="BTCUSDT"):
+        self.con.commit()
+        with patch("server.store.connect",
+                   side_effect=lambda: self._connect(self.db)):
+            return server.multi_timeframe_context(symbol=symbol)
+
+    def test_both_endpoints_word_the_same_reading_the_same_way(self):
+        for reg in ALL_REGIMES:
+            with self.subTest(reg=reg):
+                self.universe([{"symbol": "BTCUSDT", "rank": 1,
+                                "state": "ADMITTED"}])
+                for tf in ("1W", "1D", "4H", "1H", "15m"):
+                    self.regime_fact("BTCUSDT", tf, reg)
+                rows = self.context()["timeframes"]
+                for row in rows:
+                    self.assertEqual(row["regime"], reg)
+                    self.assertNotEqual(
+                        row["label"], reg,
+                        f"{reg} reaches the chart as the raw engine enum")
+                    self.assertEqual(row["label"], server._regime_label(reg))
+                # the identical string, not merely an equivalent one
+                for wtf in self.weather()["symbols"][0]["timeframes"]:
+                    self.assertEqual(
+                        wtf["label"],
+                        next(r["label"] for r in rows if r["tf"] == wtf["tf"]))
+                self.reset()
+
+    def test_an_unclassified_timeframe_is_labelled_rather_than_blank(self):
+        """No regime fact is missing DATA, and the label has to say so — a
+        blank would read as a calm market, which is a different claim."""
+        self.universe([{"symbol": "BTCUSDT", "rank": 1, "state": "ADMITTED"}])
+        row = self.context()["timeframes"][0]
+        self.assertIsNone(row["regime"])
+        self.assertTrue(row["label"].strip())
+        self.assertEqual(row["label"], server._regime_label(None))
+
+
 class TestTheUiDoesNotRestateTheRules(unittest.TestCase):
     """weather.js is allowed to decide how a verdict LOOKS, never what it is."""
 
@@ -317,6 +367,31 @@ class TestTheUiDoesNotRestateTheRules(unittest.TestCase):
                  "static" / "shell.html").read_text(encoding="utf-8")
         self.assertIn('id="weatherRoot"', shell)
         self.assertIn("weather.js", shell)
+
+    def test_the_cycle_backdrop_mounts_beside_the_decision_it_bears_on(self):
+        """The backdrop is long-horizon CONTEXT, and its own footer says nothing
+        in it opens, sizes or blocks a trade — so it cannot answer Command's
+        question, "what should I do right now?". It answers Chart's, "is this
+        setup worth taking?". If #cycleRoot returns to Command it is outranking
+        the mission rail again, which is the arrangement this moved away from.
+        """
+        self.assertIn("cycleRoot", self.js)
+        shell = (Path(__file__).resolve().parents[1] /
+                 "static" / "shell.html").read_text(encoding="utf-8")
+        mount = shell.index('id="cycleRoot"')
+        chart = shell.index('id="s-chart"')
+        after_chart = shell.index('id="s-results"')
+        self.assertTrue(chart < mount < after_chart,
+                        "#cycleRoot is not inside the chart surface")
+
+    def test_the_weather_mount_still_carries_the_failure(self):
+        """Everything weather.js used to DRAW on Command has moved. The mount
+        stays for one reason: a failed /api/weather has to announce itself on
+        the surface whose quiet it would otherwise be mistaken for. Empty on
+        success is correct; empty on failure is the defect."""
+        self.assertIn("root.innerHTML = ''", self.js)
+        fail = self.js[self.js.index("function fail("):]
+        self.assertIn("root.innerHTML", fail[:400])
 
 
 if __name__ == "__main__":
