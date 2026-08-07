@@ -114,4 +114,51 @@ ok('no term is defined twice', () => {
     `definition silently replaces the earlier one`);
 });
 
+/* ── LEDGER ──
+   The surface that puts the two eras next to each other on purpose. The engine
+   book is scoped to the active baseline; the operator's own book is all of
+   history by design (manual.py's `book()` reads every manual version). Those
+   are different windows over different capital, so the nouns are not decoration
+   here — they are the whole reason the columns may not be added. */
+ok('the Ledger names an era on every book', () => {
+  assert(/id="s-ledger"/.test(HTML), 'no Ledger surface');
+  const i = SHELL.indexOf('function renderLedger(');
+  assert(i > 0, 'renderLedger was renamed — this test no longer reads it');
+  const block = SHELL.slice(i, SHELL.indexOf('function renderLedgerMine', i));
+  assert(block.length > 400, 'the renderLedger slice is empty — re-anchor it');
+  /* Every bookCard() call must carry one, including the "could not read" and
+     "not read yet" branches — a book whose window is unstated is a number the
+     reader has to guess the scope of, and those branches are exactly when a
+     reader is most likely to misread one. */
+  const calls = (block.match(/bookCard\(\{/g) || []).length;
+  const eras = [...block.matchAll(/era:\s*'([^']+)'/g)].map(m => m[1]);
+  assert(calls >= 3, `only ${calls} book cards are built; the surface has three`);
+  assert.strictEqual(eras.length, calls,
+    `${calls} book cards are built and ${eras.length} carry an era label. An ` +
+    `unlabelled book is a number whose window the reader has to guess.`);
+  for (const e of eras) {
+    assert(ERAS.includes(e),
+      `the Ledger says "${e}" — the app has exactly two era nouns, ` +
+      `"${ERAS.join('" and "')}", and a third invents a window`);
+  }
+  assert(eras.includes('recorded book') && eras.includes('forward window'),
+    'both eras must appear — the point of the surface is that they differ');
+});
+
+ok('no figure on the Ledger adds two books', () => {
+  /* The one rule the whole surface exists to enforce. `manual.arm` never
+     consults the risk authority, so hand-armed size was never drawn from the
+     engine's $10,000; a combined total would be an invented number wearing a
+     measured one's authority. */
+  const i = SHELL.indexOf('function renderLedger(');
+  const block = SHELL.slice(i, SHELL.indexOf('const LOADER_SURFACE', i));
+  assert(block.length > 400, 'the renderLedger slice is empty — re-anchor it');
+  assert(!/total_pnl_usd\s*[+]|[+]\s*(?:b\.)?total_pnl_usd/.test(block),
+    'the manual book total is being added to something');
+  assert(!/operator_closed_usd\s*[+]|[+]\s*(?:p\.)?operator_closed_usd/.test(block),
+    'the operator-exit total is being added to something');
+  assert(/never added|not added/i.test(block) || /never added/i.test(HTML),
+    'nothing on screen says the books are not summed');
+});
+
 console.log('\n' + passed + ' passed');

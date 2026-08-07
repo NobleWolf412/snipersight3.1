@@ -258,19 +258,20 @@
        Left unlabelled, the two contradict each other on the two surfaces whose
        stated jobs are "is this actually working" and "is the machine telling me
        the truth" — the worst possible place to look like you are lying. */
-    /* Rewritten for the move to Results (audit B6). This panel now sits
-       directly beneath tiles scoped to the forward window, so the band's one
-       job is to stop the page reading as self-contradictory: the counts differ
-       because the eras differ, and both say which one they are. */
+    /* The band was written when this panel sat under Results' tiles and said
+       so — "the tiles above", "the window above" — and it kept saying it after
+       the panel moved to Diagnostics, a surface with no tiles anywhere above
+       it. A reader who went looking found nothing. It now names the surface it
+       is contrasting itself with, which is true from wherever this mounts. */
     const eraBand = `<div class="era-band">
       These figures cover the whole
       <span class="term" data-t="recordedBook">recorded book</span> — every trade
       the simulator has closed, across every
       <span class="term" data-t="baseline">baseline</span> — not the
-      <span class="term" data-t="forwardWindow">forward window</span> the tiles
-      above are scoped to. That is why this panel can show hundreds of trades
-      while the window above shows few, or none. Telling a real edge from a
-      lucky run needs far more trades than one window usually holds.</div>`;
+      <span class="term" data-t="forwardWindow">forward window</span> Results is
+      scoped to. That is why this panel can show hundreds of trades while
+      Results shows few, or none. Telling a real edge from a lucky run needs far
+      more trades than one window usually holds.</div>`;
 
     panel(`
       ${eraBand}

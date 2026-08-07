@@ -398,12 +398,17 @@ class TestCockpitHierarchy(unittest.TestCase):
 
         The property this test defends is unchanged and is in fact better
         served than it was: the forward window is still named, by the chip on
-        the equity curve, and POSITIONS are now genuinely surfaced rather than
-        merely implied by the deck — `#positions` did not exist when this test
-        was written, and an open trade was reachable only through the chart of
-        the symbol it was on."""
+        the equity curve, and POSITIONS are surfaced by the Mission Briefs
+        rail — an open trade used to be reachable only through the chart of
+        the symbol it was on.
+
+        Re-pinned: `#positions` is gone. It was an 'Engaged - detail' panel
+        rendering the same active_positions and pending_orders the rail
+        already carried, on the same surface, in a different shape. `#deck`
+        IS the open-trade surface now, and it is already in this list, so the
+        property is still covered by the anchor above."""
         for anchor in ('id="baselineChip"', 'id="deck"',
-                       'id="positions"', 'id="rEquity"', 'id="rDD"'):
+                       'id="rEquity"', 'id="rDD"'):
             self.assertIn(anchor, self.html, anchor)
 
     def test_open_risk_is_shown_against_its_ceiling(self):

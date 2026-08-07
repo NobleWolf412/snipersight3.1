@@ -72,6 +72,32 @@ ok('the per-timeframe context still reaches the chart', () => {
     'the context no longer lands anywhere the operator can find it');
 });
 
+ok('the chart says the regime in the words the rest of the app uses', () => {
+  /* Same field, two registers, two surfaces. The chip and its hover both used
+     to de-underscore the engine enum here, so a reading Overwatch called
+     "Bull weakening" appeared on the chart as WEAKENING BULL — forty pixels
+     from the Arm button, on the surface where the trade is committed.
+
+     server.py owns the noun (`_regime_label`) and /api/context now carries it.
+     This file prints what it is sent. The pin follows that property, not the
+     wording: the raw enum may survive ONLY as the stated fallback for an
+     unreachable endpoint. */
+  const i = CHART.indexOf('async function loadContext');
+  const fn = CHART.slice(i, i + 3000);
+  assert(/\.label/.test(fn),
+    'the chart no longer reads the display noun /api/context sends — it is '
+    + 'spelling the engine enum for itself again');
+  assert(/textContent/.test(fn),
+    'loadContext no longer writes the chip, so something else is deciding '
+    + 'how the regime is worded');
+  assert(/unavailable/.test(fn),
+    'the fallback to the raw enum is silent. A degraded path that does not '
+    + 'say it is degraded is indistinguishable from the defect this fixed');
+  const elsewhere = CHART.slice(0, i) + CHART.slice(i + 3000);
+  assert(!/cRegime'\)\.textContent = reg/.test(elsewhere),
+    'a second writer is spelling the regime chip from the raw facts again');
+});
+
 ok('the superseded routes are gone, with the reasoning recorded', () => {
   assert(!/@app\.get\("\/api\/swings"\)/.test(SERVER),
          '/api/swings is back — it is a strict subset of /api/facts?kind=swing');
@@ -104,11 +130,25 @@ ok('the data tables are tables', () => {
          'cells carry no scope, so columns are shapes rather than answers');
   assert(/\.data-table\{/.test(CSS),
          'tables have no styling — the semantics changed and the pixels broke');
-  // the weather grid is exempt BY DESIGN: its rows are buttons that expand
+  /* The weather grid USED to be the exemption here — a symbol x timeframe
+     table whose rows were expanding buttons, so it announced as a disclosure
+     list rather than as a table.
+
+     That grid no longer exists. It listed the same markets the At-a-level
+     sweep listed, one screen apart, and both halves are now one card per
+     market in Market Watch. So the exemption is retired and replaced by the
+     property that has to hold in its place: weather renders no grid at all,
+     and the card that absorbed it keeps each regime label bound to the
+     timeframe it belongs to. A bare "Bear weakening" with the "4H" lost is
+     the accessibility failure this assertion exists to catch — it is the
+     same claim the old table made with a column header. */
   const W = S('weather.js');
-  assert(/role="button"/.test(W),
-         'weather rows lost their button role — they are an interactive '
-         + 'disclosure list, not a table, and must announce as one');
+  assert(!/wx-row|wx-data/.test(W),
+         'weather still renders its per-symbol grid — it moved into Market '
+         + 'Watch, and two copies of one reading is how they drift');
+  assert(/class="wl-reg/.test(JS) && /<b>\$\{esc\(t\.tf\)\}<\/b>/.test(JS),
+         'the watch card prints a regime label without its timeframe beside '
+         + 'it, so the reading cannot be attributed to a timeframe');
 });
 
 ok('the served shell is version-stamped by the server', () => {

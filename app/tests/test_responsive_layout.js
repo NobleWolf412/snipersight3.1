@@ -148,12 +148,19 @@ ok('the Diagnostics handover button is thumb-sized', () => {
 
 ok('the controls that WRITE are thumb-sized on a phone', () => {
   /* 24px is the WCAG floor for a pointer; Android asks 48dp, and the gap is
-     not pedantry — one of these three is CLOSE on a live position, sitting in
-     a dense list where the neighbouring target is what you actually hit. */
+     not pedantry — one of these is CLOSE on a live position, sitting in a
+     dense list where the neighbouring target is what you actually hit.
+
+     Re-pinned from `.pos-acts`, which was the action strip on the trade ROWS.
+     Both live books are card rails now, so every write control on a trade sits
+     in a card's `.mc-acts`: Close on a mission card, Cancel on a hand-picked
+     one. `.mc .btn` is the rule that has to carry the floor for them, and
+     pinning the dead selector would have left the real control unguarded. */
   const css = read('ss.css');
-  const narrow = rules(css).filter(r => coversPhone(r.media) && /\.pos-acts/.test(r.sel));
+  const narrow = rules(css).filter(r => coversPhone(r.media) && /\.mc \.btn/.test(r.sel));
   const sized = narrow.some(r => /min-height:\s*4[8-9]px|min-height:\s*[5-9]\dpx/.test(r.body));
-  assert(sized, '.pos-acts buttons are not raised to a 48px target below 900px');
+  assert(sized, 'card buttons (.mc .btn — Close, Cancel) are not raised to a ' +
+    '48px target below 900px');
 });
 
 ok('a wide table scrolls rather than being clipped away', () => {

@@ -15,6 +15,14 @@ from pathlib import Path
 
 LOG_PATH = Path(__file__).resolve().parent.parent / "data" / "engine.log"
 
+# The index exists for ONE reader: `/api/overview` asks for the last run of
+# each engine, and this table is append-only and enormous — 3,038,265 rows at
+# 2026-08-05, roughly 300 MB. Unindexed, "last run per engine" is a full table
+# scan: it measured **2,432 ms of the endpoint's 2,900 ms**, on the 30s poll
+# every cockpit surface waits behind, dragging that much of the store through
+# the page cache each time and slowing everything else reading the same file.
+# With the index the same answer is 22 seeks. Descending on run_at so the
+# newest row of an engine is the first entry reached rather than the last.
 RUNS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS engine_runs (
     id           INTEGER PRIMARY KEY,
@@ -33,6 +41,8 @@ CREATE TABLE IF NOT EXISTS engine_runs (
     ,input_fingerprint TEXT NOT NULL DEFAULT ''
     ,output_fingerprint TEXT NOT NULL DEFAULT ''
 );
+CREATE INDEX IF NOT EXISTS ix_engine_runs_engine_recent
+    ON engine_runs (engine, run_at DESC);
 """
 
 _logger = None

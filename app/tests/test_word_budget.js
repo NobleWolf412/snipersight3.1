@@ -93,8 +93,13 @@ ok('panel titles stay under four words', () => {
    ~20% headroom. JS-injected text is budgeted by the builder checks below,
    not here. Settings joined at its rebuilt weight (UI 4/7): 1,350 words of
    Rules became ~300 rendered. */
+/* THIS MAP FAILS OPEN TOO: an unbudgeted surface can carry any amount of
+   prose. Ledger joined at its measured weight (54 words) plus headroom — its
+   whole static text is a wallet band that must never carry a number and one
+   banner saying the three books are never added, both of which are the point
+   of the surface rather than explanation of it. */
 const CEILINGS = { command: 120, chart: 200, results: 130, diagnostics: 220,
-                   settings: 260 };
+                   settings: 260, ledger: 70 };
 
 for (const [id, cap] of Object.entries(CEILINGS)) {
   ok(`${id} stays under ${cap} static words`, () => {

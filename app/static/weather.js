@@ -17,6 +17,13 @@
   const root = document.getElementById('weatherRoot');
   if (!root) return;                 // no mount point, no module. Never inject one.
 
+  /* Second mount, on CHART. The Bitcoin backdrop is the only thing this module
+     still draws, and it does not draw it here — see the comment above
+     cycleLede(). Optional by design: if the chart surface is absent the module
+     still renders its lede and its fallback, it just has nowhere to put the
+     backdrop. Never injected, same rule as above. */
+  const cycleMount = document.getElementById('cycleRoot');
+
   /* The module carries its own stylesheet so a mistake in here cannot take out
      the sheet the other four surfaces depend on. */
   if (!document.getElementById('wxCss')) {
@@ -58,65 +65,21 @@
     return window.SSTeach ? window.SSTeach(text) : esc(text);
   }
 
-  /* ---------- presentation lookups ----------
-     Both map an engine constant to a class name. Neither decides anything. */
-  const TONE = {
-    BULL_TREND: 'r-bull', WEAKENING_BULL: 'r-bull-w',
-    BEAR_TREND: 'r-bear', WEAKENING_BEAR: 'r-bear-w',
-    TRANSITION: 'r-trans', RANGE: 'r-range',
-  };
-  function bias(tf) {
-    if (!tf.regime) return 'b-unknown';        // absent data, not a flat market
-    if (tf.bias === 'LONG') return 'b-long';
-    if (tf.bias === 'SHORT') return 'b-short';
-    return tf.requires_sweep ? 'b-gated' : 'b-flat';
-  }
-  /* BTCUSDT -> BTC, BTC-USD -> BTC. The full symbol stays in the title. */
-  const shortName = s => String(s).replace(/-USD$/, '').replace(/USDT$/, '');
+  /* The per-symbol grid that used to live here — the regime cells, their
+     bias colouring, the expand-a-row-for-the-reason behaviour — is gone, and
+     with it TONE, bias(), shortName(), rowHtml() and the expanded-row set.
 
-  const COLLAPSED = 8;                 // above the fold beats complete-but-buried
-  let showAll = false;
-  /* Both start CLOSED on Command, and survive the 30s re-render — a panel that
-     folded itself back up under the reader every half minute would be worse
-     than one that never folded at all. */
-  let tableOpen = false, backdropOpen = false;
-  const open = new Set();              // rows the operator expanded, kept across refreshes
+     It was not deleted, it MOVED. It listed exactly the markets the
+     At-a-level sweep listed, a screen apart, so "what condition is DOGE in
+     and is price anywhere near a level in it" took two panels and a
+     scroll. Both halves are one card per market in Overwatch now
+     (shell.js renderNear), which reads THIS payload out of the shared SSData
+     cache — same response, same instant, same words.
 
-  function rowHtml(s) {
-    const cells = s.timeframes.map((t, i) => {
-      const b = bias(t);
-      // A colour change between adjacent cells IS the disagreement, so the
-      // break in the rule is drawn from the same two classes — no second
-      // opinion about whether the timeframes agree.
-      const split = i > 0 && bias(s.timeframes[i - 1]) !== b ? ' split' : '';
-      return `<div class="wx-tf ${b}${split}">` +
-        `<span class="tfk">${esc(t.tf)}</span>` +
-        `<span class="reg ${TONE[t.regime] || 'r-none'}">${esc(t.label)}</span></div>`;
-    }).join('');
-    /* NOT role="button" on the row. The row holds glossary terms, and
-       glossary.js makes every one of them a focus stop — ARIA forbids focusable
-       descendants inside a button role, so a screen reader computed this row's
-       whole contents as the button's name ("DOGE 1D Bear weakening 4H Bear
-       weakening -> Pullback shorts are live ...") and the terms inside it
-       announced as buttons within a button.
-
-       Worse for a keyboard: the row's Enter/Space handler called r.click() on
-       the ROW, so pressing Enter while focused on a nested term both toggled
-       the row and fired the glossary.
-
-       Same shape as the fix on .pos-row. The row stays clickable for a pointer,
-       which is the affordance the handler below is written for; the symbol cell
-       becomes the real disclosure button and carries aria-expanded. A native
-       button gets Enter and Space for free, so the keydown handler goes. */
-    return `<div class="wx-row wx-data tier-${s.tier}${s.live ? ' live' : ''}` +
-      `${open.has(s.symbol) ? ' open' : ''}" data-sym="${esc(s.symbol)}">` +
-      `<button class="wx-sym wx-toggle" title="${esc(s.symbol)}"` +
-      ` aria-expanded="${open.has(s.symbol)}"><span>${esc(shortName(s.symbol))}</span></button>` +
-      cells +
-      `<div class="wx-mean"><span class="wx-arrow" aria-hidden="true">&rarr;</span>` +
-      `<span>${teach(s.meaning)}</span></div>` +
-      `<div class="wx-why">${teach(s.why)}</div></div>`;
-  }
+     What this module still owns: the sentence that says whether a quiet rail
+     is correct, and the Bitcoin backdrop — the first on Command beside the
+     rail, the second on Chart beside the decision. */
+  let backdropOpen = false;
 
   /* ---------- Bitcoin cycle backdrop ----------
      The nested-cycle model has been computed and served since S31 and rendered
@@ -124,7 +87,17 @@
      glossary.js already defined `dcl`, `wcl` and `translation` — someone
      intended this and stopped.
 
-     It goes HERE, once, at the top of Market Weather, and it is BITCOIN ONLY.
+     It renders ONCE, on CHART, and it is BITCOIN ONLY.
+
+     It was on Command, which is the wrong surface for it. Command asks "what
+     should I do right now?", and this block cannot answer that by its own
+     admission — the footer below says nothing here opens, sizes or blocks a
+     trade. Chart asks "is this setup worth taking?", and long-horizon context
+     is precisely what that question takes. So it moved to a mount of its own at
+     the foot of the chart surface rather than being demoted a second time on a
+     surface it never belonged on. Still collapsed, still last, still
+     remembering its state.
+
      The alt basket correlates ~0.65 to BTC at lag 0, which licenses a shared
      BACKDROP and specifically forbids the alternative: a per-symbol cycle stage
      fanned across 33 deck rows would be 33 copies of one reading, each looking
@@ -135,8 +108,10 @@
      detected swings; `heuristic` means a community rule of thumb fitted to two
      or three samples. The engine labels these in its own docstring and the
      labels travel with the numbers rather than sitting in a footnote. */
+  /* The last /api/cycles payload. `lastWeather` used to sit beside it so the
+     backdrop could be redrawn out of render() when cycles arrived second; the
+     backdrop no longer renders out of render() at all, so it went. */
   let cyc = null;
-  let lastWeather = null;   // so the backdrop can re-render without a refetch
 
   const D = ts => new Date(ts * 1000).toLocaleDateString(undefined,
     {day: 'numeric', month: 'short', year: 'numeric'});
@@ -207,12 +182,12 @@
     }
 
     if (!rows.length) return '';
-    /* DEMOTED, deliberately. This block is explicitly observational — its own
-       footer says nothing here opens, sizes or blocks a trade — and it was
-       sitting ABOVE the weather table on the surface that answers "what should
-       I do right now?". Context outranking instruction is exactly backwards, so
-       it now sits last and starts closed. Nothing is removed: the reader who
-       wants the longer rhythm opens it, and it remembers that choice. */
+    /* CLOSED, deliberately. This block is explicitly observational — its own
+       footer says nothing here opens, sizes or blocks a trade — and it once
+       rendered open, at full height, above the thing it was context FOR.
+       Context outranking instruction is exactly backwards. It now starts closed
+       wherever it mounts. Nothing is removed: the reader who wants the longer
+       rhythm opens it, and it remembers that choice. */
     return `<details class="wx-lede cy-details"${isOpen ? ' open' : ''}>
       <summary class="cy-head">
         <span class="t-section">Bitcoin backdrop</span>
@@ -238,12 +213,6 @@
      the weather grid, on the surface a trader opens first. They are provenance
      for whoever is debugging a reading, not for whoever is reading it. */
   function render(d) {
-    lastWeather = d;
-    const rows = showAll ? d.symbols : d.symbols.slice(0, COLLAPSED);
-    const hidden = d.symbols.length - rows.length;
-    // The GRID lists every row — tradeable, shadow and warming. Its own
-    // counts must say so, or "top 8 of 19" would sit above a 29-row table.
-    const rowTotal = d.n_rows != null ? d.n_rows : d.symbols.length;
     // The sentence that does the actual explaining. Regime eligibility is
     // necessary, not sufficient — price still has to arrive at a zone — and
     // saying so is the difference between "quiet" and "broken".
@@ -256,8 +225,8 @@
     const shadow = d.n_shadow || 0, warming = d.n_warming || 0;
     const shadowLive = d.n_shadow_live || 0;
     const footer = d.n_live === 0
-      ? 'No symbol is in a condition any playbook trades right now. An empty ' +
-        'Setup Deck is the correct answer to that, not a fault.'
+      ? 'No symbol is in a condition any playbook trades right now. Empty ' +
+        'Mission Briefs are the correct answer to that, not a fault.'
       : `${d.n_live} of ${d.n_total} tradeable symbols are in a condition a ` +
         `playbook trades. Even then a setup only appears once price returns to ` +
         `one of that symbol's zones and confirms there, so quiet days are normal.`;
@@ -272,49 +241,47 @@
           warming ? `${warming} still <span class="term" data-t="warming">warming</span>` : ''}.</span>`
       : '';
 
-    /* Command asks "what should I do right now?" and this panel's ANSWER is one
-       sentence — whether anything is in a tradeable condition, and that a quiet
-       deck is the correct result rather than a fault. The 8-row grid is the
-       evidence for that sentence, not the sentence itself, and on the surface
-       whose job is instruction it was outweighing the Setup Deck.
+    /* THE ANSWER GOES WHERE THE QUESTION IS ASKED.
+       This sentence is the only thing on the surface that says whether an
+       empty rail is correct or broken, and it used to sit two thousand
+       pixels below the empty rail it was explaining. It now renders into
+       #missionLede, directly under the Mission Briefs — the operator reads
+       "nothing is in a tradeable condition" in the same glance as the
+       nothing. Owned here still: one authority, new address. */
+    const lede = document.getElementById('missionLede');
+    if (lede) {
+      lede.innerHTML = `${teach(footer)}${aside}`;
+      lede.className = 'mb-lede' + (d.n_live === 0 ? ' quiet' : '');
+    }
 
-       So the sentence stays on screen and the grid goes behind a disclosure.
-       The reader who wants to know WHY still gets everything, one click away
-       and with its state remembered. */
-    root.innerHTML = `<div class="panel wx">
-      <div class="panel-head">
-        <span class="t-section">Market Weather</span>
-        <span class="wx-sub">what the market is doing &middot; and whether anything can be traded</span>
-        <span class="chip">${d.n_live} of ${d.n_total} tradeable</span>
-      </div>
-      <div class="wx-lead">${teach(footer)}${aside}</div>
-      <details class="wx-details"${tableOpen ? ' open' : ''}>
-        <summary class="wx-summary">Per-symbol breakdown${
-          showAll ? '' : ` &middot; top ${Math.min(COLLAPSED, rowTotal)} of ${rowTotal}`}</summary>
-        <div class="wx-body">
-          <div class="wx-row wx-head">
-            <span class="t-label">Symbol</span>
-            ${d.timeframes.map(tf => `<span class="t-label">${esc(tf)}</span>`).join('')}
-            <span class="t-label mean">what this means</span>
-          </div>
-          ${rows.map(rowHtml).join('')}
-        </div>
-        <div class="wx-foot">
-          <p><span style="color:var(--fg-4)">Click a row for the full reason.</span></p>
-          ${hidden > 0 || showAll
-            ? `<button class="btn" id="wxMore">${showAll ? 'Show fewer' : 'Show all ' + rowTotal}</button>`
-            : ''}
+    /* NOTHING renders here on a healthy scan, and that is the finished state,
+       not an oversight.
 
-        </div>
-      </details>
-      ${cycleLede(cyc, backdropOpen)}
-    </div>`;
+       The per-symbol grid became one card per market in Overwatch (shell.js
+       renderNear), reading this very payload from the shared cache. The lede
+       moved to #missionLede above. The backdrop moved to Chart. What was left
+       was a panel head, a subtitle describing a block that is no longer under
+       it, and a "N of M tradeable" chip restating the lede's own first clause
+       — chrome around an absence, and a second copy of a count that already
+       has an authority forty pixels higher up.
 
-    const more = document.getElementById('wxMore');
-    if (more) more.addEventListener('click', () => { showAll = !showAll; render(d); });
-    const det = root.querySelector('.wx-details');
-    if (det) det.addEventListener('toggle', () => { tableOpen = det.open; });
-    const cyd = root.querySelector('.cy-details');
+       The mount stays because fail() below needs it: a failed request has to
+       announce itself on the surface whose quiet it would otherwise be
+       mistaken for. Empty on success, loud on failure. */
+    root.innerHTML = '';
+  }
+
+  /* The backdrop repaints on the CHART mount and on its own data.
+
+     It used to be drawn inside render(), which meant a failed /api/weather
+     took the backdrop down with it — the subscription below already declares
+     that these two must not be able to fail together, and drawing one from
+     the other's handler quietly broke that. Now /api/cycles calls this and
+     /api/weather never touches it. Two mounts, two payloads, two failures. */
+  function renderBackdrop() {
+    if (!cycleMount) return;
+    cycleMount.innerHTML = cycleLede(cyc, backdropOpen);
+    const cyd = cycleMount.querySelector('.cy-details');
     if (cyd) cyd.addEventListener('toggle', () => { backdropOpen = cyd.open; });
   }
 
@@ -329,32 +296,18 @@
       <div class="wx-failbody">
         <b>Market Weather could not load.</b>
         <code>${esc(msg)}</code>
-        <div>No market condition is being reported. Do not read the empty Setup
-        Deck above as &ldquo;nothing to trade&rdquo; until this is fixed &mdash;
+        <div>No market condition is being reported. Do not read empty Mission
+        Briefs above as &ldquo;nothing to trade&rdquo; until this is fixed &mdash;
         this is a failed request, not a quiet market.</div>
       </div>
     </div>`;
   }
 
-  /* Rows expand on click anywhere, and by keyboard through .wx-toggle — the
-     symbol cell, which is a real <button> and therefore gets Enter and Space
-     from the platform. The hand-rolled keydown handler that used to live here
-     fired r.click() on the ROW, so Enter on a nested glossary term toggled the
-     row as well as opening the definition. */
-  root.addEventListener('click', e => {
-    const r = e.target.closest('.wx-data');
-    if (!r || e.target.closest('.term')) return;   // let the glossary have its own taps
-    const sym = r.dataset.sym;
-    const now = !open.has(sym);
-    if (now) open.add(sym); else open.delete(sym);
-    r.classList.toggle('open', now);
-    // the state lives on the control that announces it, not on the container
-    const t = r.querySelector('.wx-toggle');
-    if (t) t.setAttribute('aria-expanded', String(now));
-  });
+  /* The expand-a-row handler went with the rows it operated on. Nothing this
+     module renders is expandable any more except the backdrop, which is a
+     native <details> and needs no handler.
 
-
-  /* The cadence is SSData's now, not this module's. It was the only file
+     The cadence is SSData's now, not this module's. It was the only file
      checking document.hidden; that check is in the layer, so every consumer
      gets it rather than only the one that remembered. Subscribing also means
      this strip repaints from the same /api/weather response any other reader
@@ -369,13 +322,13 @@
     render(d);
   }, 30000);
   /* The cycle backdrop is SUPPLEMENTARY, and subscribed SEPARATELY for that
-     reason: its failure must never take the strip down with it. The strip
-     answers "why is my screen empty?", which is the load-bearing question here.
-     A missing backdrop drops one block; a backdrop that could throw into the
-     weather's own path would drop the answer. On error `c` is undefined, the
-     lede renders nothing, and the strip stands on its own. */
+     reason: its failure must never take the strip down with it, and — now that
+     the two live on different surfaces — the strip's failure must not take the
+     backdrop down either. The strip answers "why is my screen empty?", which is
+     the load-bearing question. On error `c` is undefined, cycleLede() returns
+     the empty string, and each side stands on its own. */
   window.SSData.subscribe('/api/cycles', (c) => {
     cyc = c || null;
-    if (lastWeather) render(lastWeather);
+    renderBackdrop();
   }, 30000);
 })();

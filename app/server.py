@@ -846,11 +846,20 @@ def portfolio():
         # engine's simulation is untouched and will still record its own
         # outcome for this setup; this only stops the cockpit showing exposure
         # the operator has declared finished.
+        #
+        # Matched on the VERSION-STRIPPED id, not the id itself. `setup_id`
+        # embeds SETUP_VERSION, so an exact-match key made every override
+        # expire the moment the engine version moved: the same zone was
+        # re-derived under the new tag, the suppression stopped firing, and a
+        # position the operator had closed came back as live exposure with
+        # nothing announcing it. See `manual.setup_zone_key` for the measured
+        # case and for what the wider key does and does not cover.
         from engine import manual as _manual
         overrides = _manual.overridden_setups(con)
+        override_zones = _manual.overridden_zone_keys(overrides)
         positions, pending_orders = [], []
         for sid, order in latest_order.items():
-            if sid in completed or sid in overrides:
+            if sid in completed or _manual.setup_zone_key(sid) in override_zones:
                 continue
             detail = setup_by_id.get(sid, {})
             sized = risk_by_id.get(sid, {})
@@ -939,6 +948,37 @@ def portfolio():
                 "operator_closed": sorted(overrides.values(),
                                           key=lambda d: d["closed_at"],
                                           reverse=True)[:20],
+                # The operator's own exits on the ENGINE's trades — the engine
+                # picked the setup, the operator picked the moment. This money
+                # is counted in no other total on this payload or in the manual
+                # book, so without this field it is on screen row by row and
+                # nowhere in a sum.
+                #
+                # Summed over EVERY override, not over the 20 rows above: the
+                # same rule `journal`/`journal_total` follows two fields down.
+                # A total that silently meant "the visible ones" would be
+                # wrong the day a 21st close is recorded, and wrong quietly.
+                # `usd_at_close` is already 2dp from manual.py, so the sum is
+                # exact and the quantize is shape, not rounding.
+                # NULL IS NOT ZERO, the same rule `total_pnl_usd` follows on
+                # the manual book. Summing with Decimal(0) always produced a
+                # float, so a book whose every close was unpriceable reported
+                # $0.00 — which reads as "broke even" rather than "could not
+                # be priced", and the UI's `== null` guard could never fire.
+                "operator_closed_usd": (
+                    float(sum((Decimal(str(o["usd_at_close"]))
+                               for o in overrides.values()
+                               if o.get("usd_at_close") is not None), Decimal(0))
+                          .quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+                    if any(o.get("usd_at_close") is not None
+                           for o in overrides.values()) else None),
+                # How many closes that sum leaves out. A close recorded against
+                # a position with no risk figure has an R and no dollars,
+                # permanently — the same degraded path `n_no_risk_usd` reports
+                # on the manual book, and audible for the same reason.
+                "operator_closed_no_usd": sum(
+                    1 for o in overrides.values()
+                    if o.get("usd_at_close") is None),
                 "pending_orders": pending_orders,
                 "open_risk_usd": round(sum(float(p["risk_usd"] or 0)
                                            for p in positions), 2),
@@ -1567,7 +1607,14 @@ def multi_timeframe_context(
                 for row in store.get_facts(con, symbol, tf, "setup", ver, as_of):
                     p = json.loads(row["payload"])
                     setups_state[p["setup_id"]] = p["state"]
-            out.append({"tf": tf, "regime": reg,
+            # `regime` is the engine's enum and stays the machine-readable
+            # field; `label` is the SAME reading in the wording every other
+            # surface prints. Market Weather and Overwatch already read that
+            # noun off the server (_regime_label below), and the chart was the
+            # one surface de-underscoring the enum itself — so one recording
+            # appeared as "Bull weakening" on Command and "WEAKENING BULL" on
+            # the chart, forty pixels from the Arm button.
+            out.append({"tf": tf, "regime": reg, "label": _regime_label(reg),
                         "active_zones": sum(s != "BROKEN" for s in zone_state.values()),
                         "forming": sum(s == "FORMING" for s in setups_state.values()),
                         "ready": sum(s == "VALIDATED" for s in setups_state.values())})
@@ -1599,6 +1646,19 @@ REGIME_LABELS = {"BULL_TREND": "Bull trend", "BEAR_TREND": "Bear trend",
 
 def _cap(s: str) -> str:
     return s[:1].upper() + s[1:]
+
+
+def _regime_label(reg: str | None) -> str:
+    """The display noun for one recorded regime — the single authority for how
+    a regime is WORDED on screen.
+
+    It was inline in _tf_weather() and therefore reachable only through
+    /api/weather, so /api/context (the chart's reader) had no way to get the
+    noun and de-underscored the enum instead. Two registers for one field.
+    Anything that prints a regime calls this."""
+    if reg is None:
+        return "Not mapped"
+    return REGIME_LABELS.get(reg) or _cap(reg.replace("_", " ").lower())
 
 
 def _side_word(direction: str | None) -> str:
@@ -1692,8 +1752,7 @@ def _tf_weather(tf: str, reg: str | None, enabled: set | None) -> dict:
                           - {p["strategy"] for p in plays})
     live = [p for p in plays if not p["requires_sweep"]]
     gated = [p for p in plays if p["requires_sweep"]]
-    label = (REGIME_LABELS.get(reg) or
-             ("Not mapped" if reg is None else _cap(reg.replace("_", " ").lower())))
+    label = _regime_label(reg)
     dirs = {p["direction"] for p in live}
 
     because = detail = None
@@ -2022,9 +2081,38 @@ def overview():
         for s in feed:
             s["risk"] = risk_by_setup.get(s["setup_id"])
 
-        engines = con.execute(
-            "SELECT engine, MAX(run_at), duration_ms FROM engine_runs "
-            "GROUP BY engine").fetchall()
+        # 22 rows, read out of 3,038,265. `GROUP BY engine` over an unindexed
+        # append-only table scanned all of it — **2,432 ms of this endpoint's
+        # 2,900 ms**, every 30 seconds, and ~300 MB of page cache with it.
+        #
+        # The rewrite is two index moves. `names` is the loose-index-scan
+        # idiom: MIN(engine), then repeatedly the next engine greater than the
+        # last, so the 22 distinct values cost 22 seeks instead of a scan of
+        # three million (SELECT DISTINCT still scans — measured 177 ms).
+        # Each name then seeks its own newest row.
+        #
+        # `ORDER BY run_at DESC, x.id` is NOT a new tie-break — it is the one
+        # the old query already had. SQLite's bare-column rule takes
+        # `duration_ms` from the first row reaching MAX(run_at) in scan order,
+        # and a scan reads in rowid order. Ties are the norm here, not the
+        # exception: 16 of the 22 engines finish their last run in the same
+        # second as their siblings and disagree on duration_ms, so leaving it
+        # implicit would have made the answer depend on which access path the
+        # planner chose. Stated, it is the same row every time — verified
+        # equal to the old query's output, row for row, on the live store.
+        engines = con.execute("""
+            WITH RECURSIVE names(engine) AS (
+                SELECT MIN(engine) FROM engine_runs
+                UNION ALL
+                SELECT (SELECT MIN(engine) FROM engine_runs
+                         WHERE engine > names.engine)
+                  FROM names WHERE names.engine IS NOT NULL)
+            SELECT r.engine, r.run_at, r.duration_ms
+              FROM names JOIN engine_runs r ON r.id = (
+                   SELECT x.id FROM engine_runs x WHERE x.engine = names.engine
+                    ORDER BY x.run_at DESC, x.id LIMIT 1)
+             WHERE names.engine IS NOT NULL
+             ORDER BY r.engine""").fetchall()
 
         import time as _t
         hb_path = STATIC.parent / "data" / "heartbeat.json"
@@ -2133,8 +2221,12 @@ def trade_config(symbol: str | None = None):
         # nothing in the system defined the condition it named — see
         # engine/livegate.py. The criteria are measurable and live at
         # /api/live-gate; the reason now points at them instead of gesturing.
+        # The four criteria MOVED to Results -> Progression; Settings keeps the
+        # lock and its consequence. This sentence is printed on the arming
+        # ticket — the surface where money is committed — so a pointer at the
+        # wrong panel is worse here than anywhere else in the app.
         "live_locked_reason": "Forward paper evidence has not yet earned live "
-                              "execution — see Settings for the four criteria "
+                              "execution — see Results for the four criteria "
                               "and where the record stands against them.",
     }
 
@@ -2229,11 +2321,15 @@ def manual_arm(payload: dict):
     # THE CALLER MAY NAME THE MOMENT, WITHIN REASON.
     #
     # `create_intent` builds its intent_id as `symbol|tf|MANUAL|created_at`, so
-    # a client that reuses one created_at across a retry produces an identical
-    # intent_id and an identical payload, which the content-hashed store
-    # collapses onto the row it already holds. That is what makes arming from a
-    # phone safe to retry: a request whose REPLY was lost can simply be sent
-    # again instead of the operator guessing whether it landed.
+    # a client that reuses one created_at across a retry rebuilds the identical
+    # intent_id, which `create_intent` recognises as THIS order arriving again
+    # and answers with the recorded one — `already_armed`, nothing written.
+    # That is what makes arming from a phone safe to retry: a request whose
+    # REPLY was lost can simply be sent again instead of the operator guessing
+    # whether it landed. (It used to be the content-hashed store that collapsed
+    # the second write, which was never reached: the same-side guard refused
+    # first, so the retry-safe design reported the operator's own resting order
+    # back to them as an error.)
     #
     # But created_at is written into an append-only fact and is the moment the
     # record will forever claim the plan was authored. A phone with a wrong
@@ -2274,21 +2370,51 @@ def manual_arm(payload: dict):
         except manual.IntentRejected as exc:
             # A refused plan is a 400 carrying the REASON. The operator needs to
             # know which rule stopped them, not that "something went wrong".
+            # Logged as well as returned: a refusal is a path the operator took
+            # and could not act on, and one that leaves no trace cannot be
+            # matched afterwards against what the book actually holds.
+            from engine.runlog import get_logger
+            get_logger().info(f"MANUAL ARM REFUSED {symbol} {tf} "
+                              f"{str(payload.get('direction') or '').upper()} "
+                              f"— nothing written — {exc}")
             raise HTTPException(400, str(exc))
         except (ValueError, ArithmeticError) as exc:
             raise HTTPException(400, str(exc))
+        from engine.runlog import get_logger
         # Resolve immediately, so the response reflects bars that have already
         # closed. Usually a no-op — the order was just placed and no eligible
         # bar exists yet — which is the correct causal answer, not a failure.
-        manual.run(con, symbol, tf, importer.TF_SECONDS[tf])
-        from engine.runlog import get_logger
+        #
+        # AFTER the intent is committed, so a resolver failure is not an arming
+        # failure and must not be reported as one. Raising here would answer a
+        # request that succeeded with a 500, and the ticket would say the trade
+        # was refused while the order rested on the book — the same message/
+        # state disagreement the duplicate guard used to produce, arriving by
+        # the other door. Said out loud instead: the order stands, its first
+        # resolution pass did not.
+        resolve_failed = None
+        try:
+            manual.run(con, symbol, tf, importer.TF_SECONDS[tf])
+        except Exception as exc:                      # noqa: BLE001 - see above
+            resolve_failed = f"{type(exc).__name__}: {exc}"
+            get_logger().error(
+                f"MANUAL ARM {symbol} {tf} recorded, but the first resolve pass "
+                f"failed: {resolve_failed}")
         rungs = intent.get("partials") or []
         get_logger().info(
-            f"MANUAL ARM {symbol} {tf} {intent['direction']} "
+            ("MANUAL ARM ALREADY ARMED (no new order) " if intent.get("already_armed")
+             else "MANUAL ARM ")
+            + f"{symbol} {tf} {intent['direction']} "
             f"entry={intent['entry']} tp={intent['tp']} sl={intent['sl']}"
             + ("".join(f" scale={r['fraction']}@{r['price']}" for r in rungs))
             + " (paper)")
-        return {"ok": True, "intent": intent, "book": manual.book(con)}
+        return {"ok": True,
+                # The request landed either way; this says whether it CREATED
+                # anything. The ticket words its receipt off this, so a retry
+                # cannot be announced as a second trade.
+                "already_armed": bool(intent.get("already_armed")),
+                "resolve_failed": resolve_failed,
+                "intent": intent, "book": manual.book(con)}
     finally:
         con.close()
 

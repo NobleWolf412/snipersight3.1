@@ -39,7 +39,15 @@ console.log('your trades');
 
 ok('Command has a panel for the operator\'s own orders', () => {
   assert(/id="minePanel"/.test(HTML), 'no panel for your own book');
-  assert(/<div id="mine">/.test(HTML), 'nowhere to render the rows');
+  /* Re-pinned when this panel became a card rail. The old selector named the
+     bare `<div id="mine">` the rows were written into; the PROPERTY is that
+     there is somewhere to render the operator's book, and it is now the rail
+     track itself. Pinned to the id AND to the rail class, because a track that
+     stops being a .wheel-rail silently loses the wheel and renders every card
+     stacked on top of the first. */
+  assert(/id="mine"/.test(HTML), 'nowhere to render your book');
+  assert(/class="mb-track wheel-rail" id="mine"/.test(HTML),
+    'the panel must be a rail, like every other live-trade surface on Command');
   assert(/renderMine\(\)/.test(SHELL), 'nothing renders it');
   assert(/renderMine\(\)\.then\(\(\) => renderMineAside\(\)\)/.test(SHELL),
     'the panel must refresh on the same cycle as the rest of Command');
@@ -72,13 +80,37 @@ ok('your book is never merged into the engine\'s', () => {
     'a hand-picked trade must never join the engine position list');
   assert(/hand-picked · not engine record/.test(HTML),
     'the panel must say whose plan these are');
-  assert(HTML.indexOf('id="minePanel"') < HTML.indexOf('id="posPanel"'),
-    'your orders belong above the engine positions, not mixed into them');
+  /* Re-pinned: #posPanel is gone — the engine's open trades are the Mission
+     Briefs rail (#deck) now, so the comparison re-points at that. The
+     ordering property is UNCHANGED in direction: your hand-picked orders sit
+     above the engine's book, because the panel that can mislead you about
+     whose plan a trade was should be met first. The separation itself is
+     carried by the two assertions above, which are untouched. */
+  assert(HTML.indexOf('id="minePanel"') < HTML.indexOf('id="deck"'),
+    'your orders belong above the engine book, not mixed into it');
+  assert(!/id="posPanel"/.test(HTML),
+    'the duplicate Engaged-detail panel is back');
 });
 
-ok('the row is visually attributed, not just captioned', () => {
-  assert(/\.pos-row\.mine\{border-left:2px solid var\(--accent\)\}/.test(CSS),
+ok('the card is visually attributed, not just captioned', () => {
+  /* Re-pinned when the rows became a rail. The property is UNCHANGED and is the
+     load-bearing one on this whole panel: a hand-picked trade must never read
+     as engine edge, so it must be told apart from a mission card WITHOUT
+     reading the chip. The accent left edge came across from `.pos-row.mine`
+     literally — same token, same meaning — and the card additionally refuses
+     the mission card's brushed-platinum plate, which is what "the engine's
+     book" means on this surface. Both halves are pinned: the spine, and the
+     fact that `.mc.mine` declares its own ground rather than inheriting
+     `.mc.mission`'s. */
+  assert(/\.mc\.mine\{[\s\S]{0,240}?border-left:3px solid var\(--accent\)/.test(CSS),
     'two books rendered identically is how a number ends up read against the wrong one');
+  assert(/\.mc\.mine\{[\s\S]{0,400}?background:/.test(CSS),
+    'the hand-picked card must not wear the mission plate — material is what ' +
+    'survives the rail when a chip is too small and too blurred to read');
+  assert(/hand-picked · not engine record/.test(HTML) &&
+         /class="chip chip-mine"/.test(SHELL),
+    'the attribution must be on the card too, not only on the panel head — ' +
+    'one card read alone, or read out, still has to say whose plan it is');
 });
 
 ok('a resting row is marked unfilled, with the stake on hover', () => {
@@ -95,6 +127,41 @@ ok('a resting row is marked unfilled, with the stake on hover', () => {
 ok('waiting and filled are drawn differently', () => {
   assert(/t\.state === 'PENDING'/.test(SHELL), 'one rendering for both states');
   assert(/waits <b>/.test(SHELL), 'a resting order must read as waiting, tersely');
+  /* ARMED and OPEN are different things and the card says so before a number
+     is read. The stamp is the first thing on it. */
+  assert(/'st-mine-rest', 'YOURS · ARMED'/.test(SHELL) &&
+         /'st-mine', 'YOURS · FILLED'/.test(SHELL),
+    'the card must stamp its own state — "committed" and "at stake" are not the same claim');
+});
+
+ok('the rail carries the chrome it earns', () => {
+  /* makeRail's navState is a no-op without opts.status, so a rail without one
+     announces nothing as it turns — the sighted reader's cue withheld from
+     everyone else. Three of the app's rails were bare once; this one is not. */
+  assert(/makeRail\(track, \{prev: 'minePrev', next: 'mineNext',\s*status: 'mineStatus'\}\)/
+    .test(SHELL), 'the hand-picked rail lost its nav buttons or its live region');
+  for (const id of ['minePrev', 'mineNext', 'mineStatus'])
+    assert(new RegExp('id="' + id + '"').test(HTML), 'no element for ' + id);
+  assert(/id="mineStatus" aria-live="polite"/.test(HTML),
+    'the position announcement must be a live region or nobody hears it');
+});
+
+ok('a fill resolved on a fallback grid says so on the card', () => {
+  /* Degraded paths are audible. `resolution_degraded` carries the engine's own
+     plain-English reason when a fill had to be settled on coarser bars than
+     the finest stored; a fill that is four hours late for a reason nobody can
+     read is the same bug in a quieter costume. It is printed, not hovered. */
+  const fn = SHELL.slice(SHELL.indexOf('function mineCardInner'),
+                         SHELL.indexOf('/* Cancel is a real mutation'));
+  assert(/t\.resolution_degraded/.test(fn), 'the card never looks at the flag');
+  assert(/esc\(t\.resolution_degraded\)/.test(fn),
+    'the engine\'s own reason must reach the surface, not be re-worded here');
+  assert(/esc\(t\.resolution_tf/.test(fn),
+    'which bars it was resolved on is half the disclosure');
+  assert(/mc-degraded/.test(fn) && /\.mc-degraded\{/.test(CSS),
+    'a disclosure with no rule of its own renders as body text and is skipped');
+  assert(!/title="[^"]*resolution_degraded/.test(fn),
+    'a degradation reachable only by hover is not audible on a phone');
 });
 
 ok('an order about to expire says so louder', () => {
@@ -332,13 +399,51 @@ ok('the stop still takes the whole bar', () => {
     'the loss — plausible, flattering, and unprovable from OHLC');
 });
 
-ok('the version moved, and the old one is still read', () => {
-  assert(/MANUAL_VERSION = "manual-v0\.2-draft"/.test(ENGINE),
-    'a scale-out changes what r_multiple MEANS — a v0.1 reader is wrong about the trade');
-  assert(/MANUAL_VERSIONS = \("manual-v0\.1-draft", MANUAL_VERSION\)/.test(ENGINE),
-    'without a wider read set the bump strands every order still open under v0.1');
+/* Re-pinned when the override key moved off the engine version (manual-v0.3).
+ * The old assertions named v0.2 and the exact two-element tuple, so the next
+ * bump would have failed them for being a bump — which is not what they are
+ * for. The PROPERTY is: the write tag is one version, the read set is every
+ * version this book has ever written, and it only ever grows. Stated that way
+ * a bump passes and a bump that STRANDS the old book fails, which is the
+ * direction that matters. */
+ok('the version moved, and every old one is still read', () => {
+  const cur = ENGINE.match(/MANUAL_VERSION = "(manual-v[\d.]+-draft)"/);
+  assert(cur, 'the write tag must be one named manual version');
+  const set = ENGINE.match(/MANUAL_VERSIONS = \(([^)]*)\)/);
+  assert(set, 'the read set must be a literal tuple, greppable from here');
+  /* Every tag this book has SHIPPED. Append on a bump; never remove. Dropping
+   * one strands every order still open under it: never settled, never expired,
+   * absent from every surface. */
+  for (const shipped of ['manual-v0.1-draft', 'manual-v0.2-draft',
+                         'manual-v0.3-draft']) {
+    assert(set[1].includes('"' + shipped + '"'),
+      `the read set dropped ${shipped} — orders under it are stranded armed forever`);
+  }
+  assert(!set[1].includes('"' + cur[1] + '"') && /MANUAL_VERSION\s*\)?\s*$/.test(set[1].trim()),
+    'the current tag belongs in the tuple as MANUAL_VERSION, last, not restated as a literal');
   assert(/algo_version IN \(\{marks\}\)/.test(ENGINE),
     'the read path must filter on the tuple, not on one version');
+});
+
+/* ─────────── an override outlives the engine version it was written under ───────────
+ * The class of bug, not the one instance. Found live 2026-08-06: `setup_id`
+ * embeds SETUP_VERSION, the portfolio suppressed on an exact id match, so the
+ * bump from setup-v0.15 to v0.17 re-minted the id and a position the operator
+ * had CLOSED for +$136.22 came back as $194.60 of live exposure. It was the
+ * only position, so open_risk_usd was entirely a closed trade. */
+ok('an operator override is keyed on the zone, not on the engine version', () => {
+  assert(/def setup_zone_key\(/.test(ENGINE),
+    'the version-stripping rule needs one named home, or it gets re-implemented');
+  assert(/def overridden_zone_keys\(/.test(ENGINE),
+    'the suppression set must come from the same map operator_closed is built from');
+  assert(!/if sid in completed or sid in overrides/.test(SERVER),
+    'an exact setup_id match expires every override the next time setups bumps');
+  assert(/setup_zone_key\(sid\) in override_zones/.test(SERVER),
+    'the portfolio must suppress on the version-stripped id');
+  /* operator_closed keeps the FULL id, one row per fact. Collapsing it on the
+   * stripped key would hide a second close of the same zone — real money. */
+  assert(/out\[p\["setup_id"\]\] = /.test(ENGINE),
+    'overridden_setups must stay keyed on the full id so no closed trade is lost');
 });
 
 /* ───────────────── the label that was written twice ───────────────── */

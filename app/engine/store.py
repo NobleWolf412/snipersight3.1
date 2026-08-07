@@ -394,9 +394,24 @@ def get_candles(con, symbol: str, tf: str, start_ts: int = 0,
         return cache[(symbol, tf)]
     q = ("SELECT * FROM candles WHERE symbol=? AND tf=? AND open_ts>=? AND open_ts<? "
          "ORDER BY open_ts")
-    rows = con.execute(q, (symbol, tf, start_ts, end_ts)).fetchall()
-    if limit is not None:
-        rows = rows[-limit:]
+    args = (symbol, tf, start_ts, end_ts)
+    if limit is not None and limit > 0:
+        # The last N bars, taken by the primary key rather than by slicing a
+        # list the WHOLE series was read into first. `/api/overview` asks 86
+        # symbols for their last two daily closes and was reading 96,030 rows
+        # to return 172 of them — 230 ms of the endpoint, and the same shape
+        # on /api/candles, which asks for 1,500 bars of a 25,000-bar series.
+        # Same rows, same ascending order: the descending read is reversed
+        # back, and (symbol, tf, open_ts) is unique so there are no ties for
+        # the LIMIT to resolve differently.
+        rows = con.execute(q + " DESC LIMIT ?", args + (limit,)).fetchall()
+        rows.reverse()
+    else:
+        rows = con.execute(q, args).fetchall()
+        # A non-positive limit keeps its old meaning exactly: `rows[-0:]` is
+        # the whole list, not an empty one, and no caller passes it.
+        if limit is not None:
+            rows = rows[-limit:]
     if cache is not None:
         # Stored as plain dicts — the terminal form every consumer builds
         # anyway — so `dict(r)` in each engine's comprehension keeps handing

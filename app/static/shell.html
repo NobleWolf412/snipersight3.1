@@ -11,10 +11,21 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="/static/ss.css?v=20">
 </head>
-<body data-mode="idle">
+<!-- `unknown` until /api/portfolio answers. Shipping "idle" here painted
+     the shell green on every launch — the accent that means "nothing of
+     yours is in the market" — and flipped it to amber a second later.
+     See setAccentMode() in shell.js. -->
+<body data-mode="unknown">
 
 <!-- Tab order reached the glossary terms inside the header before any
-     action. First stop is now the content. -->
+     action. First stop is now the content.
+
+     The href is a no-JS fallback only. Left to itself it navigates to Command
+     from wherever you were and lands focus on <body>, because a <section> with
+     no tabindex cannot receive it — so the one control that exists purely for
+     keyboard and screen-reader users teleported the reader and then dropped
+     them. shell.js binds a handler that focuses the surface you are ALREADY on;
+     every .surface now carries tabindex="-1" so it can be that target. -->
 <a class="skip-link" href="#s-command">Skip to content</a>
 
 <div class="shell">
@@ -44,7 +55,7 @@
     <!-- the account, readable from every surface — you should never have to
          navigate away to find out what the risk % is a percentage OF -->
     <span class="chip" id="equityChip" title="account equity (paper)">
-      <span id="equityTxt">—</span><span id="equityRet" style="opacity:.7"></span></span>
+      <span id="equityTxt">—</span><span id="equityRet"></span></span>
     <span class="chip" id="healthChip" title="pipeline audit"><span class="orb" id="healthOrb"></span><span id="healthTxt">—</span></span>
     <span class="chip" id="scanChip"><span class="orb" id="scanOrb"></span><span id="scanTxt">SCANNER —</span></span>
     <span class="t-mono" id="clock" style="color:var(--fg-4)">—</span>
@@ -54,11 +65,12 @@
     <button class="btn btn-red" id="btnHalt" title="stop sizing new entries">HALT</button>
   </header>
 
-  <!-- ══ left rail: five surfaces, each with one job ══ -->
+  <!-- ══ left rail: six surfaces, each with one job ══ -->
   <nav class="nav">
     <a href="#command" class="on"   data-s="command">Command<span class="nav-count" id="nCommand"></span></a>
     <a href="#chart"                data-s="chart">Chart</a>
     <a href="#results"              data-s="results">Results</a>
+    <a href="#ledger"               data-s="ledger">Ledger</a>
     <div class="nav-sep"></div>
     <a href="#settings"             data-s="settings">Settings</a>
     <a href="#diagnostics"          data-s="diagnostics">Diagnostics<span class="nav-count" id="nDiag"></span></a>
@@ -72,7 +84,7 @@
   <main class="stage">
 
     <!-- ─── COMMAND ─── -->
-    <section class="surface on" id="s-command">
+    <section class="surface on" id="s-command" tabindex="-1">
       <div class="surface-head">
         <h1 class="t-page">Command</h1>
         <p>What should I do right now?</p>
@@ -104,14 +116,14 @@
            onboarding text on a trading app is the Learn tab all over again. -->
       <div class="panel firstrun" id="firstRun" hidden>
         <div class="panel-body">
-          <h2 class="t-section">Start here</h2>
+          <h2 class="t-section">Briefing</h2>
           <p class="t-body">This watches a list of crypto markets and tells you when one
             matches a rule it has been taught. Everything is
             <span class="term" data-t="paper">paper</span> — no real order can be
             sent, and the switch for that is locked until the record earns it.</p>
           <ol class="fr-steps">
-            <li><b>Setup Deck</b>, below — what the engine found, and why. Empty is
-              normal and it explains itself.</li>
+            <li><b>Mission Briefs</b>, below — what the engine found, and why.
+              Empty is normal and it explains itself.</li>
             <li><b>Chart</b> — open any market, drag the levels, see the risk in
               dollars before you commit.</li>
             <li><b>Settings → Going live</b> — the four things that have to be true
@@ -183,7 +195,7 @@
            room is as operational as knowing there is none. -->
       <div class="panel" id="budgetPanel" style="margin-bottom:var(--lg)">
         <div class="panel-head">
-          <h2 class="t-section">Risk budget</h2>
+          <h2 class="t-section">Rules of engagement</h2>
           <span class="chip" id="budgetChip" style="margin-left:auto">—</span>
         </div>
         <div class="budget-grid" id="budget"></div>
@@ -206,85 +218,160 @@
            silently. -->
       <div class="panel" id="minePanel" style="margin-bottom:var(--lg);display:none">
         <div class="panel-head">
-          <h2 class="t-section">Your trades</h2>
+          <h2 class="t-section">Hand-picked</h2>
           <span class="chip" style="margin-left:auto">hand-picked · not engine record</span>
           <span class="chip" id="mineRisk">—</span>
         </div>
-        <div id="mine"></div>
-      </div>
+        <!-- A RAIL, because these are live trades. Mission Briefs and Overwatch
+             are both card rails driven by makeRail(); this was the last surface
+             carrying the operator's own money that still rendered as rows.
+             Full chrome — prev/next and a live region — the same set the
+             mission wheel and Progression carry, because makeRail's navState
+             is a no-op without opts.status and "2 of 3" announced to nobody is
+             the sighted reader's cue withheld from everyone else.
 
-      <!-- Open trades. `active_positions` has been in the portfolio payload the
-           whole time and was rendered on no surface: the only place an open
-           trade appeared was the chart's order ticket, and only while you
-           happened to be looking at that symbol's chart. Answering "what am I
-           in right now" meant visiting each chart in turn.
-
-           It belongs above the deck, because what you already hold is what
-           decides whether you can take anything on it. -->
-      <div class="panel" id="posPanel" style="margin-bottom:var(--lg);display:none">
-        <div class="panel-head">
-          <h2 class="t-section">Open trades</h2>
-          <span class="chip" id="posRisk" style="margin-left:auto">—</span>
+             What must NOT come across from Mission Briefs is the material. See
+             `.mc.mine` in ss.css: same anatomy, deliberately different plate. -->
+        <div class="mb-shell">
+          <button class="mb-nav mb-prev" id="minePrev" aria-label="previous hand-picked trade" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.5 2 5 8l5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="mb-track wheel-rail" id="mine" role="group" tabindex="0"
+               aria-label="your hand-picked trades — use left and right arrow keys"></div>
+          <button class="mb-nav mb-next" id="mineNext" aria-label="next hand-picked trade" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5.5 2 11 8l-5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <p class="sr-only" id="mineStatus" aria-live="polite"></p>
         </div>
-        <div id="positions"></div>
       </div>
 
-      <div class="panel" style="margin-bottom:var(--lg)">
+      <!-- "Engaged — detail" stood here: a second, row-shaped rendering of the
+           same open positions the Mission Briefs rail already carries. Its
+           controls (the keyboard-operable symbol, Reasons, the composed hold
+           question and Close) all moved onto the mission card, so nothing was
+           lost with the panel. -->
+
+      <!-- MISSION BRIEFS — the Setup Deck and the Approaching radar, fused
+           into one horizontally scanned rail of dossier cards. The two feeds
+           stay two feeds (deckSplit() still owns "how many setups", the radar
+           payload still owns "what is forming") — what changed is only the
+           slot they render into and the shape they render as.
+
+           Ready cards and forming cards share the rail because they are one
+           story at two moments: the plan the engine cleared, and the plan it
+           is still waiting on. The badge tells them apart — READY draws the
+           accent, FORMING is amber and watch-only — and no forming card ever
+           grows an arm control, because a setup with no verdict has nothing
+           to arm.
+
+           The ring on every card is a real number, not a score: time left
+           before a ready plan expires, distance to the zone (in ATR) for a
+           forming one. This app records no confidence percentage, so no card
+           shows one. -->
+      <div class="panel floating mb-panel" style="margin-bottom:var(--lg)">
         <div class="panel-head">
-          <h2 class="t-section">Setup Deck</h2>
-          <!-- Says what the deck IS, next to the thing itself. An operator
-               reading an empty deck beside a busy Market Weather concluded the
-               scanner was broken; it is the correct answer, and the correction
-               has to live here rather than one surface away. -->
-          <span class="chip" style="margin-left:auto">One per token · best replaces pending</span>
+          <h2 class="t-section">Mission Briefs</h2>
+          <!-- Plain words, because a newcomer lands here first. The promise is
+               the deck's dedupe rule: one card per coin, and a newer, more
+               urgent plan on the same coin takes the slot. -->
+          <span class="chip" style="margin-left:auto"
+                title="a coin listed on two venues still gets one card — the plan expiring soonest holds the slot">One per coin</span>
+          <span class="chip chip-amber" id="radarCount" hidden>—</span>
         </div>
-        <div id="deck"><div class="skeleton" role="status" aria-label="loading">
-          <div class="skel" style="height:58px"></div>
-          <div class="skel" style="height:58px"></div>
-        </div></div>
-      </div>
-
-      <!-- Approaching: setups still forming — price closing on a zone but not
-           there yet. The engine has always produced this signal (it went to
-           desktop notifications) and the cockpit dropped it: the feed is
-           VALIDATED-only, so the most engaging near-term thing the scanner
-           knows was invisible on the surface that asks "what should I do
-           right now". Watch-only by design: a forming setup has no verdict
-           and no ticket, so the row offers the chart and nothing to arm. -->
-      <div class="panel" id="radarPanel" style="margin-bottom:var(--lg);display:none">
-        <div class="panel-head">
-          <h2 class="t-section">Approaching</h2>
-          <span class="chip chip-amber" id="radarCount" style="margin-left:auto">—</span>
+        <div class="mb-shell">
+          <button class="mb-nav mb-prev" id="mbPrev" aria-label="previous mission" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.5 2 5 8l5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <!-- The track is the scroll container; scroll-snap does the paging,
+               so a phone gets native swipe physics for free and the buttons
+               are additive chrome for a mouse. -->
+          <div class="mb-track wheel-rail" id="mbTrack" role="group" tabindex="0"
+               aria-label="mission briefs — use left and right arrow keys">
+            <div id="deck" class="mb-seg"><div class="skeleton" role="status" aria-label="loading">
+              <div class="skel" style="height:300px"></div>
+            </div></div>
+            <div id="radar" class="mb-seg"></div>
+          </div>
+          <button class="mb-nav mb-next" id="mbNext" aria-label="next mission" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5.5 2 11 8l-5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <!-- Which brief is in front, announced only once the wheel settles.
+               A live region narrating every card that passes under a flick is
+               a screen reader shouting. -->
+          <p class="sr-only" id="mbStatus" aria-live="polite"></p>
         </div>
-        <div id="radar"></div>
+        <!-- Refused and expired setups are evidence, not missions. They keep
+             their own quiet strip under the rail — same demotion the old deck
+             made with its "Looked at, not taken" divider, same honesty:
+             nothing is hidden, nothing dead sits in the slot where advice
+             goes. -->
+        <!-- The one sentence that says whether the quiet is correct. It used
+             to live 2000px down the page inside Market Weather, which meant
+             the answer to "why is this empty?" was nowhere near the empty
+             thing. weather.js fills it. -->
+        <p class="mb-lede" id="missionLede"></p>
+
       </div>
 
-      <!-- At a level: where price is standing near structure, across the whole
-           tradeable universe. Distinct from BOTH panels above it, and the
-           distinction is the reason it exists:
+      <!-- ─── MARKET WATCH ───
+           Three lists that were scattered across two panels and two buried
+           disclosures, now one panel with three toggles, none of them hidden:
 
-             Setup Deck   — the engine's plans.
-             Approaching  — the engine's own FORMING signal: a candidate it has
-                            already accepted and is waiting on.
-             At a level   — structure. The engine may not have looked at it.
+             At a level  — price standing near structure the engine watches.
+             Out of reach — the same, further out than the engine's own bound.
+                            It was titled "Beyond the 1 ATR the engine looks",
+                            which is a sentence, not a tab. The bound itself
+                            is still stated in the group's own line, where
+                            there is room to say it properly.
+             Not taken   — setups the risk authority refused, or that expired.
+                            These used to sit under Mission Briefs, which put
+                            dead trades in the panel that answers "what should
+                            I do right now". They are evidence, and evidence
+                            belongs with the other things being watched.
 
-           Without this, "which markets is price actually at a level in" could
-           only be answered by opening charts one at a time — and the ticket
-           draws a bracket on every chart, including ones the engine has never
-           considered, so the answer that came back looked like an engine plan.
-           Every row is stamped with how the engine regards that zone for
-           exactly that reason; a caption alone would not survive being read
-           beside three price lines. -->
-      <div class="panel" id="nearPanel" style="margin-bottom:var(--lg);display:none">
+           Market Weather's per-symbol grid merged in here too: each card
+           carries what condition that market is in AND how near price is,
+           because they were two tables of the same symbols a screen apart.
+           Nothing on a card is re-derived — regime and bias are quoted from
+           /api/weather, the distance and reach from /api/near-levels, which
+           stays the only authority on whether the engine is even looking. -->
+      <div class="panel floating" id="nearPanel" style="margin-bottom:var(--lg);display:none">
         <div class="panel-head">
-          <h2 class="t-section">At a level</h2>
+          <h2 class="t-section">Overwatch</h2>
           <span class="chip" id="nearCount" style="margin-left:auto">—</span>
         </div>
-        <p class="t-body" id="nearLede" style="padding:0 var(--lg) 4px;color:var(--fg-3)"></p>
+        <!-- ONE RANKED DECK, no tabs. There were four — Manual setups, Out of
+             reach, All markets, Refused — and they were never a partition:
+             "All markets" iterated the whole weather universe while "Manual
+             setups" iterated the zone sweep, so the same symbol appeared on
+             both wearing two different badges. "Out of reach" was pure
+             redundancy, every card on it the bottom rank, 21 times out of 21.
+
+             Now: one card per market, ranked by how close price is to a zone
+             the engine watches and then by whether a playbook trades that
+             market's condition. The engine's bound is the grey bottom of the
+             ordering rather than a tab. The refused setups answer a different
+             question — "why did nothing fire" — and live with the rest of
+             that answer on Diagnostics. -->
+        <p class="t-body mw-lede" id="nearLede"></p>
         <div id="near"></div>
       </div>
 
-      <!-- Market Weather: regime x timeframe, and what it MEANS. weather.js owns it. -->
+      <!-- Market Watch used to stand here as its own "At a level" panel. It is
+           now the second tier INSIDE Mission Briefs, merged with Market
+           Weather's per-symbol read — see the comment at #nearPanel above.
+           The honesty it was built for is unchanged and travelled with it:
+           every card still says how the engine regards that zone, because the
+           ticket draws a bracket on every chart including ones the engine has
+           never considered, and a card that could not say so read as an
+           engine plan. -->
+      <!-- Market Weather's mount. Everything it used to DRAW here has found a
+           better address: the per-symbol grid is one card per market in Market
+           Watch above, the lead sentence is #missionLede beside the rail it
+           explains, and the Bitcoin backdrop is on Chart beside the decision it
+           bears on. What is left is the loud fallback — if /api/weather fails,
+           it says so HERE, on the surface whose emptiness it would otherwise be
+           mistaken for. An empty div on a healthy scan is the correct render. -->
       <div id="weatherRoot"></div>
 
       <!-- The Backend Console used to sit here. It is developer telemetry —
@@ -295,7 +382,7 @@
     </section>
 
     <!-- ─── CHART ─── -->
-    <section class="surface" id="s-chart">
+    <section class="surface" id="s-chart" tabindex="-1">
       <!-- B3 — the only surface that had no stated question, and the one where
            the decision is actually committed. Every other surface leads with
            the thing it answers; this one led with a symbol picker. Compact
@@ -599,10 +686,24 @@
              height. Kept in the DOM (chart.js writes it) but out of flow. -->
         <div class="t-mono tk-lock" id="tkLock" hidden></div>
       </div>
+
+      <!-- ─── BITCOIN BACKDROP ───
+           Long-horizon context for ONE decision, mounted where that decision is
+           made. It rendered on Command until now, and could not answer
+           Command's question: its own footer says nothing in it opens, sizes or
+           blocks a trade, so "what should I do right now?" was never a question
+           it could take. Chart asks "is this setup worth taking?", and a
+           four-year rhythm is exactly the kind of context that bears on that
+           one — read before arming, not instead of the rail.
+
+           Collapsed, last, below the commit bar, and it remembers being opened.
+           weather.js owns what goes in here; the mount point is the whole
+           contract, same as #weatherRoot. -->
+      <div id="cycleRoot"></div>
     </section>
 
     <!-- ─── RESULTS ─── -->
-    <section class="surface" id="s-results">
+    <section class="surface" id="s-results" tabindex="-1">
       <div class="surface-head"><h1 class="t-page">Results</h1><p>Is this actually working?</p></div>
       <!-- Which ERA these numbers cover, stated before the numbers rather than
            under them. Results is scoped to the active baseline and Diagnostics
@@ -612,6 +713,30 @@
       <div class="era-band" id="resultsEra"><span class="skeleton" role="status" aria-label="loading">
         <span class="skel skel-line" style="width:88%"></span>
         <span class="skel skel-line" style="width:64%"></span></span></div>
+      <!-- THE STAT WHEEL. The same carousel the Mission Briefs ride, carrying
+           the eight numbers that answer "is this actually working?" — each one
+           drawn rather than just printed, so the shape of the answer is
+           readable before the digits are.
+
+           The tiles below are NOT removed. They are the same numbers in a flat
+           grid, and they stay because a wheel is a poor way to compare eight
+           figures at once: the cards are for reading one stat properly, the
+           grid is for seeing them together. Both render from renderScoreboard
+           and the portfolio — one authority, two presentations. -->
+      <div class="panel floating" style="margin-bottom:var(--sm)">
+        <div class="mb-shell">
+          <button class="mb-nav mb-prev" id="statPrev" aria-label="previous stat" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.5 2 5 8l5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="mb-track wheel-rail" id="statTrack" role="group" tabindex="0"
+               aria-label="statistics — use left and right arrow keys"></div>
+          <button class="mb-nav mb-next" id="statNext" aria-label="next stat" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5.5 2 11 8l-5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <p class="sr-only" id="statStatus" aria-live="polite"></p>
+        </div>
+      </div>
+
       <div class="grid cols-4" style="margin-bottom:var(--lg)">
         <div class="tile"><span class="t-label">Equity</span><span class="t-metric" id="rEquity">—</span></div>
         <div class="tile"><span class="t-label">Return</span><span class="t-metric" id="rReturn">—</span></div>
@@ -635,8 +760,44 @@
            is a number, not evidence, and saying so here is cheaper than
            letting the reader find out later. -->
       <p class="t-body" id="rSample" style="margin:0 0 var(--lg);color:var(--fg-4);font-size:var(--fs-1);max-width:56ch"></p>
-      <div class="panel" style="margin-bottom:var(--lg)">
-        <div class="panel-head"><h2 class="t-section">Trade Journal</h2>
+
+      <!-- ─── PROGRESSION ───
+           What a stats screen in a game does well: it tells you where you are
+           against something, and what the next thing is. This does that with
+           the gates that already exist and already mean something — the
+           sample sizes the maths needs, the drawdown ceiling, the halt
+           record — so every bar is a real threshold and every locked row
+           names what unlocks it.
+
+           NOTHING HERE CONGRATULATES A LOSS. The record is what it is, and
+           the product's first principle is honest before flattering. So these
+           mark PROCESS — trades logged, discipline held, ground covered —
+           never outcome. There is no badge for being profitable, because the
+           forward record does not currently say that, and a screen that
+           awarded one would be the exact thing this app refuses to be. -->
+      <div class="panel floating" style="margin-bottom:var(--lg)">
+        <div class="panel floating-head">
+          <h2 class="t-section">Progression</h2>
+          <span class="chip" id="progCount" style="margin-left:auto">—</span>
+        </div>
+        <p class="t-body mw-lede" id="progLede"></p>
+        <!-- Full rail chrome. Three of the app's rails were bare — no arrows,
+             and `card 3 of 9` announced to nobody, because makeRail's navState
+             is a no-op without opts.status. This one now carries nine cards. -->
+        <div class="mb-shell">
+          <button class="mb-nav mb-prev" id="progPrev" aria-label="previous milestone" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.5 2 5 8l5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="mb-track wheel-rail" id="progTrack" role="group" tabindex="0"
+               aria-label="progression — use left and right arrow keys"></div>
+          <button class="mb-nav mb-next" id="progNext" aria-label="next milestone" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5.5 2 11 8l-5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <p class="sr-only" id="progStatus" aria-live="polite"></p>
+        </div>
+      </div>
+      <div class="panel floating" style="margin-bottom:var(--lg)">
+        <div class="panel floating-head"><h2 class="t-section">Trade Journal</h2>
           <span class="chip" id="jnlCount" style="margin-left:auto">—</span>
           <!-- The book was readable and not extractable. Anyone who wants to
                check this record in a spreadsheet had to retype it. -->
@@ -644,10 +805,10 @@
                   title="download these trades as CSV">Export</button></div>
         <div id="journal"><div class="empty">no closed trades in this window yet</div></div>
       </div>
-      <div class="panel" style="margin-bottom:var(--lg)">
-        <div class="panel-head"><h2 class="t-section">Equity Curve</h2>
+      <div class="panel floating" style="margin-bottom:var(--lg)">
+        <div class="panel floating-head"><h2 class="t-section">Equity Curve</h2>
           <span class="chip" id="baselineChip" style="margin-left:auto">—</span></div>
-        <div class="panel-body">
+        <div class="panel floating-body">
           <!-- viewBox is set in JS to the measured pixel width. It used to be a
                fixed 0 0 800 160 with preserveAspectRatio="none", which stretches
                every glyph inside it — the reason this chart could carry no
@@ -687,8 +848,8 @@
            the engine's research simulations never touch this list. -->
 
       <div class="grid cols-2" style="margin-bottom:var(--lg)">
-        <div class="panel">
-          <div class="panel-head"><h2 class="t-section">By Symbol</h2></div>
+        <div class="panel floating">
+          <div class="panel floating-head"><h2 class="t-section">By Symbol</h2></div>
           <div id="perfSymbol"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:24px"></div>
           <div class="skel" style="height:24px"></div>
@@ -696,8 +857,8 @@
           <div class="skel" style="height:24px"></div>
         </div></div>
         </div>
-        <div class="panel">
-          <div class="panel-head"><h2 class="t-section">By Strategy</h2></div>
+        <div class="panel floating">
+          <div class="panel floating-head"><h2 class="t-section">By Strategy</h2></div>
           <div id="perfStrategy"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:24px"></div>
           <div class="skel" style="height:24px"></div>
@@ -707,13 +868,19 @@
         </div>
       </div>
 
-      <div class="panel">
-        <div class="panel-head"><h2 class="t-section">Forward Record</h2></div>
-        <div class="panel-body t-body" id="resultsNote"><span class="skeleton" role="status" aria-label="loading">
+      <div class="panel floating" style="margin-bottom:var(--lg)">
+        <div class="panel floating-head"><h2 class="t-section">Forward Record</h2></div>
+        <div class="panel floating-body t-body" id="resultsNote"><span class="skeleton" role="status" aria-label="loading">
         <span class="skel skel-line" style="width:92%"></span>
         <span class="skel skel-line" style="width:78%"></span>
         <span class="skel skel-line" style="width:40%"></span></span></div>
       </div>
+
+      <!-- One line, no figure restated. Everything above this counts the
+           engine's paper account only; the other two books are a surface
+           away and are never added to it. -->
+      <p class="t-note ledger-link">Your own trades and your own exits are
+        counted separately, in <a href="#ledger">Ledger</a>.</p>
 
       <!-- "Is the edge real?" — HERE, on the surface that asks it.
 
@@ -738,7 +905,7 @@
     </section>
 
     <!-- ─── SCANNER SETUP ─── -->
-    <section class="surface" id="s-settings">
+    <section class="surface" id="s-settings" tabindex="-1">
       <div class="surface-head"><h1 class="t-page">Settings</h1><p>keys · Claude · configuration</p></div>
 
       <!-- The "How the scanner works" essay lived here. Operator ruling: this
@@ -770,11 +937,25 @@
             <div id="credFields"></div>
           </div>
         </div>
+        <!-- ONE PANEL, ONE AUTHORITY.
+             Risk and Guardrails both printed the daily loss halt, the maximum
+             concurrent positions and the total open risk — from two endpoints,
+             in two unit conventions (fractions from /api/trade-config,
+             percentages from /api/settings.values.risk_config), with the
+             second inventing client-side fallbacks of 6, 2 and 4 for numbers
+             the engine owns. Three caps, six readings, and nothing on screen
+             said which was authoritative.
+
+             Now: #riskNow is the caps, read only from /api/trade-config;
+             #guardRows is the halt STATE, which lives only in settings and is
+             duplicated nowhere. The invented fallbacks are gone — a cap the
+             engine did not send now reads as absent, not as 6%. -->
         <div class="panel">
           <!-- the cost-model build stamp (`costs-v0.4`) lived here; it is
                provenance for a developer, not a rule the reader can change -->
-          <div class="panel-head"><h2 class="t-section">Risk</h2>
-            <span class="chip" style="margin-left:auto">read-only</span></div>
+          <div class="panel-head"><h2 class="t-section">Risk &amp; guardrails</h2>
+            <span class="chip" id="guardChip" style="margin-left:auto"
+              title="read-only — and every guardrail blocks NEW entries only: open positions still settle, and live order submission stays locked regardless">—</span></div>
           <div class="panel-body">
             <!-- Was a 180-character title. "Why can I not change this?" is the
                  first question this panel provokes, and the answer was the one
@@ -786,6 +967,7 @@
             <p class="t-note" style="margin:0 0 var(--md)">Sized by the engine, not
               editable here. Changing risk per trade would replay and re-size the entire forward record under the same engine version, which the versioning rule forbids.</p>
             <div class="tk-out" id="riskNow"></div>
+            <div class="tk-out" id="guardRows" style="margin-top:var(--md)"></div>
             <!-- B7 — one line, then a disclosure. This was a nine-line essay
                  standing between the operator and the numbers above it. The
                  reasoning is worth keeping; it is not worth reading on every
@@ -830,34 +1012,33 @@
                 title="runs `claude --version` — the copilot needs the CLI on PATH and a logged-in plan">Test</button></div>
           </div>
         </div>
-        <div class="panel">
-          <div class="panel-head"><h2 class="t-section">Guardrails</h2>
-            <span class="chip" id="guardChip" style="margin-left:auto"
-              title="every guardrail blocks NEW entries only — open positions still settle, and live order submission stays locked regardless">—</span></div>
-          <div class="panel-body">
-            <div class="tk-out" id="guardRows"></div>
-          </div>
-        </div>
         <!-- The lock that had no key. "Forward paper evidence has not yet
              earned live execution" was printed on two surfaces and defined
-             nowhere; engine/livegate.py now measures what "earned" means and
-             this shows the record against it. -->
+             nowhere; engine/livegate.py now measures what "earned" means.
+
+             THE CRITERIA THEMSELVES LEFT THIS PANEL. They were a wheel of
+             cards with a met/not-met stamp, a ring and a note, sitting thirty
+             lines from Results' Progression track — which is a wheel of cards
+             with a met/not-met stamp, a ring and a note, measuring the same
+             forward record, and sharing two criteria outright. One track, one
+             MET/NOT MET vocabulary, on the surface that asks whether this is
+             working. Settings keeps the lock and its consequence: is it on,
+             what the record scores against the gate, and the build fact no
+             amount of good trading can earn. -->
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Going live</h2>
             <span class="chip" id="gateChip" style="margin-left:auto">—</span></div>
-          <div class="panel-body">
-            <div id="gateRoot"><div class="skeleton" role="status" aria-label="loading">
-              <div class="skel" style="height:22px"></div>
-              <div class="skel" style="height:22px"></div>
-              <div class="skel" style="height:22px"></div>
-            </div></div>
+          <div class="panel-body gate-body">
+            <p class="t-note gate-foot" id="gateFoot"></p>
+            <p class="t-note" style="margin:var(--md) 0 0">The four criteria, and
+              how far off each one is: <a href="#results">Results → Progression</a>.</p>
           </div>
         </div>
       </div>
     </section>
 
     <!-- ─── DIAGNOSTICS ─── -->
-    <section class="surface" id="s-diagnostics">
+    <section class="surface" id="s-diagnostics" tabindex="-1">
       <div class="surface-head"><h1 class="t-page">Diagnostics</h1><p>what is failing, and why</p></div>
 
       <!-- THE ANSWER, AND THE HANDOVER — same shape as Command's disposition
@@ -932,6 +1113,22 @@
         <!-- funnel.js appends the stage bars + bottleneck pill here -->
         <div id="funnelRoot"></div>
       </div>
+
+      <!-- REFUSED SETUPS — the per-instance view, directly under its own
+           aggregate. These cards used to sit on Command, first inside Mission
+           Briefs and then as a fourth Overwatch tab, and in both places they
+           were dead trades in the panel that answers "what should I do right
+           now". The question they answer is "why did nothing fire", and that
+           is this surface's whole subject: the funnel above counts the
+           refusals, and this names them one at a time with the reason on each
+           card. -->
+      <div class="panel" id="refusedPanel" style="margin-bottom:var(--lg);display:none">
+        <div class="panel-head"><h2 class="t-section">Refused setups</h2>
+          <span class="chip" id="refusedCount" style="margin-left:auto">—</span></div>
+        <p class="t-body mw-lede" id="refusedLede"></p>
+        <div id="refused" class="wheel-rail" tabindex="0" role="group"
+             aria-label="refused setups — use left and right arrow keys"></div>
+      </div>
       <div class="grid cols-2">
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Open <span class="term" data-t="blocker">Issues</span></h2></div>
@@ -997,6 +1194,90 @@
       </div>
     </section>
 
+    <!-- ─── LEDGER ───
+
+         THREE BOOKS, NEVER SUMMED. The engine's paper account; the trades the
+         operator armed by hand; the operator's own exits on trades the engine
+         picked. Three windows, three pools of capital, three totals — and no
+         fourth number anywhere on this surface that adds any two of them.
+
+         `manual.arm` never consults the risk authority, so hand-armed size was
+         never drawn from the engine's $10,000. A combined "main wallet" figure
+         would therefore be an invention, and it is the exact leak the version
+         separation exists to prevent: two generations of money under one
+         label. Two figures with two labels is honest; one figure made of both
+         is not.
+
+         The third book is the interesting one. The engine chose those trades
+         and the operator chose when to leave them, both outcomes are recorded,
+         and that money is counted in NO total anywhere else in the store —
+         not in the equity curve, not in the manual book. It is the purest
+         measure of operator skill this app holds. -->
+    <section class="surface" id="s-ledger" tabindex="-1">
+      <div class="surface-head"><h1 class="t-page">Ledger</h1><p>Where are the wins coming from?</p></div>
+
+      <!-- THE WALLET BAND CARRIES NO NUMBER, and must not until a real balance
+           arrives over a signed request. What exists today: a DPAPI credential
+           vault with `read_secret` and no caller. What does not: request
+           signing of any kind — there is no `hmac` import anywhere in app/ —
+           a `balance()` on any venue adapter, or `POST /api/credentials/test`.
+           A placeholder figure here would be the only invented money in the
+           app, and a stored key does not move this band either: the live
+           gate is separate and locked. -->
+      <div class="wallet-band">
+        <span class="chip" id="walletChip">not connected</span>
+        <div class="wallet-say"><b>Exchange wallet</b>
+          <span>No balance is read from any exchange. Nothing on this page is
+          money you can withdraw.</span></div>
+      </div>
+
+      <!-- NON-OPTIONAL, and static rather than rendered: a banner that depends
+           on a fetch is a banner that can be absent exactly when the numbers
+           below it are wrong. -->
+      <div class="era-band ledger-warn">
+        Three separate books, <b>never added</b>. They cover different windows
+        and different capital, and the forward record is negative.
+      </div>
+
+      <!-- A GRID, NOT A WHEEL. The rule: a rail when the front card answers the
+           question on its own, a grid when answering it needs two things side
+           by side. "Where are the wins coming from" is a comparison between
+           three books by construction, so all three are on screen at once. -->
+      <div class="ledger-books" id="ledgerBooks">
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:180px"></div></div>
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:180px"></div></div>
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:180px"></div></div>
+      </div>
+
+      <!-- The engine's own closed trades are NOT re-tabled here. They already
+           have exactly one rendering, the Trade Journal on Results, and a
+           second copy is how two surfaces start disagreeing. The two tables
+           below are the rows that exist on no other surface. -->
+      <div class="panel floating" style="margin-bottom:var(--lg)">
+        <div class="panel-head"><h2 class="t-section">Your trades</h2>
+          <span class="chip" id="ledgerMineChip" style="margin-left:auto">—</span></div>
+        <div class="panel-body">
+          <div id="ledgerMine"><div class="skeleton" role="status" aria-label="loading">
+            <div class="skel" style="height:24px"></div>
+            <div class="skel" style="height:24px"></div>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="panel floating">
+        <div class="panel-head"><h2 class="t-section">Your exits</h2>
+          <span class="chip" id="ledgerExitChip" style="margin-left:auto">—</span></div>
+        <div class="panel-body">
+          <div id="ledgerExits"><div class="skeleton" role="status" aria-label="loading">
+            <div class="skel" style="height:24px"></div>
+          </div></div>
+        </div>
+      </div>
+    </section>
+
     <!-- ─── LEARN ─── -->
 
   </main>
@@ -1055,6 +1336,10 @@
      not-taken blocks painted raw engine codes until the next 30s refresh
      happened to land after funnel.js had run. -->
 <script defer src="/static/funnel.js?v=20"></script>
+<!-- Before shell.js, which wires the mission wheel the moment it parses.
+     `defer` scripts execute in document order, so this ordering IS the
+     dependency declaration. -->
+<script defer src="/static/wheel.js?v=20"></script>
 <script defer src="/static/shell.js?v=20"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must

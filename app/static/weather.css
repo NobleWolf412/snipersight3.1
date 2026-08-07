@@ -9,106 +9,22 @@
        steal attention from the Setup Deck above it.
      · Flat at rest. No shadows, no side-stripe status borders. */
 
-/* Regime columns size to their content rather than to a guess.
-   "Bear weakening" needs ~150px and the cell was 132, so it
-   clipped to "Bear weaken…" while roughly a third of the row
-   was empty space to its right. max-content with a floor keeps
-   the columns aligned and lets the longest label decide. */
-.wx{ --wx-cols: 112px minmax(132px, max-content) minmax(132px, max-content) minmax(0, 1fr); }
+/* The per-symbol grid this file was mostly written for is gone — weather.js
+   says why (both halves of it are one card per market in Overwatch now), and
+   test_audit_closeout.js pins that `wx-row` / `wx-data` must not come back.
+   Everything that dressed those rows went with them: the --wx-cols track, the
+   row/head/symbol/toggle cells, the per-timeframe cells and their agreement
+   rule, the r-* regime tones and b-* bias colours, the meaning column, the
+   click-to-open reason, and the strip footer. What is left below is what this
+   module still renders: the Bitcoin backdrop (on CHART now — see the mount
+   rules further down), and the loud fallback on Command, which is the only
+   thing that still draws a panel head here. */
 .wx .panel-head{ gap: var(--md); }
 
 /* orientation line: what the strip is for, said once */
 .wx-sub{ font-family: var(--f-mono); font-size:var(--fs-1); letter-spacing: .1em;
   color: var(--fg-4); text-transform: lowercase; }
 .wx .panel-head .chip{ margin-left: auto; flex: none; }
-
-.wx-body{ padding: var(--sm) var(--sm) var(--md); }
-
-.wx-row{ display: grid; grid-template-columns: var(--wx-cols);
-  align-items: stretch; border-radius: var(--r-md); }
-.wx-row.wx-data{ cursor: pointer; }
-.wx-row.wx-data:hover{ background: rgba(255,255,255,.03); }
-.wx-row.wx-data:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* column headings */
-.wx-head{ padding-bottom: 6px; }
-.wx-head .t-label{ padding: 0 12px; }
-.wx-head .t-label.mean{ padding-left: 22px; }
-
-/* ---- symbol ---- */
-.wx-sym{ display: flex; align-items: center; padding: 6px 12px;
-  font-family: var(--f-mono); font-size:var(--fs-2); letter-spacing: .04em;
-  color: var(--fg); min-width: 0; }
-.wx-sym span{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* The symbol cell became a real <button> when the row stopped being
-   role="button" — the row held focusable glossary terms, which ARIA forbids
-   inside a button role. It looks exactly as it did as a div; it is simply the
-   one thing a keyboard reaches to expand the row, and it carries the
-   aria-expanded state the row used to claim. */
-.wx-toggle{ background: none; border: 0; cursor: pointer; font: inherit;
-  font-family: var(--f-mono); font-size:var(--fs-2); letter-spacing: .04em;
-  color: var(--fg); text-align: left; width: 100%; }
-.wx-toggle:hover{ color: var(--accent); }
-
-/* ---- one timeframe ----
-   The 2px rule under each cell is the engine's own higher-timeframe agreement
-   factor made visible: it is coloured by the side the playbook would take, so
-   two cells that want the same thing draw ONE unbroken line and two that
-   disagree draw a broken one. Agreement is then readable without reading. */
-.wx-tf{ position: relative; display: flex; align-items: center; gap: 7px;
-  padding: 6px 12px 12px; min-width: 0; }
-.wx-tf::after{ content: ''; position: absolute; left: 0; right: 0; bottom: 5px;
-  height: 2px; background: var(--wx-bias); opacity: .85; }
-.wx-tf.split::after{ left: 7px; }              /* the break = they disagree */
-.wx-tf .tfk{ font-family: var(--f-mono); font-size:var(--fs-1); font-weight: 600;
-  letter-spacing: .16em; text-transform: uppercase; color: var(--fg-4); flex: none; }
-.wx-tf .reg{ font-family: var(--f-mono); font-size:var(--fs-2); color: var(--wx-tone);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* regime tone — direction by colour, conviction by weight of that colour */
-.r-bull  { --wx-tone: var(--green); }
-.r-bull-w{ --wx-tone: var(--green-soft); }
-.r-bear  { --wx-tone: var(--red); }
-.r-bear-w{ --wx-tone: var(--red-2); }
-.r-trans { --wx-tone: var(--amber); }
-.r-range { --wx-tone: var(--fg-3); }
-.r-none  { --wx-tone: var(--fg-4); }
-
-/* what the playbook would DO here — the colour of the rule underneath */
-.b-long  { --wx-bias: var(--green); }
-.b-short { --wx-bias: var(--red); }
-.b-gated { --wx-bias: var(--amber); }
-.b-flat  { --wx-bias: var(--fg-4); }
-.wx-tf.b-gated::after{ opacity: .5; }
-.wx-tf.b-flat::after { opacity: .28; }
-/* no regime recorded: a dashed rule, because absent data must not look flat */
-.wx-tf.b-unknown::after{ opacity: .5; background: repeating-linear-gradient(
-  90deg, var(--fg-4) 0 3px, transparent 3px 7px); }
-
-/* ---- what this means: the only prose on the strip, so the only Inter ---- */
-.wx-mean{ display: flex; align-items: center; gap: 9px; min-width: 0;
-  padding: 6px 12px 6px 10px; font-family: var(--f-body); font-size:var(--fs-2);
-  line-height: 1.45; color: var(--fg-3); }
-.wx-row.live .wx-mean{ color: var(--fg-2); }
-.wx-arrow{ font-family: var(--f-mono); color: var(--fg-4); flex: none; }
-.wx-row.tier-3 .wx-mean, .wx-row.tier-4 .wx-mean{ color: var(--fg-4); }
-.wx-row.tier-4 .wx-sym{ color: var(--fg-3); }
-
-/* the full reason, revealed on click — kept out of the resting layout so
-   twenty rows still fit above the fold */
-.wx-why{ display: none; grid-column: 2 / -1; padding: 0 12px 11px 10px;
-  font-family: var(--f-body); font-size:var(--fs-2); line-height: 1.55;
-  color: var(--fg-3); max-width: 78ch; }
-.wx-row.open .wx-why{ display: block; }
-.wx-row.open{ background: rgba(255,255,255,.03); }
-
-/* ---- footer: the sentence that explains the silence ---- */
-.wx-foot{ display: flex; align-items: center; gap: var(--md); flex-wrap: wrap;
-  padding: var(--md) var(--lg); border-top: 1px solid var(--border-soft); }
-.wx-foot p{ font-family: var(--f-body); font-size:var(--fs-2); line-height: 1.5;
-  color: var(--fg-3); margin: 0; flex: 1; min-width: 220px; max-width: 78ch; }
-.wx-ver{ font-family: var(--f-mono); font-size:var(--fs-1); letter-spacing: .12em;
-  color: var(--fg-4); text-transform: uppercase; }
 
 /* ---- loud fallback ----
    A strip that renders nothing looks identical to a calm market, and this one
@@ -122,20 +38,8 @@
   color: var(--fg-4); word-break: break-all; }
 
 /* ---- responsive ---- */
-@media (max-width:1180px){ .wx{ --wx-cols: 96px minmax(112px, max-content) minmax(112px, max-content) minmax(0, 1fr); } }
 @media (max-width:1100px){
   .wx-sub{ display: none; }
-  .wx{ --wx-cols: 88px minmax(104px, max-content) minmax(104px, max-content) minmax(0, 1fr); }
-  .wx-mean{ font-size:var(--fs-2); }
-}
-/* stacked: symbol on its own line, the two timeframes still side by side so the
-   agreement rule stays readable, meaning underneath */
-@media (max-width:900px){
-  .wx-row{ grid-template-columns: 1fr 1fr; padding: 4px 0 6px; }
-  .wx-head{ display: none; }
-  .wx-sym{ grid-column: 1 / -1; padding-bottom: 2px; }
-  .wx-mean{ grid-column: 1 / -1; padding-top: 8px; align-items: flex-start; }
-  .wx-why{ grid-column: 1 / -1; }
 }
 
 /* ---------- Bitcoin cycle backdrop ----------
@@ -155,6 +59,34 @@
    from the rows above it. */
 .wx-lede{ padding: var(--md) var(--lg); border-top: 1px solid var(--border-soft);
   background: rgba(0,0,0,.18) }
+
+/* ---- the chart mount ----
+   #s-chart.on is a fixed-height flex column: its height is calculated from the
+   viewport minus the two chrome bars, and NOTHING on that surface scrolls —
+   the commit bar's own comment is explicit that the operator must never scroll
+   to reach the number that decides the trade. A disclosure at the foot of it
+   therefore has two obligations.
+
+   flex:none — it must not be handed 1fr and grow; the chart pane owns the
+   slack. Collapsed it costs one line, which is the whole reason it starts
+   closed.
+
+   max-height + overflow on the OPEN state — opened, its content is taller than
+   whatever height is left, and an unbounded flex item would either push the
+   chart to nothing or spill past the calculated height with no scrollbar to
+   reach it. Bounded, the backdrop scrolls INSIDE itself and the surface still
+   does not. Below 900 the surface is height:auto and the cap comes off. */
+#cycleRoot{ flex: none }
+/* Closed, it is a one-line strip and its padding is charged to the chart, so
+   it runs tighter than the same block did inside a panel. Opened, it is being
+   read and takes the panel's normal breathing room back. */
+#cycleRoot .wx-lede{ border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--bg-2); padding: 7px var(--md) }
+#cycleRoot .cy-details[open]{ padding: var(--md) var(--lg);
+  max-height: 34vh; overflow: auto }
+@media (max-width:900px){
+  #cycleRoot .cy-details[open]{ max-height: none; overflow: visible }
+}
 .cy-head{ display: flex; align-items: baseline; gap: var(--md); flex-wrap: wrap;
   cursor: pointer; list-style: none }
 .cy-head::-webkit-details-marker{ display: none }
@@ -164,21 +96,13 @@
   transition: transform .15s ease }
 .cy-details[open] .cy-head::after{ transform: rotate(180deg) }
 
-/* Market Weather's own disclosure. The load-bearing sentence stays out here;
-   only the evidence grid folds. */
-.wx-lead{ font-family: var(--f-body); font-size:var(--fs-2); line-height: 1.6;
-  color: var(--fg-2); padding: var(--md) var(--lg) 0 }
-.wx-summary{ display: flex; align-items: center; gap: var(--sm); cursor: pointer;
-  list-style: none; padding: var(--sm) var(--lg) var(--md);
-  font-family: var(--f-mono); font-size:var(--fs-1); font-weight: 600;
-  letter-spacing: .16em; text-transform: uppercase; color: var(--fg-3) }
-.wx-summary::-webkit-details-marker{ display: none }
-.wx-summary::after{ content: '▾'; transition: transform .15s ease }
-.wx-details[open] .wx-summary::after{ transform: rotate(180deg) }
-.wx-summary:hover{ color: var(--fg-2) }
+/* Market Weather's own .wx-details disclosure went with the evidence grid it
+   folded. .wx-lead / .wx-summary had nothing left to style — note the trap if
+   they are ever reinstated: `.wx-details` reads as live to a naive grep
+   because the string survives in a shell.js comment. */
 
 @media (prefers-reduced-motion: reduce){
-  .cy-head::after, .wx-summary::after{ transition: none }
+  .cy-head::after{ transition: none }
 }
 .cy-row{ display: grid; grid-template-columns: 148px 1fr; gap: var(--md);
   padding: 7px 0; align-items: start }
