@@ -276,7 +276,12 @@ ok('chrome heights are tokens, shared by the grid and the chart calc', () => {
 
 ok('live trade data clears the contrast floor', () => {
   // --fg-4 is 2.2:1 on this ground. These rules carry prices and dollars.
-  for (const sel of ['.pos-ends{', '.pos-r .t-sub{']) {
+  /* Re-pinned when the hand-picked panel stopped being rows. `.pos-ends` and
+     `.pos-r .t-sub` were the row's price line and its dollars-at-risk line;
+     `.mc.mine .mc-nums` and `.mc.mine .t-sub` are the same two numbers on the
+     card that replaced it. The property is untouched: live money does not
+     render at 2.2:1. */
+  for (const sel of ['.mc.mine .mc-nums{', '.mc.mine .t-sub{']) {
     const i = CSS.indexOf(sel);
     assert(i > -1, 'missing rule ' + sel);
     const block = CSS.slice(i, CSS.indexOf('}', i));

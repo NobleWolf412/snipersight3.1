@@ -39,7 +39,15 @@ console.log('your trades');
 
 ok('Command has a panel for the operator\'s own orders', () => {
   assert(/id="minePanel"/.test(HTML), 'no panel for your own book');
-  assert(/<div id="mine">/.test(HTML), 'nowhere to render the rows');
+  /* Re-pinned when this panel became a card rail. The old selector named the
+     bare `<div id="mine">` the rows were written into; the PROPERTY is that
+     there is somewhere to render the operator's book, and it is now the rail
+     track itself. Pinned to the id AND to the rail class, because a track that
+     stops being a .wheel-rail silently loses the wheel and renders every card
+     stacked on top of the first. */
+  assert(/id="mine"/.test(HTML), 'nowhere to render your book');
+  assert(/class="mb-track wheel-rail" id="mine"/.test(HTML),
+    'the panel must be a rail, like every other live-trade surface on Command');
   assert(/renderMine\(\)/.test(SHELL), 'nothing renders it');
   assert(/renderMine\(\)\.then\(\(\) => renderMineAside\(\)\)/.test(SHELL),
     'the panel must refresh on the same cycle as the rest of Command');
@@ -84,9 +92,25 @@ ok('your book is never merged into the engine\'s', () => {
     'the duplicate Engaged-detail panel is back');
 });
 
-ok('the row is visually attributed, not just captioned', () => {
-  assert(/\.pos-row\.mine\{border-left:2px solid var\(--accent\)\}/.test(CSS),
+ok('the card is visually attributed, not just captioned', () => {
+  /* Re-pinned when the rows became a rail. The property is UNCHANGED and is the
+     load-bearing one on this whole panel: a hand-picked trade must never read
+     as engine edge, so it must be told apart from a mission card WITHOUT
+     reading the chip. The accent left edge came across from `.pos-row.mine`
+     literally — same token, same meaning — and the card additionally refuses
+     the mission card's brushed-platinum plate, which is what "the engine's
+     book" means on this surface. Both halves are pinned: the spine, and the
+     fact that `.mc.mine` declares its own ground rather than inheriting
+     `.mc.mission`'s. */
+  assert(/\.mc\.mine\{[\s\S]{0,240}?border-left:3px solid var\(--accent\)/.test(CSS),
     'two books rendered identically is how a number ends up read against the wrong one');
+  assert(/\.mc\.mine\{[\s\S]{0,400}?background:/.test(CSS),
+    'the hand-picked card must not wear the mission plate — material is what ' +
+    'survives the rail when a chip is too small and too blurred to read');
+  assert(/hand-picked · not engine record/.test(HTML) &&
+         /class="chip chip-mine"/.test(SHELL),
+    'the attribution must be on the card too, not only on the panel head — ' +
+    'one card read alone, or read out, still has to say whose plan it is');
 });
 
 ok('a resting row is marked unfilled, with the stake on hover', () => {
@@ -103,6 +127,41 @@ ok('a resting row is marked unfilled, with the stake on hover', () => {
 ok('waiting and filled are drawn differently', () => {
   assert(/t\.state === 'PENDING'/.test(SHELL), 'one rendering for both states');
   assert(/waits <b>/.test(SHELL), 'a resting order must read as waiting, tersely');
+  /* ARMED and OPEN are different things and the card says so before a number
+     is read. The stamp is the first thing on it. */
+  assert(/'st-mine-rest', 'YOURS · ARMED'/.test(SHELL) &&
+         /'st-mine', 'YOURS · FILLED'/.test(SHELL),
+    'the card must stamp its own state — "committed" and "at stake" are not the same claim');
+});
+
+ok('the rail carries the chrome it earns', () => {
+  /* makeRail's navState is a no-op without opts.status, so a rail without one
+     announces nothing as it turns — the sighted reader's cue withheld from
+     everyone else. Three of the app's rails were bare once; this one is not. */
+  assert(/makeRail\(track, \{prev: 'minePrev', next: 'mineNext',\s*status: 'mineStatus'\}\)/
+    .test(SHELL), 'the hand-picked rail lost its nav buttons or its live region');
+  for (const id of ['minePrev', 'mineNext', 'mineStatus'])
+    assert(new RegExp('id="' + id + '"').test(HTML), 'no element for ' + id);
+  assert(/id="mineStatus" aria-live="polite"/.test(HTML),
+    'the position announcement must be a live region or nobody hears it');
+});
+
+ok('a fill resolved on a fallback grid says so on the card', () => {
+  /* Degraded paths are audible. `resolution_degraded` carries the engine's own
+     plain-English reason when a fill had to be settled on coarser bars than
+     the finest stored; a fill that is four hours late for a reason nobody can
+     read is the same bug in a quieter costume. It is printed, not hovered. */
+  const fn = SHELL.slice(SHELL.indexOf('function mineCardInner'),
+                         SHELL.indexOf('/* Cancel is a real mutation'));
+  assert(/t\.resolution_degraded/.test(fn), 'the card never looks at the flag');
+  assert(/esc\(t\.resolution_degraded\)/.test(fn),
+    'the engine\'s own reason must reach the surface, not be re-worded here');
+  assert(/esc\(t\.resolution_tf/.test(fn),
+    'which bars it was resolved on is half the disclosure');
+  assert(/mc-degraded/.test(fn) && /\.mc-degraded\{/.test(CSS),
+    'a disclosure with no rule of its own renders as body text and is skipped');
+  assert(!/title="[^"]*resolution_degraded/.test(fn),
+    'a degradation reachable only by hover is not audible on a phone');
 });
 
 ok('an order about to expire says so louder', () => {

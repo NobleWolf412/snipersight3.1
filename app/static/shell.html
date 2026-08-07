@@ -222,7 +222,27 @@
           <span class="chip" style="margin-left:auto">hand-picked · not engine record</span>
           <span class="chip" id="mineRisk">—</span>
         </div>
-        <div id="mine"></div>
+        <!-- A RAIL, because these are live trades. Mission Briefs and Overwatch
+             are both card rails driven by makeRail(); this was the last surface
+             carrying the operator's own money that still rendered as rows.
+             Full chrome — prev/next and a live region — the same set the
+             mission wheel and Progression carry, because makeRail's navState
+             is a no-op without opts.status and "2 of 3" announced to nobody is
+             the sighted reader's cue withheld from everyone else.
+
+             What must NOT come across from Mission Briefs is the material. See
+             `.mc.mine` in ss.css: same anatomy, deliberately different plate. -->
+        <div class="mb-shell">
+          <button class="mb-nav mb-prev" id="minePrev" aria-label="previous hand-picked trade" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.5 2 5 8l5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="mb-track wheel-rail" id="mine" role="group" tabindex="0"
+               aria-label="your hand-picked trades — use left and right arrow keys"></div>
+          <button class="mb-nav mb-next" id="mineNext" aria-label="next hand-picked trade" hidden>
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5.5 2 11 8l-5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <p class="sr-only" id="mineStatus" aria-live="polite"></p>
+        </div>
       </div>
 
       <!-- "Engaged — detail" stood here: a second, row-shaped rendering of the

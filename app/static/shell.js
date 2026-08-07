@@ -1579,10 +1579,34 @@
     missionRail.sync();
   }
 
+  /* The operator's own book rides the same rail, with the same extras. It is
+     the third instance of makeRail on this surface and it cost one call, which
+     is the point of the shared implementation. */
+  let mineRail = null;
+  function mineRailSync(){
+    const track = $('mine');
+    if(!track || !window.SSWheel) return;
+    if(!mineRail){
+      /* A bare mountRails() sweep — the resize handler runs one — walks every
+         .wheel-rail in the document and attaches a CHROME-LESS instance to any
+         it does not know. #mine starts inside a display:none panel, so it can
+         be claimed that way before this panel has ever painted, and a second
+         makeRail on the same element would leave two wheels fighting over one
+         drag. Take the track back rather than doubling up. */
+      const stale = rails.get(track);
+      if(stale){ stale.wheel.destroy(); rails.delete(track); }
+      mineRail = makeRail(track, {prev: 'minePrev', next: 'mineNext',
+                                  status: 'mineStatus'});
+    }
+    mineRail.sync();
+  }
+
   let railResizeT = 0;
   addEventListener('resize', () => {
     clearTimeout(railResizeT);
-    railResizeT = setTimeout(() => { missionRailSync(); mountRails(); }, 120);
+    railResizeT = setTimeout(() => {
+      missionRailSync(); mineRailSync(); mountRails();
+    }, 120);
   });
 
   /* The COIN behind a venue's symbol. `PF_UNIUSD` (Kraken perp), `UNIUSDT`
@@ -2401,6 +2425,27 @@ weighed in. Name the facts you used.`;
      book, and the whole point of the manual store is that hand-picked trades
      never enter the record that grades the strategy. Same visual language,
      separate panel, labelled on the header. */
+
+  /* ═══ SAME ANATOMY AS A MISSION CARD, DELIBERATELY NOT THE SAME MATERIAL ═══
+
+     These were rows while every other live-trade surface on Command had become
+     a card rail, so they get the rail: `.mc`, makeRail(), ringSvg(),
+     ladderHtml(), window.SSFormat. That is the anatomy, and sharing it is
+     right — an open trade is an open trade, and a second hand-rolled money
+     formatter on this panel is the bug this repo has already fixed twice.
+
+     What is NOT shared is the plate. `.mc.mission` wears brushed platinum and
+     it means exactly one thing: the engine's book, your money in it. A
+     hand-picked trade is a different book by construction — `manual.arm` never
+     consults the risk authority, the risk budget does not count this money,
+     and none of it may ever be read as engine edge. So this card stays on the
+     app's matte ground and wears an accent spine (the property `.pos-row.mine`
+     carried, brought forward) plus an off-record hatch. Material is the
+     distinction because material survives the rail: at three cards out a card
+     is turned, dimmed and blurred, and a chip is unreadable while a plate
+     versus a black card with a lit edge still is not. The chip is kept anyway,
+     on the card as well as the panel head, so the same thing is said in words
+     to anyone reading one card close up or with a screen reader. */
   let MINE = {open: [], pending_risk_usd: '0', open_risk_usd: '0'};
 
   /* Bars left, said in time. "4 bars" is the engine's unit and means nothing
@@ -2426,93 +2471,144 @@ weighed in. Name the facts you used.`;
       box.innerHTML = `<div class="empty">Could not read your book — ${
         esc(err.message || 'the server did not answer')}. Any orders you armed
         are still there; this panel just cannot show them right now.</div>`;
+      mineRows.clear();
+      mineRailSync();
       return;
     }
     MINE = d || MINE;
     setAccentMode();          // the operator's own orders are money too
     const rows = (d && d.open) || [];
-    if(!rows.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
+    if(!rows.length){ panel.style.display = 'none'; box.innerHTML = ''; mineRows.clear(); return; }
     panel.style.display = '';
+    box.querySelectorAll(':scope > .empty').forEach(n => n.remove());
 
     const risk = (+d.open_risk_usd || 0) + (+d.pending_risk_usd || 0);
     $('mineRisk').textContent =
       `${money(risk)} committed · ${d.n_open} open, ${d.n_pending} waiting`;
 
-    const prices = await Promise.all(rows.map(t =>
-      api(`/api/candles?symbol=${encodeURIComponent(t.symbol)}&tf=${
-            encodeURIComponent(t.tf)}&limit=1`)
-        .then(a => { const r = Array.isArray(a) ? a[a.length - 1] : null;
-                     return r ? +r.close : null; })
-        .catch(() => null)));
-
-    box.innerHTML = rows.map((t, i) => {
-      const long = t.direction === 'LONG';
-      const entry = +t.entry, sl = +(t.current_stop || t.sl), tp = +t.tp;
-      const now = prices[i];
-      const sym = tokenOf(t.symbol);
-      /* A planned rung belongs on a RESTING order too. It is part of the plan
-         that will run without anyone watching, and an order that will take
-         half off at a level reads as an ordinary one until it does. */
-      const plan = (t.partials_planned || []).map(
-        r => `${Math.round(+r.fraction * 100)}% off at ${px(+r.price)}`).join(' · ');
-      const head = `<div>
-          <div class="pos-sym">${esc(sym)}</div>
-          <div class="t-label" style="margin-top:3px">${long ? 'Long' : 'Short'} · ${
-            esc(t.tf)} · yours${+t.leverage > 1 ? ' · ' + esc(t.leverage) + 'x' : ''}</div>
-          ${plan ? `<div class="t-sub">${esc(plan)}</div>` : ''}
-        </div>`;
-      const cancel = `<button class="btn mine-cancel" data-cancel="${esc(t.intent_id)}"
-            title="withdraw this resting order — nothing has been risked yet">Cancel</button>`;
-
-      if(t.state === 'PENDING'){
-        const bars = t.bars_left;
-        const soon = bars != null && bars <= 1;
-        const away = (now == null || !now) ? null : Math.abs(now - entry) / now * 100;
-        return `<div class="pos-row pending mine">
-          ${head}
-          <div>
-            <div class="pos-wait">waits <b>${px(entry)}</b>${
-              away == null ? '' : ` · ${away.toFixed(1)}% away`}${
-              bars == null ? '' : ` · ${bars} bar${bars === 1 ? '' : 's'} left`}
-              <span class="t-sub" title="Nothing is at stake until it fills">unfilled</span></div>
-            <div class="pos-ends">
-              <span>stop ${px(sl)}</span>
-              <span class="now">${now == null ? 'price unavailable' : 'now ' + px(now)}</span>
-              <span>target ${px(tp)}</span>
-            </div>
-          </div>
-          <div class="pos-r">
-            <span class="chip ${soon ? 'chip-red' : 'chip-amber'}">${
-              soon ? 'expiring' : 'waiting'}</span>
-            <span class="t-sub">${money(t.risk_usd)} if it fills · ${
-              esc(windowLeft(bars, t.tf_seconds))}</span>
-            ${cancel}</div>
-        </div>`;
+    /* The server's own measuring moment, not the browser's clock — every
+       `bars_left` on this payload was counted against it. */
+    const now = +d.measured_at || Date.now() / 1000;
+    /* Keyed diff, the same discipline every other rail on this surface holds
+       and for the same reason: this repaints on a 30s poll, and a wholesale
+       innerHTML would destroy Cancel under a pointer already on its way down —
+       on the one control here that mutates the operator's book. Keyed on
+       intent_id, which is the order's identity for its whole life. */
+    const seen = new Set();
+    rows.forEach(t => {
+      const key = t.intent_id || (t.symbol + '|' + t.tf);
+      seen.add(key);
+      const html = mineCardInner(t, now);
+      const cls = 'mc mine' + (t.state === 'PENDING' ? ' resting' : ' filled');
+      let rec = mineRows.get(key);
+      if(!rec){
+        const node = document.createElement('div');
+        node.className = cls;
+        node.innerHTML = html;
+        rec = {el: node, html, cls};
+        mineRows.set(key, rec);
+      }else{
+        if(rec.cls !== cls){ rec.el.className = cls; rec.cls = cls; }
+        if(rec.html !== html){ rec.el.innerHTML = html; rec.html = html; }
       }
+      box.appendChild(rec.el);
+    });
+    for(const [key, rec] of mineRows){
+      if(seen.has(key)) continue;
+      rec.el.remove(); mineRows.delete(key);
+    }
+    wireCardActions(box);     // data-manage; Cancel is delegated on document
+    mineRailSync();
+  }
+  const mineRows = new Map();          // intent_id -> {el, html, cls}
 
+  function mineCardInner(t, now){
+    const long = t.direction === 'LONG';
+    const pending = t.state === 'PENDING';
+    const entry = +t.entry;
+    /* ONE PRICE ON THIS CARD, AND IT IS THE SERVER'S. This panel used to fetch
+       /api/candles per row on the CHART timeframe and mark the live price from
+       that, while the R beside it was marked by the book against `last_close`
+       on the RESOLVING timeframe — two different bars, forty pixels apart. The
+       payload already carries the bar the book used, so the picture and the
+       number now come off the same close. */
+    const live = t.last_close == null ? null : +t.last_close;
+    /* The plan, as the shared ladder wants it. The stop is the stop as it
+       stands NOW, ratchet included: that is where this trade dies today, and
+       drawing the original one would misstate it. */
+    const lad = {entry: t.entry, tp: t.tp, sl: t.current_stop || t.sl};
+
+    const bars = t.bars_left;
+    const soon = bars != null && bars <= 1;
+    /* A resting order's ring is the fraction of its OWN fill window still to
+       run — the same measurement the mission ready-card's ring carries, and
+       computed from two facts on the row rather than from a denominator this
+       file would have to invent: when it was armed, and how many bars are
+       left. A filled trade's ring is where price stands between stop and
+       target, which is ladderRing's whole job. */
+    const elapsed = t.tf_seconds
+      ? Math.max(0, (now - (t.armed_at || now)) / t.tf_seconds) : 0;
+    const span = (bars == null ? 0 : bars) + elapsed;
+    const lifeFrac = (bars == null || span <= 0) ? 1 : bars / span;
+    const ring = pending
+      ? ringSvg(lifeFrac,
+                soon ? 'ring-low' : lifeFrac <= 0.5 ? 'ring-mid' : 'ring-ok',
+                bars == null ? '—' : String(bars),
+                bars === 1 ? 'bar left' : 'bars left')
+      : ladderRing(lad, live);
+
+    /* ARMED AND WAITING IS NOT OPEN AND FILLED, and the stamp is where that is
+       said first. A resting order wears the dashed mark this app already uses
+       for "not cleared yet"; a filled one wears solid ink. */
+    const stamp = pending ? ['st-mine-rest', 'YOURS · ARMED']
+                          : ['st-mine', 'YOURS · FILLED'];
+    const held = t.bars_held == null ? ''
+      : `Held ${t.bars_held} ${esc(t.tf)} bar${t.bars_held === 1 ? '' : 's'}`;
+
+    /* AUDIBLE DEGRADATION. `resolution_tf` is the grid this row's fill and mark
+       were resolved on, and `resolution_degraded` is the plain-English reason
+       when it is not the finest one stored. A fill that landed four hours late
+       for a reason nobody can read is the same bug in a quieter costume, so
+       the reason is printed on the card rather than left in a run log. Null is
+       the ordinary case and prints nothing. */
+    const degraded = t.resolution_degraded
+      ? `<div class="mc-degraded">Resolved on ${esc(t.resolution_tf || '')} bars — ${
+           esc(t.resolution_degraded)}. The fill moment and the mark are
+           coarser than usual.</div>`
+      : '';
+
+    /* A planned rung belongs on a RESTING order too. It is part of the plan
+       that will run without anyone watching, and an order that will take half
+       off at a level reads as an ordinary one until it does. */
+    const plan = (t.partials_planned || []).map(
+      r => `${Math.round(+r.fraction * 100)}% off at ${px(+r.price)}`).join(' · ');
+
+    let body;
+    if(pending){
+      const away = (live == null || !live) ? null : Math.abs(live - entry) / live * 100;
+      body = `<div class="mc-nums t-mono">waits <b>${px(entry)}</b>${
+          away == null ? '' : ` · ${away.toFixed(1)}% away`}${
+          bars == null ? '' : ` · ${bars} bar${bars === 1 ? '' : 's'} left`}
+          <span class="t-sub" title="Nothing is at stake until it fills">unfilled</span></div>
+        <div class="mc-nums t-mono">${money(t.risk_usd)} if it fills · ${
+          esc(windowLeft(bars, t.tf_seconds))}</div>`;
+    }else{
       // OPEN — filled, and worth something right now. The R comes from the
       // server, which marks it against the last CLOSED bar with the same walk
       // that will settle the trade; recomputing it here would be a second
       // authority that drifts from the one that pays out.
       const r = t.unrealized_r == null ? null : +t.unrealized_r;
-      /* PARTLY CLOSED IS NOT OPEN, and this row said it was. A position with
+      /* PARTLY CLOSED IS NOT OPEN, and this used to say it was. A position with
          half taken off rendered exactly like an untouched one: the full stake
          under "at risk", and `unrealized_r` — which is the per-unit R of what
          is STILL on — read as the whole trade's result. Both numbers were
          wrong in the flattering direction on a winner.
          `blended_r` is the trade: banked plus open. It equals `unrealized_r`
-         when nothing has been scaled out, so an ordinary row is unchanged. */
+         when nothing has been scaled out, so an ordinary card is unchanged. */
       const closed = +t.closed_fraction || 0;
       const openFrac = t.open_fraction == null ? 1 : +t.open_fraction;
       const blended = t.blended_r == null ? r : +t.blended_r;
       const tone = blended == null ? '' : blended >= 0 ? 'up' : 'down';
-      const span = Math.abs(tp - sl);
-      const at = (now == null || !span) ? null
-        : Math.max(2, Math.min(98, ((long ? now - sl : sl - now) / span) * 100));
-      const entAt = span ? Math.max(2, Math.min(98,
-        ((long ? entry - sl : sl - entry) / span) * 100)) : null;
-      const a = (at == null || entAt == null) ? null : Math.min(entAt, at);
-      const b = (at == null || entAt == null) ? null : Math.max(entAt, at);
       /* Only the REMAINING size is still exposed. Quoting the original stake
          beside a half-closed position overstates what a stop would now cost —
          the money the operator is deciding with. */
@@ -2522,30 +2618,70 @@ weighed in. Name the facts you used.`;
              rr(+t.realized_r)} banked${
              openFrac > 0 ? ' · ' + rr(r) + ' on the rest' : ''}</span>`
         : '';
-      return `<div class="pos-row mine">
-        ${head}
-        <div>
-          <div class="pos-track"><span class="end-sl"></span><span class="end-tp"></span>${
-            a == null ? '' :
-            `<span class="pos-prog ${tone}" style="left:${a.toFixed(1)}%;width:${(b - a).toFixed(1)}%"></span>
-             <span class="pos-entry" style="left:${entAt.toFixed(1)}%" title="entry ${px(entry)}"></span>
-             <span class="pos-mark" style="left:${at.toFixed(1)}%"></span>`}</div>
-          <div class="pos-ends">
-            <span>${t.trailed ? 'stop (trailed)' : 'stop'} ${px(sl)}</span>
-            <span class="now">${now == null ? 'price unavailable' : 'now ' + px(now)}</span>
-            <span>target ${px(tp)}</span>
-          </div>
-        </div>
-        <div class="pos-r ${tone}">${rr(blended)}
+      /* The ladder draws the stop where it stands, which on a ratcheted trade
+         is not where it started. Saying so is the difference between "the plan
+         moved" and "I misread the plan". */
+      body = `<div class="mc-nums t-mono mine-money">
+          <b class="mine-r ${tone}">${rr(blended)}</b>
           <span class="t-sub">${
             t.unrealized_usd == null ? money(stillAtRisk) + ' at risk'
               : signedMoney(t.unrealized_usd) + ' · ' + money(stillAtRisk) + ' at risk'}</span>
           ${scaled}
-          <span class="t-sub">${
-            t.bars_held == null ? '' : 'held ' + t.bars_held + ' bar' + (t.bars_held === 1 ? '' : 's')}</span>
+          ${t.trailed ? '<span class="t-sub">stop trailed — the ladder shows where it stands now</span>' : ''}
+        </div>`;
+    }
+
+    return `
+      <div class="mc-top">
+        <span class="mc-stamp ${stamp[0]}">${stamp[1]}</span>
+        <span class="mc-id t-mono">${pending ? 'Not filled yet' : held}</span>
+      </div>
+      <div class="mc-hero">
+        <div class="mc-idy">
+          <button class="mc-tok t-mono pos-sym pos-open" data-manage="${esc(t.symbol)}"
+                  data-managetf="${esc(t.tf)}"
+                  title="open the chart on this trade">${esc(tokenOf(t.symbol))}</button>
+          <div class="mc-sub t-label" title="${esc(t.symbol)}">${
+            esc(String(t.symbol).replace('-USD',''))} · ${esc(t.tf)} · yours${
+            +t.leverage > 1 ? ' · ' + esc(t.leverage) + 'x' : ''}</div>
+          <div class="mc-dirline">
+            <span class="chip ${long ? 'chip-green' : 'chip-red'}">${esc(t.direction)}</span>
+            ${pending ? `<span class="chip ${soon ? 'chip-red' : 'chip-amber'}">${
+              soon ? 'expiring' : 'waiting'}</span>` : ''}
+            <!-- Said on the card, not only on the panel head: one card seen
+                 alone, or read out by a screen reader, must still say which
+                 book it belongs to. -->
+            <span class="chip chip-mine"
+                  title="you armed this by hand — it is outside the risk budget and never counts as engine edge">not engine record</span>
+          </div>
         </div>
+        <div class="mc-ringcol">
+          ${ring}
+          <!-- "4h left" alone renders uppercase as 4H LEFT, which on a card
+               whose timeframe IS 4H reads as the timeframe. The clause says
+               what the time is until. -->
+          <div class="t-label mc-exp">${pending
+            ? (esc(windowLeft(bars, t.tf_seconds)) + ' to fill').trim()
+            : (live == null ? 'No live price' : 'Toward target')}</div>
+        </div>
+      </div>
+      <!-- ladderHtml returns nothing when the three prices cannot be scaled
+           against each other, and this card must never lose its prices to
+           that. Same flat fallback the setup card carries. -->
+      ${ladderHtml(lad, live) || `<div class="mc-nums t-mono">
+        entry <b>${px(lad.entry)}</b> ·
+        tp <b style="color:var(--green)">${px(lad.tp)}</b> ·
+        stop <b style="color:var(--red-2)">${px(lad.sl)}</b>
+      </div>`}
+      ${body}
+      ${plan ? `<div class="mc-nums t-mono"><span class="t-sub">${esc(plan)}</span></div>` : ''}
+      ${degraded}
+      <div class="mc-acts">
+        <button class="btn" data-manage="${esc(t.symbol)}" data-managetf="${esc(t.tf)}"
+                title="open the chart on this trade — the ticket manages it">Manage</button>
+        ${pending ? `<button class="btn mine-cancel" data-cancel="${esc(t.intent_id)}"
+                title="withdraw this resting order — nothing has been risked yet">Cancel</button>` : ''}
       </div>`;
-    }).join('');
   }
 
   /* Cancel is a real mutation on the operator's book, so it confirms first and
