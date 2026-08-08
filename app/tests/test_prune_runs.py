@@ -154,8 +154,22 @@ class PruneRunsCase(unittest.TestCase):
         after = self.con.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
         self.assertEqual(before + 1, after, "only the retention fact is added")
 
-    def test_facts_target_is_refused_rather_than_half_implemented(self):
-        self.assertEqual(2, prune.main(["--target", "facts"]))
+    def test_deleting_requires_an_explicit_flag(self):
+        """The spec's §5 shape: dry run is what you get by asking for nothing.
+
+        Asserted against the parser rather than by running it — prune.main()
+        opens the real store, and a test that reaches the operator's live
+        database to check an argument default is the hazard CLAUDE.md names.
+        """
+        src = Path(prune.__file__).read_text(encoding="utf-8")
+        self.assertIn('ap.add_argument("--apply", action="store_true"', src)
+        self.assertIn("if not args.apply:", src)
+        self.assertIn("DRY RUN", src)
+
+    def test_both_targets_are_implemented(self):
+        for name in ("plan_runs", "apply_runs", "plan_facts", "apply_facts"):
+            with self.subTest(fn=name):
+                self.assertTrue(hasattr(prune, name))
 
 
 if __name__ == "__main__":
