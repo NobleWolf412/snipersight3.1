@@ -219,7 +219,7 @@ Audited 2026-07-31.
 | `DESIGN-SYSTEM.md` | current |
 | **`HARDENING.md`** | **STALE AND WRONG** — declares "Coinbase spot / shorts rejected / leverage capped at 1×" and an engine chain six versions behind. It is a *venue contract*, so being wrong here is worse than being absent |
 | **`README.md`** | **STALE** — describes a Coinbase-spot-only system with the old cockpit UI; predates perps, the five-surface shell, and every engine added since 07-22 |
-| `TODO.md` | mixed; a v0 remediation tracker still open against items long since closed |
+| `TODO.md` | **deleted 2026-08-07** — a v0 remediation tracker still open against items long since closed. Kept in git history |
 | `war-room/*`, `personas/*`, `sources/*` | Apex artefacts (`personas/`, `foundation.md`) and old war-room notes deleted 2026-08-07 — git history is the archive. `sources/ss3_v0.1.txt` (the constitution) stays; `war-room/` is runtime output, recreated on demand by `apexbridge.py` |
 
 ---
