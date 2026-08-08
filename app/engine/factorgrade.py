@@ -279,6 +279,44 @@ def grade(con, *, window_bars: int = DEFAULT_WINDOW, resamples: int = 5000,
     }
 
 
+def calibrated_grade(evidence: dict) -> dict:
+    """Turn validated Factor Stats into an explanation-only setup grade.
+
+    Only stable, forward, multiple-testing-adjusted positive uplift can earn a
+    letter. The grade never grants eligibility and ``sizing_allowed`` remains
+    false until a later, explicitly promoted shadow calibration says otherwise.
+    """
+    accepted = [row for row in evidence.get("rows", [])
+                if row.get("passes_evidence")]
+    total_n = sum(int(row.get("high_samples", {}).get("forward", 0))
+                  for row in accepted)
+    if not accepted:
+        return {
+            "version": "factorgrade-v0.2-draft", "score": None,
+            "grade": "UNGRADED", "confidence": "INSUFFICIENT_EVIDENCE",
+            "coverage": 0.0, "expected_edge_r": None, "sample_size": 0,
+            "components": [], "warnings": [
+                "No stable out-of-sample factor survived the evidence and "
+                "multiple-testing gates."], "sizing_allowed": False,
+        }
+    weights = [max(1, int(row["high_samples"]["forward"])) for row in accepted]
+    edge = sum(float(row["shrunk_uplift_r"]) * weight
+               for row, weight in zip(accepted, weights)) / sum(weights)
+    coverage = sum(float(row["coverage"]) * weight
+                   for row, weight in zip(accepted, weights)) / sum(weights)
+    score = max(0.0, min(100.0, 50.0 + edge * 100.0))
+    grade_name = "A" if score >= 80 else "B" if score >= 65 else "C" if score >= 50 else "D"
+    q_min = min(float(row["q_value"]) for row in accepted)
+    confidence = "HIGH" if total_n >= 100 and q_min <= 0.05 else "MEDIUM"
+    return {
+        "version": "factorgrade-v0.2-draft", "score": round(score, 2),
+        "grade": grade_name, "confidence": confidence,
+        "coverage": round(coverage, 4), "expected_edge_r": round(edge, 4),
+        "sample_size": total_n, "components": accepted, "warnings": [],
+        "sizing_allowed": False,
+    }
+
+
 def _fmt(rep: dict) -> str:
     L = [f"UNWIRED ENGINES vs THE BOOK   book {rep['strategy']} · "
          f"window {rep['window_bars']} bars · "

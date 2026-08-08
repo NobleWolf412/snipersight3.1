@@ -35,7 +35,7 @@ evidence rather than shipped on plausibility.
 import json
 from decimal import Decimal
 
-from . import bias, costs, store
+from . import bias, costs, registry, store
 from .liquidity import LIQ_VERSION
 from .regime import REGIME_VERSION
 from .runlog import RunRecorder
@@ -94,6 +94,8 @@ RETEST_INVALIDATE_ATR = Decimal("0.75")
 
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
     with RunRecorder(con, "breakout", BREAKOUT_VERSION, symbol, tf) as rec:
+        if tf not in registry.BREAKOUT_RETEST.timeframes:
+            return {"symbol": symbol, "tf": tf, "setups": 0, "rejected": 0}
         candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
         if len(candles) < 30:
             return {"symbol": symbol, "tf": tf, "setups": 0, "rejected": 0}

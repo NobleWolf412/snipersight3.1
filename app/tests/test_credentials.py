@@ -46,6 +46,14 @@ class VaultTest(unittest.TestCase):
         credentials.clear("phemex-perp", "api_key")
         self.assertIsNone(credentials.read_secret("phemex-perp", "api_key"))
 
+    def test_testnet_and_mainnet_credentials_are_isolated(self):
+        credentials.store_secret("phemex-testnet", "api_key", "test-key")
+        credentials.store_secret("phemex-mainnet", "api_key", "live-key")
+        self.assertEqual(credentials.read_secret(
+            "phemex-testnet", "api_key"), "test-key")
+        self.assertEqual(credentials.read_secret(
+            "phemex-mainnet", "api_key"), "live-key")
+
     def test_unknown_venue_or_field_refused(self):
         """An open-ended store invites secrets nobody audits."""
         with self.assertRaises(ValueError):

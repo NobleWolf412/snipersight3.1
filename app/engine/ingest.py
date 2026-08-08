@@ -11,6 +11,9 @@ from . import importer, aggregator, pipeline
 DAILY_SINCE = "2022-01-01"
 HOURS_DAYS = 180
 M15_DAYS = 30
+# Kraken's native 5m endpoint is capped at 5,000 candles. Fourteen days stays
+# within one bounded walk (4,032 bars) while still warming the scalp features.
+M5_DAYS = 14
 # How far inside its floor a stored series may START before we call it a HOLE
 # rather than simply where the venue's own history begins. Two bars absorbs
 # bucket alignment and the bar that was still forming when onboarding ran.
@@ -45,6 +48,7 @@ def history_floor(tf: str, now: int) -> int:
                    .replace(tzinfo=timezone.utc).timestamp())
     return {"1D": since_1d,
             "1H": now - HOURS_DAYS * 86400,
+            "5m": now - M5_DAYS * 86400,
             "15m": now - M15_DAYS * 86400}.get(tf, since_1d)
 
 

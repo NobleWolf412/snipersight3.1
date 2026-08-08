@@ -62,7 +62,7 @@ RESOLVED_HOURS = {"scalp": 0.25, "intraday": 0.5, "swing": 1.0}
 
 # Which timeframes count as which horizon. A horizon is a hold-time policy, not
 # a timeframe — but the timeframe is what the setup carries, so this is the map.
-HORIZON_BY_TF = {"15m": "scalp", "1H": "intraday", "4H": "intraday",
+HORIZON_BY_TF = {"5m": "scalp", "15m": "scalp", "1H": "intraday", "4H": "intraday",
                  "1D": "swing", "1W": "swing"}
 
 # Outcomes that mean the level FAILED, as opposed to merely finished.

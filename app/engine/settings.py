@@ -29,7 +29,7 @@ history; the old baseline and every fact under it are retained.
 import json
 import time
 
-SETTINGS_VERSION = "settings-v0.1-draft"
+SETTINGS_VERSION = "settings-v0.2-draft"
 
 # name -> (class, type, default, description)
 SPEC = {
@@ -42,7 +42,9 @@ SPEC = {
                        "Liquidity floor. Structural stops do not fill on thin books."),
     "strategy_pullback": ("BEHAVIOURAL", bool, True, "Trade PULLBACK setups."),
     "strategy_reversal": ("BEHAVIOURAL", bool, True, "Trade REVERSAL setups."),
-    "strategy_scale_in": ("BEHAVIOURAL", bool, True, "Allow SCALE_IN adds."),
+    "strategy_scale_in": ("BEHAVIOURAL", bool, False,
+                          "Allow SCALE_IN adds. Off by default: the first-live "
+                          "safety contract forbids averaging and pyramiding."),
     # Declared but PLANNED — `registry.RANGE_FADE`. The switch exists so the
     # catalogue can render its toggle in a disabled state against a real
     # setting rather than a placeholder, and defaults OFF because the strategy
@@ -55,6 +57,12 @@ SPEC = {
     "strategy_range_fade": ("BEHAVIOURAL", bool, False,
                             "Trade RANGE FADE setups. Planned — no engine "
                             "implements it yet; enabling it changes nothing."),
+    "strategy_liquidity_sweep_reversal": (
+        "BEHAVIOURAL", bool, False,
+        "Trade 5m LIQUIDITY SWEEP REVERSAL setups. Research-only and locked."),
+    "strategy_compression_release": (
+        "BEHAVIOURAL", bool, False,
+        "Trade COMPRESSION RELEASE setups. Research-only and locked."),
     # OPERATIONAL, deliberately: halting stops new entries but changes no rule.
     # Classing it BEHAVIOURAL reset the forward baseline on every halt/resume,
     # which would have made the safety control destroy the evidence it protects.

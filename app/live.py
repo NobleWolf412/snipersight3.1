@@ -1,6 +1,6 @@
 """Forward paper loop — the scanner running live.
 
-Wakes are aligned to the candle grid: just past each 15m boundary (where every
+Wakes are aligned to the candle grid: just past each 5m boundary (where every
 tracked timeframe closes — see next_wake), capped by the POLL_SECONDS drift
 heartbeat. Each pass: import newly CLOSED candles (never developing ones, §5),
 re-aggregate 4H/1W, re-run every engine (all idempotent/append-only — a cycle
@@ -77,7 +77,7 @@ def install_exit_forensics() -> None:
             pass                      # not every signal is settable on Windows
     atexit.register(lambda: _exit_note("EXIT", "interpreter shutdown"))
 
-NATIVE_TFS = ("15m", "1H", "1D")
+NATIVE_TFS = tuple(importer.NATIVE_TFS)
 # None, not 0.0, and the difference is not cosmetic. This is compared against
 # time.monotonic(), whose zero is BOOT — so 0.0 does not mean "never refreshed",
 # it means "refreshed at boot". On a machine that has been up for hours the
@@ -116,8 +116,8 @@ POLL_SECONDS = 60
 # to the CANDLE BOUNDARY, because that is when the world can change.
 #
 # One grid covers every boundary, and that is a checked fact, not a hope:
-# every tracked granularity is a multiple of 900s, and the 1D/1W boundaries
-# (midnight / Monday 00:00 UTC) sit on the 900s grid too — pinned in
+# every tracked granularity is a multiple of 300s, and the 1D/1W boundaries
+# (midnight / Monday 00:00 UTC) sit on the 300s grid too — pinned in
 # test_boundary_wake. So a wake landing just after each 15m edge lands just
 # after EVERY edge that matters.
 #
@@ -126,7 +126,7 @@ POLL_SECONDS = 60
 # the live price BETWEEN closes), and the scanner-health light declares the
 # process stuck at SCANNER_STALE_S=90 — both constraints hold by construction
 # because next_wake never exceeds the poll.
-CANDLE_GRID_S = 900
+CANDLE_GRID_S = 300
 # How long after the boundary the venue needs to finalize the bar before an
 # import can land it. The prior project ran 5.0s in production
 # (ohlcv_cache.is_expired buffer_seconds); kept. A candle that finalizes

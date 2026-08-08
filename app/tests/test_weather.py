@@ -310,7 +310,7 @@ class TestOneWordingForOneRegime(TempStore):
             with self.subTest(reg=reg):
                 self.universe([{"symbol": "BTCUSDT", "rank": 1,
                                 "state": "ADMITTED"}])
-                for tf in ("1W", "1D", "4H", "1H", "15m"):
+                for tf in ("1W", "1D", "4H", "1H", "15m", "5m"):
                     self.regime_fact("BTCUSDT", tf, reg)
                 rows = self.context()["timeframes"]
                 for row in rows:

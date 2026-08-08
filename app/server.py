@@ -20,6 +20,9 @@ from fastapi.staticfiles import StaticFiles
 from engine import registry, store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
 from engine import momentum, volatility, volume, ma, fvg, volprofile, ranges
 from engine import costs
+from engine import achievements, automation, broker_factory, contracts, execution, learning, market_context, opportunities, positions, venues
+from engine import factorgrade as factorgrade_engine, factorstats as factorstats_engine
+from engine import edgestats
 
 KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "structure": structure.STRUCTURE_VERSION,
@@ -789,6 +792,71 @@ def setup_trace(setup_id: str):
         con.close()
 
 
+def _journal_performance_summary(journal: list[dict], baseline: dict) -> dict:
+    """One server-owned scoreboard for the current funded forward book."""
+    values = [Decimal(str(row["r_multiple"])) for row in journal
+              if row.get("r_multiple") is not None]
+    wins = [value for value in values if value > 0]
+    losses = [-value for value in values if value < 0]
+    n = len(values)
+    avg = (sum(values, Decimal(0)) / n if n else None)
+    profit_factor = (sum(wins, Decimal(0)) / sum(losses, Decimal(0))
+                     if losses and wins else None)
+    boot = edgestats._bootstrap_mean([float(value) for value in values], 5000)
+    confidence = ({"status": "MEASURED", "lo": round(boot["ci_lo"], 4),
+                   "hi": round(boot["ci_hi"], 4), "resamples": 5000,
+                   "method": "DETERMINISTIC_BOOTSTRAP_MEAN"}
+                  if boot else {"status": "INSUFFICIENT_EVIDENCE", "lo": None,
+                                "hi": None, "resamples": 0,
+                                "minimum_trades": edgestats.MIN_TRADES,
+                                "method": "DETERMINISTIC_BOOTSTRAP_MEAN"})
+    if n < 10:
+        verdict = {"code": "INSUFFICIENT_EVIDENCE",
+                   "text": f"{n} closed trade{'s' if n != 1 else ''}; too few to judge the method."}
+    else:
+        verdict = {"code": "REVIEW_CONFIDENCE_INTERVAL",
+                   "text": "The sample can be measured; read the confidence interval before trusting it."}
+    return {
+        "population": "FUNDED_PAPER_TRADES", "window": "ACTIVE_BASELINE",
+        "baseline_id": baseline.get("baseline_id") or baseline.get("id"),
+        "started_at": baseline.get("started_at"), "trades": n,
+        "wins": len(wins), "win_pct": (round(100 * len(wins) / n) if n else None),
+        "average_r": (float(avg.quantize(Decimal("0.0001"))) if avg is not None else None),
+        "profit_factor": (float(profit_factor.quantize(Decimal("0.01")))
+                          if profit_factor is not None else None),
+        "has_losses": bool(losses),
+        "best_r": float(max(values)) if values else None,
+        "worst_r": float(min(values)) if values else None,
+        "confidence_interval_r": confidence,
+        "verdict": verdict,
+    }
+
+
+def _performance_dimensions(journal: list[dict], baseline: dict) -> dict:
+    """Comparable funded-book cuts; unknown metadata stays explicitly unknown."""
+    def rows(field):
+        buckets: dict[str, list[dict]] = {}
+        for trade in journal:
+            key = str(trade.get(field) or "NOT_REPORTED")
+            buckets.setdefault(key, []).append(trade)
+        out = []
+        for key, trades in sorted(buckets.items()):
+            rs = [Decimal(str(trade.get("r_multiple") or 0)) for trade in trades]
+            pnl = sum((Decimal(str(trade.get("pnl_usd") or 0)) for trade in trades), Decimal(0))
+            wins = sum(value > 0 for value in rs)
+            out.append({"key": key, "n": len(trades),
+                        "win_pct": round(100 * wins / len(trades)),
+                        "average_r": float((sum(rs, Decimal(0)) / len(rs)).quantize(Decimal("0.0001"))),
+                        "sum_r": float(sum(rs, Decimal(0)).quantize(Decimal("0.01"))),
+                        "pnl_usd": float(pnl.quantize(Decimal("0.01"))),
+                        "population": "FUNDED_PAPER_TRADES"})
+        return out
+    return {"window": "ACTIVE_BASELINE", "population": "FUNDED_PAPER_TRADES",
+            "baseline": baseline, "dimensions": {
+                field: rows(field) for field in
+                ("strategy", "regime", "horizon", "direction", "order_type")}}
+
+
 @app.get("/api/portfolio")
 def portfolio():
     """Paper account state from risk-authority facts (§9/§13 dashboard)."""
@@ -810,7 +878,7 @@ def portfolio():
             if r["confirmed_at"] >= since and p.get("event") == "KILL_SWITCH":
                 kills += 1
         for sym in universe.all_tracked_symbols(con):
-            for tf in ("15m", "1H", "4H", "1D", "1W"):
+            for tf in ("5m", "15m", "1H", "4H", "1D", "1W"):
                 for version in (setups.SETUP_VERSION, scalein.SCALE_VERSION):
                     for r in store.get_facts(con, sym, tf, "setup", version):
                         p = json.loads(r["payload"])
@@ -911,6 +979,8 @@ def portfolio():
             # journal is the surface an operator reads to learn what their
             # system does; a row with an outcome but no reason teaches nothing.
             setup = setup_by_id.get(sid, {})
+            strategy_contract = registry.for_engine_name(str(setup.get("strategy") or ""))
+            order = latest_order.get(sid, {})
             journal.append({
                 "setup_id": sid, "symbol": ex["symbol"], "tf": ex["tf"],
                 "why": setup.get("why"),
@@ -918,6 +988,9 @@ def portfolio():
                 "ts": ex["ts"],
                 "direction": ex.get("direction"),
                 "strategy": ex.get("strategy"),
+                "horizon": setup.get("horizon") or (
+                    strategy_contract.horizon if strategy_contract else None),
+                "order_type": order.get("order_type") or setup.get("entry_model"),
                 "outcome": ex.get("outcome"),
                 "r_multiple": r_net,
                 "r_gross": float(ex.get("r_gross") or 0),
@@ -1013,6 +1086,7 @@ def portfolio():
                 # reintroduced later cannot silently lie about being complete.
                 "journal": journal,
                 "journal_total": len(journal),
+                "performance_summary": _journal_performance_summary(journal, baseline),
                 "config": {"risk_pct": float(risk.RISK_PCT) * 100,
                            "max_total_risk_pct": float(risk.MAX_TOTAL_OPEN_RISK_PCT) * 100,
                            "max_concurrent": risk.MAX_CONCURRENT,
@@ -1145,6 +1219,14 @@ def system_restart(target: str = Query("both", pattern="^(server|scanner|both)$"
             "expected_back_within_s": 15}
 
 
+@app.get("/api/performance/dimensions")
+def performance_dimensions():
+    """Funded forward-book results by operator comparison dimension."""
+    payload = portfolio()
+    return _performance_dimensions(payload.get("journal") or [],
+                                   payload.get("baseline") or {})
+
+
 @app.get("/api/performance")
 def performance():
     """Per-symbol / per-strategy paper performance, PARTITIONED BY WHETHER THE
@@ -1175,7 +1257,7 @@ def performance():
         sized = {}    # setup_id -> risk_usd for APPROVED/REDUCED
         refused = {}  # setup_id -> the reason it was not funded
         for sym in universe.all_tracked_symbols(con):
-            for tf in ("15m", "1H", "4H", "1D", "1W"):
+            for tf in ("5m", "15m", "1H", "4H", "1D", "1W"):
                 for r in store.get_facts(con, sym, tf, "risk", risk.RISK_VERSION):
                     p = json.loads(r["payload"])
                     if p.get("event") != "DECISION" or p.get("setup_id") not in eligible:
@@ -1208,7 +1290,7 @@ def performance():
         untaken_n = {}                     # taken key -> trades it did NOT fund
         for sym in universe.all_tracked_symbols(con):
             is_shadow = sym in shadow
-            for tf in ("15m", "1H", "4H", "1D", "1W"):
+            for tf in ("5m", "15m", "1H", "4H", "1D", "1W"):
                 for r in store.get_facts(con, sym, tf, "exec", execsim.EXEC_VERSION):
                     p = json.loads(r["payload"])
                     if p["setup_id"] not in eligible or p["outcome"] == "MISSED":
@@ -1259,6 +1341,10 @@ def performance():
                        # did not happen. The empty-window rule, on a new row.
                        "pnl_usd": round(a["pnl_usd"], 2) if taken else None,
                        "population": population,
+                       # Stable row schema: non-taken populations have no
+                       # additional untaken cohort, but clients may render the
+                       # same component for every population.
+                       "untaken_n": untaken_n.get(k, 0) if taken else 0,
                        # kept for existing consumers that branch on it
                        "shadow": population == "shadow"}
                 if taken:
@@ -1456,7 +1542,7 @@ def playbooks():
                       "overhead in a downtrend."),
          "confirms": rules["confirms"], "stop_goes": rules["stop_goes"],
          "holds_for": horizon,
-         "timeframes": list(importer.TF_SECONDS),
+         "timeframes": list(registry.PULLBACK.timeframes),
          "notes": (f"Every candidate has to offer at least {setups.MIN_RR} of "
                    f"reward for every 1 it puts at risk, and has to risk at "
                    f"least {setups.MIN_RISK_COST_MULT}x what the trade will cost "
@@ -1474,7 +1560,7 @@ def playbooks():
                       f"not enough either, so two must agree."),
          "confirms": rules["confirms"], "stop_goes": rules["stop_goes"],
          "holds_for": horizon,
-         "timeframes": list(importer.TF_SECONDS),
+         "timeframes": list(registry.REVERSAL.timeframes),
          "notes": ("Starts 10 rank points below Pullback. Catching a turn is a "
                    "harder claim than following a trend, and the ranking says so.")},
         {"key": registry.SCALE_IN.key, "name": registry.SCALE_IN.name,
@@ -1533,16 +1619,64 @@ def playbooks():
 
     ]
 
+    # Research playbooks are real contracts, not "coming soon" decoration.
+    # They remain non-live and have no funded record, but the API publishes the
+    # trigger, timeframe, evidence state and exact contraindications now so the
+    # scanner and UI have one vocabulary when evidence eventually promotes one.
+    for spec in (registry.BREAKOUT_RETEST,
+                 registry.LIQUIDITY_SWEEP_REVERSAL,
+                 registry.COMPRESSION_RELEASE):
+        cards.append({
+            "key": spec.key, "name": spec.name, "status": "planned",
+            "record_key": None, "setting": None,
+            "one_liner": spec.one_liner, "hunts": spec.hunts,
+            "triggers": spec.requires or "; ".join(spec.structure_requires),
+            "confirms": ("Required factors: " + ", ".join(spec.required_factors)
+                         if spec.required_factors else
+                         "The versioned playbook trigger must close before entry."),
+            "stop_goes": spec.invalidation_policy.replace("_", " ").title(),
+            "holds_for": spec.exit_policy.replace("_", " ").title(),
+            "timeframes": list(spec.timeframes), "notes": spec.gap,
+        })
+
     out = []
     for c in cards:
         card = dict(c)
+        spec = registry.BY_KEY.get(card["key"])
+        if spec:
+            card.update({
+                "evidence_status": spec.evidence_status,
+                "horizons": list(spec.horizons),
+                "trigger_timeframe": spec.trigger_timeframe,
+                "structure_requires": list(spec.structure_requires),
+                "required_factors": list(spec.required_factors),
+                "optional_factors": list(spec.optional_factors),
+                "entry_policy": spec.entry_policy,
+                "expiry_policy": spec.expiry_policy,
+                "invalidation_policy": spec.invalidation_policy,
+                "exit_policy": spec.exit_policy,
+                "contraindications": list(spec.contraindications),
+                "directions": list(spec.directions),
+                "higher_timeframe_relationship": spec.higher_timeframe_relationship,
+                "trigger_rule": spec.trigger_rule,
+                "minimum_rr_after_costs": spec.minimum_rr_after_costs,
+                "liquidity_rule": spec.liquidity_rule,
+                "spread_rule": spec.spread_rule,
+                "volatility_rule": spec.volatility_rule,
+                "freshness_rule": spec.freshness_rule,
+                "contract_version": spec.version,
+            })
         if card["status"] == "live":
             card["enabled"] = bool(values.get(card["setting"], True))
             card["record"] = record(card["record_key"])
         else:
             card["enabled"] = None
             card["record"] = None
-            card.update(gap(card["key"]))
+            if card["key"] in _PLANNED_GAP:
+                card.update(gap(card["key"]))
+            else:
+                card.update({"gap": (spec.gap if spec else card.get("notes")),
+                             "gap_pct": None, "gap_n": 0})
         out.append(card)
 
     return {"baseline": baseline, "playbooks": out,
@@ -1612,7 +1746,7 @@ def multi_timeframe_context(
     con = store.connect()
     try:
         out = []
-        for tf in ("1W", "1D", "4H", "1H", "15m"):
+        for tf in ("1W", "1D", "4H", "1H", "15m", "5m"):
             regs = store.get_facts(
                 con, symbol, tf, "regime", regime.REGIME_VERSION, as_of)
             reg = json.loads(regs[-1]["payload"])["regime"] if regs else None
@@ -2230,6 +2364,7 @@ def trade_config(symbol: str | None = None):
                   # A JS copy of either would be a second authority for the
                   # price at which a position dies.
                   "margin_mode": v.margin_mode,
+                  "position_mode": "ONE_WAY",
                   "maintenance_margin": float(venues.MAINTENANCE_MARGIN)},
         "venues": [{"key": x.key, "kind": x.kind, "allow_shorts": x.allow_shorts,
                     "max_leverage": float(x.max_leverage)} for x in venues.ALL],
@@ -2278,15 +2413,373 @@ def live_gate():
     con = store.connect()
     try:
         pf = portfolio()
+        return _live_gate_from(con, pf)
+    finally:
+        con.close()
+
+
+def _live_gate_from(con, pf: dict) -> dict:
+    """Evaluate the gate from an already-authoritative portfolio payload."""
+    from engine import livegate
+    q = con.execute("SELECT status FROM quality_runs "
+                    "ORDER BY observed_at DESC LIMIT 1").fetchone()
+    return livegate.evaluate(
+        con, journal=pf.get("journal") or [],
+        max_drawdown_pct=pf.get("max_drawdown_pct") or 0.0,
+        quality_status=q[0] if q else None,
+        baseline=pf.get("baseline"), strategy_version=setups.SETUP_VERSION)
+
+
+def _automation_read(con, gate: dict | None = None) -> tuple[dict, dict]:
+    """One server-owned automation answer for every cockpit surface."""
+    operational = automation.operational_evidence(con)
+    result = automation.status(con, live_gate=gate or live_gate(),
+                               operational=operational)
+    return contracts.to_wire(result), operational
+
+
+@app.get("/api/automation/status")
+def automation_status():
+    """Current mode, locks and promotion evidence.  This endpoint never arms."""
+    con = store.connect()
+    try:
+        status_row, operational = _automation_read(con)
+        return {**status_row, "operational": operational,
+                "evidence_scope": {
+                    "population": "PROMOTION_EVENTS_BY_STAGE",
+                    "window": "CUMULATIVE_CURRENT_AUTOMATION_VERSION",
+                    "version": automation.AUTOMATION_VERSION},
+                "history": automation.history(con, 20)}
+    finally:
+        con.close()
+
+
+@app.post("/api/automation/mode")
+def automation_mode(payload: dict):
+    """Revision-checked mode transition with explicit high-risk acknowledgement."""
+    if "expected_revision" not in payload:
+        raise HTTPException(400, "expected_revision is required")
+    note = str(payload.get("note") or "")[:500]
+    acknowledgement = str(payload.get("acknowledgement") or "")
+    con = store.connect()
+    try:
+        gate = live_gate()
+        operational = automation.operational_evidence(con)
+        try:
+            result = automation.transition(
+                con, str(payload.get("mode") or ""),
+                expected_revision=int(payload["expected_revision"]),
+                acknowledgement=acknowledgement, note=note,
+                live_gate=gate, operational=operational)
+        except automation.ModeConflict as exc:
+            raise HTTPException(409, str(exc))
+        except (automation.ModeRejected, TypeError, ValueError) as exc:
+            raise HTTPException(423, str(exc))
+        return {**contracts.to_wire(result), "operational": operational}
+    finally:
+        con.close()
+
+
+@app.get("/api/automation/drills")
+def automation_drills():
+    con = store.connect()
+    try:
+        return {"items": automation.safety_drills(con),
+                "required": sorted(automation.REQUIRED_SAFETY_DRILLS),
+                "authority": automation.AUTOMATION_VERSION}
+    finally:
+        con.close()
+
+
+@app.post("/api/automation/drills")
+def automation_drill_start(payload: dict):
+    """Stage one TESTNET drill; the endpoint never performs the fault."""
+    con = store.connect()
+    try:
+        try:
+            return automation.start_safety_drill(
+                con, str(payload.get("drill") or ""),
+                acknowledgement=str(payload.get("acknowledgement") or ""))
+        except automation.ModeConflict as exc:
+            raise HTTPException(409, str(exc))
+        except automation.ModeRejected as exc:
+            raise HTTPException(423, str(exc))
+    finally:
+        con.close()
+
+
+@app.get("/api/positions/managed")
+def managed_positions(include_closed: bool = Query(False)):
+    """Custody state used by the Trade workspace and reconciliation UI."""
+    con = store.connect()
+    try:
+        return {"items": positions.managed(con, include_closed=include_closed),
+                "authority": positions.POSITION_VERSION}
+    finally:
+        con.close()
+
+
+@app.get("/api/positions/paper")
+def simulated_positions(include_closed: bool = Query(False)):
+    """Deterministic closed-candle PAPER fills and exits."""
+    con = store.connect()
+    try:
+        return {"items": execution.paper_positions(
+                    con, include_closed=include_closed),
+                "authority": execution.EXECUTION_CORE_VERSION}
+    finally:
+        con.close()
+
+
+@app.post("/api/positions/{position_id}/manual-override")
+def position_manual_override(position_id: str, payload: dict):
+    if payload.get("acknowledgement") != (
+            "I UNDERSTAND BOT DISCRETIONARY MANAGEMENT WILL STOP"):
+        raise HTTPException(400, "exact manual-override acknowledgement required")
+    con = store.connect()
+    try:
+        try:
+            return positions.manual_override(con, position_id)
+        except (ValueError, positions.ProtectionFailed) as exc:
+            raise HTTPException(409, str(exc))
+    finally:
+        con.close()
+
+
+@app.post("/api/positions/{position_id}/return-control")
+def position_return_control(position_id: str, payload: dict):
+    if payload.get("acknowledgement") != "RETURN CONTROL TO BOT":
+        raise HTTPException(400, "exact return-control acknowledgement required")
+    con = store.connect()
+    try:
+        try:
+            row = con.execute(
+                "SELECT o.mode FROM managed_positions p JOIN execution_outbox o "
+                "ON o.intent_id=p.intent_id WHERE p.position_id=?",
+                (position_id,)).fetchone()
+            if not row or row[0] not in ("TESTNET", "LIVE"):
+                raise ValueError("managed private execution environment not found")
+            broker = broker_factory.phemex_for_mode(automation.AutomationMode(row[0]))
+            return positions.return_control(con, position_id, broker)
+        except (ValueError, positions.ProtectionFailed,
+                broker_factory.BrokerConfigurationError) as exc:
+            raise HTTPException(409, str(exc))
+    finally:
+        con.close()
+
+
+@app.get("/api/opportunities")
+def opportunity_list(
+        state: str | None = Query(None),
+        horizon: str | None = Query(None),
+        include_history: bool = Query(True),
+        limit: int = Query(200, ge=1, le=500)):
+    """Ranked, server-owned setup read model; legacy volume rank is ignored."""
+    con = store.connect()
+    try:
+        rows = opportunities.list_candidates(con, include_history=include_history)
+        if state:
+            wanted = {s.strip().upper() for s in state.split(",") if s.strip()}
+            rows = [row for row in rows if row["state"] in wanted]
+        if horizon:
+            wanted_h = {h.strip().lower() for h in horizon.split(",") if h.strip()}
+            rows = [row for row in rows
+                    if str(row["setup"].get("horizon") or "").lower() in wanted_h]
+        rows = rows[:limit]
+        return {"generated_at": int(time.time()),
+                "summary": opportunities.summary(rows), "items": rows,
+                "authority": opportunities.OPPORTUNITY_VERSION}
+    finally:
+        con.close()
+
+
+@app.get("/api/market-context/{symbol}")
+def market_context_snapshot(symbol: str, tf: str = Query("15m")):
+    """Canonical closed-candle phase: trend/range/compression/release/unstable."""
+    con = store.connect()
+    try:
+        try:
+            return market_context.snapshot(con, symbol, tf)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+    finally:
+        con.close()
+
+
+@app.get("/api/opportunities/{setup_id}")
+def opportunity_detail(setup_id: str):
+    """The same record used by card, chart, ticket and later attribution."""
+    con = store.connect()
+    try:
+        for row in opportunities.list_candidates(con, include_history=True):
+            if row["setup"]["setup_id"] == setup_id:
+                return row
+        raise HTTPException(404, "opportunity not found in the current baseline")
+    finally:
+        con.close()
+
+
+@app.get("/api/operations")
+def operations_read_model():
+    """Compact command-layer state shared by every cockpit destination."""
+    pf = portfolio()
+    con = store.connect()
+    try:
+        gate = _live_gate_from(con, pf)
+        mode, operational = _automation_read(con, gate)
+        rows = opportunities.list_candidates(con, include_history=False)
+        opp_summary = opportunities.summary(rows)
+
+        quality_row = con.execute(
+            "SELECT status,observed_at FROM quality_runs "
+            "ORDER BY observed_at DESC LIMIT 1").fetchone()
+        quality_status = quality_row[0] if quality_row else "UNKNOWN"
+        universe_row = con.execute(
+            "SELECT payload FROM facts WHERE kind='universe' "
+            "AND algo_version=? ORDER BY id DESC LIMIT 1",
+            (universe.UNIVERSE_VERSION,)).fetchone()
+        members = json.loads(universe_row[0]).get("members", []) if universe_row else []
+        eligible_markets = sum(1 for member in members
+                               if member.get("state") == "ADMITTED")
+
+        try:
+            hb = json.loads(HEARTBEAT.read_text(encoding="utf-8"))
+            scanner_age = max(0, int(time.time() - float(hb["ts"])))
+            scanner = {"state": "SCANNING" if scanner_age < SCANNER_STALE_S
+                       else "STALE", "age_s": scanner_age,
+                       "stage": hb.get("stage")}
+        except (OSError, ValueError, KeyError, TypeError):
+            scanner = {"state": "OFFLINE", "age_s": None, "stage": None}
+
+        equity = Decimal(str(pf.get("equity") or risk.START_EQUITY))
+        open_risk = Decimal(str(pf.get("open_risk_usd") or 0))
+        total_budget = (equity * risk.MAX_TOTAL_OPEN_RISK_PCT)
+        utc_day_start = int(time.time()) // 86_400 * 86_400
+        today_pnl = sum((Decimal(str(row.get("pnl_usd") or 0))
+                         for row in pf.get("journal", [])
+                         if int(row.get("ts") or 0) >= utc_day_start), Decimal(0))
+        day_open_equity = equity - today_pnl
+        daily_budget = day_open_equity * risk.DAILY_LOSS_LIMIT_PCT
+        daily_remaining = max(Decimal(0), daily_budget + min(Decimal(0), today_pnl))
+        return {
+            "generated_at": int(time.time()), "venue": "PHEMEX_USDT_PERPETUAL",
+            "automation": mode,
+            "account": {
+                "equity": str(equity.quantize(Decimal("0.01"))),
+                "risk_per_trade_pct": str(risk.RISK_PCT * 100),
+                "next_risk_usd": str((equity * risk.RISK_PCT).quantize(Decimal("0.01"))),
+                "open_risk_usd": str(open_risk.quantize(Decimal("0.01"))),
+                "total_risk_remaining_usd": str(max(Decimal(0), total_budget - open_risk)
+                                                .quantize(Decimal("0.01"))),
+                "daily_loss_remaining_usd": str(daily_remaining.quantize(Decimal("0.01"))),
+                "open_positions": len(pf.get("active_positions") or []),
+                "working_orders": len(pf.get("pending_orders") or []),
+            },
+            "scanner": {**scanner, "eligible_markets": eligible_markets},
+            "data": {"status": quality_status,
+                     "observed_at": quality_row[1] if quality_row else None},
+            "opportunities": opp_summary,
+            "promotion": gate,
+            "operational_evidence": operational,
+        }
+    finally:
+        con.close()
+
+
+@app.get("/api/achievements")
+def achievement_progress():
+    """Progression that rewards evidence, documentation and safety drills only."""
+    pf = portfolio()
+    con = store.connect()
+    try:
+        gate = _live_gate_from(con, pf)
+        mode, _ = _automation_read(con, gate)
         q = con.execute("SELECT status FROM quality_runs "
                         "ORDER BY observed_at DESC LIMIT 1").fetchone()
-        return livegate.evaluate(
-            con,
-            journal=pf.get("journal") or [],
-            max_drawdown_pct=pf.get("max_drawdown_pct") or 0.0,
-            quality_status=q[0] if q else None,
-            baseline=pf.get("baseline"),
-            strategy_version=setups.SETUP_VERSION)
+        items = achievements.calculate(
+            live_gate=gate, automation_status=mode,
+            journal_count=int(pf.get("journal_total") or 0),
+            quality_status=q[0] if q else None)
+        return {"items": items, "version": achievements.ACHIEVEMENT_VERSION,
+                "policy": "Discipline only; profit, leverage and frequency earn nothing."}
+    finally:
+        con.close()
+
+
+@app.get("/api/learning/registry")
+def learning_registry():
+    """Champion/challenger state; it has no authority over risk or live mode."""
+    con = store.connect()
+    try:
+        return learning.registry(con)
+    finally:
+        con.close()
+
+
+@app.get("/api/factor-evidence")
+def factor_evidence():
+    """Point-in-time, chronological factor uplift; never a trade permission."""
+    con = store.connect()
+    try:
+        candidates, warnings = factorstats_engine.load_candidates(con)
+        report = factorstats_engine.evidence_report(candidates)
+        report["population"] = "POINT_IN_TIME_CLOSED_TRADES"
+        report["window"] = "CUMULATIVE_CURRENT_FACTORSTATS_VERSION"
+        report["warnings"] = warnings + report.get("warnings", [])
+        return report
+    finally:
+        con.close()
+
+
+@app.get("/api/factor-grade")
+def factor_grade():
+    """Explanation-only calibration over the current factor evidence."""
+    con = store.connect()
+    try:
+        candidates, warnings = factorstats_engine.load_candidates(con)
+        evidence = factorstats_engine.evidence_report(candidates)
+        grade = factorgrade_engine.calibrated_grade(evidence)
+        grade["population"] = "VALIDATED_FACTOR_COHORTS"
+        grade["window"] = "CUMULATIVE_CURRENT_FACTORGRADE_VERSION"
+        grade["warnings"] = warnings + grade.get("warnings", [])
+        grade["permission"] = "RANK_AND_EXPLAIN_ONLY"
+        return grade
+    finally:
+        con.close()
+
+
+@app.post("/api/learning/propose")
+def learning_propose(payload: dict):
+    con = store.connect()
+    try:
+        try:
+            return learning.propose(
+                con, proposal_id=str(payload.get("proposal_id") or ""),
+                model_id=str(payload.get("model_id") or ""),
+                target_stage=str(payload.get("target_stage") or ""),
+                expected_algorithm_version=str(
+                    payload.get("expected_algorithm_version") or ""),
+                note=str(payload.get("note") or ""))
+        except learning.LearningRejected as exc:
+            raise HTTPException(400, str(exc))
+    finally:
+        con.close()
+
+
+@app.post("/api/learning/approve")
+def learning_approve(payload: dict):
+    """Explicit human promotion; never toggles a strategy or execution mode."""
+    if payload.get("acknowledgement") != "I APPROVE MODEL PROMOTION":
+        raise HTTPException(400, "exact model-promotion acknowledgement required")
+    con = store.connect()
+    try:
+        try:
+            return learning.approve(
+                con, str(payload.get("proposal_id") or ""),
+                human_approver=str(payload.get("human_approver") or ""),
+                new_algorithm_version=str(payload.get("new_algorithm_version") or ""))
+        except learning.LearningRejected as exc:
+            raise HTTPException(400, str(exc))
     finally:
         con.close()
 
@@ -2331,9 +2824,9 @@ def credentials_store(payload: dict):
 def manual_arm(payload: dict):
     """Arm one operator plan as a PAPER trade.
 
-    This places no live order and cannot: no order-placement code exists in
-    this system, so `live_enabled` is not consulted here — there is nothing for
-    it to gate. The intent is recorded under the manual book's own version, a
+    This endpoint remains PAPER-only, and it records the same canonical
+    execution plan as autonomous routing. The intent is also recorded under
+    the manual book's own version, a
     tag no strategy consumer queries, so it cannot reach the record that
     `edgestats`/`factorstats` grade. See `engine/manual.py` for why that
     separation is structural rather than a filter someone has to remember.
@@ -2413,6 +2906,48 @@ def manual_arm(payload: dict):
             raise HTTPException(400, str(exc))
         except (ValueError, ArithmeticError) as exc:
             raise HTTPException(400, str(exc))
+        # Manual and autonomous plans now enter the same durable intent
+        # vocabulary. The legacy manual resolver remains the PAPER fill model,
+        # but there is no second order identity or un-audited broker-shaped
+        # record. A later TESTNET/LIVE review can consume this exact contract.
+        quantity = Decimal(str(intent.get("size_units") or "0"))
+        core_key = execution.intent_key(
+            intent["intent_id"], contracts.AutomationMode.PAPER,
+            contracts.OrderKind.LIMIT.value, str(quantity), intent.get("entry"))
+        core_intent = contracts.OrderIntent(
+            intent_id=intent["intent_id"],
+            setup_id="manual:" + intent["intent_id"],
+            mode=contracts.AutomationMode.PAPER, symbol=symbol,
+            direction=intent["direction"], order_kind=contracts.OrderKind.LIMIT,
+            quantity=quantity, entry=Decimal(str(intent["entry"])),
+            stop=Decimal(str(intent["sl"])),
+            targets=(Decimal(str(intent["tp"])),), reduce_only=False,
+            created_at=created_at, playbook_version=manual.MANUAL_VERSION,
+            idempotency_key=core_key, timeframe=tf,
+            expires_at=int(intent["expires_at_ts"])
+            if intent.get("expires_at_ts") is not None else None)
+        manual_risk = Decimal(str(intent.get("risk_usd") or "0"))
+        notional = quantity * Decimal(str(intent["entry"]))
+        approved = quantity > 0 and manual_risk > 0
+        core_risk = contracts.RiskDecision(
+            approved=approved,
+            decision="APPROVED" if approved else "REJECTED",
+            risk_usd=manual_risk if approved else Decimal(0),
+            quantity=quantity, notional_usd=notional,
+            implied_leverage=Decimal(str(intent.get("leverage") or "1")),
+            reasons=(contracts.DecisionReason(
+                "MANUAL_PLAN_VALIDATED" if approved else "UNSIZED_PAPER_PLAN",
+                "The server validated the manual plan and its risk amount."
+                if approved else
+                "This paper plan has no positive risk amount and cannot be dispatched.",
+                "INFO" if approved else "WARNING"),))
+        core_plan = contracts.ExecutionPlan(
+            intent=core_intent, risk=core_risk,
+            venue=venues.venue_for(symbol).key,
+            margin_mode="ISOLATED", position_mode="ONE_WAY",
+            protection_deadline_seconds=5,
+            version=execution.EXECUTION_CORE_VERSION)
+        core_receipt = execution.enqueue(con, core_intent, plan=core_plan)
         from engine.runlog import get_logger
         # Resolve immediately, so the response reflects bars that have already
         # closed. Usually a no-op — the order was just placed and no eligible
@@ -2447,7 +2982,10 @@ def manual_arm(payload: dict):
                 # cannot be announced as a second trade.
                 "already_armed": bool(intent.get("already_armed")),
                 "resolve_failed": resolve_failed,
-                "intent": intent, "book": manual.book(con)}
+                "intent": intent, "order_intent": contracts.to_wire(core_intent),
+                "risk_decision": contracts.to_wire(core_risk),
+                "execution_plan": contracts.to_wire(core_plan),
+                "execution_receipt": core_receipt, "book": manual.book(con)}
     finally:
         con.close()
 
@@ -2534,7 +3072,7 @@ def analyse_symbol(symbol: str, response: Response):
         produced, failed = {}, []
         for mod in pipeline.DESCRIPTIVE:
             name = mod.__name__.rsplit(".", 1)[-1]
-            for tf in ("15m", "1H", "4H", "1D", "1W"):
+            for tf in ("5m", "15m", "1H", "4H", "1D", "1W"):
                 try:
                     r = mod.run(con, symbol, tf, importer.TF_SECONDS[tf])
                 except Exception as exc:

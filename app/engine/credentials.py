@@ -37,6 +37,11 @@ FIELDS = ("api_key", "api_secret", "passphrase")
 # by name." A second hand-maintained list is exactly the branch it warns about,
 # and deriving it means adding a venue can never again half-arrive.
 VENUES = tuple(v.key for v in _venues.ALL)
+# Private execution credentials are isolated by environment. The legacy venue
+# target remains for read-only account integrations; it is never used by the
+# private order factory.
+PRIVATE_TARGETS = ("phemex-testnet", "phemex-mainnet")
+TARGETS = VENUES + PRIVATE_TARGETS
 
 
 class _Blob(ctypes.Structure):
@@ -97,7 +102,7 @@ def _save(data: dict) -> None:
 
 def store_secret(venue: str, field: str, value: str) -> None:
     """Encrypt and persist one credential field. The value is never logged."""
-    if venue not in VENUES:
+    if venue not in TARGETS:
         raise ValueError(f"unknown venue {venue!r}")
     if field not in FIELDS:
         raise ValueError(f"unknown field {field!r}")
@@ -123,7 +128,7 @@ def clear(venue: str, field: str | None = None) -> None:
 def status() -> dict:
     """What EXISTS, never what it is. This is the only shape the API may return."""
     data = _load()
-    return {v: {f: bool(data.get(v, {}).get(f)) for f in FIELDS} for v in VENUES}
+    return {v: {f: bool(data.get(v, {}).get(f)) for f in FIELDS} for v in TARGETS}
 
 
 def read_secret(venue: str, field: str) -> str | None:

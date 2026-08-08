@@ -1,6 +1,6 @@
 """One-command backfill + aggregate + swing run for BTC-USD and ETH-USD.
 
-Usage: python backfill.py [--days-15m 30] [--days-1h 180] [--since-1d 2022-01-01]
+Usage: python backfill.py [--days-5m 30] [--days-15m 30] [--days-1h 180] [--since-1d 2022-01-01]
 Idempotent: safe to re-run; facts are append-only, candles keyed by open_ts.
 """
 import argparse
@@ -20,6 +20,7 @@ TF_SECONDS = importer.TF_SECONDS
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--days-5m", type=int, default=30)
     ap.add_argument("--days-15m", type=int, default=30)
     ap.add_argument("--days-1h", type=int, default=180)
     ap.add_argument("--since-1d", default="2022-01-01")
@@ -29,6 +30,7 @@ def main():
     since_1d = int(datetime.strptime(args.since_1d, "%Y-%m-%d")
                    .replace(tzinfo=timezone.utc).timestamp())
     plan = [("1D", since_1d), ("1H", now - args.days_1h * 86400),
+            ("5m", now - args.days_5m * 86400),
             ("15m", now - args.days_15m * 86400)]
 
     con = store.connect()
@@ -41,7 +43,7 @@ def main():
             print(f"agg     {r['symbol']:8s} {r['tf']:3s} candles={r['candles']:6d} skipped={r['skipped_incomplete']}")
         quality.assert_market_ready(con, symbol, now)
         for name, mod in ENGINES:
-            for tf in ("15m", "1H", "4H", "1D", "1W"):
+            for tf in pipeline.ALL_TFS:
                 r = mod.run(con, symbol, tf, TF_SECONDS[tf])
                 counts = " ".join(f"{k}+{v}" for k, v in r.items()
                                   if k not in ("symbol", "tf"))

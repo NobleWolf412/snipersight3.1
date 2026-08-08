@@ -31,6 +31,9 @@ before. That moment is the trigger, not a version number.
 from dataclasses import dataclass, field
 
 
+STRATEGY_CONTRACT_VERSION = "strategy-contract-v0.1-draft"
+
+
 @dataclass(frozen=True)
 class Strategy:
     key: str
@@ -52,6 +55,30 @@ class Strategy:
     #: Populated only for planned strategies: the measured reason it matters.
     gap: str | None = None
     timeframes: tuple = field(default_factory=lambda: ("15m", "1H", "4H", "1D", "1W"))
+    # Public promotion state. ``status`` remains for the legacy cockpit
+    # (live/measured/planned); this vocabulary is used by automation and the
+    # task-oriented opportunity read model.
+    evidence_status: str = "RESEARCH"
+    horizons: tuple = field(default_factory=tuple)
+    trigger_timeframe: str | None = None
+    structure_requires: tuple = field(default_factory=tuple)
+    required_factors: tuple = field(default_factory=tuple)
+    optional_factors: tuple = field(default_factory=tuple)
+    entry_policy: str = "LIMIT"
+    expiry_policy: str = "PLAYBOOK"
+    invalidation_policy: str = "STRUCTURAL_STOP"
+    exit_policy: str = "STRUCTURAL_TARGET_AND_TIME_STOP"
+    contraindications: tuple = field(default_factory=lambda: (
+        "STALE_DATA", "UNECONOMIC_AFTER_COSTS", "RISK_REJECTED"))
+    directions: tuple = ("LONG", "SHORT")
+    higher_timeframe_relationship: str = "CANONICAL_TOP_DOWN_DECISION"
+    trigger_rule: str = "CLOSED_CANDLE_PLAYBOOK_TRIGGER"
+    minimum_rr_after_costs: str = "ENGINE_MIN_RR"
+    liquidity_rule: str = "UNIVERSE_ELIGIBLE"
+    spread_rule: str = "WITHIN_PLAYBOOK_COST_BUDGET"
+    volatility_rule: str = "REGIME_AND_PLAYBOOK_COMPATIBLE"
+    freshness_rule: str = "ALL_REQUIRED_CANDLES_CLOSED_AND_FRESH"
+    version: str = STRATEGY_CONTRACT_VERSION
 
 
 PULLBACK = Strategy(
@@ -60,6 +87,13 @@ PULLBACK = Strategy(
     one_liner="Buy the dip in an uptrend, sell the bounce in a downtrend.",
     hunts="Trending markets — the trend is intact and price has come back.",
     regimes=("BULL_TREND", "WEAKENING_BULL", "BEAR_TREND", "WEAKENING_BEAR"),
+    evidence_status="PAPER", horizons=("intraday", "swing"),
+    structure_requires=("intact trend", "tested demand or supply"),
+    optional_factors=("sweep", "volume", "higher-timeframe ladder"),
+    trigger_timeframe="SETUP_TIMEFRAME",
+    trigger_rule="ZONE_RETEST_CONFIRMED_ON_CLOSED_CANDLE",
+    higher_timeframe_relationship="ALIGNED_OR_PLAYBOOK_CONDITIONAL",
+    entry_policy="LIMIT_THEN_MARKET_IF_STILL_VALID",
 )
 
 REVERSAL = Strategy(
@@ -70,6 +104,14 @@ REVERSAL = Strategy(
           "not formed.",
     regimes=("TRANSITION",),
     requires="composed evidence",
+    evidence_status="PAPER", horizons=("intraday", "swing"),
+    structure_requires=("transition regime", "confirmed rejection"),
+    required_factors=("composed reversal evidence",),
+    optional_factors=("sweep", "volume", "higher-timeframe ladder"),
+    trigger_timeframe="SETUP_TIMEFRAME",
+    trigger_rule="TRANSITION_REJECTION_CONFIRMED_ON_CLOSED_CANDLE",
+    higher_timeframe_relationship="TRANSITION_WITHOUT_DIRECTIONAL_CONFLICT",
+    entry_policy="LIMIT_THEN_MARKET_IF_STILL_VALID",
 )
 
 SCALE_IN = Strategy(
@@ -79,6 +121,9 @@ SCALE_IN = Strategy(
     hunts="An open higher-timeframe position that has moved at least 1R your way.",
     regimes=(),
     requires="an open parent position",
+    evidence_status="DISABLED", horizons=("intraday",),
+    trigger_timeframe="15m",
+    contraindications=("FIRST_LIVE_SAFETY_CONTRACT",),
 )
 
 # Planned entries carry the MEASURED reason they matter, so the catalogue shows
@@ -91,6 +136,12 @@ RANGE_FADE = Strategy(
     one_liner="Buy the low of a range, sell the high.",
     hunts="Markets going sideways between two levels that keep holding.",
     regimes=("RANGE",),
+    evidence_status="RESEARCH", horizons=("scalp", "intraday"),
+    timeframes=("5m", "15m", "1H"), trigger_timeframe="5m",
+    structure_requires=("confirmed range", "tested boundary"),
+    trigger_rule="BOUNDARY_REJECTION_CONFIRMED_ON_CLOSED_CANDLE",
+    higher_timeframe_relationship="NO_DIRECTIONAL_TREND_CONFLICT",
+    entry_policy="LIMIT",
     gap="Ranging markets are a large share of rejected candidates — but "
         "`ranges.py` measured that almost none of them have a detected range "
         "at the moment of rejection, and none at all on symbols whose "
@@ -105,13 +156,57 @@ BREAKOUT_RETEST = Strategy(
     hunts="A structural break that price comes back to test.",
     regimes=(),
     requires="a confirmed close back off the broken level",
+    evidence_status="RESEARCH", horizons=("scalp", "intraday"),
+    timeframes=("5m", "15m", "1H"), trigger_timeframe="5m",
+    structure_requires=("confirmed break", "successful retest"),
+    required_factors=("close back off broken level",),
+    trigger_rule="BREAK_RETEST_AND_REJECTION_CLOSE",
+    higher_timeframe_relationship="ALIGNED_OR_NON_CONFLICTING_TRANSITION",
+    entry_policy="MARKET_ON_CONFIRMED_RETEST",
     gap="Built and MEASURED, deliberately not enabled: n=55, -0.076 R, "
         "CI [-0.545, +0.426], P(>0) 37.4% — indistinguishable from zero on the "
         "same harness REVERSAL cleared. It keeps emitting facts so the sample "
         "grows and it can be re-graded; it trades nothing meanwhile.",
 )
 
-ALL = (PULLBACK, REVERSAL, SCALE_IN, BREAKOUT_RETEST, RANGE_FADE)
+LIQUIDITY_SWEEP_REVERSAL = Strategy(
+    key="liquidity_sweep_reversal", name="Liquidity Sweep Reversal",
+    setting="strategy_liquidity_sweep_reversal", horizon="scalp",
+    status="planned", evidence_status="RESEARCH", horizons=("scalp",),
+    timeframes=("5m",), trigger_timeframe="5m",
+    one_liner="Fade a confirmed sweep that closes back through the taken level.",
+    hunts="Fast stop-runs at established liquidity followed by immediate rejection.",
+    regimes=("RANGE", "TRANSITION", "WEAKENING_BULL", "WEAKENING_BEAR"),
+    requires="a confirmed sweep and rejection close",
+    structure_requires=("liquidity pool", "sweep", "rejection close"),
+    required_factors=("sweep",), optional_factors=("relative volume", "divergence"),
+    trigger_rule="SWEEP_AND_CLOSE_BACK_THROUGH_LIQUIDITY",
+    higher_timeframe_relationship="NO_HARD_DIRECTIONAL_CONFLICT",
+    entry_policy="MARKET_ON_CONFIRMED_SWEEP",
+    gap="Research contract only. It must earn point-in-time forward evidence "
+        "before it may create an executable setup.",
+)
+
+COMPRESSION_RELEASE = Strategy(
+    key="compression_release", name="Compression Release",
+    setting="strategy_compression_release", horizon="intraday",
+    status="planned", evidence_status="RESEARCH", horizons=("intraday",),
+    timeframes=("15m", "1H"), trigger_timeframe="15m",
+    one_liner="Trade a confirmed expansion out of a mature compression.",
+    hunts="Volatility contractions that break with structure and executable cost.",
+    regimes=("RANGE", "TRANSITION"),
+    requires="a mature squeeze and confirmed structural release",
+    structure_requires=("compression", "break of structure"),
+    required_factors=("squeeze",), optional_factors=("relative volume", "VWAP"),
+    trigger_rule="MATURE_COMPRESSION_AND_STRUCTURE_RELEASE_CLOSE",
+    higher_timeframe_relationship="RELEASE_DIRECTION_NOT_IN_CONFLICT",
+    entry_policy="MARKET_ON_CONFIRMED_RELEASE",
+    gap="Research contract only. The volatility engine supplies the measurement, "
+        "but no promoted entry engine exists yet.",
+)
+
+ALL = (PULLBACK, REVERSAL, SCALE_IN, BREAKOUT_RETEST, RANGE_FADE,
+       LIQUIDITY_SWEEP_REVERSAL, COMPRESSION_RELEASE)
 #: "measured" is a third status, distinct from planned: the engine EXISTS and
 #: runs, it simply has not earned a place in the book. Collapsing it into
 #: "planned" would hide a strategy that is already producing gradeable evidence.

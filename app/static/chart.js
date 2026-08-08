@@ -22,6 +22,10 @@ window.SSChart = (() => {
   let lastMarkerDrop = 0;
   let sym = null, tf = '4H';
   let candles = [], facts = {}, setup = null;
+  // Set by Setup Radar.  The card, overlays and ticket must describe the same
+  // server-owned record even when a newer setup for the symbol arrives.
+  let preferredSetupId = null;
+  let preferredSetupMissing = false;
   // `base` is whatever this chart started from — the engine's setup, or levels
   // seeded from the recent range when there is no setup. Either way it is
   // restorable, so an operator who drags into a corner is never stranded.
@@ -1026,6 +1030,7 @@ window.SSChart = (() => {
     // the empty chart in front of you is a failure or simply unscanned.
     paintSymBtn();
     window.SSChartCtx = {symbol: sym, tf};
+    if(preferredSetupId) window.SSChartCtx.setup_id = preferredSetupId;
     // The live suffix is per-symbol and the ticker only corrects it every 5s —
     // long enough for BTC's tick to sit beside LINK's closed price, which is
     // the wrong-market-under-the-right-name failure with a $55k tell. Hide it
@@ -2000,7 +2005,10 @@ window.SSChart = (() => {
     const all = Object.values(byId);
     const valid = all.filter(f => f.state === 'VALIDATED')
                      .sort((a, b) => b.market_time - a.market_time);
-    setup = valid[0] || null;
+    const preferred = preferredSetupId
+      ? valid.find(f => f.setup_id === preferredSetupId) : null;
+    preferredSetupMissing = !!preferredSetupId && !preferred;
+    setup = preferredSetupId ? (preferred || null) : (valid[0] || null);
 
     /* An operator who has dragged a level or overridden risk owns those
        numbers, and a background refresh must not take them away mid-thought.
@@ -2102,6 +2110,10 @@ window.SSChart = (() => {
         : '';
       $('tkWhy').innerHTML = verdict + gone +
         `<em>Why the engine took it</em>${setup.why || '—'}`;
+    }else if(preferredSetupMissing){
+      base = null;
+      $('tkWhy').innerHTML = '<div class="tk-verdict bad"><b>SELECTED SETUP UNAVAILABLE</b>' +
+        '<br>The requested setup is no longer validated on this chart. SniperSight did not substitute another setup or draft a new plan.</div>';
     }else if(draftPlan){
       /* No engine setup, but price IS at a level the engine recognises. Draft
          a bracket from it — entry at the zone edge, stop beyond its far edge,
@@ -2272,7 +2284,8 @@ window.SSChart = (() => {
      An unknown timeframe therefore returns null rather than a default, and
      the caller says so out loud. A silent fallback here is a gate that is
      either uselessly strict or quietly absent, and no way to tell which. */
-  const TF_S = {'15m': 900, '1H': 3600, '4H': 14400, '1D': 86400, '1W': 604800};
+  const TF_S = {'5m': 300, '15m': 900, '1H': 3600, '4H': 14400,
+                '1D': 86400, '1W': 604800};
   const barSeconds = t => Object.prototype.hasOwnProperty.call(TF_S, t) ? TF_S[t] : null;
 
   /* The refusal sentence when the numbers are too old to size against, or ''
@@ -2335,6 +2348,9 @@ window.SSChart = (() => {
       ? (modified ? 'Managing trade — unsaved' : 'Managing open trade')
       : dupe ? 'Already armed' : 'New trade';
     $('ticket').classList.toggle('managing', holding);
+    dispatchEvent(new CustomEvent('ss:trade-ticket-state', {detail: {
+      state: holding ? 'POSITION_MANAGED' : 'PLANNING', symbol: sym, timeframe: tf
+    }}));
     renderManage();
     // Holding a position: the only honest commit is changing where it ends,
     // and only once a level has actually moved.
@@ -2359,6 +2375,7 @@ window.SSChart = (() => {
        they are planning against may already have closed somewhere else. */
     const stale = staleForThisTimeframe();
     btn.disabled = badScale ? true
+      : preferredSetupMissing ? true
       : stale ? true
       : holding ? (!modified || !armable) : (!armable || !sym || !!dupe);
 
@@ -2371,7 +2388,9 @@ window.SSChart = (() => {
       const over = m && (m.notes || []).includes('NOTIONAL_EXCEEDS_BUYING_POWER');
       const hardBlock = m && m.blocks && m.blocks.length;
       let why = '', fixLabel = '', fixLev = null;
-      if(stale){
+      if(preferredSetupMissing){
+        why = 'The selected setup is no longer available. No substitute was loaded.';
+      }else if(stale){
         /* FIRST, ahead of every other reason. The others are verdicts about
            the plan — margin, geometry, a resting duplicate — and every one of
            them was computed against numbers this branch has just established
@@ -3115,6 +3134,7 @@ window.SSChart = (() => {
      Held rather than drawn here, because load() clears the chart. */
   async function open(s, t, opts){
     pendingTrade = (opts && opts.trade) || null;
+    preferredSetupId = opts && opts.setup_id ? opts.setup_id : null;
     sym = s; if(t) tf = t;
     boot();
     document.querySelectorAll('#cTfs button').forEach(b =>

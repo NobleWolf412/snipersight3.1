@@ -116,7 +116,7 @@ class MissingHistory(unittest.TestCase):
     def test_an_empty_timeframe_is_flagged(self):
         """PF_XLMUSD exactly: 1D warm, 1H and 15m at zero."""
         self.assertEqual(sorted(ingest.missing_history(self.con, "PF_AAAUSD", self.now)),
-                         ["15m", "1H"])
+                         ["15m", "1H", "5m"])
 
     def test_a_partial_timeframe_is_flagged(self):
         """The case `history_floor` CANNOT reach — a non-NULL watermark means
@@ -135,7 +135,8 @@ class MissingHistory(unittest.TestCase):
         not a hole. Without the anchor it would be flagged on every refresh for
         the life of the symbol."""
         listed = self.now - 10 * 86400
-        for tf, gran in (("1D", 86400), ("1H", 3600), ("15m", 900)):
+        for tf, gran in (("1D", 86400), ("1H", 3600), ("15m", 900),
+                         ("5m", 300)):
             _warm(self.con, "PF_NEWUSD", tf, gran, listed, 5)
         self.assertEqual(ingest.missing_history(self.con, "PF_NEWUSD", self.now), [])
 

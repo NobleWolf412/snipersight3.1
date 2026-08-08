@@ -22,7 +22,7 @@ WAL_SIZE_LIMIT_BYTES = 64 * 1024 * 1024
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS candles (
     symbol      TEXT NOT NULL,
-    tf          TEXT NOT NULL,           -- 15m | 1H | 4H | 1D | 1W
+    tf          TEXT NOT NULL,           -- 5m | 15m | 1H | 4H | 1D | 1W
     open_ts     INTEGER NOT NULL,        -- bucket start, epoch seconds UTC
     open        TEXT NOT NULL,
     high        TEXT NOT NULL,

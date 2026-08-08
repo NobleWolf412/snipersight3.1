@@ -85,6 +85,28 @@ class Shape(unittest.TestCase):
         for k in keys:
             self.assertRegex(k, r"^[a-z][a-z_]*$")
 
+    def test_every_strategy_declares_the_public_evidence_contract(self):
+        allowed = {"RESEARCH", "PAPER", "SHADOW", "TESTNET",
+                   "LIVE_ELIGIBLE", "DISABLED"}
+        for strategy in registry.ALL:
+            with self.subTest(strategy=strategy.key):
+                self.assertIn(strategy.evidence_status, allowed)
+                self.assertTrue(strategy.horizons)
+                self.assertTrue(strategy.trigger_timeframe)
+                self.assertTrue(strategy.entry_policy)
+                self.assertTrue(strategy.invalidation_policy)
+                self.assertTrue(strategy.exit_policy)
+                self.assertTrue(strategy.directions)
+                self.assertTrue(strategy.higher_timeframe_relationship)
+                self.assertTrue(strategy.trigger_rule)
+                self.assertTrue(strategy.minimum_rr_after_costs)
+                self.assertTrue(strategy.liquidity_rule)
+                self.assertTrue(strategy.spread_rule)
+                self.assertTrue(strategy.volatility_rule)
+                self.assertTrue(strategy.freshness_rule)
+                self.assertEqual(strategy.version,
+                                 registry.STRATEGY_CONTRACT_VERSION)
+
     def test_every_horizon_is_one_the_cooldown_policy_knows(self):
         """A horizon is a hold-time and cooldown policy. One the cooldown tables
         do not recognise would silently fall back to another strategy's rules."""

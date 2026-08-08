@@ -133,15 +133,15 @@ class DrawdownHaltTest(unittest.TestCase):
         # 87 imported perp setups from the live record.
         day = 86400
         t0 = base["started_at"]
-        for i in range(12):
+        for i in range(28):
             self.con.execute(
                 "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
                 ("BTC-USD", "1D", t0 + day * i, "100", "102", "98", "100", "1",
                  "coinbase", t0 + day * i + 1))
 
-        # eight consecutive full stop-outs at 2% risk: no single DAY breaches
-        # -6% because each sits on its own day, but cumulatively it is ~-15%
-        for i in range(8):
+        # Consecutive full stop-outs at 0.25% risk: no single UTC account day
+        # breaches the 1% daily halt, but the cumulative book exceeds 5%.
+        for i in range(24):
             sid = f"S{i}"
             ts = t0 + day * (i + 1)
             store.insert_fact(

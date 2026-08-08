@@ -591,12 +591,35 @@ details.panel.floating > summary{padding-left:var(--lg)}
   grid-template-rows:var(--topbar-h) 1fr var(--statusbar-h);
   grid-template-columns:186px 1fr}
 
-.topbar{grid-column:1/-1;display:flex;align-items:center;gap:var(--lg);padding:0 var(--shell-x);
-  border-bottom:1px solid var(--border-soft);background:linear-gradient(180deg,var(--bg-2),var(--bg))}
+.topbar{grid-column:1/-1;display:flex;align-items:center;gap:var(--md);padding:0 var(--shell-x);
+  border-bottom:1px solid var(--border-soft);background:
+  linear-gradient(90deg,rgba(var(--accent-rgb),.035),transparent 34%),
+  linear-gradient(180deg,var(--bg-2),var(--bg))}
+.topbar-identity,.topbar-system,.topbar-account,.topbar-actions{
+  display:flex;align-items:center;min-width:0}
+.topbar-identity{gap:var(--sm)}
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-size:var(--fs-4);
   letter-spacing:.22em;color:var(--fg);text-transform:uppercase}
 .brand img{height:26px;width:auto;display:block}
-.topbar .spacer{margin-left:auto}
+.top-venue{font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;
+  text-transform:uppercase;color:var(--fg-4);white-space:nowrap}
+.topbar #modeChip{min-height:30px;padding-inline:10px;border:1px solid currentColor;
+  border-radius:3px;background:rgba(255,194,102,.05)}
+.topbar-system{gap:var(--md);margin-left:auto;padding:0 var(--md);min-height:32px;
+  border-inline:1px solid var(--border-soft)}
+.topbar-system>span{display:inline-flex;align-items:center;gap:7px;min-width:0;
+  font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--fg-3)}
+.topbar-account{gap:0;border:1px solid var(--border-soft);border-radius:var(--r-md);overflow:hidden;
+  background:rgba(0,0,0,.22)}
+.topbar-account>span{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 10px;
+  border-right:1px solid var(--border-soft);font:600 var(--fs-1)/1 var(--f-mono);
+  letter-spacing:.08em;text-transform:uppercase;color:var(--fg-2);white-space:nowrap}
+.topbar-account>span:last-child{border-right:0}
+.topbar-label{color:var(--fg-4)}
+.topbar-account b{color:var(--fg);font-weight:650}
+.topbar-actions{gap:var(--xs)}
+.topbar-actions .btn{min-height:34px;padding-inline:11px}
+.topbar #clock{display:none;font-variant-numeric:tabular-nums;width:8ch}
 
 /* A8 — the header must hold still. The scanner chip cycles through
    `SCANNER · ENGINES PF_ADAUSD`, `SCANNER · AUDIT` and `SCANNER LIVE` at
@@ -604,7 +627,7 @@ details.panel.floating > summary{padding-left:var(--lg)}
    motion in the top bar reads as alarm from the corner of the eye, on a bar
    whose job is to be ignorable until something is wrong. Fixed slot, truncate
    rather than reflow; the full phase stays in the title attribute. */
-#scanChip{width:196px;flex:none;overflow:hidden}
+#scanChip{width:172px;flex:none;overflow:hidden}
 #scanTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* tabular numerals so a changing clock does not shuffle its own digits */
 #clock{font-variant-numeric:tabular-nums;width:8ch;flex:none}
@@ -615,32 +638,57 @@ details.panel.floating > summary{padding-left:var(--lg)}
    (at 900px HALT sat 86px off-screen; beta pass, 4 Aug 2026). Shed in order
    of expendability: the venue note and clock first, then the audit chip, then
    the scanner slot — its state lives on Command too. HALT never leaves. */
+@media (max-width:1180px){
+  #venueNote{display:none}
+  #scanChip{width:128px}
+}
 @media (max-width:1100px){
-  #venueNote, #clock{display:none}
+  #healthChip{display:none}
+  .topbar-system{padding-right:0;border-right:0}
+  #equityChip{display:none}
 }
 @media (max-width:900px){
-  #healthChip{display:none}
   /* ...unless it has something to report. shell.js adds .degraded when a
      refresh fails, and that is exactly the state ssdata.js is relying on this
      chip to announce while it keeps the last good numbers on screen. Shedding
      a status chip to save room is only free while the status is fine. */
   #healthChip.degraded{display:inline-flex}
-  #scanChip{width:auto;max-width:120px;flex:0 1 auto}
+  .topbar-system{display:none}
+  .topbar-system:has(#healthChip.degraded){display:flex;margin-left:auto;padding:0;border:0}
+  .topbar-system:has(#healthChip.degraded) #scanChip{display:none}
+  .topbar{padding-inline:var(--md)}
 }
 @media (max-width:640px){
+  .topbar{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,108px) auto;
+    gap:5px;padding-inline:8px}
+  .topbar-identity{grid-column:1;min-width:0}
+  .topbar-system,.topbar-system:has(#healthChip.degraded){display:none!important}
+  .topbar-account{grid-column:3;min-width:0;margin:0;justify-self:stretch;border:0;
+    background:none;overflow:hidden}
+  .topbar-account>span{border:0;padding-inline:6px}
+  #riskChip{display:block;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topbar-actions{grid-column:4;display:block;justify-self:end}
+  .topbar-actions #btnHalt{display:inline-flex;min-width:58px;justify-content:center}
   #scanChip{display:none}
 }
 
 .nav{border-right:1px solid var(--border-soft);padding:var(--lg) 0;display:flex;flex-direction:column;gap:2px;
   background:linear-gradient(180deg,var(--bg-2),var(--bg))}
-.nav a{display:flex;align-items:center;gap:10px;padding:11px var(--lg);text-decoration:none;
+.nav a{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+  padding:11px var(--lg);text-decoration:none;
   font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.18em;text-transform:uppercase;
   color:var(--fg-3);border-left:2px solid transparent;transition:color .15s,background .15s}
+.nav a small{font-size:9px;font-weight:400;letter-spacing:.08em;text-transform:none;color:var(--fg-4)}
 .nav a:hover{color:var(--fg-2);background:rgba(255,255,255,.02)}
 .nav a.on{color:var(--accent);border-left-color:var(--accent);background:rgba(var(--accent-rgb),.06)}
-.nav .nav-count{margin-left:auto;font-size:var(--fs-1);color:var(--fg-4)}
+.nav .nav-count{position:absolute;right:var(--lg);top:11px;font-size:var(--fs-1);color:var(--fg-4)}
 .nav a.on .nav-count{color:var(--accent)}
 .nav-sep{height:1px;background:var(--border-soft);margin:var(--md) var(--lg)}
+/* Retained for intermediate-width rails; JS applies it only after measuring
+   actual overflow, so the hint never claims content is hidden when it fits. */
+.nav.scrollable{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent);
+  mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent)}
+.nav.scrollable.scrolled-end{-webkit-mask-image:none;mask-image:none}
 
 
 
@@ -664,6 +712,133 @@ details.panel.floating > summary{padding-left:var(--lg)}
 }
 .surface-head{display:flex;align-items:baseline;gap:var(--md);margin-bottom:var(--xl)}
 .surface-head p{color:var(--fg-4);font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.1em}
+.surface-tabs{display:flex;gap:var(--xs);margin:calc(var(--lg) * -1) 0 var(--lg);
+  border-bottom:1px solid var(--border-soft)}
+.surface-tabs a{min-height:44px;display:inline-flex;align-items:center;padding:0 var(--md);
+  color:var(--fg-3);font-family:var(--f-mono);font-size:var(--fs-1);
+  letter-spacing:.12em;text-transform:uppercase;text-decoration:none;border-bottom:2px solid transparent}
+.surface-tabs a:hover,.surface-tabs a:focus-visible{color:var(--fg);outline:none;border-bottom-color:var(--fg-4)}
+.surface-tabs a.on{color:var(--accent);border-bottom-color:var(--accent)}
+
+.workspace-tabs{position:sticky;top:calc(var(--xl) * -1);z-index:9;display:flex;
+  gap:var(--xs);margin:calc(var(--lg) * -1) 0 var(--lg);overflow-x:auto;
+  border-bottom:1px solid var(--border-soft);background:color-mix(in oklch,var(--bg-2) 95%,transparent)}
+.workspace-tabs button,.workspace-tabs a{min-width:max-content;min-height:44px;display:inline-flex;
+  align-items:center;justify-content:center;padding:0 var(--md);background:transparent;border:0;
+  border-bottom:2px solid transparent;color:var(--fg-3);cursor:pointer;text-decoration:none;
+  font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase}
+.workspace-tabs button:hover,.workspace-tabs button:focus-visible,
+.workspace-tabs a:hover,.workspace-tabs a:focus-visible{color:var(--fg);outline:2px solid transparent;
+  border-bottom-color:var(--fg-4)}
+.workspace-tabs .on{color:var(--accent);border-bottom-color:var(--accent)}
+[data-performance-view][hidden],[data-system-view][hidden]{display:none!important}
+#s-settings[data-active-view="risk"] .pack-cols,
+#s-settings[data-active-view="venues"] .pack-cols,
+#s-settings[data-active-view="strategies"] .pack-cols{column-count:1;max-width:920px}
+#factorEvidenceRoot[data-performance-view]{margin-top:0}
+
+/* ---------- Setup Radar ---------- */
+.op-toolbar{position:sticky;top:calc(var(--xl) * -1);z-index:8;display:flex;align-items:center;
+  gap:var(--md);padding:var(--sm) var(--md);margin-bottom:var(--lg);box-shadow:none;
+  background:color-mix(in oklch,var(--bg-2) 94%,transparent)}
+.op-toolbar .t-note{margin:0 0 0 auto;text-align:right}
+.op-groups{display:flex;flex-direction:column;gap:var(--xl)}
+.op-group>h2{display:flex;align-items:center;gap:var(--sm);margin:0 0 var(--sm);
+  color:var(--fg-2);font:600 var(--fs-2)/1 var(--f-mono);letter-spacing:.16em;text-transform:uppercase}
+.op-group>h2 span{color:var(--fg-4)}
+.op-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,390px);gap:var(--lg);align-items:start}
+.op-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--md)}
+.op-card{display:flex;flex-direction:column;gap:var(--md);padding:var(--lg);
+  min-width:0;background:var(--card);border:1px solid var(--border-soft);border-radius:var(--r-md)}
+.op-card[data-state="READY"]{border-color:rgba(var(--accent-rgb),.52)}
+.op-card[data-state="BLOCKED"],.op-card[data-state="REJECTED"]{border-color:rgba(255,100,100,.36)}
+.op-card>header{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--md)}
+.op-card h3{margin:5px 0 0;font:600 var(--fs-4)/1 var(--f-display);letter-spacing:.08em}
+.op-card h3 small{font:600 var(--fs-1)/1 var(--f-mono);color:var(--fg-3)}
+.op-state,.op-quality{font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--fg-4)}
+.op-quality b{color:var(--fg-2)}
+.op-meta,.op-verdict{display:flex;gap:6px;flex-wrap:wrap}
+.op-meta span,.op-verdict span,.op-verdict b{padding:5px 7px;border:1px solid var(--border-soft);
+  border-radius:var(--r-sm);font:500 var(--fs-1)/1 var(--f-mono);color:var(--fg-3)}
+.op-verdict b{color:var(--fg-2)}
+.op-why,.op-counter,.op-evidence p{margin:0;font:var(--fs-2)/1.55 var(--f-body);color:var(--fg-2)}
+.op-counter{padding:var(--sm);border-left:2px solid var(--amber);background:rgba(255,194,102,.04)}
+.op-levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;margin:0;background:var(--border-soft)}
+.op-levels div{min-width:0;padding:9px;background:var(--bg-2)}
+.op-levels dt{font:500 var(--fs-1)/1.3 var(--f-mono);color:var(--fg-4);text-transform:uppercase;letter-spacing:.09em}
+.op-levels dd{margin:4px 0 0;overflow-wrap:anywhere;font:600 var(--fs-2)/1.3 var(--f-mono);color:var(--fg-2)}
+.op-evidence{border-top:1px solid var(--border-soft);padding-top:var(--sm)}
+.op-evidence summary{min-height:44px;display:flex;align-items:center;cursor:pointer;color:var(--fg-3);
+  font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase}
+.op-evidence ul{list-style:none;padding:0;margin:var(--sm) 0;display:grid;gap:4px}
+.op-evidence li{display:flex;justify-content:space-between;gap:var(--sm);font:var(--fs-1)/1.4 var(--f-mono);color:var(--fg-3)}
+.op-warning{color:var(--amber)!important}.op-review{align-self:flex-start;min-height:44px;margin-top:auto}
+.op-empty{padding:var(--xl);text-align:center}.op-empty h2{margin-top:0}.op-empty p{color:var(--fg-3)}
+.op-card-compact{gap:var(--sm);padding:var(--md)}
+.op-card-compact.selected{border-color:var(--accent);background:
+  linear-gradient(180deg,rgba(var(--accent-rgb),.06),transparent 48%),var(--card)}
+.op-score-pair{display:flex;gap:1px;background:var(--border-soft);border:1px solid var(--border-soft);
+  border-radius:var(--r-sm);overflow:hidden;flex:none}
+.op-score-pair>span{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-width:64px;padding:6px;background:var(--bg-2)}
+.op-score-pair b{font:650 var(--fs-3)/1 var(--f-display);color:var(--fg)}
+.op-score-pair small{max-width:76px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;
+  font:600 8px/1.15 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--fg-4)}
+.op-compact-levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;
+  margin:0;background:var(--border-soft)}
+.op-compact-levels>div{min-width:0;padding:8px;background:var(--bg-2)}
+.op-compact-levels dt,.op-detail-levels dt{font:600 var(--fs-1)/1.2 var(--f-mono);
+  letter-spacing:.1em;text-transform:uppercase;color:var(--fg-4)}
+.op-compact-levels dd,.op-detail-levels dd{margin:4px 0 0;overflow:hidden;text-overflow:ellipsis;
+  font:600 var(--fs-2)/1.25 var(--f-mono);color:var(--fg-2)}
+.op-card-compact .op-review{align-self:stretch;justify-content:center}
+
+.op-detail{position:sticky;top:48px;max-height:calc(100vh - var(--topbar-h) - var(--statusbar-h) - 96px);
+  overflow:auto;padding:var(--lg)}
+.op-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--md);
+  padding-bottom:var(--md);border-bottom:1px solid var(--border-soft)}
+.op-detail-head h2{margin:5px 0 0;font:650 var(--fs-5)/1 var(--f-display);letter-spacing:.08em}
+.op-detail-head h2 small{font-size:var(--fs-2);color:var(--fg-3)}
+.op-detail-tags,.op-decision-line{display:flex;gap:5px;flex-wrap:wrap;margin-top:var(--md)}
+.op-detail-tags span,.op-decision-line span{padding:5px 7px;border:1px solid var(--border-soft);
+  border-radius:var(--r-sm);font:600 var(--fs-1)/1 var(--f-mono);color:var(--fg-3)}
+.op-decision-line span:first-child{color:var(--fg-2)}
+.op-recommendation{display:flex;flex-direction:column;gap:5px;margin-top:var(--md);padding:var(--md);
+  border:1px solid rgba(var(--accent-rgb),.32);border-radius:var(--r-md);
+  background:rgba(var(--accent-rgb),.045)}
+.op-kicker{font:650 var(--fs-1)/1 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--fg-4)}
+.op-recommendation strong{font:650 var(--fs-4)/1.25 var(--f-display);color:var(--fg)}
+.op-recommendation small{font:var(--fs-1)/1.45 var(--f-body);color:var(--fg-3)}
+.op-detail-levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;
+  margin:var(--md) 0 0;background:var(--border-soft)}
+.op-detail-levels>div{min-width:0;padding:9px;background:var(--bg-2)}
+.op-callout{margin-top:var(--md);padding:var(--sm) var(--md);border:1px solid var(--border-soft);
+  border-radius:var(--r-md);background:rgba(0,0,0,.16)}
+.op-callout.caution{border-color:rgba(255,194,102,.28)}
+.op-callout p{margin:5px 0 0;font:var(--fs-2)/1.5 var(--f-body);color:var(--fg-2)}
+.op-detail-evidence{margin-top:var(--md);border-top:1px solid var(--border-soft)}
+.op-detail-evidence>summary{min-height:44px;display:flex;align-items:center;cursor:pointer;
+  font:650 var(--fs-1)/1 var(--f-mono);letter-spacing:.13em;text-transform:uppercase;color:var(--fg-3)}
+.op-evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--md)}
+.op-evidence-grid h3,.op-detail-evidence>h3{font:650 var(--fs-1)/1 var(--f-mono);
+  letter-spacing:.1em;text-transform:uppercase;color:var(--fg-4)}
+.op-evidence-grid ul,.op-warning-list{list-style:none;margin:0;padding:0}
+.op-evidence-grid li{display:flex;justify-content:space-between;gap:var(--sm);padding:5px 0;
+  border-bottom:1px solid var(--border-soft);font:var(--fs-1)/1.3 var(--f-mono);color:var(--fg-3)}
+.op-warning-list li{padding:5px 0;font:var(--fs-1)/1.45 var(--f-body);color:var(--amber)}
+.op-detail-actions{position:sticky;bottom:calc(var(--lg) * -1);display:flex;padding:var(--md) 0 var(--lg);
+  margin-top:var(--md);background:linear-gradient(transparent,var(--card) 30%)}
+.op-detail-actions .btn{width:100%;justify-content:center;min-height:44px}
+.op-detail-empty{text-align:center;padding:var(--xl) var(--md)}
+.op-detail-empty h2{margin:var(--sm) 0}.op-detail-empty p{margin:0;color:var(--fg-3)}
+.factor-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;
+  margin-bottom:var(--md);background:var(--border-soft)}
+.factor-summary div{display:flex;flex-direction:column;gap:6px;padding:var(--md);background:var(--bg-2)}
+.factor-summary span{font:var(--fs-1)/1.3 var(--f-mono);text-transform:uppercase;color:var(--fg-4)}
+.factor-summary b{font:600 var(--fs-3)/1.3 var(--f-mono);color:var(--fg-2)}
+.mode-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--sm);margin:var(--md) 0}
+.mode-grid .btn{min-height:58px;display:flex;flex-direction:column;justify-content:center;gap:4px}
+.mode-grid small{font-size:9px;font-weight:400;letter-spacing:.05em;color:var(--fg-4)}
 
 /* THE ANSWER LINE.
 
@@ -698,6 +873,60 @@ details.panel.floating > summary{padding-left:var(--lg)}
 .diag-handover .t-label{text-transform:none;letter-spacing:0;color:var(--fg-4)}
 .disposition.bad{color:var(--red-2)}
 .disposition .skel{height:1.1em;width:38%}
+
+/* Overview command brief. It is the only dense control surface on the page:
+   narrative first, instruments second, machine pulse last. */
+.command-hero{overflow:hidden;background:
+  radial-gradient(70% 130% at 0 0,rgba(var(--accent-rgb),.10),transparent 58%),
+  linear-gradient(155deg,rgba(255,255,255,.025),rgba(0,0,0,.22)),var(--bg-2)}
+.command-hero>.panel-head{align-items:flex-start;flex-wrap:wrap;padding:var(--lg)}
+.command-heading{display:flex;flex-direction:column;gap:4px;min-width:min(100%,260px);margin-right:auto}
+.command-kicker{font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.18em;
+  text-transform:uppercase;color:var(--fg-4)}
+.command-heading .t-section{font:650 var(--fs-5)/1.15 var(--f-display);letter-spacing:.06em}
+.command-heading p{max-width:68ch;margin:3px 0 0;font:var(--fs-2)/1.5 var(--f-body);color:var(--fg-2)}
+.command-mode{display:inline-flex;align-items:center;min-height:28px;padding:0 9px;
+  border:1px solid var(--border);border-radius:3px;font:650 var(--fs-1)/1 var(--f-mono);
+  letter-spacing:.16em;color:var(--fg-3)}
+.command-mode.good{color:var(--green);border-color:rgba(0,255,170,.45)}
+.command-mode.warn{color:var(--amber);border-color:rgba(255,194,102,.45)}
+.command-mode.bad{color:var(--red-2);border-color:rgba(248,113,113,.45)}
+.command-hero>.panel-body{padding:0 var(--lg) var(--lg)}
+.command-hero .grid{gap:1px;background:var(--border-soft);border:1px solid var(--border-soft);
+  border-radius:var(--r-lg);overflow:hidden}
+.command-hero .tile{min-height:104px;padding:var(--md);border:0;border-radius:0;
+  background:rgba(0,0,0,.28);box-shadow:none}
+.command-hero .tile .t-metric{font-size:var(--fs-6)}
+.command-pulse{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;
+  background:var(--border-soft);border-top:1px solid var(--border-soft)}
+.command-pulse>div{display:flex;align-items:center;justify-content:space-between;gap:var(--sm);
+  min-width:0;padding:10px var(--lg);background:rgba(0,0,0,.22)}
+.command-pulse span,.command-pulse b{font:600 var(--fs-1)/1.3 var(--f-mono);
+  letter-spacing:.11em;text-transform:uppercase}
+.command-pulse span{color:var(--fg-4)}
+.command-pulse b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg-2)}
+.command-pulse b.good{color:var(--green)}.command-pulse b.warn{color:var(--amber)}
+.command-pulse b.bad{color:var(--red-2)}
+
+.mission-heading{display:flex;flex-direction:column;gap:5px;margin-right:auto}
+.mission-position{min-width:5ch;color:var(--fg-3);text-align:center}
+.mission-radar-link{min-height:36px}
+.overview-risk{background:linear-gradient(155deg,rgba(255,255,255,.02),rgba(0,0,0,.18))}
+
+@media(max-width:900px){
+  .command-hero>.panel-head{align-items:center}
+  .command-heading{flex-basis:calc(100% - 110px)}
+  .command-hero .spacer{display:none}
+  .command-pulse{grid-template-columns:1fr}
+}
+@media(max-width:640px){
+  .command-heading{flex-basis:100%}
+  .command-mode{order:-1}
+  .command-hero>.panel-head .btn{flex:1;justify-content:center;min-height:44px}
+  .command-hero>.panel-head #btnAuto{display:none}
+  .command-pulse>div{min-height:44px;padding-inline:var(--md)}
+  .mission-radar-link{width:100%;justify-content:center;order:5}
+}
 
 .statusbar{grid-column:1/-1;display:flex;align-items:center;gap:var(--lg);padding:0 var(--shell-x);
   border-top:1px solid var(--border-soft);background:var(--bg-2);
@@ -781,9 +1010,42 @@ body:not(.dev) #consolePanel{display:none}
 .chart-head{margin-bottom:0;flex:none;align-items:baseline}
 .chart-head .t-page{font-size:var(--fs-5);letter-spacing:.16em}
 .chart-top{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap;flex:none}
-.chart-main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 320px;
-  gap:var(--md);min-height:0}
-@media(max-width:1180px){.chart-main{grid-template-columns:minmax(320px,1fr) 268px}}
+.chart-main{flex:1;display:grid;grid-template-columns:280px minmax(0,1fr) 320px;
+  grid-template-areas:"evidence chart ticket";gap:var(--md);min-height:0}
+.trade-evidence{grid-area:evidence;min-width:0;overflow:auto;padding:var(--lg)}
+.chart-pane{grid-area:chart}
+.ticket{grid-area:ticket}
+@media(max-width:1180px){
+  .chart-main{grid-template-columns:minmax(320px,1fr) 268px;
+    grid-template-areas:"evidence evidence" "chart ticket";
+    grid-template-rows:auto minmax(0,1fr)}
+  .trade-evidence{display:grid;grid-template-columns:minmax(190px,.7fr) minmax(0,1.3fr);
+    gap:var(--md);max-height:210px}
+  .trade-evidence-empty{grid-column:1/-1}
+}
+
+.trade-evidence h2{margin:6px 0 var(--xs);font-family:var(--f-display);font-size:var(--fs-5)}
+.trade-evidence h2 small{color:var(--fg-3);font-size:var(--fs-2);letter-spacing:.08em}
+.trade-evidence-head{padding-bottom:var(--md);border-bottom:1px solid var(--border-soft)}
+.trade-verdict{display:flex;flex-direction:column;gap:4px;margin:var(--md) 0;padding:var(--md);
+  border-left:2px solid var(--accent);background:rgba(195,181,116,.06)}
+.trade-verdict strong{font-family:var(--f-mono);font-size:var(--fs-3);color:var(--fg)}
+.trade-evidence-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;
+  margin:0 0 var(--md);background:var(--border-soft)}
+.trade-evidence-stats div{padding:8px;background:var(--card)}
+.trade-evidence-stats dt{font:500 var(--fs-1)/1.2 var(--f-mono);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--fg-4)}
+.trade-evidence-stats dd{margin:4px 0 0;font-family:var(--f-mono);color:var(--fg-2)}
+.trade-brief{margin:0 0 var(--sm);padding:0 0 var(--sm);border-bottom:1px solid var(--border-soft)}
+.trade-brief p{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+  margin:5px 0 0;color:var(--fg-2);font-size:var(--fs-2);line-height:1.45}
+.trade-brief.caution{border-left:2px solid var(--amber);padding-left:var(--sm)}
+.trade-evidence-more summary{min-height:44px;display:flex;align-items:center;cursor:pointer;
+  color:var(--accent);font-family:var(--f-mono);font-size:var(--fs-2)}
+.trade-evidence-empty{display:flex;min-height:220px;flex-direction:column;align-items:flex-start;
+  justify-content:center;gap:var(--sm)}
+.trade-evidence-empty h2,.trade-evidence-empty p{margin:0}
+.trade-evidence-empty p{color:var(--fg-3);line-height:1.5}
 
 /* ── THE SHELL BELOW 900 ──
 
@@ -812,7 +1074,7 @@ body:not(.dev) #consolePanel{display:none}
      The zero minimum lets the track match the viewport; the rules below then
      make the bar's contents actually fit it, rather than overflow silently. */
   .shell{grid-template-columns:minmax(0,1fr);
-    grid-template-rows:var(--topbar-h) auto 1fr var(--statusbar-h)}
+    grid-template-rows:var(--topbar-h) minmax(0,1fr) 64px}
   .shell > *{min-width:0}
 
   /* The bar tightens instead of overflowing: smaller gap and gutter, a smaller
@@ -831,30 +1093,29 @@ body:not(.dev) #consolePanel{display:none}
   .topbar .chip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .topbar .brand img{max-height:22px}
   #btnHalt{flex:none}
-  /* The strip scrolls, and it says so. Five destinations need about 510px and
-     a phone gives 390, so Settings and Diagnostics sit off the right edge —
-     with the scrollbar suppressed there was nothing at all to indicate two of
-     the five surfaces existed. A slim visible bar is the honest hint: a fade
-     mask would dim the last item on the wider screens where everything fits,
-     which is a hint that lies half the time. */
-  .nav{flex-direction:row;overflow-x:auto;gap:0;padding:0 var(--sm);
-    border-right:0;border-bottom:1px solid var(--border-soft);
-    scrollbar-width:thin;scrollbar-color:var(--border) transparent}
-  .nav::-webkit-scrollbar{height:3px}
-  .nav::-webkit-scrollbar-thumb{background:var(--border);border-radius:var(--r-pill)}
-  .nav::-webkit-scrollbar-track{background:transparent}
-  .nav a{white-space:nowrap;padding:10px var(--md)}
-  .nav-sep{display:none}
-  /* ...and the fade, which shell.js only turns on when the strip actually has
-     more than it can show, so it never dims a last item that already fits.
-     A ::-webkit-scrollbar is an overlay on touch: it appears while scrolling
-     and then vanishes, which is no hint at all on the one device that needed
-     one. Faded out again at the far right, where there is nothing more to
-     promise. */
-  .nav.scrollable{
-    -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent);
-    mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent)}
-  .nav.scrollable.scrolled-end{-webkit-mask-image:none;mask-image:none}
+  /* Five fixed destinations at the bottom: no hidden sixth item and no swipe
+     required to discover System. Text, not colour, identifies every route. */
+  .nav{grid-row:3;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+    overflow:visible;gap:0;padding:0;border:0;border-top:1px solid var(--border-soft)}
+  .nav a{min-width:0;min-height:64px;align-items:center;justify-content:center;
+    padding:6px 2px;border-left:0;border-top:2px solid transparent;
+    font-size:9px;letter-spacing:.02em;text-align:center;white-space:normal}
+  .nav a.on{border-left:0;border-top-color:var(--accent)}
+  .nav a small,.nav .nav-count,.nav a[hidden]{display:none}
+  .statusbar{display:none}
+  .stage{grid-row:2;padding:var(--lg) var(--sm)}
+  .op-toolbar{align-items:stretch;flex-direction:column}
+  .op-toolbar .t-note{margin:0;text-align:left}
+  #opFilters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  #opFilters button{min-height:44px}
+  .op-levels{grid-template-columns:1fr}
+  .op-workspace{grid-template-columns:1fr}
+  .op-detail{position:fixed;z-index:40;inset:var(--topbar-h) 0 64px;
+    max-height:none;border-radius:0;overflow:auto}
+  .op-detail-head{position:sticky;top:calc(var(--lg) * -1);z-index:2;
+    padding-top:var(--lg);background:var(--card)}
+  .factor-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mode-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 
   /* The chart leads and the ticket follows it, instead of competing for a
      width neither can use.
@@ -871,9 +1132,17 @@ body:not(.dev) #consolePanel{display:none}
      exists and pushes the ticket off the bottom. The vh line before it is the
      fallback for engines without dvh. */
   .chart-main{grid-template-columns:1fr;
-    grid-template-rows:minmax(0,58vh) auto;
-    grid-template-rows:minmax(0,58dvh) auto}
+    grid-template-areas:"evidence" "chart" "ticket";
+    grid-template-rows:auto minmax(0,58vh) auto;
+    grid-template-rows:auto minmax(0,58dvh) auto}
+  .trade-evidence{display:block;max-height:none;overflow:visible}
   #s-chart.on{height:auto;min-height:0}
+}
+
+@media(max-width:640px){
+  .topbar .brand,#equityChip,#exposureChip,#btnCopilot{display:none}
+  #riskChip{max-width:145px}
+  .surface-head{align-items:flex-start;flex-direction:column;gap:4px;margin-bottom:var(--lg)}
 }
 
 .chart-pane{position:relative;min-width:0;overflow:hidden}
@@ -1170,6 +1439,12 @@ body:not(.dev) #consolePanel{display:none}
 .tk-why em{color:var(--fg-4);font-style:normal;font-family:var(--f-mono);font-size:var(--fs-1);
   letter-spacing:.16em;text-transform:uppercase;display:block;margin-bottom:3px}
 .tk-actions{display:flex;gap:var(--sm)}
+.managed-custody{margin:var(--md);padding:var(--md);border:1px solid rgba(251,191,36,.38);background:rgba(0,0,0,.28)}
+.managed-custody strong{display:block;margin:6px 0;color:var(--amber)}
+.managed-custody dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sm);margin:var(--sm) 0}
+.managed-custody dt{color:var(--fg-3);font-size:var(--fs-0);text-transform:uppercase}.managed-custody dd{margin:2px 0 0}
+.ticket.private-managed #tkDir,.ticket.private-managed #tkDirWhy,.ticket.private-managed #tkTabs,
+.ticket.private-managed .ticket-body,.ticket.private-managed #tkBlock,.ticket.private-managed .tk-commit-status{display:none!important}
 .tk-actions .btn{flex:1}
 /* Arm and Restore, at a thumb's size. Measured at 412px they rendered 34px
    tall — under Android's 48dp floor, on the single most consequential control
@@ -1563,6 +1838,17 @@ body:not(.dev) #consolePanel{display:none}
 .mc-acts{display:flex;gap:var(--sm);margin-top:auto}
 .mc-acts .btn{flex:1;justify-content:center;text-align:center}
 .mc-say{flex:1}
+
+/* The active card has one obvious next step. Investigation and close remain
+   reachable, but management owns the full first row. */
+.mc.mission .mc-acts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.mc.mission .mc-acts .btn{min-width:0;padding-inline:6px}
+.mc.mission .mc-acts .btn-primary{grid-column:1/-1;order:-1;
+  background:rgba(var(--accent-rgb),.18);border-color:rgba(var(--accent-rgb),.58);
+  color:var(--accent)}
+.mc.mission .mc-acts [data-trace],.mc.mission .mc-acts .btn-quiet{
+  background:rgba(0,0,0,.18);color:var(--fg-2)}
+.mc.mission .mc-acts .btn-red{color:var(--red-2);border-color:rgba(248,113,113,.42)}
 
 /* THE ARRIVAL is gone. `.mc-new` was applied by nothing — the class, its
    three keyframes and the first-paint guard that gated it all went together.
@@ -1993,9 +2279,15 @@ details.panel > summary:focus-visible{outline:2px solid var(--accent);outline-of
 .ledger-link a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 
 .mb-lede{padding:var(--md) var(--lg);font-family:var(--f-body);
-  font-size:var(--fs-3);line-height:1.55;color:var(--fg-3);max-width:78ch}
+  font-size:var(--fs-2);line-height:1.5;color:var(--fg-3);max-width:none;
+  display:flex;align-items:center;gap:var(--md);flex-wrap:wrap}
 .mb-lede:empty{display:none}
 .mb-lede.quiet{color:var(--fg-2)}
+.mission-summary{flex:1;min-width:min(100%,320px)}
+.mission-detail{position:relative;color:var(--fg-4)}
+.mission-detail summary{min-height:36px;display:flex;align-items:center;cursor:pointer;
+  font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase}
+.mission-detail>div{margin-top:var(--xs);font-size:var(--fs-1);color:var(--fg-3)}
 
 /* ── Market Watch: four groups, four tabs, nothing buried ── */
 /* The Overwatch tab strip is gone — the four groups were never a
@@ -2304,12 +2596,22 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
    not the only sane response. */
 .firstrun{margin-bottom:var(--lg);border-color:var(--accent);
   background:linear-gradient(180deg,rgba(var(--accent-rgb),.05),transparent)}
-.firstrun .t-body{max-width:64ch;margin:var(--sm) 0 var(--md)}
-.fr-steps{margin:0 0 var(--md);padding-left:1.15rem;max-width:64ch;
-  color:var(--fg-2);font-size:var(--fs-3);line-height:1.6}
-.fr-steps li{margin-bottom:5px}
-.fr-steps b{color:var(--fg)}
+.fr-head{display:flex;align-items:baseline;gap:var(--md);flex-wrap:wrap;margin-bottom:var(--md)}
+.fr-head h2,.fr-head p{margin:0}.fr-head p{color:var(--fg-3)}
+.fr-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;margin-bottom:var(--md);
+  background:var(--border-soft)}
+.fr-grid>div{display:flex;min-width:0;flex-direction:column;gap:5px;padding:var(--md);background:var(--bg-2)}
+.fr-grid strong{font-family:var(--f-mono);font-size:var(--fs-2);color:var(--fg-2);overflow-wrap:anywhere}
+.fr-grid small,.fr-grid details{color:var(--fg-4);font-size:var(--fs-1)}
+.fr-grid summary{min-height:32px;display:flex;align-items:center;cursor:pointer;color:var(--accent)}
+.fr-grid details p{margin:3px 0 0;line-height:1.45}
 .fr-acts{display:flex;gap:var(--sm);flex-wrap:wrap}
+@media(max-width:900px){
+  .ticket .tk-commit-status{position:sticky;bottom:0;z-index:4;margin-top:var(--md);padding:var(--sm);background:var(--panel);border-top:1px solid var(--line)}
+  .managed-custody dl{grid-template-columns:1fr}
+  .fr-grid{grid-template-columns:1fr}.fr-head{display:block}.fr-head h2{margin:5px 0}
+  .fr-acts{display:grid;grid-template-columns:1fr}.fr-acts .btn{width:100%;min-width:0}
+}
 
 /* The OHLC readout. Tabular numerals and a fixed slot: hovering across bars
    must not make the strip twitch, which is the whole reason the scanner chip
@@ -2456,3 +2758,142 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .jnl-row.jnl-open:hover{background:rgba(255,255,255,.03)}
 .jnl-row.jnl-open:focus-visible{outline:1px solid var(--accent);outline-offset:-2px;
   border-radius:var(--r-sm)}
+
+/* Completion pass: compact evidence, consequence-first system facts and a
+   mobile command layer that keeps every safety fact visible. */
+#opFilters [data-op-count]{min-width:2ch;margin-left:5px;color:var(--fg-4);
+  font-variant-numeric:tabular-nums}
+.factor-grade-facts,.system-fact-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:1px;margin:var(--md) 0;background:var(--border-soft)}
+.factor-grade-facts>div,.system-fact-grid>div{min-width:0;padding:9px;background:var(--bg-2)}
+.factor-grade-facts dt,.system-fact-grid span{font:600 var(--fs-1)/1.25 var(--f-mono);
+  letter-spacing:.09em;text-transform:uppercase;color:var(--fg-4)}
+.factor-grade-facts dd,.system-fact-grid b{display:block;margin:4px 0 0;overflow-wrap:anywhere;
+  font:600 var(--fs-2)/1.3 var(--f-mono);color:var(--fg-2)}
+.op-detail-actions{gap:var(--sm)}
+.op-detail-actions .op-trace{background:var(--bg-2)}
+
+.chart-head{justify-content:space-between;gap:var(--lg)}
+.chart-head>div:first-child{display:flex;align-items:baseline;gap:var(--md)}
+.trade-state{display:grid;grid-template-columns:auto auto;align-items:center;column-gap:8px;
+  min-width:270px;padding:7px 10px;border:1px solid var(--border-soft);border-radius:var(--r-md);
+  background:rgba(0,0,0,.22)}
+.trade-state span,.trade-state small{font:600 9px/1.25 var(--f-mono);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--fg-4)}
+.trade-state b{font:650 var(--fs-2)/1 var(--f-mono);letter-spacing:.11em;color:var(--fg)}
+.trade-state small{grid-column:1/-1;margin-top:3px;letter-spacing:.03em;text-transform:none}
+.trade-state[data-state="HALTED"] b,.trade-state[data-state="MANUAL_OVERRIDE"] b{color:var(--red-2)}
+.trade-state[data-state="ORDER_WORKING"] b,.trade-state[data-state="POSITION_MANAGED"] b{color:var(--amber-2)}
+.trade-mobile-bar{display:none}
+.layers-pop{width:min(310px,calc(100vw - 24px));padding:0;max-height:min(72vh,610px);overflow:auto}
+.layer-group{padding:7px;border-bottom:1px solid var(--border-soft)}
+.layer-group:last-child{border-bottom:0}
+.layer-group>span{display:block;padding:4px 7px 6px;font:650 9px/1 var(--f-mono);
+  letter-spacing:.14em;text-transform:uppercase;color:var(--fg-4)}
+
+.decision-strip{display:grid;grid-template-columns:auto 1fr;gap:5px var(--md);align-items:center;
+  margin:0 0 var(--lg);padding:var(--md);border:1px solid var(--border-soft);
+  border-left:3px solid var(--amber);border-radius:var(--r-md);background:rgba(0,0,0,.2)}
+.decision-strip b{font:600 var(--fs-3)/1.35 var(--f-body);color:var(--fg)}
+.decision-strip small{grid-column:2;font:var(--fs-1)/1.4 var(--f-mono);color:var(--fg-4)}
+.performance-trust[data-verdict="TRUST_BUILDING"]{border-left-color:var(--green)}
+.performance-trust[data-verdict="NOT_PROVEN"],.performance-trust[data-verdict="DEGRADED"]{border-left-color:var(--red)}
+.dimension-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--md);margin-bottom:var(--lg)}
+.dimension-table{min-width:520px;width:100%;border-collapse:collapse}
+.dimension-scroll{overflow-x:auto}
+.dimension-table th,.dimension-table td{padding:8px 10px;border-bottom:1px solid var(--border-soft);
+  text-align:right;font:var(--fs-1)/1.35 var(--f-mono);white-space:nowrap}
+.dimension-table th:first-child,.dimension-table td:first-child{text-align:left}
+.factor-record{margin-top:var(--md);border-top:1px solid var(--border-soft)}
+.factor-record>summary{display:flex;align-items:center;min-height:44px;cursor:pointer;
+  font:650 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+.factor-table{min-width:940px;width:100%;border-collapse:collapse}
+.factor-table th,.factor-table td{padding:8px 10px;border-bottom:1px solid var(--border-soft);
+  text-align:right;vertical-align:top;font:var(--fs-1)/1.35 var(--f-mono);white-space:nowrap}
+.factor-table th:first-child,.factor-table td:first-child{text-align:left}
+.factor-table td:first-child small{display:block;max-width:300px;overflow:hidden;text-overflow:ellipsis;color:var(--fg-4)}
+.population-note{margin:0 0 var(--md);color:var(--fg-3)}
+.promotion-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;
+  margin:0 var(--lg) var(--md);background:var(--border-soft)}
+.promotion-summary>div{padding:9px;background:var(--bg-2)}
+.promotion-summary span,.promotion-summary b{display:block;font:var(--fs-1)/1.35 var(--f-mono)}
+.promotion-summary span{color:var(--fg-4);text-transform:uppercase}.promotion-summary b{margin-top:4px;color:var(--fg-2)}
+.journal-tools{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap;padding:var(--sm) var(--lg);
+  border-bottom:1px solid var(--border-soft)}
+.journal-tools label{flex:1;min-width:min(100%,260px)}
+.journal-tools input{width:100%;min-height:44px;padding:8px 10px;background:rgba(0,0,0,.34);
+  border:1px solid var(--border);border-radius:var(--r-md);color:var(--fg);font:var(--fs-2)/1 var(--f-body)}
+.journal-tools input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.journal-tools select{min-height:44px;padding:8px 32px 8px 10px;background:rgba(0,0,0,.34);color:var(--fg);border:1px solid var(--line)}
+.performance-scope{position:sticky;top:0;z-index:7;display:flex;gap:var(--md);flex-wrap:wrap;padding:9px var(--md);margin-bottom:var(--md);background:rgba(17,18,14,.96);border:1px solid var(--line);font:var(--fs-0)/1.4 var(--mono);text-transform:uppercase}
+.performance-scope b{color:var(--fg-3);margin-right:5px}.promotion-stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--sm);margin:var(--md) 0}
+.performance-scope i{font-style:normal;color:var(--fg)}
+.topbar-account .data-stale{color:var(--red)!important;border-color:rgba(248,113,113,.6)!important}
+.performance-scope label{display:flex;align-items:center;margin-left:auto}.performance-scope select{min-height:44px;background:var(--bg-2);color:var(--fg);border:1px solid var(--line);padding:6px 28px 6px 8px}
+.promotion-stages article{display:flex;flex-direction:column;gap:5px;padding:var(--md);border:1px solid var(--line);background:rgba(0,0,0,.24)}
+.promotion-stages span{color:var(--fg-2);font-size:var(--fs-1)}
+.promotion-stages small{color:var(--fg-4);font:var(--fs-0)/1.45 var(--f-mono)}
+
+.system-consequence{margin-bottom:var(--md);padding:var(--md);border-left:2px solid var(--amber);
+  background:rgba(255,194,102,.05);color:var(--fg-2);font:var(--fs-2)/1.5 var(--f-body)}
+.strategy-catalogue{display:grid;gap:var(--sm);margin-bottom:var(--lg)}
+.strategy-contract{padding:var(--md);border:1px solid var(--border-soft);border-radius:var(--r-md);
+  background:rgba(0,0,0,.18)}
+.strategy-contract header{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap}
+.strategy-contract header h3{margin:0 auto 0 0;font:650 var(--fs-3)/1 var(--f-display)}
+.strategy-contract dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;
+  margin:var(--sm) 0 0;background:var(--border-soft)}
+.strategy-contract dl>div{padding:8px;background:var(--bg-2)}
+.strategy-contract dt{font:600 9px/1.2 var(--f-mono);text-transform:uppercase;color:var(--fg-4)}
+.strategy-contract dd{margin:4px 0 0;font:var(--fs-1)/1.4 var(--f-mono);color:var(--fg-2)}
+#s-settings>.dirty-banner{position:fixed;left:calc(186px + var(--shell-x));right:var(--shell-x);
+  bottom:calc(var(--statusbar-h) + var(--sm));z-index:80;box-shadow:0 10px 30px rgba(0,0,0,.65)}
+.reconciliation-panel[data-state="BLOCKED"]{border-color:rgba(248,113,113,.5)}
+.reconciliation-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--border-soft)}
+.reconciliation-grid>div{padding:9px;background:var(--bg-2)}
+.reconciliation-grid span,.reconciliation-grid b{display:block;font:var(--fs-1)/1.35 var(--f-mono)}
+.reconciliation-grid span{color:var(--fg-4);text-transform:uppercase}.reconciliation-grid b{margin-top:4px;color:var(--fg-2)}
+
+@media(max-width:900px){
+  .promotion-stages{grid-template-columns:1fr}.performance-scope{top:0;gap:var(--sm)}
+  .dimension-grid{grid-template-columns:1fr}
+  .promotion-summary,.reconciliation-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #s-settings>.dirty-banner{left:var(--sm);right:var(--sm);bottom:72px}
+  .chart-head{align-items:stretch}
+  .chart-head>div:first-child{display:block}
+  .trade-state{min-width:0}
+  .chart-main{grid-template-columns:1fr;grid-template-areas:"chart";grid-template-rows:minmax(420px,calc(100dvh - var(--topbar-h) - 270px))}
+  .trade-evidence,.ticket{display:none;position:fixed;z-index:70;left:0;right:0;bottom:108px;
+    max-height:min(70dvh,640px);overflow:auto;border-radius:var(--r-lg) var(--r-lg) 0 0;
+    box-shadow:0 -16px 48px rgba(0,0,0,.72)}
+  body.trade-sheet-evidence .trade-evidence,body.trade-sheet-action .ticket{display:block}
+  .trade-mobile-bar{position:fixed;z-index:72;left:0;right:0;bottom:64px;display:grid;
+    grid-template-columns:1fr 1fr;gap:1px;padding:0 var(--sm);background:var(--bg-2);
+    border-top:1px solid var(--border-soft)}
+  .trade-mobile-bar .btn{min-height:44px;justify-content:center;border-radius:0}
+}
+
+@media(max-width:640px){
+  :root{--topbar-h:94px}
+  .topbar{grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:44px 44px;
+    align-content:center;gap:0 6px;padding:2px 8px}
+  .topbar .brand,#venueNote,#btnCopilot{display:none}
+  .topbar-identity{display:flex!important;grid-column:1;grid-row:1}
+  .topbar-system,.topbar-system:has(#healthChip.degraded){display:flex!important;grid-column:2;grid-row:1;
+    min-height:30px;margin:0;padding:0;border:0;overflow:hidden}
+  .topbar-system #scanChip{display:none}
+  .topbar-system #healthChip{display:inline-flex!important;max-width:100%;overflow:hidden}
+  #healthTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topbar-actions{display:block!important;grid-column:3;grid-row:1}
+  .topbar-account{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));grid-column:1/-1;
+    grid-row:2;width:100%;border:1px solid var(--border-soft);background:rgba(0,0,0,.22)}
+  .topbar-account>span,#equityChip,#riskChip,#exposureChip{display:flex!important;justify-content:center;
+    max-width:none;min-width:0;min-height:38px;padding:0 5px!important;border-right:1px solid var(--border-soft);
+    overflow:hidden;text-overflow:ellipsis;font-size:9px;letter-spacing:.02em}
+  .topbar-account>span:last-child{border-right:0}
+  #equityRet{display:none}
+  .factor-grade-facts,.system-fact-grid,.strategy-contract dl{grid-template-columns:1fr}
+  .decision-strip{grid-template-columns:1fr}.decision-strip small{grid-column:1}
+  .journal-tools .chip{min-height:36px;display:flex;align-items:center}
+  .op-detail-actions{flex-direction:column}
+}

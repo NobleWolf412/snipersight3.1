@@ -225,11 +225,9 @@
     const shadow = d.n_shadow || 0, warming = d.n_warming || 0;
     const shadowLive = d.n_shadow_live || 0;
     const footer = d.n_live === 0
-      ? 'No symbol is in a condition any playbook trades right now. Empty ' +
-        'Mission Briefs are the correct answer to that, not a fault.'
-      : `${d.n_live} of ${d.n_total} tradeable symbols are in a condition a ` +
-        `playbook trades. Even then a setup only appears once price returns to ` +
-        `one of that symbol's zones and confirms there, so quiet days are normal.`;
+      ? 'No tradeable market matches an enabled playbook regime. Watching continues.'
+      : `${d.n_live} of ${d.n_total} tradeable markets match an enabled regime. ` +
+        'Entry still requires zone confirmation.';
     /* Said plainly rather than folded into the count above. A watched symbol
        that can never be sized is evidence about a venue, not an opportunity.
 
@@ -251,21 +249,18 @@
     const other = d.n_other || 0;
     const parts = [];
     if (shadow) {
-      parts.push(`${shadow} more ${shadow === 1 ? 'is a' : 'are'} `
-        + `<span class="term" data-t="shadow">shadow</span> `
-        + `symbol${shadow === 1 ? '' : 's'} — watched and scored, never sized`
-        + `${shadowLive ? `, and ${shadowLive} of those are live` : ''}`);
+      parts.push(`${shadow} <span class="term" data-t="shadow">shadow</span>`
+        + `, measured but never sized${shadowLive ? ` (${shadowLive} live)` : ''}`);
     }
     if (warming) {
-      parts.push(`${warming} ${warming === 1 ? 'is' : 'are'} still `
-        + `<span class="term" data-t="warming">warming</span>, waiting on history`);
+      parts.push(`${warming} <span class="term" data-t="warming">warming</span>`);
     }
     if (other) {
-      parts.push(`${other} ${other === 1 ? 'is' : 'are'} in neither group — `
-        + `scanned and held, but outside every state above`);
+      parts.push(`${other} unclassified`);
     }
     const aside = parts.length
-      ? ` <span style="color:var(--fg-4)">${parts.join('. ')}.</span>`
+      ? `<details class="mission-detail"><summary>Universe details</summary>` +
+        `<div>${parts.join(' · ')}</div></details>`
       : '';
 
     /* THE ANSWER GOES WHERE THE QUESTION IS ASKED.
@@ -277,7 +272,7 @@
        nothing. Owned here still: one authority, new address. */
     const lede = document.getElementById('missionLede');
     if (lede) {
-      lede.innerHTML = `${teach(footer)}${aside}`;
+      lede.innerHTML = `<span class="mission-summary">${teach(footer)}</span>${aside}`;
       lede.className = 'mb-lede' + (d.n_live === 0 ? ' quiet' : '');
     }
 

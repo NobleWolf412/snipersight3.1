@@ -15,7 +15,7 @@ from pathlib import Path
 from engine import store, execsim
 
 OUT = Path(__file__).resolve().parent / "verification" / "validation-current.md"
-TFS = ("15m", "1H", "4H", "1D", "1W")
+TFS = ("5m", "15m", "1H", "4H", "1D", "1W")
 
 
 def load(con):

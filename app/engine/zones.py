@@ -56,7 +56,7 @@ ZONE_ATR = Decimal("0.25")
 TOL_ATR = Decimal("0.05")
 MAX_TOUCH_FACTS = 10
 
-TF_WEIGHT = {"1W": 20, "1D": 15, "4H": 10, "1H": 5, "15m": 5}
+TF_WEIGHT = {"1W": 20, "1D": 15, "4H": 10, "1H": 5, "15m": 5, "5m": 5}
 
 
 def formation_quality(cluster: int, tf: str) -> int:

@@ -167,7 +167,8 @@ RVOL_DRY_IN, RVOL_DRY_OUT = Decimal("0.5"), Decimal("0.7")
 # session. An absent key means "this timeframe has no session", not "default to
 # a day" — a silent default here would emit a one-bar VWAP and call it an
 # average.
-SESSION_ANCHOR = {"15m": "DAY", "1H": "DAY", "4H": "WEEK", "1D": "WEEK"}
+SESSION_ANCHOR = {"5m": "DAY", "15m": "DAY", "1H": "DAY",
+                  "4H": "WEEK", "1D": "WEEK"}
 MIN_SESSION_BARS = 3
 DAY_SECONDS = 86400
 WEEK_SECONDS = 604800

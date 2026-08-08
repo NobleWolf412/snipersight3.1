@@ -113,7 +113,7 @@ def names() -> list[str]:
 # its buckets with a _KNOWN_REASONS set after new reason strings drifted in
 # unlabelled; here an unknown gate name is a programming error, loud at write.
 
-ALL_TFS = ("15m", "1H", "4H", "1D", "1W")
+ALL_TFS = ("5m", "15m", "1H", "4H", "1D", "1W")
 
 # The closed gate vocabulary. Adding a gate means adding it HERE, to the
 # funnel's label map, and to the tests — in one commit. An unknown name

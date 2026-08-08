@@ -60,6 +60,16 @@
   // `rules` lived at this address for the whole redesign; links and habits
   // survive the rename to Settings.
   const SURFACE_ALIASES = {setup: 'settings', rules: 'settings'};
+  const LEGACY_ROUTES = {
+    command: 'overview', chart: 'trade', results: 'performance',
+    ledger: 'performance-ledger', settings: 'system',
+    diagnostics: 'system-diagnostics'
+  };
+  const ROUTE_SURFACE = {
+    overview: 'command', opportunities: 'opportunities', trade: 'chart',
+    performance: 'results', 'performance-ledger': 'results',
+    system: 'settings', 'system-diagnostics': 'diagnostics'
+  };
   let pendingJump = null;
   /* Set once the first full refresh has been kicked off. go() runs during
      boot — from the initial hash — and refreshing from inside it then would
@@ -84,29 +94,44 @@
        the section id and the surface name be the same link. Refusing to land
        nowhere means no hash can ever empty the stage again, whatever it says. */
     if(name.startsWith('s-')) name = name.slice(2);
-    if(!document.getElementById('s-' + name)) name = 'command';
-    document.querySelectorAll('.surface').forEach(s => s.classList.toggle('on', s.id === 's' + '-' + name));
+    let route = LEGACY_ROUTES[name] || name;
+    let surface = ROUTE_SURFACE[route];
+    if(!surface || !document.getElementById('s-' + surface)){
+      route = 'overview'; surface = 'command';
+    }
+    if(route === 'performance-ledger'){
+      try{ sessionStorage.setItem('ss:performance-view', 'journal'); }catch(e){ /* optional */ }
+    }
+    document.body.dataset.route = route;
+    document.querySelectorAll('.surface').forEach(s =>
+      s.classList.toggle('on', s.id === 's-' + surface));
     document.querySelectorAll('.nav a').forEach(a => {
-      const here = a.dataset.s === name;
+      const navRoute = a.dataset.route;
+      const here = navRoute === route ||
+        (navRoute === 'performance' && route === 'performance-ledger') ||
+        (navRoute === 'system' && route === 'system-diagnostics');
       a.classList.toggle('on', here);
       /* The rail showed the current surface with a colour and nothing else.
          aria-current is how that fact reaches anyone not reading the colour. */
       if(here) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     });
-    if(location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
+    if(location.hash.slice(1) !== route) history.replaceState(null, '', '#' + route);
     // The chart cannot size itself while its surface is display:none, so it is
     // told when it becomes visible rather than measuring a 0x0 box at load.
-    if(window.SSChart) name === 'chart' ? SSChart.onShow() : SSChart.onHide();
+    if(window.SSChart) surface === 'chart' ? SSChart.onShow() : SSChart.onHide();
     // The console polls slowly while it is off screen; arriving on it should
     // not mean waiting out that slow tick for the first paint.
-    if(name === 'diagnostics' && consoleReady) pollConsole();
+    if(surface === 'diagnostics' && consoleReady) pollConsole();
     /* ...and the same courtesy for the rest. The 30s tick now only refreshes
        the surface you are looking at, so ARRIVING somewhere is the moment its
        data has to be fetched — otherwise Settings would show whatever was
        true when you last left it. Concurrent requests for one path collapse
        inside SSData, so this costs nothing when it races the periodic tick. */
-    if(booted) refresh();
+    if(booted){
+      refresh();
+      if(route === 'performance-ledger') loadLedger().catch(err => console.warn('ledger unavailable', err));
+    }
     /* A dead-end number becomes a door. Anything with data-jump routes to the
        surface AND scrolls the panel that answers it into view, because landing
        at the top of Diagnostics is not the same as being shown the funnel. */
@@ -126,7 +151,9 @@
     if(stage) stage.scrollTop = 0;
   }
   document.querySelectorAll('.nav a').forEach(a =>
-    a.addEventListener('click', e => { e.preventDefault(); go(a.dataset.s); }));
+    a.addEventListener('click', e => {
+      e.preventDefault(); go(a.dataset.route || a.dataset.s);
+    }));
 
   /* THE STRIP SAYS WHEN IT HAS MORE. Measured at 412px, Diagnostics sits at
      370-504px — off the edge, with two of the five surfaces undiscoverable.
@@ -181,8 +208,13 @@
     target.scrollIntoView({block: 'start'});
   });
 
-  addEventListener('hashchange', () => go(location.hash.slice(1) || 'command'));
-  go(location.hash.slice(1) || 'command');
+  addEventListener('hashchange', () => go(location.hash.slice(1) || 'overview'));
+  go(location.hash.slice(1) || 'overview');
+  addEventListener('ss:workspace-view', event => {
+    const view = event.detail || {};
+    if(view.name === 'performance' && view.view === 'journal')
+      loadLedger().catch(err => console.warn('ledger unavailable', err));
+  });
 
   /* ---------- keyboard ----------
      There were no shortcuts of any kind. Five surfaces on the number keys and
@@ -216,7 +248,9 @@
       try{ localStorage.setItem(FR_KEY, '1'); }
       catch(e){ storageFailed('the dismissal of the intro card', e); }
     };
-    document.getElementById('frGo').addEventListener('click', dismiss);
+    document.getElementById('frGo').addEventListener('click', () => {
+      dismiss(); location.hash = 'opportunities';
+    });
     document.getElementById('frDiag').addEventListener('click', () => {
       dismiss();
       if(window.SSWizard) SSWizard.open();
@@ -231,8 +265,9 @@
      Diagnostics for the life of the app and renumbering a habit is a worse
      cost than a rail whose order and whose keys are not the same list. The
      keys are accelerators; nothing on screen numbers the rail. */
-  const KEYS = {'1': 'command', '2': 'chart', '3': 'results',
-                '4': 'settings', '5': 'diagnostics', '6': 'ledger'};
+  const KEYS = {'1': 'command', '2': 'opportunities', '3': 'chart',
+                '4': 'results', '5': 'settings', '6': 'ledger',
+                '7': 'diagnostics'};
   addEventListener('keydown', e => {
     // never steal a keystroke from a field, and never from a chord the OS or
     // the browser owns
@@ -245,7 +280,7 @@
     if(KEYS[e.key]){ e.preventDefault(); go(KEYS[e.key]); return; }
     if(e.key === 'c' && window.SSCopilot){ e.preventDefault(); SSCopilot.toggle(); }
     if(e.key === '?'){ e.preventDefault(); toast(
-      'Keys: 1–6 switch surfaces · c toggles the copilot · Esc closes ' +
+      'Keys: 1–7 switch views · c toggles the copilot · Esc closes ' +
       'popovers. Arming is deliberately not on a key.', 'good'); }
   });
 
@@ -928,9 +963,8 @@
       missionRows.forEach(r => r.el.remove());
       missionRows.clear();
       if(!el.querySelector('.empty'))
-        el.innerHTML = '<div class="empty">No position open.<br>' +
-          '<span style="color:var(--fg-3)">The engine enters on its own as ' +
-          'setups confirm. Nothing is open right now, and nothing needs you.</span></div>';
+        el.innerHTML = '<div class="empty"><b>No active position.</b><br>' +
+          '<span style="color:var(--fg-3)">Scanner continues watching.</span></div>';
       missionRailSync();
       return;
     }
@@ -953,8 +987,9 @@
       const cls = 'deck-row mc mission' + (filled ? ' filled' : ' resting');
       let rec = missionRows.get(key);
       if(!rec){
-        const node = document.createElement('div');
+        const node = document.createElement('article');
         node.className = cls;
+        node.setAttribute('aria-label', `${filled ? 'Open position' : 'Working order'}: ${t.symbol} ${t.direction}`);
         node.innerHTML = html;
         rec = {el: node, html, cls};
         missionRows.set(key, rec);
@@ -1021,18 +1056,18 @@
         <!-- The composed hold question, carried over from the deleted rows.
              It OFFERS the wording and never sends it — the dock fills its own
              input and the operator presses send. -->
-        <button class="btn" data-ask="${esc(t.setup_id || '')}"
+        <button class="btn btn-quiet" data-ask="${esc(t.setup_id || '')}"
                 data-asksym="${esc(t.symbol)}" data-asktf="${esc(t.tf)}"
                 title="ask the copilot whether to hold this — it reads the trace and cannot arm">Ask</button>
-        <button class="btn btn-amber" data-manage="${esc(t.symbol)}"
+        <button class="btn btn-primary" data-manage="${esc(t.symbol)}"
                 data-managetf="${esc(t.tf)}"
-                title="open the chart — the ticket manages this position">Manage</button>
+                title="open the chart — the ticket manages this position">Manage position</button>
         <!-- CLOSE, carried over with the rest. It is the one WRITE control on
              this card and it only exists for a filled position: a resting
              order has nothing to close. Leaving it behind with the deleted
              rows would have removed the operator's ability to close from
              Command at all, which is a capability loss, not a declutter. -->
-        ${filled ? `<button class="btn pos-close" data-close-sid="${esc(t.setup_id || '')}"
+        ${filled ? `<button class="btn btn-red pos-close" data-close-sid="${esc(t.setup_id || '')}"
                 title="close this on YOUR book at the last closed price — the engine keeps simulating its own plan, so the two outcomes can be compared">Close</button>` : ''}
       </div>`;
   }
@@ -1505,6 +1540,9 @@
           `${i + 1} of ${st.cards.length}`,
         ].filter(Boolean).join(', ');
       }
+      const position = opts.position && $(opts.position);
+      if(position) position.textContent = st.cards.length
+        ? `${i + 1} / ${st.cards.length}` : '0 / 0';
     }
 
     st.sync = function(){
@@ -1609,7 +1647,8 @@
     if(!track || !window.SSWheel) return;
     if(!missionRail)
       missionRail = makeRail(track, {prev: 'mbPrev', next: 'mbNext',
-                                     status: 'mbStatus', tilt: true});
+                                     status: 'mbStatus', position: 'mbPosition',
+                                     tilt: true});
     missionRail.sync();
   }
 
@@ -1957,11 +1996,11 @@
             : `<button class="btn" data-copilot="1" data-sym="${s.symbol}" data-tf="${s.tf}"
                        data-sid="${esc(s.setup_id || '')}"
                        title="ask the copilot about this setup — it reads the trace and cannot arm">Ask copilot</button>`}
-          <button class="btn${mine ? ' btn-amber' : ''}" data-sym="${s.symbol}" data-tf="${
+          <button class="btn${mine ? ' btn-amber' : ' btn-primary'}" data-sym="${s.symbol}" data-tf="${
             mine ? heldSyms.get(s.symbol).tf : s.tf}"
                   title="${mine ? 'open the chart on the trade you are holding — the ticket manages it'
                                 : 'open this plan on the chart'}">${
-            mine ? 'Manage trade' : 'Open chart'}</button>
+            mine ? 'Manage trade' : 'Review setup'}</button>
         </div>`;
     }
   }
@@ -2058,7 +2097,7 @@
         <div class="radar-say mc-say">${verb} <b>${esc(zone)}</b>. Becomes a trade only if price
           gets there and a candle confirms.</div>
         <div class="mc-acts">
-          <button class="btn" data-rsym="${esc(s.symbol)}" data-rtf="${esc(s.tf)}">Open chart</button>
+          <button class="btn btn-primary" data-rsym="${esc(s.symbol)}" data-rtf="${esc(s.tf)}">Review setup</button>
         </div>`;
       const key = s.symbol + '|' + s.tf;
       seenR.add(key);
@@ -2937,7 +2976,7 @@ weighed in. Name the facts you used.`;
         ? `${Math.abs(Number(j.r_gross)).toFixed(2)}R ${
             Number(j.r_gross) < 0 ? 'loss' : 'gain'} + ${costR.toFixed(2)}R costs`
         : '';
-      return `<div class="jnl-row jnl-open${flat ? '' : up ? ' up' : ' down'}"
+      return `<div class="jnl-row jnl-open${flat ? '' : up ? ' up' : ' down'}" data-journal-source="BOT"
         data-jsid="${esc(j.setup_id || '')}" tabindex="0" role="button"
         title="open this trade on the chart — the bars it happened on, with entry and exit marked">
         <div>
@@ -3070,7 +3109,7 @@ weighed in. Name the facts you used.`;
     // Results scoreboard, and the name collision meant only the second ever
     // ran from here.
     renderTodayTile(journal);
-    renderScoreboard(journal);
+    renderScoreboard(p.performance_summary);
 
 
     // fire-and-forget: the positions panel fetches a price per open trade, and
@@ -3105,7 +3144,6 @@ weighed in. Name the facts you used.`;
       setSub('rReturn', ''); setSub('rDD', ''); setSub('rEquity', '');
     }
     $('rHalt').textContent = p.kill_switch_days ?? 0;
-    renderScoreboard(p.journal || []);
     lastJournal = p.journal || [];
     if(p.config) $('mRisk').textContent = money(p.config.next_risk_usd);
     drawCurve(p.curve, p.start_equity);
@@ -3802,7 +3840,7 @@ weighed in. Name the facts you used.`;
      already fetched — no endpoint, no second authority for what a trade was.
      Every field the journal row shows, plus the identifiers needed to trace
      a row back to the fact store. */
-  const CSV_COLS = ['ts', 'symbol', 'tf', 'strategy', 'direction', 'regime',
+  const CSV_COLS = ['ts', 'symbol', 'tf', 'strategy', 'horizon', 'order_type', 'direction', 'regime',
                     'entry', 'exit_price', 'outcome', 'r_multiple', 'r_gross',
                     'costs_r', 'pnl_usd', 'risk_usd', 'holding_hours',
                     'setup_id', 'why'];
@@ -3838,28 +3876,27 @@ weighed in. Name the facts you used.`;
      recorded book: those two populations differ by hundreds of trades, and
      mixing them on one page is a bug this project has already had to fix
      once. The era band above these tiles is their scope statement. */
-  function renderScoreboard(journal){
-    const rs = journal.map(t => t.r_multiple)
-                      .filter(r => r != null).map(Number);
-    const n = rs.length;
+  function renderScoreboard(summary){
+    const s = summary || {};
+    const n = Number(s.trades || 0);
     if(!n){
       for(const id of ['rTrades', 'rWin', 'rAvgR', 'rPF']) $(id).textContent = '—';
       $('rSample').textContent = '';
+      lastScore = null;
+      renderStatWheel();
+      renderProgression();
       return;
     }
-    const wins = rs.filter(r => r > 0);
-    const gross = wins.reduce((s, r) => s + r, 0);
-    const loss = rs.filter(r => r < 0).reduce((s, r) => s - r, 0);
-    const avg = rs.reduce((s, r) => s + r, 0) / n;
+    const avg = Number(s.average_r);
 
     $('rTrades').textContent = n;
-    $('rWin').textContent = Math.round(wins.length / n * 100) + '%';
+    $('rWin').textContent = s.win_pct == null ? '—' : s.win_pct + '%';
     $('rAvgR').textContent = (avg >= 0 ? '+' : '') + avg.toFixed(2) + 'R';
     $('rAvgR').parentElement.className = 'tile ' + (avg > 0 ? 'up' : avg < 0 ? 'down' : '');
     // A book with no losses has no profit factor — it has no denominator.
     // Printing ∞ or 999 there would read as a result rather than an absence.
-    $('rPF').textContent = loss > 0 ? (gross / loss).toFixed(2)
-                         : gross > 0 ? 'no losses yet' : '—';
+    $('rPF').textContent = s.profit_factor == null
+      ? (s.has_losses ? '—' : 'no losses yet') : Number(s.profit_factor).toFixed(2);
 
     /* THE SAMPLE CAVEAT, sized to the sample. A win rate off seven trades is
        a number, not evidence. The thresholds match the ones the rest of the
@@ -3873,9 +3910,9 @@ weighed in. Name the facts you used.`;
         : `${n} trades — enough to compute, not enough to trust. Settings ` +
           `wants 100 before the record argues for real money.`;
 
-    lastScore = {n, win: wins.length / n, avg,
-                 pf: loss > 0 ? gross / loss : null,
-                 best: Math.max(...rs), worst: Math.min(...rs)};
+    lastScore = {n, win: Number(s.win_pct || 0) / 100, avg,
+                 pf: s.profit_factor == null ? null : Number(s.profit_factor),
+                 best: Number(s.best_r), worst: Number(s.worst_r)};
     renderStatWheel();
     renderProgression();
   }
@@ -3989,14 +4026,13 @@ weighed in. Name the facts you used.`;
      does not say the method works, and a badge claiming otherwise would be the
      one thing this product must never print. */
   function progressionRows(){
-    const s = lastScore, p = lastPortfolio || {};
+    const s = lastScore;
     if(!s) return [];
-    const halts = p.kill_switch_days ?? 0;
     const rows = [
-      {t: 'First blood', done: s.n >= 1, have: Math.min(s.n, 1), need: 1,
-       d: 'One trade closed and recorded.',
-       locked: 'Closes when the engine finishes its first trade.'},
-      {t: 'Readable sample', done: s.n >= 10, have: Math.min(s.n, 10), need: 10,
+      {t: 'Journal established', done: s.n >= 1, have: Math.min(s.n, 1), need: 1,
+       d: 'One complete setup-to-outcome record.',
+       locked: 'Met when the first complete trade record closes.'},
+      {t: 'Statistical floor', done: s.n >= 10, have: Math.min(s.n, 10), need: 10,
        d: 'Ten closed trades — the minimum a confidence interval can be computed from.',
        locked: 'The maths cannot bound an edge on fewer than ten.'},
       /* "Arguable record" (100 trades) and "Shallow water" (drawdown) used to
@@ -4006,9 +4042,6 @@ weighed in. Name the facts you used.`;
          note, and the drawdown one reads the operator's CONFIGURED ceiling
          instead of a hardcoded 10. Both are appended below from /api/live-gate.
          Do not add a local copy back. */
-      {t: 'Discipline held', done: halts === 0 && s.n > 0, have: halts === 0 ? 1 : 0, need: 1,
-       d: 'The daily loss limit has never had to stop you.',
-       locked: 'The kill switch has fired. It working is good; needing it is the note.'},
     ];
     return rows;
   }
@@ -4283,6 +4316,8 @@ weighed in. Name the facts you used.`;
                      'withdraw permission is required — this app never sends ' +
                      'a real order.',
     'phemex-perp':   'Needs READ only. Do not grant withdrawal rights.',
+    'phemex-testnet':'Testnet order key. Keep it separate from mainnet and do not grant withdrawal rights.',
+    'phemex-mainnet':'Mainnet order key. LIVE remains build-locked; never grant withdrawal rights.',
     'kraken-perp':   'Needs READ only. Do not grant withdrawal rights.',
   };
   function buildCredRows(d){
@@ -5185,7 +5220,7 @@ weighed in. Name the facts you used.`;
      setup_id to open a chart on. */
   function ledgerRow(o){
     const flat = o.r == null || Number(o.r) === 0;
-    return `<div class="jnl-row${flat ? '' : Number(o.r) > 0 ? ' up' : ' down'}">
+    return `<div class="jnl-row${flat ? '' : Number(o.r) > 0 ? ' up' : ' down'}" data-journal-source="${esc(o.source || 'MANUAL')}">
       <div>
         <div class="t-mono" style="font-size:13px;color:var(--fg)">${
           o.dir === 'SHORT' ? '<span class="dir-dn">▼</span>'
@@ -5241,7 +5276,7 @@ weighed in. Name the facts you used.`;
         when: dayOf(t.resolved_at),
         r: settled ? t.r_multiple : null,
         usd: t.pnl_usd,
-        noUsd: settled ? 'no dollars' : 'never sized',
+        noUsd: settled ? 'no dollars' : 'never sized', source: 'MANUAL',
       });
     }).join('');
   }
@@ -5260,7 +5295,7 @@ weighed in. Name the facts you used.`;
       symbol: o.symbol, tf: o.tf, dir: o.direction,
       say: 'closed by you',
       when: dayOf(o.closed_at),
-      r: o.r_at_close, usd: o.usd_at_close,
+      r: o.r_at_close, usd: o.usd_at_close, source: 'EXIT',
     })).join('');
   }
 

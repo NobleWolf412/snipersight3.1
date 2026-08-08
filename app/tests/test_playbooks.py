@@ -169,8 +169,12 @@ class PlaybookCatalogueCase(unittest.TestCase):
             if p["status"] != "planned":
                 continue
             self.assertTrue(p.get("gap"), f"{p['key']} is planned with no reason")
-            self.assertIsNotNone(p.get("gap_pct"), p["key"])
-            self.assertGreater(p.get("gap_n"), 0, p["key"])
+            # Range Fade is sized from the rejection corpus. Other research
+            # contracts have strategy-specific evidence and must not borrow a
+            # regime percentage just to make the card look measured.
+            if p["key"] == "range_fade":
+                self.assertIsNotNone(p.get("gap_pct"), p["key"])
+                self.assertGreater(p.get("gap_n"), 0, p["key"])
 
     def test_gap_percentages_are_counted_not_hard_coded(self):
         """Two different rejection corpora must produce two different gaps.
@@ -210,9 +214,8 @@ class PlaybookCatalogueCase(unittest.TestCase):
         cards = self.by_key(self.call())
         planned = [k for k, c in cards.items() if c["status"] == "planned"]
         self.assertTrue(planned, "no planned card left to test the fallback on")
-        for key in planned:
-            self.assertIsNone(cards[key]["gap_pct"], key)
-            self.assertIn("not measured", cards[key]["gap"].lower(), key)
+        self.assertIsNone(cards["range_fade"]["gap_pct"])
+        self.assertIn("not measured", cards["range_fade"]["gap"].lower())
 
     def test_gap_falls_back_to_older_versions_and_says_which(self):
         """A version bump leaves the new engine with no rejections of its own.

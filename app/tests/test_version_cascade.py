@@ -179,7 +179,11 @@ EXPECTED = {
     # scale ALSO changed on its own account — its economics gate now prices the
     # add on the add's own venue instead of the process-wide Coinbase default.
     "exec": "exec-v0.21-draft",
-    "risk": "risk-v0.20-draft",
+    # risk-v0.21 is a risk-only policy move: 0.25% per trade, one base
+    # position, 0.5% total open risk and a 1% UTC-day halt. Risk has no
+    # downstream fact consumer in CONSUMERS; setup/exec/scale/cooldown do not
+    # read risk facts, so no cascade follows it.
+    "risk": "risk-v0.21-draft",
     "scale": "scale-v0.15-draft",
     "cooldown": "cooldown-v0.9-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on

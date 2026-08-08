@@ -99,7 +99,7 @@ def state(con) -> dict:
     baseline = store.get_active_baseline(con)
     active = 0
     for sym in universe.all_tracked_symbols(con):
-        for tf in ("15m", "1H", "4H", "1D", "1W"):
+        for tf in ("5m", "15m", "1H", "4H", "1D", "1W"):
             for ver in (setups.SETUP_VERSION, scalein.SCALE_VERSION):
                 for r in store.get_facts(con, sym, tf, "setup", ver):
                     p = json.loads(r["payload"])

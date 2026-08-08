@@ -37,9 +37,10 @@ QUOTE = "USDT"
 SETTLE = "USDT"
 
 # Same shape as importer.TF_SECONDS so timeframe handling is venue-agnostic.
-TF_SECONDS = {"15m": 900, "1H": 3600, "4H": 14400, "1D": 86400, "1W": 604800}
+TF_SECONDS = {"5m": 300, "15m": 900, "1H": 3600, "4H": 14400,
+              "1D": 86400, "1W": 604800}
 # Phemex serves 4H natively, unlike Coinbase which forces aggregation.
-NATIVE_TFS = {"15m": 900, "1H": 3600, "4H": 14400, "1D": 86400}
+NATIVE_TFS = {"5m": 300, "15m": 900, "1H": 3600, "4H": 14400, "1D": 86400}
 MAX_ROWS_PER_REQ = 1000
 
 # 5/s, not 10: the limiter is process-GLOBAL but not machine-global, and both
@@ -98,9 +99,9 @@ def _get(path: str, retries: int = RANK_RETRIES):
     raise last
 
 
-def list_products() -> list[dict]:
-    """Live USDT-settled perpetuals, normalised to the fields we care about."""
-    data = (_get("/public/products") or {}).get("data") or {}
+def normalize_products(payload: dict) -> list[dict]:
+    """Normalize either mainnet or testnet's official product response."""
+    data = (payload or {}).get("data") or {}
     out = []
     for p in data.get("perpProductsV2") or []:
         if p.get("status") not in (None, "Listed"):
@@ -113,8 +114,17 @@ def list_products() -> list[dict]:
             "tick_size": p.get("tickSize"),
             "max_leverage": p.get("maxLeverage"),
             "funding_symbol": p.get("fundingRateSymbol"),
+            "qty_step": p.get("qtyStepSize"),
+            "qty_precision": p.get("qtyPrecision"),
+            "min_notional": p.get("minOrderValueRv"),
+            "max_order_qty": p.get("maxOrderQtyRq"),
         })
     return out
+
+
+def list_products() -> list[dict]:
+    """Live USDT-settled perpetuals, normalised to the fields we care about."""
+    return normalize_products(_get("/public/products") or {})
 
 
 def rank_by_volume(progress=None) -> list[tuple[str, float]]:

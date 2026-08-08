@@ -51,8 +51,10 @@ QUOTE = "USD"
 # Kraken's own resolution names, mapped from ours. Kept as a table rather than a
 # lowercase() call because the two vocabularies agreeing today is a coincidence,
 # not a contract.
-RESOLUTION = {"15m": "15m", "1H": "1h", "4H": "4h", "1D": "1d", "1W": "1w"}
-TF_SECONDS = {"15m": 900, "1H": 3600, "4H": 14400, "1D": 86400, "1W": 604800}
+RESOLUTION = {"5m": "5m", "15m": "15m", "1H": "1h", "4H": "4h",
+              "1D": "1d", "1W": "1w"}
+TF_SECONDS = {"5m": 300, "15m": 900, "1H": 3600, "4H": 14400,
+              "1D": 86400, "1W": 604800}
 
 # Kraken serves ALL FIVE timeframes natively. We still import only these three
 # and let the aggregator build 4H and 1W, for the same reason recorded in
@@ -60,7 +62,7 @@ TF_SECONDS = {"15m": 900, "1H": 3600, "4H": 14400, "1D": 86400, "1W": 604800}
 # (symbol, tf, open_ts) row the aggregator writes, and two writers for one bucket
 # is how they disagree at a gap and the audit reports a conflict it cannot
 # explain. One saved request is not worth a second write path.
-NATIVE_TFS = {"15m": 900, "1H": 3600, "1D": 86400}
+NATIVE_TFS = {"5m": 300, "15m": 900, "1H": 3600, "1D": 86400}
 
 MAX_CANDLES_PER_REQ = 5000
 

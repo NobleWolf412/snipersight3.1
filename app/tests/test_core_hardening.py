@@ -300,7 +300,9 @@ class TestRiskVenueContract(TempStore):
     def test_daily_halt_uses_start_of_day_equity(self):
         candle(self.con, "BTC-USD", "1D", 0, 100, 101, 99, 100)
         day = 86400
-        for i in range(4):
+        # Four 1.10R losses at the 0.25% initial risk profile exceed the
+        # deterministic 1% UTC-day halt; the fifth intent must be rejected.
+        for i in range(5):
             sid = f"long-{i}"
             confirmed = day + 100 + i * 1000
             store.insert_fact(
@@ -310,7 +312,7 @@ class TestRiskVenueContract(TempStore):
                 payload={"setup_id": sid, "strategy": "PULLBACK",
                          "direction": "LONG", "entry": "100", "sl": "95", "tp": "110",
                          "rr": "2", "rank": 50, "state": "VALIDATED"})
-            if i < 3:
+            if i < 4:
                 store.insert_fact(
                     self.con, symbol="BTC-USD", tf="1D", kind="exec",
                     market_time=i, confirmed_at=confirmed + 500,

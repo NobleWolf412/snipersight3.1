@@ -32,48 +32,48 @@
 
   <!-- ══ top bar: identity, venue, mode, health ══ -->
   <header class="topbar">
-    <div class="brand">
-      <img src="/static/assets/snipersight-logo.png" alt="SniperSight">
+    <div class="topbar-identity">
+      <div class="brand">
+        <img src="/static/assets/snipersight-logo.png" alt="SniperSight">
+      </div>
+      <span class="chip chip-amber" id="modeChip">
+        <span class="orb warn"></span><span class="term" data-t="paper">Paper</span>
+      </span>
+      <span class="top-venue" id="venueNote" title="active execution venue"><span class="term" data-t="perps">Phemex perps</span></span>
     </div>
 
-    <!-- The venue SELECT that used to sit here is deliberately gone. Venue is
-         not a mode: it is derived per symbol (BTC-USD -> Coinbase spot,
-         BTCUSDT -> Phemex perp, PF_XBTUSD -> Kraken perp) at ranking time by
-         an economic rule, and nothing ever read this control's value. Worse,
-         it actively lied — it told the operator "Phemex lands in phase 4"
-         while the scan universe was 19 Phemex perps and nothing else. The
-         venue of the chart in front of you is named by the #cVenue chip and on
-         every entry in the symbol picker, which is where the fact is true. -->
-    <span class="chip" id="venueNote" title="venue is per-symbol — see the chart's venue chip"><span class="term" data-t="perps">multi-venue</span></span>
+    <div class="topbar-system" aria-label="System status">
+      <span id="scanChip"><span class="orb" id="scanOrb"></span><span id="scanTxt">SCANNER —</span></span>
+      <span id="healthChip" title="pipeline audit"><span class="orb" id="healthOrb"></span><span id="healthTxt">—</span></span>
+    </div>
 
-    <span class="chip chip-amber" id="modeChip">
-      <span class="orb warn"></span><span class="term" data-t="paper">Paper</span>
-    </span>
+    <div class="topbar-account" aria-label="Account and exposure">
+      <span id="equityChip" title="account equity (paper)">
+        <span class="topbar-label">Equity</span><b id="equityTxt">—</b><span id="equityRet"></span></span>
+      <span id="riskChip" title="server-calculated available open-risk budget">Risk —</span>
+      <span id="exposureChip" title="open positions and working orders">Open —</span>
+    </div>
 
-    <div class="spacer"></div>
-
-    <!-- the account, readable from every surface — you should never have to
-         navigate away to find out what the risk % is a percentage OF -->
-    <span class="chip" id="equityChip" title="account equity (paper)">
-      <span id="equityTxt">—</span><span id="equityRet"></span></span>
-    <span class="chip" id="healthChip" title="pipeline audit"><span class="orb" id="healthOrb"></span><span id="healthTxt">—</span></span>
-    <span class="chip" id="scanChip"><span class="orb" id="scanOrb"></span><span id="scanTxt">SCANNER —</span></span>
-    <span class="t-mono" id="clock" style="color:var(--fg-4)">—</span>
-    <button class="btn btn-primary" id="btnCopilot"
-            title="ask the copilot — it reads the facts, it cannot arm anything">Copilot</button>
-    <!-- always visible, on every surface: the operator can always stop it -->
-    <button class="btn btn-red" id="btnHalt" title="stop sizing new entries">HALT</button>
+    <span class="t-mono" id="clock" aria-hidden="true">—</span>
+    <div class="topbar-actions">
+      <button class="btn" id="btnCopilot"
+              title="ask the copilot — it reads the facts, it cannot arm anything">Copilot</button>
+      <button class="btn btn-red" id="btnHalt" title="stop sizing new entries">HALT</button>
+    </div>
   </header>
 
-  <!-- ══ left rail: six surfaces, each with one job ══ -->
+  <!-- Five operator jobs. Old hashes remain router aliases, not navigation. -->
   <nav class="nav">
-    <a href="#command" class="on"   data-s="command">Command<span class="nav-count" id="nCommand"></span></a>
-    <a href="#chart"                data-s="chart">Chart</a>
-    <a href="#results"              data-s="results">Results</a>
-    <a href="#ledger"               data-s="ledger">Ledger</a>
-    <div class="nav-sep"></div>
-    <a href="#settings"             data-s="settings">Settings</a>
-    <a href="#diagnostics"          data-s="diagnostics">Diagnostics<span class="nav-count" id="nDiag"></span></a>
+    <a href="#overview" class="on" data-route="overview" data-s="command"><span>Overview</span><small>Command Center</small><span class="nav-count" id="nCommand"></span></a>
+    <a href="#opportunities" data-route="opportunities" data-s="opportunities"><span>Opportunities</span><small>Setup Radar</small></a>
+    <a href="#trade" data-route="trade" data-s="chart"><span>Trade</span><small>Execution Bay</small></a>
+    <a href="#performance" data-route="performance" data-s="results"><span>Performance</span><small>Debrief</small></a>
+    <a href="#system" data-route="system" data-s="settings"><span>System</span><small>Control Room</small><span class="nav-count" id="nDiag"></span></a>
+    <!-- Compatibility hooks for old bookmarks and contract tests. Hidden from
+         users: Settings/Diagnostics and Ledger now live inside their parent. -->
+    <a hidden href="#settings" data-s="settings">Settings</a>
+    <a hidden href="#diagnostics" data-s="diagnostics">Diagnostics</a>
+    <a hidden href="#ledger" data-s="ledger">Ledger</a>
   </nav>
 
   <!-- Outcome of the last mutating action. aria-live=polite so a screen
@@ -86,8 +86,8 @@
     <!-- ─── COMMAND ─── -->
     <section class="surface on" id="s-command" tabindex="-1">
       <div class="surface-head">
-        <h1 class="t-page">Command</h1>
-        <p>What should I do right now?</p>
+        <h1 class="t-page">Overview</h1>
+        <p>Command Center — what is the bot doing now?</p>
       </div>
 
       <!-- THE ANSWER, ABOVE THE EVIDENCE.
@@ -116,28 +116,31 @@
            onboarding text on a trading app is the Learn tab all over again. -->
       <div class="panel firstrun" id="firstRun" hidden>
         <div class="panel-body">
-          <h2 class="t-section">Briefing</h2>
-          <p class="t-body">This watches a list of crypto markets and tells you when one
-            matches a rule it has been taught. Everything is
-            <span class="term" data-t="paper">paper</span> — no real order can be
-            sent, and the switch for that is locked until the record earns it.</p>
-          <ol class="fr-steps">
-            <li><b>Mission Briefs</b>, below — what the engine found, and why.
-              Empty is normal and it explains itself.</li>
-            <li><b>Chart</b> — open any market, drag the levels, see the risk in
-              dollars before you commit.</li>
-            <li><b>Settings → Going live</b> — the four things that have to be true
-              before this trades real money.</li>
-          </ol>
+          <div class="fr-head"><span class="op-state">First deployment</span>
+            <h2 class="t-section">Paper training active</h2>
+            <p>No-trade is a valid result. Real funds remain locked.</p></div>
+          <div class="fr-grid">
+            <div><span class="op-kicker">Mode ladder</span><strong>OFF → PAPER → SHADOW → TESTNET → LIVE</strong>
+              <details><summary>What each mode does</summary><p>Off recommends only. Paper simulates. Shadow records intent. Testnet uses test funds. Live uses real funds.</p></details></div>
+            <div><span class="op-kicker">Initial risk</span><strong>0.25% · 1 position · 0.5% total</strong>
+              <small>1% UTC daily-loss halt</small></div>
+            <div><span class="op-kicker">First mission</span><strong>Radar → Trade → Debrief</strong>
+              <small>Review one paper setup end to end.</small></div>
+          </div>
           <div class="fr-acts">
-            <button class="btn btn-primary" id="frGo">Got it</button>
-            <button class="btn" id="frDiag">Something looks wrong</button>
+            <button class="btn btn-primary" id="frGo">Start paper scan</button>
+            <button class="btn" id="frDiag">Run system checks</button>
           </div>
         </div>
       </div>
-      <div class="panel panel-accent bracket" style="margin-bottom:var(--lg)">
+      <div class="panel panel-accent bracket command-hero" style="margin-bottom:var(--lg)">
         <div class="panel-head">
-          <h2 class="t-section"><span class="term" data-t="scanner">Scanner</span></h2>
+          <div class="command-heading">
+            <span class="command-kicker">Current directive</span>
+            <h2 class="t-section">Autonomous scan</h2>
+            <p id="commandNarrative">Reading execution, market, and risk state...</p>
+          </div>
+          <span class="command-mode" id="commandMode">MODE LOADING</span>
           <div class="spacer" style="margin-left:auto"></div>
           <!-- "Check now", not "Run Scan". Rules says outright that this does
                nothing extra — it runs the same pass immediately instead of
@@ -183,27 +186,11 @@
             <div class="tile"><span class="t-label">Next trade risk</span><span class="t-metric" id="mRisk">—</span></div>
           </div>
         </div>
-      </div>
-
-      <!-- Risk budget. The caps have always been enforced and never shown: the
-           ticket said "$195 at risk" without saying at risk AGAINST WHAT, so a
-           REDUCED verdict or a refused setup arrived with no context and read
-           as the engine being arbitrary. Three limits, each as a fill against
-           its ceiling — how much of the open-risk budget is spent, how many
-           position slots are used, and how close today's losses are to the
-           automatic halt. Always visible, including at zero: knowing there is
-           room is as operational as knowing there is none. -->
-      <div class="panel" id="budgetPanel" style="margin-bottom:var(--lg)">
-        <div class="panel-head">
-          <h2 class="t-section">Rules of engagement</h2>
-          <span class="chip" id="budgetChip" style="margin-left:auto">—</span>
+        <div class="command-pulse" aria-label="System pulse">
+          <div><span>Scanner</span><b id="commandScanner">Checking...</b></div>
+          <div><span>Market data</span><b id="commandData">Checking...</b></div>
+          <div><span>Exposure</span><b id="commandExposure">Checking...</b></div>
         </div>
-        <div class="budget-grid" id="budget"></div>
-        <!-- What these three bars do NOT count. `manual.arm` never consults the
-             risk authority, so armed hand-picked orders are outside the budget
-             by design — and the meters could read "room for another trade"
-             while several hundred dollars of your own orders were committed. -->
-        <p class="budget-aside" id="budgetAside" hidden></p>
       </div>
 
       <!-- YOUR trades — the operator's own book, which had no surface at all.
@@ -270,13 +257,13 @@
            shows one. -->
       <div class="panel floating mb-panel" style="margin-bottom:var(--lg)">
         <div class="panel-head">
-          <h2 class="t-section">Mission Briefs</h2>
-          <!-- Plain words, because a newcomer lands here first. The promise is
-               the deck's dedupe rule: one card per coin, and a newer, more
-               urgent plan on the same coin takes the slot. -->
-          <span class="chip" style="margin-left:auto"
-                title="a coin listed on two venues still gets one card — the plan expiring soonest holds the slot">One per coin</span>
+          <div class="mission-heading">
+            <span class="command-kicker">Active book + near triggers</span>
+            <h2 class="t-section">Mission Briefs</h2>
+          </div>
+          <span class="mission-position t-mono" id="mbPosition" aria-hidden="true">— / —</span>
           <span class="chip chip-amber" id="radarCount" hidden>—</span>
+          <a class="btn mission-radar-link" href="#opportunities">View all setups</a>
         </div>
         <div class="mb-shell">
           <button class="mb-nav mb-prev" id="mbPrev" aria-label="previous mission" hidden>
@@ -311,6 +298,20 @@
              thing. weather.js fills it. -->
         <p class="mb-lede" id="missionLede"></p>
 
+      </div>
+
+      <!-- Risk limits follow the active book: protection and remaining room
+           are supporting context, not the first thing a user must decode. -->
+      <div class="panel overview-risk" id="budgetPanel" style="margin-bottom:var(--lg)">
+        <div class="panel-head">
+          <div>
+            <span class="command-kicker">Capital guardrails</span>
+            <h2 class="t-section">Rules of engagement</h2>
+          </div>
+          <span class="chip" id="budgetChip" style="margin-left:auto">—</span>
+        </div>
+        <div class="budget-grid" id="budget"></div>
+        <p class="budget-aside" id="budgetAside" hidden></p>
       </div>
 
       <!-- ─── MARKET WATCH ───
@@ -381,7 +382,33 @@
            which is where "what is the machine actually doing" belongs. -->
     </section>
 
-    <!-- ─── CHART ─── -->
+    <!-- ─── OPPORTUNITIES / SETUP RADAR ─── -->
+    <section class="surface" id="s-opportunities" tabindex="-1">
+      <div class="surface-head">
+        <h1 class="t-page">Opportunities</h1>
+        <p>Setup Radar — what deserves attention?</p>
+      </div>
+      <div class="op-toolbar panel" aria-label="Opportunity filters">
+        <div class="seg" id="opFilters" role="group" aria-label="Filter setup state">
+          <button class="on" data-op-filter="ACTIVE" aria-pressed="true">Active <span data-op-count="ACTIVE">—</span></button>
+          <button data-op-filter="READY" aria-pressed="false">Ready <span data-op-count="READY">—</span></button>
+          <button data-op-filter="FORMING" aria-pressed="false">Forming <span data-op-count="FORMING">—</span></button>
+          <button data-op-filter="WATCHING" aria-pressed="false">Watching <span data-op-count="WATCHING">—</span></button>
+          <button data-op-filter="HISTORY" aria-pressed="false">History <span data-op-count="HISTORY">—</span></button>
+        </div>
+        <p id="opStatus" class="t-note" role="status" aria-live="polite">Loading server-ranked setups…</p>
+      </div>
+      <div class="op-workspace">
+        <div class="op-groups" id="opGroups">
+          <div class="skeleton" role="status" aria-label="loading">
+            <div class="skel" style="height:260px"></div>
+          </div>
+        </div>
+        <aside class="panel op-detail" id="opDetail" aria-label="Selected setup details" tabindex="-1" hidden></aside>
+      </div>
+    </section>
+
+    <!-- ─── TRADE / EXECUTION BAY ─── -->
     <section class="surface" id="s-chart" tabindex="-1">
       <!-- B3 — the only surface that had no stated question, and the one where
            the decision is actually committed. Every other surface leads with
@@ -389,7 +416,10 @@
            because the chart needs the height, but present, because "what am I
            deciding here" should not be the operator's inference. -->
       <div class="surface-head chart-head">
-        <h1 class="t-page">Chart</h1><p>Is this setup worth taking?</p>
+        <div><h1 class="t-page">Trade</h1><p>Execution Bay — should I enter or manage this trade?</p></div>
+        <div class="trade-state" id="tradeState" role="status" aria-live="polite">
+          <span>Workspace state</span><b>PLANNING</b><small>Select a setup or inspect the chart.</small>
+        </div>
       </div>
       <!-- Seven controls. This row held fourteen — two prices $174 apart as
            equal chips, a regime ladder shaped exactly like the timeframe
@@ -418,7 +448,7 @@
           </div>
         </div>
         <div class="seg" id="cTfs">
-          <button data-tf="15m" aria-pressed="false">15m</button><button data-tf="1H" aria-pressed="false">1H</button
+          <button data-tf="5m" aria-pressed="false">5m</button><button data-tf="15m" aria-pressed="false">15m</button><button data-tf="1H" aria-pressed="false">1H</button
           ><button data-tf="4H" class="on" aria-pressed="true">4H</button><button data-tf="1D" aria-pressed="false">1D</button
           ><button data-tf="1W" aria-pressed="false">1W</button>
         </div>
@@ -443,21 +473,27 @@
                  live structure, and the plain 2:1 ruler, are both yours to arm
                  without your having drawn either. The note says whose it is,
                  which is the question the switch asks. -->
-            <button data-o="yours"     data-label="Your levels" class="on" data-note="the gold lines of the trade you are in, plus the ticket bracket whenever it is yours to arm rather than the engine's — a draft, the ruler, or a level you have dragged">Your levels</button>
-            <button data-o="engine"    data-label="Engine plan" class="on" data-note="the engine's own untouched levels — the setup it is waiting on, or the trade it is already in">Engine plan</button>
-            <button data-o="swings"    data-label="Swings"    class="on">Swings</button>
-            <button data-o="structure" data-label="Structure" class="on">Structure</button>
-            <button data-o="zones"     data-label="Zones"     class="on">Zones</button>
-            <button data-o="liquidity" data-label="Liquidity" data-note="stop clusters inferred from the chart's own shape — a likely place for stops, not a measured one">Liquidity</button>
-            <button data-o="cycle"     data-label="Cycle" data-note="daily and weekly cycle lows — observational, never traded">Cycle</button>
+            <div class="layer-group"><span>Trade plan</span>
+              <button data-o="yours" data-label="Your levels" class="on" data-note="the gold lines of the trade you are in, plus the ticket bracket whenever it is yours to arm rather than the engine's — a draft, the ruler, or a level you have dragged">Your levels</button>
+              <button data-o="engine" data-label="Engine plan" class="on" data-note="the engine's own untouched levels — the setup it is waiting on, or the trade it is already in">Engine plan</button>
+            </div>
+            <div class="layer-group"><span>Structure</span>
+              <button data-o="swings" data-label="Swings" class="on">Swings</button>
+              <button data-o="structure" data-label="Structure" class="on">Structure</button>
+              <button data-o="zones" data-label="Zones" class="on">Zones</button>
+              <button data-o="liquidity" data-label="Liquidity" data-note="stop clusters inferred from the chart's own shape — a likely place for stops, not a measured one">Liquidity</button>
+            </div>
             <!-- The engines that ran from day one with nowhere to appear.
                  Lazy: nothing is fetched until one of these is switched on,
                  and default-off because the standing complaint about this
                  surface is clutter. -->
-            <button data-o="gaps"    data-label="Gaps"    data-note="price moved so fast it left a band untraded — unfilled gaps tend to get revisited">Gaps</button>
-            <button data-o="shelf"   data-label="Volume shelf" data-note="prices the market kept agreeing on (solid) and bands it crossed in a hurry (dashed)">Volume shelf</button>
-            <button data-o="ranges"  data-label="Ranges"  data-note="sideways boxes the market is still respecting">Ranges</button>
-            <button data-o="signals" data-label="Momentum" data-note="divergences, RSI extremes, volume spikes and volatility squeezes — is price arriving with force behind it">Momentum</button>
+            <div class="layer-group"><span>Market context</span>
+              <button data-o="cycle" data-label="Cycle" data-note="daily and weekly cycle lows — observational, never traded">Cycle</button>
+              <button data-o="gaps" data-label="Gaps" data-note="price moved so fast it left a band untraded — unfilled gaps tend to get revisited">Gaps</button>
+              <button data-o="shelf" data-label="Volume shelf" data-note="prices the market kept agreeing on (solid) and bands it crossed in a hurry (dashed)">Volume shelf</button>
+              <button data-o="ranges" data-label="Ranges" data-note="sideways boxes the market is still respecting">Ranges</button>
+              <button data-o="signals" data-label="Momentum" data-note="divergences, RSI extremes, volume spikes and volatility squeezes — is price arriving with force behind it">Momentum</button>
+            </div>
           </div>
         </div>
         <button class="btn" id="cAnalyse"
@@ -465,6 +501,11 @@
       </div>
 
       <div class="chart-main">
+        <aside class="panel trade-evidence" id="tradeEvidence" aria-label="Selected setup evidence">
+          <div class="trade-evidence-empty"><span class="op-state">No setup selected</span>
+            <h2>Chart inspection</h2><p>Open a Setup Radar candidate to synchronize evidence, chart, and ticket.</p>
+            <a class="btn btn-primary" href="#opportunities">Open Setup Radar</a></div>
+        </aside>
         <div class="panel chart-pane" id="chartPane">
           <div id="chartBox"></div>
           <!-- What the bar under the cursor actually is. Hovering a candle
@@ -681,6 +722,7 @@
           <span id="tkBlockWhy"></span>
           <button class="btn" id="tkBlockFix" type="button" hidden></button>
         </div>
+        <div class="tk-commit-status">
         <div class="tk-actions">
           <button class="btn" id="tkReset" disabled>Reset to engine</button>
           <!-- The label says PAPER because the button is the last thing read
@@ -710,6 +752,14 @@
              strip that has to stay compact so the chart above it keeps its
              height. Kept in the DOM (chart.js writes it) but out of flow. -->
         <div class="t-mono tk-lock" id="tkLock" hidden></div>
+        </div>
+      </div>
+
+      <div class="trade-mobile-bar" id="tradeMobileBar" aria-label="Trade workspace sheets">
+        <button class="btn" type="button" data-trade-sheet="evidence"
+                aria-controls="tradeEvidence" aria-expanded="false">Evidence</button>
+        <button class="btn btn-primary" type="button" data-trade-sheet="action"
+                aria-controls="ticket" aria-expanded="false">Order</button>
       </div>
 
       <!-- ─── BITCOIN BACKDROP ───
@@ -727,15 +777,37 @@
       <div id="cycleRoot"></div>
     </section>
 
-    <!-- ─── RESULTS ─── -->
+    <!-- ─── PERFORMANCE / DEBRIEF ─── -->
     <section class="surface" id="s-results" tabindex="-1">
-      <div class="surface-head"><h1 class="t-page">Results</h1><p>Is this actually working?</p></div>
+      <div class="surface-head"><h1 class="t-page">Performance</h1><p>Debrief — is the method earning trust?</p></div>
+      <div class="workspace-tabs" id="performanceTabs" data-workspace-tabs="performance" aria-label="Performance views">
+        <button class="on" type="button" data-view="overview" aria-pressed="true">Overview</button>
+        <button type="button" data-view="strategies" aria-pressed="false">Strategies</button>
+        <button type="button" data-view="factors" aria-pressed="false">Factors</button>
+        <button type="button" data-view="journal" aria-pressed="false">Journal</button>
+        <button type="button" data-view="promotion" aria-pressed="false">Promotion</button>
+      </div>
+      <div class="performance-scope" id="performanceScope" aria-label="Performance evidence scope and filters">
+        <span><b>Population</b> <i id="performancePopulation">Reading server scope</i></span>
+        <span><b>Window</b> <i id="performanceWindow">Reading server window</i></span>
+        <span><b>Authority</b> Server reported</span>
+        <label><b>Breakdown</b><select id="performanceBreakdown">
+          <option value="ALL">All dimensions</option><option value="strategy">Strategy</option>
+          <option value="regime">Regime</option><option value="horizon">Horizon</option>
+          <option value="direction">Direction</option><option value="order_type">Order type</option>
+        </select></label>
+      </div>
+      <div class="decision-strip performance-trust" id="performanceTrust"
+           data-performance-view="overview" role="status" aria-live="polite">
+        <span class="op-state">Trust verdict</span><b>Reading the server record…</b>
+        <small>Forward paper book · current baseline</small>
+      </div>
       <!-- Which ERA these numbers cover, stated before the numbers rather than
            under them. Results is scoped to the active baseline and Diagnostics
            measures the whole book, so the two trade counts legitimately differ
            — and a reader who meets them unlabelled concludes the app is lying.
            The reconciliation is the headline on BOTH panels, in one wording. -->
-      <div class="era-band" id="resultsEra"><span class="skeleton" role="status" aria-label="loading">
+      <div class="era-band" id="resultsEra" data-performance-view="overview"><span class="skeleton" role="status" aria-label="loading">
         <span class="skel skel-line" style="width:88%"></span>
         <span class="skel skel-line" style="width:64%"></span></span></div>
       <!-- THE STAT WHEEL. The same carousel the Mission Briefs ride, carrying
@@ -748,7 +820,7 @@
            figures at once: the cards are for reading one stat properly, the
            grid is for seeing them together. Both render from renderScoreboard
            and the portfolio — one authority, two presentations. -->
-      <div class="panel floating" style="margin-bottom:var(--sm)">
+      <div class="panel floating" data-performance-view="overview" style="margin-bottom:var(--sm)">
         <div class="mb-shell">
           <button class="mb-nav mb-prev" id="statPrev" aria-label="previous stat" hidden>
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.5 2 5 8l5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -762,7 +834,7 @@
         </div>
       </div>
 
-      <div class="grid cols-4" style="margin-bottom:var(--lg)">
+      <div class="grid cols-4" data-performance-view="overview" style="margin-bottom:var(--lg)">
         <div class="tile"><span class="t-label">Equity</span><span class="t-metric" id="rEquity">—</span></div>
         <div class="tile"><span class="t-label">Return</span><span class="t-metric" id="rReturn">—</span></div>
         <div class="tile"><span class="t-label">Max <span class="term" data-t="drawdown">drawdown</span></span><span class="t-metric" id="rDD">—</span></div>
@@ -775,7 +847,7 @@
            4 Aug 2026). The confidence intervals stay there — those ARE an
            engineering reading — but these four are the scoreboard.
            Baseline-scoped like every tile above, so the era band covers them. -->
-      <div class="grid cols-4" style="margin-bottom:var(--sm)">
+      <div class="grid cols-4" data-performance-view="overview" style="margin-bottom:var(--sm)">
         <div class="tile"><span class="t-label">Trades closed</span><span class="t-metric" id="rTrades">—</span></div>
         <div class="tile"><span class="t-label">Win rate</span><span class="t-metric" id="rWin">—</span></div>
         <div class="tile"><span class="t-label">Average <span class="term" data-t="rMultiple">R</span></span><span class="t-metric" id="rAvgR">—</span></div>
@@ -784,7 +856,19 @@
       <!-- The sample caveat, sized to the sample. A win rate off seven trades
            is a number, not evidence, and saying so here is cheaper than
            letting the reader find out later. -->
-      <p class="t-body" id="rSample" style="margin:0 0 var(--lg);color:var(--fg-4);font-size:var(--fs-1);max-width:56ch"></p>
+      <p class="t-body" id="rSample" data-performance-view="overview" style="margin:0 0 var(--lg);color:var(--fg-4);font-size:var(--fs-1);max-width:56ch"></p>
+
+      <div id="factorEvidenceRoot" data-performance-view="factors" hidden>
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:120px"></div>
+        </div>
+      </div>
+
+      <div id="performanceDimensions" data-performance-view="strategies" hidden>
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:160px"></div>
+        </div>
+      </div>
 
       <!-- ─── PROGRESSION ───
            What a stats screen in a game does well: it tells you where you are
@@ -800,12 +884,15 @@
            never outcome. There is no badge for being profitable, because the
            forward record does not currently say that, and a screen that
            awarded one would be the exact thing this app refuses to be. -->
-      <div class="panel floating" style="margin-bottom:var(--lg)">
+      <div class="panel floating" data-performance-view="promotion" hidden style="margin-bottom:var(--lg)">
         <div class="panel floating-head">
           <h2 class="t-section">Progression</h2>
           <span class="chip" id="progCount" style="margin-left:auto">—</span>
         </div>
         <p class="t-body mw-lede" id="progLede"></p>
+        <p class="population-note" id="promotionScopeNote">Reading promotion evidence population and window.</p>
+        <div class="promotion-summary" id="promotionSummary" role="status"></div>
+        <div class="promotion-stages" id="promotionStages"></div>
         <!-- Full rail chrome. Three of the app's rails were bare — no arrows,
              and `card 3 of 9` announced to nobody, because makeRail's navState
              is a no-op without opts.status. This one now carries nine cards. -->
@@ -821,16 +908,25 @@
           <p class="sr-only" id="progStatus" aria-live="polite"></p>
         </div>
       </div>
-      <div class="panel floating" style="margin-bottom:var(--lg)">
+      <div class="panel floating" data-performance-view="journal" hidden style="margin-bottom:var(--lg)">
         <div class="panel floating-head"><h2 class="t-section">Trade Journal</h2>
           <span class="chip" id="jnlCount" style="margin-left:auto">—</span>
           <!-- The book was readable and not extractable. Anyone who wants to
                check this record in a spreadsheet had to retype it. -->
           <button class="btn" id="btnExport" style="margin-left:var(--sm)"
                   title="download these trades as CSV">Export</button></div>
+        <div class="journal-tools">
+          <label><span class="sr-only">Search bot journal</span><input id="journalSearch"
+            type="search" placeholder="Search pair, strategy, direction, outcome" autocomplete="off"></label>
+          <label><span class="sr-only">Filter journal attribution</span><select id="journalSource">
+            <option value="ALL">All attribution</option><option value="BOT">Bot</option>
+            <option value="MANUAL">Manual</option><option value="EXIT">Exits</option>
+          </select></label>
+          <span class="t-note" id="journalMatch" role="status" aria-live="polite"></span>
+        </div>
         <div id="journal"><div class="empty">no closed trades in this window yet</div></div>
       </div>
-      <div class="panel floating" style="margin-bottom:var(--lg)">
+      <div class="panel floating" data-performance-view="overview" style="margin-bottom:var(--lg)">
         <div class="panel floating-head"><h2 class="t-section">Equity Curve</h2>
           <span class="chip" id="baselineChip" style="margin-left:auto">—</span></div>
         <div class="panel floating-body">
@@ -872,7 +968,7 @@
            anyone evaluating a bot asks of it. Only sized trades appear here;
            the engine's research simulations never touch this list. -->
 
-      <div class="grid cols-2" style="margin-bottom:var(--lg)">
+      <div class="grid cols-2" data-performance-view="strategies" hidden style="margin-bottom:var(--lg)">
         <div class="panel floating">
           <div class="panel floating-head"><h2 class="t-section">By Symbol</h2></div>
           <div id="perfSymbol"><div class="skeleton" role="status" aria-label="loading">
@@ -893,7 +989,7 @@
         </div>
       </div>
 
-      <div class="panel floating" style="margin-bottom:var(--lg)">
+      <div class="panel floating" data-performance-view="strategies" hidden style="margin-bottom:var(--lg)">
         <div class="panel floating-head"><h2 class="t-section">Forward Record</h2></div>
         <div class="panel floating-body t-body" id="resultsNote"><span class="skeleton" role="status" aria-label="loading">
         <span class="skel skel-line" style="width:92%"></span>
@@ -904,8 +1000,9 @@
       <!-- One line, no figure restated. Everything above this counts the
            engine's paper account only; the other two books are a surface
            away and are never added to it. -->
-      <p class="t-note ledger-link">Your own trades and your own exits are
-        counted separately, in <a href="#ledger">Ledger</a>.</p>
+      <p class="t-note ledger-link" data-performance-view="journal" hidden>Bot trades, your trades,
+        and your exits remain three separate books below.</p>
+      <div id="performanceLedger" data-performance-view="journal" hidden></div>
 
       <!-- "Is the edge real?" — HERE, on the surface that asks it.
 
@@ -922,7 +1019,7 @@
            Diagnostics is faults. Results is the record. This is the record.
            edgeview.js mounts into #edgeRoot wherever it sits, so the move is
            markup only. -->
-      <div id="edgeRoot" style="margin-top:var(--lg)">
+      <div id="edgeRoot" data-performance-view="overview" style="margin-top:var(--lg)">
         <div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:64px"></div>
         </div>
@@ -931,10 +1028,39 @@
 
     <!-- ─── SCANNER SETUP ─── -->
     <section class="surface" id="s-settings" tabindex="-1">
-      <div class="surface-head"><h1 class="t-page">Settings</h1><p>keys · Claude · configuration</p></div>
+      <div class="surface-head"><h1 class="t-page">System</h1><p>Control Room — what can run, and why?</p></div>
+      <div class="workspace-tabs" id="systemTabs" data-workspace-tabs="system" aria-label="System views">
+        <button class="on" type="button" data-view="automation" aria-pressed="true">Automation</button>
+        <button type="button" data-view="risk" aria-pressed="false">Risk</button>
+        <button type="button" data-view="venues" aria-pressed="false">Venues</button>
+        <button type="button" data-view="strategies" aria-pressed="false">Strategies</button>
+        <a href="#system-diagnostics">Diagnostics</a>
+      </div>
 
       <!-- The "How the scanner works" essay lived here. Operator ruling: this
            surface is configuration, and nobody reads a wall to flip a switch. -->
+
+      <div class="panel mode-panel" data-system-view="automation" style="margin-bottom:var(--lg)">
+        <div class="panel-head"><h2 class="t-section">Operating mode</h2>
+          <span class="chip" id="modeRevision">revision —</span></div>
+        <div class="panel-body">
+          <div class="system-fact-grid" id="automationFacts" role="status">
+            <div><span>Halt state</span><b>Reading…</b></div>
+            <div><span>Dispatch</span><b>Reading…</b></div>
+            <div><span>Promotion lock</span><b>Reading…</b></div>
+            <div><span>Custody</span><b>Reading…</b></div>
+          </div>
+          <p class="t-note" id="modeExplanation">Reading server mode and promotion locks…</p>
+          <div class="mode-grid" id="modeControls" role="group" aria-label="Operating mode">
+            <button class="btn" data-mode="OFF">OFF<small>recommend only</small></button>
+            <button class="btn" data-mode="PAPER">PAPER<small>simulated</small></button>
+            <button class="btn" data-mode="SHADOW">SHADOW<small>record intent</small></button>
+            <button class="btn" data-mode="TESTNET">TESTNET<small>test funds</small></button>
+            <button class="btn" data-mode="LIVE">LIVE<small>real funds</small></button>
+          </div>
+          <p class="op-warning" id="modeLock"></p>
+        </div>
+      </div>
 
 
       <!-- Two packed columns, not a 2-up grid. As a grid these four panels sat
@@ -946,11 +1072,14 @@
            re-balances on its own as the content changes. Reading and focus
            order are still exactly the source order. -->
       <div class="pack-cols">
-        <div class="panel">
+        <div class="panel" data-system-view="venues" hidden>
           <div class="panel-head"><h2 class="t-section">Exchanges</h2>
             <span class="chip">read-only keys only</span>
             <span class="chip" id="credChip" style="margin-left:auto">—</span></div>
           <div class="panel-body">
+            <div class="system-consequence" id="venueFacts" role="status">
+              Credential presence is known. Permission scope, metadata age, and venue connectivity have not been verified.
+            </div>
             <!-- Was a 211-character title on the chip above. A security
                  guarantee is read at the moment a key is about to be pasted,
                  and a hover cannot be read by a finger, a keyboard, or a screen
@@ -975,7 +1104,7 @@
              #guardRows is the halt STATE, which lives only in settings and is
              duplicated nowhere. The invented fallbacks are gone — a cap the
              engine did not send now reads as absent, not as 6%. -->
-        <div class="panel">
+        <div class="panel" data-system-view="risk" hidden>
           <!-- the cost-model build stamp (`costs-v0.4`) lived here; it is
                provenance for a developer, not a rule the reader can change -->
           <div class="panel-head"><h2 class="t-section">Risk &amp; guardrails</h2>
@@ -992,6 +1121,7 @@
             <p class="t-note" style="margin:0 0 var(--md)">Sized by the engine, not
               editable here. Changing risk per trade would replay and re-size the entire forward record under the same engine version, which the versioning rule forbids.</p>
             <div class="tk-out" id="riskNow"></div>
+            <div class="system-fact-grid" id="riskUsage" role="status"></div>
             <div class="tk-out" id="guardRows" style="margin-top:var(--md)"></div>
             <!-- B7 — one line, then a disclosure. This was a nine-line essay
                  standing between the operator and the numbers above it. The
@@ -1000,10 +1130,13 @@
             <!-- the "why not editable" essay lives on the chip's hover now -->
           </div>
         </div>
-        <div class="panel">
+        <div class="panel" data-system-view="strategies" hidden>
           <div class="panel-head"><h2 class="t-section">Strategies &amp; Universe</h2>
             <span class="chip" id="setDirty" style="margin-left:auto" hidden>unsaved</span></div>
           <div class="panel-body">
+            <div class="strategy-catalogue" id="strategyCatalogue" aria-live="polite">
+              <div class="empty">Reading playbook contracts…</div>
+            </div>
             <div id="setFields"></div>
             <div class="tk-warn" id="setWarn" hidden></div>
             <!-- The banner replaces two permanently-disabled buttons sitting
@@ -1014,15 +1147,9 @@
                  smallest type on the surface. It now appears only when there
                  is something to apply, and the consequence is restated in the
                  confirm dialog, which is the last thing read before acting. -->
-            <div class="dirty-banner" id="dirtyBanner" hidden role="status" aria-live="polite">
-              <span id="dirtyWhat">You have unsaved rule changes.</span>
-              <span class="spacer"></span>
-              <button class="btn" id="setReset" disabled>Discard</button>
-              <button class="btn btn-primary" id="setApply" disabled>Apply</button>
-            </div>
           </div>
         </div>
-        <div class="panel">
+        <div class="panel" data-system-view="automation">
           <div class="panel-head"><h2 class="t-section">Claude</h2>
             <span class="chip" id="cpHealth" style="margin-left:auto">—</span></div>
           <div class="panel-body">
@@ -1050,7 +1177,7 @@
              working. Settings keeps the lock and its consequence: is it on,
              what the record scores against the gate, and the build fact no
              amount of good trading can earn. -->
-        <div class="panel">
+        <div class="panel" data-system-view="automation">
           <div class="panel-head"><h2 class="t-section">Going live</h2>
             <span class="chip" id="gateChip" style="margin-left:auto">—</span></div>
           <div class="panel-body gate-body">
@@ -1060,11 +1187,24 @@
           </div>
         </div>
       </div>
+      <div class="dirty-banner" id="dirtyBanner" hidden role="status" aria-live="polite">
+        <span id="dirtyWhat">You have unsaved rule changes.</span>
+        <span class="spacer"></span>
+        <button class="btn" id="setReset" disabled>Discard</button>
+        <button class="btn btn-primary" id="setApply" disabled>Apply changes</button>
+      </div>
     </section>
 
     <!-- ─── DIAGNOSTICS ─── -->
     <section class="surface" id="s-diagnostics" tabindex="-1">
-      <div class="surface-head"><h1 class="t-page">Diagnostics</h1><p>what is failing, and why</p></div>
+      <div class="surface-head"><h1 class="t-page">System</h1><p>Control Room — what is failing, and why?</p></div>
+      <div class="workspace-tabs" aria-label="System views">
+        <a href="#system" data-system-target="automation">Automation</a>
+        <a href="#system" data-system-target="risk">Risk</a>
+        <a href="#system" data-system-target="venues">Venues</a>
+        <a href="#system" data-system-target="strategies">Strategies</a>
+        <a class="on" href="#system-diagnostics" aria-current="page">Diagnostics</a>
+      </div>
 
       <!-- THE ANSWER, AND THE HANDOVER — same shape as Command's disposition
            line, deliberately, because it does the same job one surface over.
@@ -1124,6 +1264,13 @@
             <div class="t-metric" id="dVerdict" style="margin-bottom:var(--sm)">—</div>
             <div class="t-mono" id="dCounts" style="color:var(--fg-3)">—</div>
           </div>
+        </div>
+      </div>
+      <div class="panel reconciliation-panel" style="margin-bottom:var(--lg)">
+        <div class="panel-head"><h2 class="t-section">Execution reconciliation</h2>
+          <span class="chip" id="reconciliationChip" style="margin-left:auto">reading…</span></div>
+        <div class="panel-body" id="reconciliationRoot">
+          <div class="empty">Reading private custody evidence…</div>
         </div>
       </div>
       <!-- The surface's actual answer, and now the only thing at full width in
@@ -1239,7 +1386,13 @@
          not in the equity curve, not in the manual book. It is the purest
          measure of operator skill this app holds. -->
     <section class="surface" id="s-ledger" tabindex="-1">
-      <div class="surface-head"><h1 class="t-page">Ledger</h1><p>Where are the wins coming from?</p></div>
+      <div class="surface-head"><h1 class="t-page">Performance</h1><p>Debrief — where are the outcomes coming from?</p></div>
+      <div class="surface-tabs" aria-label="Performance views">
+        <a href="#performance">Evidence</a>
+        <a class="on" href="#performance-ledger">Trade journal</a>
+      </div>
+
+      <div id="ledgerContent">
 
       <!-- THE WALLET BAND CARRIES NO NUMBER, and must not until a real balance
            arrives over a signed request. What exists today: a DPAPI credential
@@ -1301,6 +1454,7 @@
           </div></div>
         </div>
       </div>
+      </div>
     </section>
 
     <!-- ─── LEARN ─── -->
@@ -1324,7 +1478,7 @@
   <footer class="statusbar">
     <span class="sb-item"><span class="orb" id="sbOrb"></span><b id="sbLive">connecting…</b></span>
     <span class="sb-item" id="sbWatch"></span>
-    <span style="margin-left:auto">Sim only — no live orders</span>
+    <span id="executionStatus" style="margin-left:auto">Loading execution mode…</span>
     <!-- The label tracks the scope, which is the whole point of having
          renamed it once already. When this gated a single panel it said
          "Backend console"; it now also restores the raw internals in the trace
@@ -1354,6 +1508,7 @@
 <!-- Before chart.js and shell.js: both call SSConfirm at their commit points,
      and defer scripts run in document order. -->
 <script defer src="/static/confirm-dialog.js?v=20"></script>
+<script defer src="/static/opportunity-ui.js?v=20"></script>
 <script defer src="/static/chart.js?v=20"></script>
 <!-- funnel.js FIRST: it owns the plain-language reason dictionary that
      shell.js reads on its very first render. Deferred scripts execute in
@@ -1366,6 +1521,12 @@
      dependency declaration. -->
 <script defer src="/static/wheel.js?v=20"></script>
 <script defer src="/static/shell.js?v=20"></script>
+<script defer src="/static/operations.js?v=20"></script>
+<script defer src="/static/mode-control.js?v=20"></script>
+<script defer src="/static/opportunities.js?v=20"></script>
+<script defer src="/static/trade-workspace.js?v=20"></script>
+<script defer src="/static/workspaces.js?v=20"></script>
+<script defer src="/static/cockpit-workspaces.js?v=20"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so
      they can be built, cached and broken independently — a failure in one must
      never blank a surface that another owns. -->
@@ -1374,5 +1535,6 @@
 <script defer src="/static/copilot.js?v=20"></script>
 <script defer src="/static/wizard.js?v=20"></script>
 <script defer src="/static/edgeview.js?v=20"></script>
+<script defer src="/static/factor-evidence.js?v=20"></script>
 </body>
 </html>

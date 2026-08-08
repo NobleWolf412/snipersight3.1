@@ -68,7 +68,8 @@ STAGNATION_FLOOR_RATIO = Decimal("0.7")
 # Adaptive time stop, in BARS of the setup's own timeframe rather than hours —
 # the same 48h means something different on 15m and 1D, and bar-counting keeps
 # the harness free of wall-clock reasoning.
-HOLD_BARS_BY_TF = {"15m": 20, "1H": 14, "4H": 12, "1D": 10, "1W": 8}
+HOLD_BARS_BY_TF = {"5m": 24, "15m": 20, "1H": 14, "4H": 12,
+                   "1D": 10, "1W": 8}
 # Maker-leg parameters for the COUNTERFACTUAL cells only. A setup that records
 # its own `maker_limit` and `maker_wait_bars` is replayed on those — setups.py
 # is the authority for where its order rested and execsim honours that, so a
@@ -657,7 +658,7 @@ CELLS = (
 )
 
 
-def report(con, symbols=None, tfs=("15m", "1H", "4H", "1D", "1W")) -> dict:
+def report(con, symbols=None, tfs=("5m", "15m", "1H", "4H", "1D", "1W")) -> dict:
     from .universe import all_tracked_symbols
     symbols = symbols or all_tracked_symbols(con)
     cal = calibrate(con, symbols, tfs)

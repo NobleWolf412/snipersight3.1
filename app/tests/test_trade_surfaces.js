@@ -383,7 +383,7 @@ ok('a resting order is not a position', () => {
   // /api/manual/open returns `engine` from active_positions ALONE, so a
   // pending order must not promise a position editor it will not get.
   assert.ok(/const mine = \(heldSyms\.get\(s\.symbol\) \|\| \{\}\)\.kind === 'open'/.test(JS));
-  assert.ok(/mine \? 'Manage trade' : 'Open chart'/.test(JS));
+  assert.ok(/mine \? 'Manage trade' : 'Review setup'/.test(JS));
 });
 ok('an opposite-direction card on a held symbol says so', () => {
   assert.ok(/this card is the other way/.test(JS));

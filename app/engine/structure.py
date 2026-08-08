@@ -70,7 +70,8 @@ TOL_ATR = Decimal("0.05")
 # 1D stays MAJOR: that one WAS tested (v0.3 tried INTERMEDIATE -> 28 breaks
 # against golden 7, and lost).
 TIER_BY_TF = {"1W": "INTERMEDIATE", "1D": "MAJOR",
-              "4H": "INTERMEDIATE", "1H": "INTERMEDIATE", "15m": "INTERMEDIATE"}
+              "4H": "INTERMEDIATE", "1H": "INTERMEDIATE",
+              "15m": "INTERMEDIATE", "5m": "INTERMEDIATE"}
 
 
 def _tier_swings(con, symbol, tf):

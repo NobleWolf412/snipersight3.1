@@ -23,7 +23,13 @@ from .execsim import EXEC_VERSION, plan_versions as execsim_plan_versions
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.20-draft"
+RISK_VERSION = "risk-v0.21-draft"
+# v0.21: first-live safety envelope. The former 2% per trade / two-position /
+# 4% open-risk / 6% daily-loss policy was a paper-research envelope, not a
+# responsible mainnet default. All execution modes now read the same authority:
+# 0.25% per base trade, one base position, 0.5% total open risk and a 1% UTC-day
+# halt. Scale-in sizing is zero because the initial autonomous contract forbids
+# averaging or pyramiding; the strategy switch also defaults off in settings.
 # v0.20: cascade from setup-v0.17 / exec-v0.21 / cooldown-v0.9 (the top-down
 # bias block upstream). No sizing rule changed and this engine does not read
 # `bias`; it replays the whole account from setup and exec facts, so a new
@@ -77,12 +83,12 @@ RISK_VERSION = "risk-v0.20-draft"
 # v0.2: governs SCALE_IN adds — exempt from the concurrency count (attach to a
 # parent) but consume the total-open-risk budget; REJECTED with PARENT_CLOSED
 # if the parent position already exited.
-SCALE_RISK_PCT = Decimal("0.01")
+SCALE_RISK_PCT = Decimal("0")
 
 START_EQUITY = Decimal("10000")
-RISK_PCT = Decimal("0.02")            # 2% of current equity per trade
-MAX_CONCURRENT = 2
-MAX_TOTAL_OPEN_RISK_PCT = Decimal("0.04")   # 4% of equity at risk at once
+RISK_PCT = Decimal("0.0025")          # 0.25% of current equity per trade
+MAX_CONCURRENT = 1
+MAX_TOTAL_OPEN_RISK_PCT = Decimal("0.005")  # 0.5% of equity at risk at once
 # v0.7: shorting and leverage are VENUE capabilities, not process constants.
 # As globals they rejected 31% of all validated setups (44 of 143) — every SHORT
 # the playbook produced — because the only declared venue was Coinbase spot.
@@ -104,11 +110,11 @@ MIN_NOTIONAL_USD = Decimal("1")
 # a second liquidity model. Inert in paper (no fills to move), which is exactly
 # why it must exist BEFORE live: it is a constraint the simulator cannot teach.
 MAX_PARTICIPATION = Decimal("0.005")          # 0.5% of 24h volume
-DAILY_LOSS_LIMIT_PCT = Decimal("0.06")      # realized -6% in a UTC day -> halt
+DAILY_LOSS_LIMIT_PCT = Decimal("0.01")      # realized -1% in a UTC day -> halt
 MIN_REDUCED_FRACTION = Decimal("0.25")      # reduce below 25% of intended -> reject
 QC = Decimal("0.01")
 
-TFS = ("15m", "1H", "4H", "1D", "1W")
+TFS = ("5m", "15m", "1H", "4H", "1D", "1W")
 
 
 def _venue_allows_shorts(symbol: str) -> bool:

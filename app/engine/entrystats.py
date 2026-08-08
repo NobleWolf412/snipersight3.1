@@ -159,7 +159,7 @@ MIN_TRADES = 30
 # and a factor graded there are graded identically.
 NOISE_Z = 1.96
 
-_TFS_ORDER = ("15m", "1H", "4H", "1D", "1W")
+_TFS_ORDER = ("5m", "15m", "1H", "4H", "1D", "1W")
 
 # Walk-forward window for the counterfactual, deliberately the same as the one
 # the real simulator held its positions for: a counterfactual allowed to run

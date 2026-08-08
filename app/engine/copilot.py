@@ -85,7 +85,7 @@ def _fmt_pct(x) -> str:
 
 def _latest_regimes(con, symbol: str) -> list[str]:
     out = []
-    for tf in ("15m", "1H", "4H", "1D", "1W"):
+    for tf in ("5m", "15m", "1H", "4H", "1D", "1W"):
         r = con.execute(
             "SELECT payload FROM facts WHERE symbol=? AND tf=? AND kind='regime' "
             "AND algo_version=? ORDER BY confirmed_at DESC LIMIT 1",

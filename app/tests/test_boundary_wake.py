@@ -56,7 +56,9 @@ class NextWakeMath(unittest.TestCase):
         self.assertAlmostEqual(sleep, live.CANDLE_FINALIZATION_S - 2)
 
     def test_mid_candle_is_the_heartbeat(self):
-        sleep = live.next_wake(self.B + 300)
+        # Two minutes after the 5m edge: the next close is three minutes away,
+        # so the 60s drift heartbeat must win.
+        sleep = live.next_wake(self.B + 120)
         self.assertEqual(sleep, live.POLL_SECONDS,
                          "far from a boundary, the drift heartbeat rules")
 

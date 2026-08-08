@@ -21,7 +21,7 @@ Every setup carries a plain-language WHY assembled from the facts it used (§8).
 import json
 from decimal import Decimal
 
-from . import bias, store
+from . import bias, registry, store
 from .bias import LADDER as HTF_LADDER      # noqa: F401  (re-export; see below)
 from .swings import compute_atr, quote_ticks, SWING_VERSION
 from .zones import ZONE_VERSION
@@ -526,6 +526,11 @@ def confirms(candle: dict, direction: str, top: Decimal, bottom: Decimal) -> boo
 def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
     with RunRecorder(con, "setup", SETUP_VERSION, symbol, tf) as rec:
         enabled = enabled_strategies(con)
+        # Strategy contracts own supported timeframes.  Adding 5m market data
+        # must not silently turn the swing playbooks into scalpers.
+        enabled = {name for name in enabled
+                   if (registry.for_engine_name(name) is not None and
+                       tf in registry.for_engine_name(name).timeframes)}
         # v0.7: the cost profile is VENUE-derived, not a module constant. It was
         # Coinbase spot for every symbol while the traded universe was entirely
         # Phemex perps — a 14x over-charge that made the economics gate demand a

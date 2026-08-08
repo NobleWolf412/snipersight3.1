@@ -30,8 +30,9 @@ IMPORTER_VERSION = "importer-v0.3-draft"
 # counted in import_log.n_bad, and left as a gap. Never repaired, never
 # fabricated (gap-honesty rule).
 
-TF_SECONDS = {"15m": 900, "1H": 3600, "4H": 14400, "1D": 86400, "1W": 604800}
-NATIVE_TFS = {"15m": 900, "1H": 3600, "1D": 86400}
+TF_SECONDS = {"5m": 300, "15m": 900, "1H": 3600, "4H": 14400,
+              "1D": 86400, "1W": 604800}
+NATIVE_TFS = {"5m": 300, "15m": 900, "1H": 3600, "1D": 86400}
 MAX_CANDLES_PER_REQ = 300
 REQUEST_PAUSE_S = 0.15
 

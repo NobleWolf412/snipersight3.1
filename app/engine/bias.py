@@ -169,7 +169,8 @@ BIAS_VERSION = "bias-v0.1-draft"
 #: The rung each timeframe defers to. Moved here from `setups.HTF_LADDER`,
 #: which re-exports it so no consumer breaks; this module is now the one
 #: authority for what "the higher timeframe" means.
-LADDER = {"15m": "1H", "1H": "4H", "4H": "1D", "1D": "1W", "1W": None}
+LADDER = {"5m": "15m", "15m": "1H", "1H": "4H", "4H": "1D",
+          "1D": "1W", "1W": None}
 
 #: Regime states that count as a SIDE. WEAKENING_* is treated as its parent
 #: trend, matching what `setups.py` has recorded since v0.7 — continuity

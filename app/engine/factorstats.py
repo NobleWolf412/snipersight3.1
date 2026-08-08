@@ -75,7 +75,7 @@ from . import store
 from .execsim import EXEC_VERSION
 from .setups import SETUP_VERSION
 
-FACTORSTATS_VERSION = "factorstats-v0.1-draft"
+FACTORSTATS_VERSION = "factorstats-v0.2-draft"
 
 # |Pearson| at or above this between two factors = overlapping signal. 0.70 is the
 # source project's threshold and is deliberately generous: at r=0.70 the two factors
@@ -108,7 +108,8 @@ _REGIME_ORDINAL = {
     "WEAKENING_BULL": 1.0,
     "BULL_TREND": 2.0,
 }
-_TF_ORDINAL = {"15m": 1.0, "1H": 2.0, "4H": 3.0, "1D": 4.0, "1W": 5.0}
+_TF_ORDINAL = {"5m": 0.0, "15m": 1.0, "1H": 2.0, "4H": 3.0,
+               "1D": 4.0, "1W": 5.0}
 # The HTF regime carried inside a v0.7 `confluence` block is read off a HIGHER
 # timeframe than the setup, and that read is unfiltered by the playbook — so it can
 # come back RANGE, a label the setup's own `regime` field never carries (the playbook
@@ -480,7 +481,8 @@ def load_candidates(con, *, setup_version: str = SETUP_VERSION,
             continue
         rec = {"fact_id": r["id"], "symbol": r["symbol"], "tf": r["tf"],
                "market_time": r["market_time"], "confirmed_at": r["confirmed_at"],
-               "payload": p}
+               "payload": p, "setup_version": setup_version,
+               "exec_version": exec_version}
         if p.get("state") == "FORMING":
             prev = forming.get(sid)
             if prev is None or (r["confirmed_at"], r["id"]) < (prev["confirmed_at"],
@@ -838,6 +840,186 @@ def analyze(candidates: list[dict], *, factors=default_factors,
         "raw_factor_count": len(names),
         "effective_independent_factors": len(live_clusters),
         "warnings": warn,
+    }
+
+
+def _mean(values) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def _sample_variance(values) -> float:
+    if len(values) < 2:
+        return 0.0
+    avg = sum(values) / len(values)
+    return sum((x - avg) ** 2 for x in values) / (len(values) - 1)
+
+
+def _uplift_interval(high: list[float], baseline: list[float]) -> dict | None:
+    """Deterministic 95% normal interval for high bucket minus control bucket.
+
+    The forward report already refuses small samples. At that floor the normal
+    interval is a conservative, deterministic screen; the deeper edge report
+    continues to own bootstrap promotion decisions.
+    """
+    if len(high) < MIN_TRADES or len(baseline) < MIN_TRADES:
+        return None
+    uplift = _mean(high) - _mean(baseline)
+    se = math.sqrt(_sample_variance(high) / len(high) +
+                   _sample_variance(baseline) / len(baseline))
+    lo, hi = uplift - 1.96 * se, uplift + 1.96 * se
+    if se == 0:
+        p = 0.0 if uplift else 1.0
+    else:
+        z = abs(uplift / se)
+        p = math.erfc(z / math.sqrt(2.0))
+    return {"uplift_r": uplift, "ci_lo": lo, "ci_hi": hi, "p_value": p}
+
+
+def _bh_q_values(rows: list[dict]) -> None:
+    """Benjamini-Hochberg false-discovery correction, in place."""
+    tested = sorted((r for r in rows if r.get("p_value") is not None),
+                    key=lambda r: (r["p_value"], r["factor"], r["cohort_key"]))
+    m, next_q = len(tested), 1.0
+    for rank_i in range(m, 0, -1):
+        row = tested[rank_i - 1]
+        q = min(next_q, row["p_value"] * m / rank_i)
+        row["q_value"] = _round(q)
+        next_q = q
+
+
+def _dimension_value(candidate: dict, name: str) -> str:
+    payload = candidate["payload"]
+    if name == "strategy":
+        return str(payload.get("strategy") or "UNKNOWN")
+    if name == "horizon":
+        from .cooldowns import horizon_for
+        return horizon_for(candidate.get("tf") or payload.get("tf") or "")
+    if name == "direction":
+        return str(payload.get("direction") or "UNKNOWN")
+    if name == "regime":
+        return str(payload.get("regime") or "UNKNOWN")
+    if name == "venue":
+        try:
+            from .venues import venue_for
+            return venue_for(candidate.get("symbol") or payload.get("symbol")).key
+        except Exception:
+            return "UNKNOWN"
+    if name == "setup_version":
+        return str(candidate.get("setup_version") or "UNKNOWN")
+    raise ValueError(f"unknown factor cohort dimension {name!r}")
+
+
+def evidence_report(candidates: list[dict], *, factors=default_factors,
+                    dimensions=("strategy", "horizon", "direction", "regime",
+                                "venue", "setup_version"),
+                    train_fraction: float = 0.60,
+                    validation_fraction: float = 0.20) -> dict:
+    """Chronological, point-in-time factor evidence by trading cohort.
+
+    Thresholds are learned from the oldest training slice only. Validation and
+    forward slices never influence them. Outcomes are the net R already written
+    by the execution simulator, so fees, slippage and funding are included.
+    """
+    if train_fraction <= 0 or validation_fraction <= 0 or \
+            train_fraction + validation_fraction >= 1:
+        raise ValueError("chronological split fractions must leave a forward slice")
+    closed = sorted((c for c in candidates if c.get("r") is not None),
+                    key=lambda c: (c["confirmed_at"], c.get("fact_id", 0),
+                                   c.get("setup_id", "")))
+    grouped: dict[tuple, list[dict]] = {}
+    for candidate in closed:
+        key = tuple(_dimension_value(candidate, d) for d in dimensions)
+        grouped.setdefault(key, []).append(candidate)
+
+    rows = []
+    for key, book in sorted(grouped.items()):
+        n = len(book)
+        train_end = max(1, int(n * train_fraction))
+        valid_end = max(train_end + 1, int(n * (train_fraction + validation_fraction)))
+        valid_end = min(valid_end, n)
+        train, valid, forward = book[:train_end], book[train_end:valid_end], book[valid_end:]
+        extracted = [(c, factors(c["payload"])) for c in book]
+        names = sorted({name for _, values in extracted for name in values})
+        for name in names:
+            train_values = sorted(values[name] for c, values in extracted[:train_end]
+                                  if values.get(name) is not None)
+            if not train_values:
+                continue
+            threshold = train_values[len(train_values) // 2]
+
+            def split_stats(part, start):
+                paired = []
+                for c, values in extracted[start:start + len(part)]:
+                    value = values.get(name)
+                    if value is not None:
+                        paired.append((value, float(c["r"])))
+                high = [r for value, r in paired if value >= threshold]
+                low = [r for value, r in paired if value < threshold]
+                overall = [r for _, r in paired]
+                return paired, high, low, overall
+
+            train_pairs, train_high, train_low, train_all = split_stats(train, 0)
+            valid_pairs, valid_high, valid_low, valid_all = split_stats(valid, train_end)
+            forward_pairs, forward_high, forward_low, forward_all = split_stats(forward, valid_end)
+            interval = _uplift_interval(forward_high, forward_low)
+            valid_uplift = (_mean(valid_high) - _mean(valid_low)
+                            if valid_high and valid_low else None)
+            forward_uplift = None if interval is None else interval["uplift_r"]
+            stable = bool(valid_uplift is not None and forward_uplift is not None and
+                          valid_uplift * forward_uplift > 0)
+            coverage = ((len(train_pairs) + len(valid_pairs) + len(forward_pairs)) / n
+                        if n else 0.0)
+            sample_ok = bool(interval is not None)
+            shrink = (len(forward_high) / (len(forward_high) + MIN_TRADES)
+                      if forward_high else 0.0)
+            row = {
+                "factor": name,
+                "cohort": dict(zip(dimensions, key)),
+                "cohort_key": "|".join(key),
+                "threshold_from_train": _round(threshold),
+                "buckets": {"control": f"value < {threshold}",
+                            "high": f"value >= {threshold}",
+                            "extremes": "open-ended"},
+                "n": n, "coverage": _round(coverage),
+                "splits": {"train": len(train), "validation": len(valid),
+                           "forward": len(forward)},
+                "high_samples": {"train": len(train_high),
+                                 "validation": len(valid_high),
+                                 "forward": len(forward_high)},
+                "control_samples": {"train": len(train_low),
+                                    "validation": len(valid_low),
+                                    "forward": len(forward_low)},
+                "overall_mean_r": _round(_mean(forward_all)),
+                "baseline_mean_r": _round(_mean(forward_low)),
+                "mean_r": _round(_mean(forward_high)),
+                "uplift_r": None if interval is None else _round(interval["uplift_r"]),
+                "shrunk_uplift_r": (None if interval is None else
+                                     _round(interval["uplift_r"] * shrink)),
+                "ci_lo": None if interval is None else _round(interval["ci_lo"]),
+                "ci_hi": None if interval is None else _round(interval["ci_hi"]),
+                "p_value": None if interval is None else _round(interval["p_value"]),
+                "q_value": None,
+                "stable": stable,
+                "sample_ok": sample_ok,
+                "status": "MEASURED" if sample_ok else "INSUFFICIENT_EVIDENCE",
+                "warnings": ([] if sample_ok else [
+                    f"forward high-factor and control buckets each need {MIN_TRADES} trades"]),
+            }
+            rows.append(row)
+    _bh_q_values(rows)
+    for row in rows:
+        row["passes_evidence"] = bool(
+            row["sample_ok"] and row["stable"] and
+            row["ci_lo"] is not None and row["ci_lo"] > 0 and
+            row["q_value"] is not None and row["q_value"] <= 0.10)
+    return {
+        "version": FACTORSTATS_VERSION,
+        "point_in_time": True,
+        "split": {"train": train_fraction, "validation": validation_fraction,
+                  "forward": 1 - train_fraction - validation_fraction},
+        "dimensions": list(dimensions), "closed_trades": len(closed),
+        "rows": rows,
+        "warnings": ([] if closed else ["no closed trades matched — evidence unavailable"]),
     }
 
 

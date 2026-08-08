@@ -44,7 +44,7 @@ from . import draft, setups, universe
 #: order the rest of the app lists them. Not `setups.FORMING_TFS` — that is the
 #: narrower set the engine will FORM a setup on, and the difference between the
 #: two is a fact this module exists to report rather than to hide by filtering.
-TIMEFRAMES = ("15m", "1H", "4H", "1D", "1W")
+TIMEFRAMES = ("5m", "15m", "1H", "4H", "1D", "1W")
 
 #: Price is inside the zone's band. `setups.py` breaks out of its forming loop
 #: at `dist <= 0` and hands the zone to the TOUCH -> CONFIRMING path, so this is
