@@ -34,3 +34,14 @@ app/data/credentials.vault
 
 # Impeccable: keep the critique record, not machine-local live-mode state
 .impeccable/live/
+
+# graphify: commit the graph, the names and the wiki; not the machine-local
+# paths, the rebuild cache, or artifacts the post-commit hook rewrites every
+# time (they would churn the diff on every single commit).
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/cache/
+graphify-out/cost.json
+graphify-out/graph.html
+graphify-out/memory/
+graphify-out/reflections/

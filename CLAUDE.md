@@ -229,6 +229,44 @@ Venue, leverage and shorts are a per-symbol contract, not a global setting —
 `docs/HARDENING.md` is current on this and `venues.venue_for()` raises rather
 than guessing.
 
+## There is a map of this repo — read it before hunting
+
+`graphify-out/` holds a knowledge graph of the codebase: every symbol, what it
+connects to, grouped into 282 named articles under `graphify-out/wiki/`. Check
+it **before** grepping around for where something lives. It is cheaper than a
+search sweep and it will not miss a file because the name was unexpected.
+
+Two ways in. The `graphify` MCP server is registered and reads this graph live —
+`query_graph`, `get_node`, `get_neighbors`, `god_nodes`, `shortest_path`. Or read
+`graphify-out/wiki/index.md`, which opens with a grouped map: engines, server,
+UI, docs, then the suites, then the vendored chart library.
+
+**Know what it is not.** 92% of the edges in this graph stay inside a single
+file, so the clustering had almost nothing to group by except which file a
+symbol lives in — it produced roughly one article per file. That makes it a
+reliable answer to "where does this live, and what sits next to it", and an
+unreliable answer to "how does a setup become a trade". Do not narrate a
+cross-file flow from the graph alone; read the code for that.
+
+A third of the articles are `lightweight-charts.js`, which is vendored
+third-party code. They are grouped and marked as such in the index. Skip them.
+
+**Freshness.** A post-commit hook rebuilds `graph.json` and `GRAPH_REPORT.md` in
+the background after every commit, code files only, no LLM. It remaps community
+IDs onto the previous run, so the hand-written article names stay attached to
+the code they describe; a genuinely new community gets an auto-name from its hub
+symbol rather than a bare number. `GRAPHIFY_SKIP_HOOK=1` opts out of a commit.
+
+The **wiki is not rebuilt by the hook**. `python graphify-out/refresh_wiki.py`
+from the repo root regenerates the articles and re-applies the grouped index,
+which `graphify export wiki` on its own would flatten. It stamps
+`wiki/index.md` with the commit the graph was built from and says **Stale** in
+the header when that is behind HEAD — so check the top of the index before
+trusting an article, rather than guessing at its age.
+
+Doc and prose changes are invisible to the hook, which only ever looks at code.
+Those need `/graphify --update`, and that one does cost tokens.
+
 ## Not part of this project
 
 **Apex**, a persona system that once shared this working directory, was removed
