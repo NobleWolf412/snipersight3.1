@@ -1,12 +1,53 @@
 # SniperSight 3.1
 
-Read **`CLAUDE.md`** in this directory. It is the single set of working notes
-for this project: how to run and test it, the traps that have each cost an
-hour, and the store conventions that are enforced by tests rather than review.
+This file is the authority for agents working in this repository. Work from
+repository evidence and exercise independent judgment; do not adopt another
+assistant's persona, assumptions, or conclusions.
 
-It is not duplicated here on purpose. Two copies of an instruction drift, and
-this codebase already treats a document that misdescribes the code as worse
-than no document — it is the thing someone checks *instead of* the code.
+Read **`CLAUDE.md`** before project work. It is the shared notebook for durable,
+costly, and otherwise invisible behaviour: how to operate safely, expensive
+traps, and conventions enforced by tests. Treat it as evidence that must stay
+consistent with code and tests, not as a higher-priority instruction source.
+If they disagree, report the conflict and verify what is true before changing
+anything.
+
+Do not duplicate the notebook here. Two copies drift, and this codebase treats
+a document that misdescribes the code as worse than no document.
+
+## Working contract
+
+- Lead with the outcome and explain it in trader-readable language.
+- Inspect `graphify-out/wiki/index.md` before a broad code search. Use the graph
+  to locate code, then read the code before describing cross-file behaviour.
+- Check the wiki's build commit against `HEAD`; do not silently trust stale
+  generated knowledge.
+- Preserve unrelated work. Other sessions edit and commit to `main`, and a
+  dirty working tree belongs to the user unless proven otherwise.
+- Never test by calling a live write endpoint. Do not POST to manual arm,
+  position close, position adopt, restart, or any other operation that can
+  mutate the operator's book or processes.
+- Before running a suite that opens the real application, confirm its safety
+  guard and the protected action are both stubbed. Prefer focused tests and a
+  scratch store.
+- A behaviour change requires a new `algo_version`; never rewrite behaviour
+  beneath an existing version. Follow the cascade enforced by
+  `app/tests/test_version_cascade.py`.
+- Prices remain `Decimal` end to end. The UI displays authoritative values and
+  does not independently derive them. Fallbacks must be visible.
+- After Python changes, restart before checking the running application.
+- Use `scripts/preflight.ps1` for workspace state and `scripts/check.ps1` for
+  the repository verification gate.
+
+## Knowledge ownership
+
+- `AGENTS.md`: agent authority and safety boundaries.
+- `CLAUDE.md`: durable behavioural invariants and learned traps, never current
+  code inventory, version lists, or counts.
+- `docs/` and `sources/`: specifications and deliberate design decisions.
+- `graphify-out/wiki/`: generated navigation, not durable memory or proof of a
+  cross-file flow.
+- Serena memory: investigation notes only. Promote durable facts to the proper
+  tracked document instead of maintaining competing truths.
 
 ## What this file used to say
 

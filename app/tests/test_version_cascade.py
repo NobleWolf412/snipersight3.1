@@ -28,6 +28,35 @@ from engine import (bias, breakout, cooldowns, cycles, execsim, venues,
                     liquidity, ma, manual, momentum, ranges, regime,
                     risk, scalein, setups, structure, swings, volatility,
                     volume, zones, trend)
+from engine import automation, autotrader, contracts, execution, lifecycle
+from engine import phemex_private, positions
+
+
+# Operational authorities do not write research facts, so they do not belong
+# in the research cascade below. They still carry behavior-bearing durable
+# state and wire contracts; lock them independently so a rewrite beneath an old
+# label fails the same gate instead of relying on review memory.
+OPERATIONAL_EXPECTED = {
+    "contracts": "contracts-v0.3-draft",
+    "automation": "automation-v0.4-draft",
+    "autotrader": "autotrader-v0.3-draft",
+    "execution_core": "execution-core-v0.5-draft",
+    "positions": "positions-v0.3-draft",
+    "phemex_private": "phemex-private-v0.3-draft",
+    "lifecycle": "lifecycle-v0.1-draft",
+}
+
+
+def operational_versions():
+    return {
+        "contracts": contracts.CONTRACT_VERSION,
+        "automation": automation.AUTOMATION_VERSION,
+        "autotrader": autotrader.AUTOTRADER_VERSION,
+        "execution_core": execution.EXECUTION_CORE_VERSION,
+        "positions": positions.POSITION_VERSION,
+        "phemex_private": phemex_private.PHEMEX_PRIVATE_VERSION,
+        "lifecycle": lifecycle.LIFECYCLE_VERSION,
+    }
 
 # The current, deliberate state of the pipeline. Update WITH the cascade.
 LOCKED = {
@@ -298,6 +327,12 @@ CONSUMERS = {
 
 
 class VersionLockfile(unittest.TestCase):
+    def test_operational_versions_are_locked(self):
+        self.assertEqual(
+            operational_versions(), OPERATIONAL_EXPECTED,
+            "an operational behavior version moved; inspect its durable wire, "
+            "state, adapter, and promotion consumers before updating this lock")
+
     def test_pipeline_versions_are_what_we_think_they_are(self):
         """Fails on ANY version move. That failure is the feature — it is the
         moment to ask what downstream of it also has to change."""

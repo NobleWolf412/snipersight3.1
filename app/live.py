@@ -24,8 +24,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import notify
-from engine import (store, importer, aggregator, risk, universe, ingest,
-                    quality, marketdata, pipeline)
+from engine import (automation, autotrader, broker_factory, execution, positions, store,
+                    importer, aggregator, risk, universe, ingest, quality,
+                    marketdata, pipeline)
 from engine.runlog import get_logger
 
 # ---------------------------------------------------------------- exit forensics
@@ -470,6 +471,40 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
 
     _beat("risk")
     risk.run(con)
+    _beat("autonomous intents")
+    try:
+        execution.monitor_paper(con)
+        private_broker = None
+        active_mode = automation.current(con)[0]
+        custody_environments = positions.private_environments_with_exposure(con)
+        if len(custody_environments) > 1:
+            raise RuntimeError("simultaneous testnet and mainnet custody is forbidden")
+        custody_mode = (automation.AutomationMode.TESTNET
+                        if custody_environments == {"testnet"} else
+                        automation.AutomationMode.LIVE
+                        if custody_environments == {"mainnet"} else active_mode)
+        if custody_mode in (automation.AutomationMode.TESTNET,
+                            automation.AutomationMode.LIVE):
+            private_broker = broker_factory.phemex_for_mode(custody_mode)
+            private_broker.sync_time()
+            execution.monitor_private(con, private_broker)
+            from engine import lifecycle
+            lifecycle.monitor(con, private_broker)
+            positions.monitor_closures(con, private_broker)
+            reconciliation = positions.reconcile(
+                con, private_broker, symbols=universe.all_tracked_symbols(con))
+            if not reconciliation["matched"]:
+                log.error("private custody reconciliation blocked new entries: "
+                          + json.dumps(reconciliation, sort_keys=True))
+        routed = autotrader.run(con, broker=private_broker)
+        if routed["routed"] or routed["refused"]:
+            log.info(f"autotrader {routed['mode']}: {len(routed['routed'])} routed, "
+                     f"{len(routed['refused'])} refused")
+    except Exception as exc:
+        # Fail closed without taking the data and paper research loop down.
+        # A private execution fault is operational state to fix, never a reason
+        # to stop recording the market.
+        log.error(f"autotrader failed closed: {type(exc).__name__}: {exc}")
     _beat("audit")
     quality.audit(con, now=now, persist=True)
 

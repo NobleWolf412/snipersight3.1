@@ -1,0 +1,4 @@
+interface:
+  display_name: "SniperSight Development"
+  short_description: "Safe coding with optional independent agents"
+  default_prompt: "Use $snipersight-development to handle this SniperSight task with the smallest safe workflow."
