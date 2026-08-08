@@ -15,6 +15,39 @@ from pathlib import Path
 
 LOG_PATH = Path(__file__).resolve().parent.parent / "data" / "engine.log"
 
+# The evidence stream. `engine.log` is 98.5% DEBUG run lines that duplicate the
+# engine_runs table below, and it grows ~26 MB/day — so any size cap that
+# controls it also discards operator actions and degraded-path warnings at the
+# same rate, and those exist NOWHERE else. They leave the hot stream here,
+# before rotation could ever apply to them. Measured and reasoned in
+# docs/SPEC-log-retention.md; this file grows ~2 MB/year and is never pruned.
+AUDIT_PATH = Path(__file__).resolve().parent.parent / "data" / "engine-audit.log"
+
+# INFO lines that are evidence rather than heartbeat. Every one is an operator
+# write action — the irreversible things done to a real book. WARNING and above
+# are carried regardless, so a new degraded path needs no entry here; a new
+# *operator action* does. `tests/test_audit_log.py` fails if a
+# `get_logger().info(...)` in server.py opens with a prefix this list misses.
+AUDIT_PREFIXES = (
+    "CREDENTIAL",
+    "MANUAL ARM",
+    "MANUAL CANCEL",
+    "MANUAL SCAN",
+    "OPERATOR CLOSED",
+    "OPERATOR ADOPTED",
+    "SETTINGS CHANGED",
+    "ANALYSE",
+)
+
+
+class _AuditFilter(logging.Filter):
+    """WARNING and above, plus operator write actions. Nothing else."""
+
+    def filter(self, record) -> bool:
+        if record.levelno >= logging.WARNING:
+            return True
+        return record.getMessage().startswith(AUDIT_PREFIXES)
+
 # The index exists for ONE reader: `/api/overview` asks for the last run of
 # each engine, and this table is append-only and enormous — 3,038,265 rows at
 # 2026-08-05, roughly 300 MB. Unindexed, "last run per engine" is a full table
@@ -63,6 +96,11 @@ def get_logger() -> logging.Logger:
         fh.setFormatter(logging.Formatter(
             "%(asctime)s %(levelname)-5s %(message)s", "%Y-%m-%d %H:%M:%S"))
         lg.addHandler(fh)
+        ah = logging.FileHandler(AUDIT_PATH, encoding="utf-8")
+        ah.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)-5s %(message)s", "%Y-%m-%d %H:%M:%S"))
+        ah.addFilter(_AuditFilter())
+        lg.addHandler(ah)
         sh = logging.StreamHandler()
         sh.setFormatter(logging.Formatter("%(levelname)-5s %(message)s"))
         sh.setLevel(logging.INFO)
