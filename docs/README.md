@@ -10,8 +10,13 @@ in these docs cite each other by path.
   against code and fact store. §6 is the convention list `CLAUDE.md` points at.
   Supersedes the sequencing in REDESIGN-PLAN.
 - [HARDENING.md](HARDENING.md) — the hardening contract from the 2026-07-21
-  audit. Current authority on venue/leverage/shorts being a per-symbol
-  contract.
+  audit, venue section revised 2026-07-31. Current authority on
+  venue/leverage/shorts being a per-symbol contract, and it matches
+  `venues.py`.
+
+Every file below carries its own status in its first lines. **That header is
+the authority, not this list** — a hand-maintained index of what is current
+goes stale exactly as fast as the things it indexes.
 
 ## Specs (built or gated, kept as the record)
 

@@ -205,7 +205,13 @@ constitution:
 
 ## 7. Documents, and which are stale
 
-Audited 2026-07-31.
+Audited 2026-07-31; rows revised 2026-08-07.
+
+**This table is a snapshot, and it rots like any other.** It called `HARDENING.md`
+and `README.md` stale; both were repaired the same week and the rows stayed
+wrong until 08-07 — a staleness audit that is itself stale is the worst of the
+two documents. Read the header of the file itself before trusting a row here.
+`docs/README.md` carries the shorter, current version of this list.
 
 | Document | State |
 |---|---|
@@ -217,8 +223,8 @@ Audited 2026-07-31.
 | `SPEC-persistence-retention.md` | current; deletion deliberately unimplemented |
 | `SALVAGE-from-snipersight-trading.md` | current; coverage audit in the previous draft is preserved in git history |
 | `DESIGN-SYSTEM.md` | current |
-| **`HARDENING.md`** | **STALE AND WRONG** — declares "Coinbase spot / shorts rejected / leverage capped at 1×" and an engine chain six versions behind. It is a *venue contract*, so being wrong here is worse than being absent |
-| **`README.md`** | **STALE** — describes a Coinbase-spot-only system with the old cockpit UI; predates perps, the five-surface shell, and every engine added since 07-22 |
+| `HARDENING.md` | **repaired 2026-07-31**, after this table first called it stale and wrong. Now states the three-venue per-symbol contract and matches `venues.py` |
+| `README.md` | **repaired 2026-07-31.** Now describes the three venues and the current shell; the "Coinbase-spot-only" text this row used to flag is gone |
 | `TODO.md` | **deleted 2026-08-07** — a v0 remediation tracker still open against items long since closed. Kept in git history |
 | `war-room/*`, `personas/*`, `sources/*` | Apex artefacts (`personas/`, `foundation.md`) and old war-room notes deleted 2026-08-07 — git history is the archive. `sources/ss3_v0.1.txt` (the constitution) stays; `war-room/` is runtime output, recreated on demand by `apexbridge.py` |
 

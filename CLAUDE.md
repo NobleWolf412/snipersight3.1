@@ -6,6 +6,32 @@ mutates. The product constitution is `sources/ss3_v0.1.txt`; the convention list
 is `docs/PROGRAM-PLAN.md` §6. This file is **not** a summary of those — it holds
 what is not written down anywhere else.
 
+## What belongs in this file
+
+**Behaviour, not inventory.** This repo is refactored constantly. A note that
+describes *how the code is arranged today* is wrong within a week and is then
+worse than nothing, because it is the thing someone reads **instead of** the
+code. A note that describes *how the system behaves, and what it does to you
+when you forget* survives a rename.
+
+A rule earns a place here when it is all three:
+
+- **Invariant** — still true after the file it names is split, renamed or
+  rewritten.
+- **Costly** — it has already burned an hour, or it can write to the operator's
+  real book.
+- **Invisible** — the suites and the linter cannot catch it, so only prose can.
+
+Keep out: what a module contains (the code and `graphify-out/` answer that, and
+they update themselves), which version any engine is on (they move most
+sessions), and counts of anything. **A count rots silently** — nothing fails
+when it drifts, so it quietly becomes a lie.
+
+When a rule cites a function, a number or a commit, that citation is **evidence
+for the rule, not the rule**. If the code moves on, keep the rule and let the
+example stand as history — it still explains why the rule exists. Fix the rule
+only when the *behaviour* changes.
+
 ## How to answer me
 
 I am a trader, not a backend engineer. Long paragraphs of implementation detail
@@ -232,23 +258,26 @@ than guessing.
 ## There is a map of this repo — read it before hunting
 
 `graphify-out/` holds a knowledge graph of the codebase: every symbol, what it
-connects to, grouped into 282 named articles under `graphify-out/wiki/`. Check
-it **before** grepping around for where something lives. It is cheaper than a
-search sweep and it will not miss a file because the name was unexpected.
+connects to, grouped into named articles under `graphify-out/wiki/` — roughly
+one per file. Check it **before** grepping around for where something lives. It
+is cheaper than a search sweep and it will not miss a file because the name was
+unexpected. Article counts move on every rebuild, so the index header is the
+only trustworthy statement of what is in there.
 
 Two ways in. The `graphify` MCP server is registered and reads this graph live —
 `query_graph`, `get_node`, `get_neighbors`, `god_nodes`, `shortest_path`. Or read
 `graphify-out/wiki/index.md`, which opens with a grouped map: engines, server,
 UI, docs, then the suites, then the vendored chart library.
 
-**Know what it is not.** 92% of the edges in this graph stay inside a single
-file, so the clustering had almost nothing to group by except which file a
-symbol lives in — it produced roughly one article per file. That makes it a
+**Know what it is not.** The overwhelming majority of edges in this graph stay
+inside a single file (92% when last measured), so the clustering had almost
+nothing to group by except which file a symbol lives in. That makes it a
 reliable answer to "where does this live, and what sits next to it", and an
 unreliable answer to "how does a setup become a trade". Do not narrate a
-cross-file flow from the graph alone; read the code for that.
+cross-file flow from the graph alone; read the code for that. The exact ratio
+does not matter to the caveat — it holds at any figure near that.
 
-A third of the articles are `lightweight-charts.js`, which is vendored
+A large block of the articles are `lightweight-charts.js`, which is vendored
 third-party code. They are grouped and marked as such in the index. Skip them.
 
 **Freshness.** A post-commit hook rebuilds `graph.json` and `GRAPH_REPORT.md` in
