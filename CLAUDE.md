@@ -2,9 +2,13 @@
 
 Deterministic market-structure research platform. Append-only, content-hashed
 fact store; every engine writes facts under an `algo_version` and nothing
-mutates. The product constitution is `sources/ss3_v0.1.txt`; the convention list
-is `docs/PROGRAM-PLAN.md` §6. This file is **not** a summary of those — it holds
-what is not written down anywhere else.
+mutates. The product constitution is `sources/ss3_v0.1.txt`.
+
+**The conventions the code does not state live here**, under "The conventions"
+below. They were `docs/PROGRAM-PLAN.md` §6 until 2026-08-07; comments in the
+code citing `§6` mean that list. They are in this file because this is the one
+that is always loaded — a rule nobody opens cannot stop anybody. Otherwise this
+file summarises nothing: it holds what is not written down anywhere else.
 
 ## What belongs in this file
 
@@ -236,20 +240,56 @@ canvas and their labels are not in the DOM; to read them, wrap
 portfolio polls every 30s, which collides with the 30s tool timeout, so poll in
 a loop capped near 25s rather than sleeping through a cycle.
 
-## The convention that bites hardest
+## The conventions
 
-**A behaviour change is a version bump, never an edit under an existing
-`algo_version`.** Two generations of output under one label is the defect the
-whole store design exists to prevent. `tests/test_version_cascade.py` is the
-lockfile: it will fail if a version moves without its consumers.
+This codebase has strong conventions that are **not stated in the code**. An
+agent that has not been given them will write something that passes the whole
+suite and still violates the constitution. That is the failure these exist to
+prevent, and it is why they live in this file rather than a document someone
+has to think to open.
 
-Related, and enforced by tests rather than by review:
+**The one that bites hardest: a behaviour change is a version bump, never an
+edit under an existing `algo_version`.** Two generations of output under one
+label is the defect the entire store design exists to prevent.
+`tests/test_version_cascade.py` is the lockfile — it fails when a version moves
+without its consumers.
 
-- Decimal end to end. No float touches a price.
-- One authority per number. The UI reads; it never re-derives.
-- Degraded paths are audible — a fallback that is silent is a bug.
-- `confirmed_at` is when the engine could have known; `market_time` is when the
-  market did it. Closed candles only.
+Nine rules about how the system behaves, and what actually holds each one up:
+
+1. **Facts are append-only, content-hash idempotent, and carry an
+   `algo_version`.** The schema enforces it — `UNIQUE (content_hash)` — so
+   re-running an engine over identical data is a no-op rather than a duplicate.
+2. **A rule change means a new version**, never an edit to an old one. See
+   above; this is the one with a lockfile.
+3. **`confirmed_at` ≠ `market_time`.** `confirmed_at` is when the engine could
+   first have known; `market_time` is when the market did it. Nothing may act
+   on a fact before it was knowable — that is what stops a backtest cheating.
+4. **Closed candles only**, never a developing bar.
+   `test_only_complete_closed_bucket_is_emitted` pins it.
+5. **Decimal end to end; no float touches a price.** Held up by the store
+   rather than by a guard test: prices live in the schema as *text* (`"100"`,
+   not `100.0`), so a float cannot survive a round trip by accident. Do not go
+   looking for the test that enforces this — the representation is the
+   enforcement.
+6. **Loud-fallback rule — a degraded path must never degrade silently.** A
+   fallback nobody can see is a bug, not a safety net.
+7. **Evidence is recorded, not filtered on, until it has been graded.** An
+   engine writes its readings from the day it exists; nothing gates a trade on
+   them until they have proven edge against the book. `MEASURED_NOT_ENABLED` in
+   `pipeline.py` is this rule in code.
+8. **Rejections are as auditable as approvals.** "Why did nothing fire" has to
+   be as answerable as "why did this fire" — the rejection funnel is the
+   surface that keeps it honest.
+9. **One authority per number — the UI reads it, never re-derives it.** With
+   exactly one deliberate exception: `ticket-math.js` re-implements
+   `venues.liquidation_price` so the order ticket can warn without a round
+   trip, and a test pins the two to agree. **A second exception is precisely
+   how two surfaces come to disagree.** Do not add one.
+
+And one rule about writing rather than behaviour, which no test will ever
+catch: **comments explain _why_, and carry the measurement that motivated
+them.** It is the reason the engine files can be read at all, and it decays the
+moment someone writes a comment restating what the line already says.
 
 Venue, leverage and shorts are a per-symbol contract, not a global setting —
 `docs/HARDENING.md` is current on this and `venues.venue_for()` raises rather

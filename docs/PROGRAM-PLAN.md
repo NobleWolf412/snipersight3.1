@@ -9,6 +9,12 @@ detail; this is the order, the ownership, and now the status.
 Every status below was verified by query, not by recollection. Where a claim is
 inferred rather than measured it says so.
 
+**This is a dated snapshot, and it is meant to read as one.** Statuses, counts
+and measurements below were true on the date beside them and are not
+re-verified on edit — the test count in §2 was already half of what the suite
+reports by 08-07. The rules that do *not* expire moved to `CLAUDE.md` (see §6);
+what is left here is planning, which is allowed to age.
+
 ---
 
 ## 1. The numbering, because there were two of them
@@ -168,7 +174,8 @@ In the order the evidence argues for:
 2. **`sessions.py`** (Wave 2.4) — the only unbuilt indicator engine.
 3. **TRANSITION gate** (Wave 2.2) — the largest remaining rejection bucket now
    that RANGE has been explained.
-4. **Doc reconciliation** — this file, plus the stale set listed in §7.
+4. **Doc reconciliation** — this file. The stale set it used to list was
+   reconciled 2026-08-07; `docs/README.md` now carries the index.
 5. **Order router**, if and only if the forward record earns it. It does not
    exist today, and `live_enabled` is a hard-coded literal, which is correct.
 
@@ -188,47 +195,33 @@ attempted, which converts a silent corruption into a test failure.
 **Convention risk — the real hazard.** This codebase has unusually strong,
 *unstated-in-code* conventions. Any agent working here must be given them
 explicitly or it will produce code that passes tests and violates the
-constitution:
+constitution.
 
-1. Facts are append-only, content-hash idempotent, and carry an `algo_version`
-2. A rule change means a **new version**, never an edit to an old one
-3. `confirmed_at` ≠ `market_time`; nothing may act on a fact before it was knowable
-4. Closed candles only — never a developing bar
-5. Decimal end to end; no float touches a price
-6. **Loud-fallback rule**: a degraded path must never degrade silently
-7. **Evidence is recorded, not filtered on**, until it has been graded
-8. Comments explain **why**, with the measurement that motivated them
-9. Rejections are as auditable as approvals
-10. One authority per number — the UI reads it, never re-derives it
+**The list moved to `CLAUDE.md` on 2026-08-07** — see "The conventions" there.
+Comments in the code citing `§6` mean that list. It moved because this document
+is a dated status snapshot and the conventions are not: binding them together
+let a reader discount the rules along with the stale wave statuses, and
+`CLAUDE.md` is the file that is always loaded. Two of the ten were corrected in
+the move — Decimal is enforced by the store's text representation rather than
+by a test, and "one authority per number" has a single deliberate, tested
+exception in `ticket-math.js`.
 
----
-
-## 7. Documents, and which are stale
-
-Audited 2026-07-31; rows revised 2026-08-07.
-
-**This table is a snapshot, and it rots like any other.** It called `HARDENING.md`
-and `README.md` stale; both were repaired the same week and the rows stayed
-wrong until 08-07 — a staleness audit that is itself stale is the worst of the
-two documents. Read the header of the file itself before trusting a row here.
-`docs/README.md` carries the shorter, current version of this list.
-
-| Document | State |
-|---|---|
-| `PROGRAM-PLAN.md` | **canonical** for forward planning (this file) |
-| `app/BUILDLOG.md` | **canonical** for what happened and why — actively maintained, S1–S52 |
-| `REDESIGN-PLAN.md` | historical; phases superseded by §1 above |
-| `PRODUCT-REVIEW-2026-07-29.md` | still sound; its §4.5 leverage principle is what the ticket now implements |
-| `SPEC-confirmed-entry.md` | still authoritative for the entry/exit rules |
-| `SPEC-persistence-retention.md` | current; deletion deliberately unimplemented |
-| `SALVAGE-from-snipersight-trading.md` | current; coverage audit in the previous draft is preserved in git history |
-| `DESIGN-SYSTEM.md` | current |
-| `HARDENING.md` | **repaired 2026-07-31**, after this table first called it stale and wrong. Now states the three-venue per-symbol contract and matches `venues.py` |
-| `README.md` | **repaired 2026-07-31.** Now describes the three venues and the current shell; the "Coinbase-spot-only" text this row used to flag is gone |
-| `TODO.md` | **deleted 2026-08-07** — a v0 remediation tracker still open against items long since closed. Kept in git history |
-| `war-room/*`, `personas/*`, `sources/*` | Apex artefacts (`personas/`, `foundation.md`) and old war-room notes deleted 2026-08-07 — git history is the archive. `sources/ss3_v0.1.txt` (the constitution) stays; `war-room/` is runtime output, recreated on demand by `apexbridge.py` |
+Nothing else about parallelisation changes: the sequencing rules above are what
+this section is for.
 
 ---
+
+## 7. Documents
+
+`docs/README.md` is the index: what each document is, and whether it is
+current. It replaced the staleness table that used to sit here.
+
+That table is worth one sentence of postmortem, because it failed in the way
+this whole document can fail. It flagged `HARDENING.md` and `README.md` as
+stale and wrong; both were repaired within days and the rows stayed wrong for a
+week. **A staleness audit that goes stale is worse than no audit** — it is
+read as current by definition. Trust the header of the file itself, which each
+document carries, over any table describing it.
 
 ## 8. What "done" looks like
 
