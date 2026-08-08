@@ -26,9 +26,20 @@ window.SSChart = (() => {
   // server-owned record even when a newer setup for the symbol arrives.
   let preferredSetupId = null;
   let preferredSetupMissing = false;
-  // `base` is whatever this chart started from — the engine's setup, or levels
-  // seeded from the recent range when there is no setup. Either way it is
-  // restorable, so an operator who drags into a corner is never stranded.
+  /* `base` is whatever this chart started from, and it is now one of exactly
+     three things: an ACTIVE TRADE, a plan the ENGINE is still waiting on, or
+     the operator's own. Null when there is none of the three — an empty ticket
+     is the honest answer and the chart says so in words.
+
+     It used to have a fourth: `last close ± average 14-bar range`, always
+     LONG, drawn on any chart with nothing else to show. Its own comment called
+     it "not a signal, not analysis, and not the engine's opinion", and it was
+     still three horizontal price lines. The operator's rule, 8 Aug 2026: the
+     only things that display are a plan the bot generated, a plan of mine, and
+     an active trade. A ruler is none of them.
+
+     Whatever `base` holds is restorable, so an operator who drags into a
+     corner is never stranded. */
   let base = null;                            // {entry,tp,sl,dir,kind}
   let symMeta = {};                           // symbol -> /api/overview row (venue, state)
   let allSymbols = [];                        // the full overview list, cached for the picker
@@ -374,11 +385,13 @@ window.SSChart = (() => {
      setup. `base.kind` was consulted only for a text chip and a button label,
      and three horizontal price lines outweigh any caption. The code that seeds
      them says "SAY it is seeded, never dress it as engine output"; it said so
-     in words and then dressed it anyway.
+     in words and then dressed it anyway. That ruler is gone entirely now — see
+     `base` — but the argument it produced is the one this whole function runs
+     on, so it stays recorded here.
 
-     Draft covers anything that is not EXACTLY what the engine said — seeded
-     levels and dragged ones both. Solid and bright therefore carries one
-     meaning: this is the engine's plan, untouched. */
+     Draft covers anything that is not EXACTLY what the engine said — a
+     structure draft and dragged levels both. Solid and bright therefore
+     carries one meaning: this is the engine's plan, untouched. */
   function applyLevels(){
     /* Three visual registers, because they mean three different things:
        LIVE (gold, solid) is money at stake right now; ENGINE (bright) is a
@@ -407,10 +420,16 @@ window.SSChart = (() => {
            setups.py has no terminal state for "acted on", so a setup the
            engine entered days ago stays VALIDATED until its zone breaks.
 
-       All three take the DIM DOTTED register the seeded ruler and the draft
-       already use, deliberately: it means "not a trade about to be taken",
-       which is exactly what these are. A fourth style would be a fourth thing
-       to learn for a distinction the operator does not need to make.
+       The second one no longer reaches this function by default: `pickSetup`
+       drops spent setups from the candidates entirely, because a finished
+       trade is not a plan and the chart draws only plans and positions. It
+       still reaches here when Setup Radar links to that exact setup_id, which
+       is a review of a past trade and is the one time these labels are wanted.
+
+       All three take the DIM DOTTED register the draft already uses,
+       deliberately: it means "not a trade about to be taken", which is exactly
+       what these are. A fourth style would be a fourth thing to learn for a
+       distinction the operator does not need to make.
 
        WHOSE stays with the ENGINE regardless — `bracketMine` is untouched
        above, so a refused or spent engine setup still belongs to the `Engine
@@ -547,7 +566,9 @@ window.SSChart = (() => {
          : base.fate === 'filled' ? 'already entered'
          : base.fate === 'missed' ? 'entry missed' : 'engine')
       : kind === 'draft' ? (modified ? 'edited' : 'your plan')
-      : kind === 'seeded' ? 'manual' : 'no setup';
+      // `manual` went with the seeded ruler. With no base, anything in the
+      // form was typed by the operator and belongs to them.
+      : modified ? 'yours' : 'no setup';
     $('tkSrc').className = 'chip ' +
       (kind === 'engine' && !modified && !spent ? 'chip-accent' : 'chip-amber');
     // Name what you are reverting TO. On a live position that is the levels
@@ -1246,8 +1267,9 @@ window.SSChart = (() => {
        engine will take, and `pickSetup` set `base.kind = 'engine'` BEFORE it
        looked the decision up — so a refusal reached the reader as a chip while
        three full-brightness ENGINE lines said the opposite. This file's own
-       argument, made where the seeded ruler was given a dim register: three
-       horizontal price lines outweigh any caption.
+       argument, first made when the 14-bar ruler was given a dim register and
+       later the reason that ruler was deleted outright: three horizontal price
+       lines outweigh any caption.
 
      · the ORDER's last word. FILLED means the entry already happened; MISSED
        means the window expired without price coming back. Either way the
@@ -1297,7 +1319,11 @@ window.SSChart = (() => {
     if(setup)
       return {kind: 'setup', dir: setup.direction, id: setup.setup_id,
               entry: +setup.entry, tp: +setup.tp, sl: +setup.sl};
-    if(base && (base.kind === 'draft' || base.kind === 'seeded'))
+    /* The 14-bar ruler was the other sketch and no longer exists (see `base`),
+       leaving the structure draft as the only one. It is still a sketch: the
+       engine drew it from a live zone but has not judged the trade, and
+       quoting it back as a second opinion would invent an authority. */
+    if(base && base.kind === 'draft')
       return {kind: 'sketch'};
     return null;
   }
@@ -2005,10 +2031,35 @@ window.SSChart = (() => {
     const all = Object.values(byId);
     const valid = all.filter(f => f.state === 'VALIDATED')
                      .sort((a, b) => b.market_time - a.market_time);
+    /* VALIDATED IS STICKY, AND THE CHART USED TO INHERIT WHATEVER IT STUCK TO.
+       setups.py retires a setup only when its ZONE breaks, so one whose entry
+       filled — or whose entry window expired — stays VALIDATED indefinitely.
+       Meanwhile every setup that DID reach a clean end drops out of this list.
+       The survivor is therefore biased towards the oldest: on BTCUSDT 1D on
+       8 Aug 2026 the newest VALIDATED setup was from 8 Sep 2024, filled four
+       days later, and the chart drew its bracket — stop 18% below the live
+       price — because the three setups since had all expired properly.
+
+       A setup the engine has finished with is history, not a plan, and the
+       operator's rule is that only a plan the bot generated, a plan of theirs,
+       or an active trade may draw on this chart. Falling through to the draft
+       (or to nothing) is the right answer here; `setupFate` already knows
+       which setups are spent, so this asks it rather than inventing a second
+       reading. Refused is NOT spent — risk may size it tomorrow once the
+       concurrent slot frees, and it is still the engine's live opinion. */
+    const open = valid.filter(f => {
+      const s = setupFate(f.setup_id).state;
+      return s !== 'filled' && s !== 'missed';
+    });
+    /* An EXPLICIT request survives the filter. Setup Radar links to one exact
+       setup_id, and an operator who clicked a finished trade to review it
+       asked for that record — the labels already read FILLED / MISSED and the
+       ticket already prints ENTRY ALREADY HAPPENED. The rule above governs
+       what this chart volunteers, not what it is told to show. */
     const preferred = preferredSetupId
       ? valid.find(f => f.setup_id === preferredSetupId) : null;
     preferredSetupMissing = !!preferredSetupId && !preferred;
-    setup = preferredSetupId ? (preferred || null) : (valid[0] || null);
+    setup = preferredSetupId ? (preferred || null) : (open[0] || null);
 
     /* An operator who has dragged a level or overridden risk owns those
        numbers, and a background refresh must not take them away mid-thought.
@@ -2127,24 +2178,25 @@ window.SSChart = (() => {
         '<br><br>The engine has not judged this trade. Arming it writes to ' +
         'your paper book, never the strategy record.';
     }else{
-      /* Nothing near price. The ruler stays ONLY as something to drag, and it
-         now says outright that it is not analysis — previously it read as a
-         plan because it was drawn like one and described in the same breath as
-         the engine's own. `applyLevels` renders it dotted and dimmed. */
-      const last = candles.length ? candles[candles.length - 1].close : null;
-      if(last == null) base = null;
-      else{
-        const n = Math.min(14, candles.length);
-        const tr = candles.slice(-n).reduce((s, k) => s + (k.high - k.low), 0) / n;
-        base = {entry: last, sl: last - tr, tp: last + tr * 2,
-                dir: 'LONG', kind: 'seeded'};
-      }
+      /* NOTHING TO DRAW, AND THE CHART SAYS SO RATHER THAN FILLING THE SPACE.
+         This branch used to seed a bracket from `last close ± average 14-bar
+         range`, always LONG, purely so the ticket had something in it. Dimmed
+         and captioned "not a signal, not analysis" — and still three price
+         lines on a chart whose whole vocabulary is that a line means someone
+         has an opinion about that price. An empty chart is the true statement;
+         a 2:1 drawn around the last close is a false one wearing a disclaimer.
+
+         The ticket inputs stay live. An operator who wants to trade a market
+         the engine has no opinion on types the three numbers in, and the
+         `change` handler on #tkEntry/#tkTp/#tkSl builds the plan from there —
+         so the capability the ruler existed to provide survives it. */
+      base = null;
       $('tkWhy').innerHTML =
-        '<em>Nothing here — price is not at a level the engine recognises</em>' +
-        'No setup, and no live zone within 3 ATR to draft against. These ' +
-        'numbers are a plain 2:1 drawn around the current price: not a signal, ' +
-        'not analysis, and not the engine\'s opinion — just something to drag ' +
-        'if you want to trade this anyway. Nothing you do here counts toward ' +
+        '<em>Nothing here — the engine has no plan on this chart</em>' +
+        'No setup it is waiting on, and price is not at a level it recognises ' +
+        'well enough to draft against. Nothing is drawn because there is ' +
+        'nothing to draw.<br><br>Type an entry, stop and target above if you ' +
+        'want to trade this anyway — it goes to your paper book and never to ' +
         'the strategy record.';
     }
     // Redraw against the refreshed facts without touching the operator's

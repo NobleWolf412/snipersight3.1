@@ -90,16 +90,18 @@ ok('the market of the open book is read from the answer, not assumed', () => {
 });
 
 ok('a sketch is never quoted back as the engine\'s opinion', () => {
-  /* pickSetup folds four different things into two looks: only a VALIDATED
+  /* pickSetup folds several different things into two looks: only a VALIDATED
      setup fact and a position the engine has actually taken are the machine
-     saying "this trade, at these prices". A structure draft and the 14-bar
-     ruler are not, and they are drawn identically to each other. */
+     saying "this trade, at these prices". A structure draft is not — the
+     engine drew it from a live zone but has not judged the trade. (The 14-bar
+     ruler was the other sketch and is now deleted rather than dimmed; see
+     "the chart draws only a plan, a position, or nothing" below.) */
   const fn = body('enginePlanHere');
   assert(/kind: 'position'/.test(fn) && /kind: 'setup'/.test(fn),
     'the two real engine plans are no longer distinguished');
-  assert(/base\.kind === 'draft' \|\| base\.kind === 'seeded'/.test(fn),
-    'a draft or the seeded ruler is no longer separated out — one of them ' +
-    'would be reported as a second opinion the engine never gave');
+  assert(/base\.kind === 'draft'/.test(fn),
+    'the structure draft is no longer separated out — it would be reported ' +
+    'as a second opinion the engine never gave');
   assert(/\{kind: 'sketch'\}/.test(fn), 'the sketch verdict is gone');
 
   const paint = body('paintSecondOpinion');
@@ -196,6 +198,63 @@ ok('a setup that is not a live plan is not DRAWN as one', () => {
   assert(/bracketMine = live \? modified : draft;/.test(fn),
     'a refused or spent ENGINE setup has been moved into `Your levels`. It ' +
     'is still the machine\'s — only the register changes, never the owner');
+});
+
+ok('the chart draws only a plan, a position, or nothing', () => {
+  /* THE OPERATOR'S RULE, 8 Aug 2026: "the only time something should display
+     on the chart is if the bot generated a plan, my plan, or active trades."
+
+     Two things violated it, and the second was found live on BTCUSDT 1D:
+
+     · the 14-bar ruler — `last close ± average range`, always LONG, drawn on
+       any chart with nothing else to show. Its own caption said "not a
+       signal, not analysis, and not the engine's opinion" and it was still
+       three horizontal price lines, which this file's other tests spend two
+       hundred lines establishing outweigh any caption;
+     · a SPENT setup. VALIDATED is sticky — setups.py retires a setup only
+       when its zone breaks — so one whose entry filled in Sep 2024 was still
+       the newest VALIDATED setup on BTC 1D in Aug 2026, purely because the
+       three setups since had all expired cleanly and dropped out. The chart
+       drew its bracket with the stop 18% below the live price. */
+  const pick = body('pickSetup');
+  assert(!/kind: 'seeded'/.test(CHART),
+    'the 14-bar ruler is back. A bracket invented from the recent range is ' +
+    'not a plan the bot generated, not the operator\'s, and not a position');
+  assert(!/base\.kind === 'seeded'/.test(CHART),
+    'something still branches on the seeded kind, so a caller can revive it');
+  assert(/const open = valid\.filter\(/.test(pick) &&
+         /setupFate\(f\.setup_id\)\.state/.test(pick),
+    'pickSetup no longer asks what became of each candidate, so a setup the ' +
+    'engine finished with two years ago can become the chart\'s subject again');
+  assert(/s !== 'filled' && s !== 'missed'/.test(pick),
+    'the spent states are no longer excluded by name');
+  assert(!/'refused'/.test(pick.slice(pick.indexOf('const open = valid.filter('),
+                                      pick.indexOf('const preferred'))),
+    'a REFUSED setup is being dropped with the spent ones. It is not spent — ' +
+    'risk may size it once the concurrent slot frees, and it is still the ' +
+    'engine\'s live opinion. It stays, labelled NOT TRADED');
+  assert(/setup = preferredSetupId \? \(preferred \|\| null\) : \(open\[0\] \|\| null\);/
+    .test(pick),
+    'the default pick no longer reads the filtered list, or the explicit ' +
+    'Setup Radar link no longer reaches a finished setup for review');
+  assert(/valid\.find\(f => f\.setup_id === preferredSetupId\)/.test(pick),
+    'an explicitly requested setup_id is resolved against the FILTERED list, ' +
+    'so clicking a finished trade in Setup Radar now reports it missing');
+});
+
+ok('an empty chart says so instead of filling the space', () => {
+  const pick = body('pickSetup');
+  const tail = pick.slice(pick.lastIndexOf('}else{'));
+  assert(/base = null;/.test(tail),
+    'the no-plan branch sets levels again rather than leaving them empty');
+  assert(!/candles\.slice\(-n\)/.test(tail),
+    'the average-range arithmetic is back in the empty branch');
+  assert(/the engine has no plan on this chart/.test(tail),
+    'the empty state no longer says what it is');
+  assert(/Type an entry, stop and target/.test(tail),
+    'the empty state does not say how to trade the market anyway. The ruler ' +
+    'existed to be dragged; deleting it without naming the typed-entry path ' +
+    'removes a capability instead of a false statement');
 });
 
 ok('it NEVER disables or gates the arm control', () => {
