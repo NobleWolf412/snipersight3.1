@@ -336,6 +336,40 @@ trusting an article, rather than guessing at its age.
 Doc and prose changes are invisible to the hook, which only ever looks at code.
 Those need `/graphify --update`, and that one does cost tokens.
 
+## Four roles, and when to call them
+
+`.claude/agents/` holds four bounded roles. They are jobs, not personalities,
+and their output is evidence — it does not overrule this file or the repo.
+
+| Role | When | Writes? |
+|---|---|---|
+| **architect** | before a change that crosses engines, moves an `algo_version`, or has more than one plausible home | no |
+| **contrarian** | before editing, when the *cause* is still uncertain | no |
+| **implementer** | when implementation is delegated. Exactly one, ever | yes |
+| **auditor** | after a change to facts, versions, sizing arithmetic, a safety guard, or a live endpoint | no |
+
+**Call them on task shape, without being asked.** The operator asked for this
+on 2026-08-08. Risk and uncertainty are the trigger, not the size of the diff:
+a one-line change to a sizing constant earns an auditor, and a day of renaming
+does not.
+
+Single agent is still the default. Most work here is one bounded edit against a
+known authority, and delegating that spends tokens and context to re-derive
+what the lead already knows. Delegate when the task is genuinely broad, genuinely
+risky, or genuinely uncertain — and say which role you used and why.
+
+**Never two writers.** Architect, contrarian and auditor are read-only; the
+implementer is the only role that edits, and the lead must not edit alongside
+one. Read-only roles may run in parallel when their questions are independent.
+
+The auditor works best cold: give it the task and the diff, not the reasoning
+that produced them. Its value is that it does not share the implementer's
+assumptions, and explaining the intent hands those assumptions straight over.
+
+There is a parallel Codex copy of these roles at
+`.agents/skills/snipersight-development/` — same four jobs, different runner.
+Keep them in step when either changes.
+
 ## Not part of this project
 
 **Apex**, a persona system that once shared this working directory, was removed
