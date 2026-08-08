@@ -16,10 +16,11 @@ appends one row per engine per symbol per timeframe per scan cycle whether or
 not that run learned anything, and 97.9% of the time it learned nothing.
 
 `--target facts` (superseded derived generations). The spec's §3.3 reference
-test, implemented literally: a derived fact goes only if its `algo_version` is
-not what the engine writes today, it is older than PRUNE_MIN_AGE_DAYS, and no
-PERMANENT fact names it. That last clause is the whole difficulty and it is why
-this is not a `DELETE ... WHERE algo_version != current`.
+test: a derived fact goes only if its `algo_version` is not what the engine
+writes today, the version string appears NOWHERE in engine source (a pinned
+cross-generation read is a reader), the version last RAN at least
+PRUNE_MIN_AGE_DAYS of wall clock ago, and no PERMANENT fact names it. Those
+gates are why this is not a `DELETE ... WHERE algo_version != current`.
 
     python prune.py --target runs                  # dry run, changes nothing
     python prune.py --target runs --apply          # deletes
@@ -31,14 +32,28 @@ Run it from `app/`, like everything else here.
 """
 import argparse
 import json
+import re
 import sqlite3
 import sys
 import time
+from pathlib import Path
 
 from engine import store
 from engine.runlog import get_logger
 
-RETENTION_VERSION = "retention-v0.1-draft"
+RETENTION_VERSION = "retention-v0.2-draft"
+# v0.2: three audited holes closed before the first --apply ever ran.
+# (1) A version string named anywhere in engine source is LIVE — swings.py
+#     pins structure-v0.2 and liq-v0.2 as its scoring inputs, and v0.1
+#     classified both as dead: deleting them would have silently changed
+#     swing tiers under an unmoved swing version, the exact defect the store
+#     exists to prevent, unrecoverably (the v0.2 engines no longer exist).
+# (2) The 30-day guard now measures WALL CLOCK since the version last ran,
+#     via engine_runs — not `confirmed_at`, which is market time and made a
+#     generation bumped away from yesterday 67-76% "old enough" today.
+# (3) The facts path retries through lock contention like the runs path,
+#     and a prune interrupted partway still records a retention fact —
+#     otherwise the deleted rows read as an outage forever.
 
 # The operational debugging window. Nothing reads a run row this old that is
 # not already covered by one of the structural keeps below — but "I am looking
@@ -93,7 +108,7 @@ def plan_runs(con, keep_days: int) -> dict:
         status = 'PASS'
         AND run_at < ?
         AND (run_id = '' OR run_id NOT IN (SELECT run_id FROM temp.keep_runs))
-        AND id NOT IN (SELECT MAX(id) FROM engine_runs GROUP BY engine)
+        AND id NOT IN (SELECT MAX(id) FROM engine_runs GROUP BY engine, algo_version)
     """
     total = con.execute("SELECT COUNT(*) FROM engine_runs").fetchone()[0]
     doomed = con.execute(
@@ -140,6 +155,16 @@ DERIVED_KINDS = {
 # (SPEC-persistence-retention.md §4).
 PRUNE_MIN_AGE_DAYS = 30
 
+# Version strings of the derived kinds, as they appear in source — either
+# quote style, because engine source already uses both. The stems here must
+# cover every DERIVED_KINDS prefix (liq-, ranges-, cycles- differ from their
+# kind names); test_prune_facts pins the invariant that every current
+# version is caught by this scan, which fails on a missing stem or a format
+# drift before either can cost a pinned generation.
+_VERSION_IN_CODE = re.compile(
+    r'["\']((?:swing|zone|structure|liq|regime|ranges|ma|momentum|volatility|'
+    r'volume|cycles)-v[0-9][0-9.]*-[a-z]+)["\']')
+
 
 def current_versions() -> dict:
     """What each derived engine writes right now, read from the engines."""
@@ -149,6 +174,35 @@ def current_versions() -> dict:
         m = importlib.import_module(f"engine.{mod}")
         out[kind] = getattr(m, const)
     return out
+
+
+def versions_named_in_code() -> set:
+    """Every derived-kind version string that appears anywhere in engine
+    source. A version an engine NAMES is a version an engine READS — the
+    current constants trivially, but also deliberate cross-generation pins
+    like swings.PRIOR_STRUCTURE = "structure-v0.2-draft". "Not the current
+    version" is not the same claim as "nothing reads it", and conflating the
+    two was this tool's stop-ship defect.
+    """
+    named = set()
+    for p in (Path(__file__).parent / "engine").glob("*.py"):
+        named |= set(_VERSION_IN_CODE.findall(p.read_text(encoding="utf-8")))
+    return named
+
+
+def _last_ran_at(con, version: str) -> int | None:
+    """Wall-clock time this algo_version last produced a run. engine_runs is
+    the only clock in the store that is not market time — run_at is when the
+    process actually executed. plan_runs deliberately preserves the newest
+    row per (engine, algo_version) so this marker survives a runs prune.
+    """
+    try:
+        row = con.execute(
+            "SELECT MAX(run_at) FROM engine_runs WHERE algo_version=?",
+            (version,)).fetchone()
+    except sqlite3.OperationalError:
+        return None          # no engine_runs table at all -> undatable, held
+    return row[0] if row else None
 
 
 def referenced_zone_ids(con) -> set:
@@ -179,27 +233,55 @@ def referenced_zone_ids(con) -> set:
 
 
 def plan_facts(con, min_age_days: int) -> dict:
-    """Superseded derived generations that nothing permanent points at."""
-    cutoff = int(time.time()) - min_age_days * 86_400
+    """Superseded derived generations that nothing reads and nothing names.
+
+    Four gates, every one fail-closed:
+      current   the version is not what the engine writes today
+      named     the version string appears nowhere in engine source — a
+                cross-generation pin (swings reads structure-v0.2) is a
+                READER, whatever the version tags say
+      age       the version last RAN at least min_age_days of wall clock
+                ago (engine_runs.run_at); a version with no run history at
+                all is held, because "we cannot date it" is not "it is old"
+      reference for zones: no permanent fact names the zone_id
+    """
+    now = int(time.time())
+    window = min_age_days * 86_400
     current = current_versions()
+    named = versions_named_in_code()
     zone_ids = referenced_zone_ids(con)
 
     rows_before = con.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
-    doomed_ids, by_kind, held_by_reference = [], {}, 0
+    doomed_ids, by_kind = [], {}
+    held = {"by_reference": 0, "named_in_code": 0, "too_recent": 0,
+            "undatable": 0}
+    _age_cache: dict = {}
 
     for kind, live_version in current.items():
         rows = con.execute(
             "SELECT id, algo_version, payload FROM facts "
-            "WHERE kind=? AND algo_version!=? AND confirmed_at<?",
-            (kind, live_version, cutoff)).fetchall()
+            "WHERE kind=? AND algo_version!=?",
+            (kind, live_version)).fetchall()
         for fid, version, payload in rows:
+            if version in named:
+                held["named_in_code"] += 1
+                continue
+            if version not in _age_cache:
+                _age_cache[version] = _last_ran_at(con, version)
+            last_ran = _age_cache[version]
+            if last_ran is None:
+                held["undatable"] += 1
+                continue
+            if now - last_ran < window:
+                held["too_recent"] += 1
+                continue
             if kind == "zone" and zone_ids:
                 try:
                     z = json.loads(payload).get("zone_id")
                 except ValueError:
                     z = None
                 if z in zone_ids:
-                    held_by_reference += 1
+                    held["by_reference"] += 1
                     continue
             doomed_ids.append(fid)
             by_kind.setdefault(kind, {}).setdefault(version, 0)
@@ -208,11 +290,12 @@ def plan_facts(con, min_age_days: int) -> dict:
     return {
         "target": "facts",
         "min_age_days": min_age_days,
-        "cutoff": cutoff,
         "rows_before": rows_before,
         "current_versions": current,
+        "versions_named_in_code": sorted(named),
         "referenced_zone_ids": len(zone_ids),
-        "held_by_reference": held_by_reference,
+        "held": held,
+        "held_by_reference": held["by_reference"],
         "deletable": len(doomed_ids),
         "ids": doomed_ids,
         "by_kind": by_kind,
@@ -220,15 +303,32 @@ def plan_facts(con, min_age_days: int) -> dict:
 
 
 def apply_facts(con, plan: dict) -> dict:
+    """Delete in retried batches; ALWAYS leave a retention fact behind.
+
+    The fact is written even when the prune stops partway through lock
+    contention — a store missing rows with no note saying why reads as an
+    outage forever, which this module's own runs path already refused to
+    allow. `partial: true` on the payload is the honest version of stopping.
+    """
     log = get_logger()
     con.execute(f"PRAGMA busy_timeout={LOCK_TIMEOUT_MS}")
     freed_before = _freelist_bytes(con)
-    ids, removed = plan["ids"], 0
+    ids, removed, partial = plan["ids"], 0, False
     for i in range(0, len(ids), BATCH):
         chunk = ids[i:i + BATCH]
-        marks = ",".join("?" * len(chunk))
-        cur = con.execute(f"DELETE FROM facts WHERE id IN ({marks})", chunk)
-        con.commit()
+        try:
+            cur = _retry_locked(
+                con, lambda: con.execute(
+                    "DELETE FROM facts WHERE id IN (%s)"
+                    % ",".join("?" * len(chunk)), chunk))
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc) and "busy" not in str(exc):
+                raise      # readonly store etc. — not resumable, say so by dying
+            partial = True
+            log.warning(f"RETENTION facts paused at {removed:,}/"
+                        f"{len(ids):,}: {exc}. Deleted batches are "
+                        f"committed; re-run to continue.")
+            break
         removed += cur.rowcount
         log.info(f"RETENTION facts: {removed:,}/{len(ids):,} deleted")
 
@@ -236,22 +336,55 @@ def apply_facts(con, plan: dict) -> dict:
     reclaimable = _freelist_bytes(con) - freed_before
     store.checkpoint_wal(con, log=log)
     now = int(time.time())
-    store.insert_fact(
-        con, symbol="PORTFOLIO", tf="ALL", kind="retention",
-        market_time=now, confirmed_at=now, algo_version=RETENTION_VERSION,
-        payload={
-            "target": "facts",
-            "min_age_days": plan["min_age_days"],
-            "rows_before": plan["rows_before"],
-            "rows_after": after,
-            "removed": removed,
-            "held_by_reference": plan["held_by_reference"],
-            "by_kind": {k: sorted(v) for k, v in plan["by_kind"].items()},
-            "reclaimable_bytes": reclaimable,
-        })
-    con.commit()
-    log.info(f"RETENTION facts complete: {removed:,} removed, {after:,} kept")
-    return {"removed": removed, "rows_after": after, "reclaimable_bytes": reclaimable}
+    payload = {
+        "target": "facts",
+        "min_age_days": plan["min_age_days"],
+        "rows_before": plan["rows_before"],
+        "rows_after": after,
+        "removed": removed,
+        "partial": partial,
+        "held": plan["held"],
+        "by_kind": {k: sorted(v) for k, v in plan["by_kind"].items()},
+        "reclaimable_bytes": reclaimable,
+    }
+    # The retention fact goes through the same lock retry as the deletes —
+    # the partial path exists precisely because the database was contended,
+    # and writing the note about that on the still-contended database was
+    # the one write with no retry (audit 2026-08-08). If even the retried
+    # insert fails, the log line below is the fallback record: loud, with
+    # the exact numbers, so the gap never reads as an unexplained outage.
+    try:
+        _retry_locked(con, lambda: store.insert_fact(
+            con, symbol="PORTFOLIO", tf="ALL", kind="retention",
+            market_time=now, confirmed_at=now,
+            algo_version=RETENTION_VERSION, payload=payload))
+    except sqlite3.OperationalError as exc:
+        log.error(f"RETENTION facts: the retention fact itself could not be "
+                  f"written ({exc}). {removed:,} deletions ARE committed; "
+                  f"payload for the record: {json.dumps(payload, sort_keys=True)}")
+    log.info(f"RETENTION facts complete: {removed:,} removed, {after:,} kept"
+             + (" (PARTIAL — re-run to continue)" if partial else ""))
+    return {"removed": removed, "rows_after": after, "partial": partial,
+            "reclaimable_bytes": reclaimable}
+
+
+def _retry_locked(con, op):
+    """Run one write op through lock contention; the scanner is a legitimate
+    concurrent writer, not an error condition."""
+    delay = 0.5
+    for attempt in range(LOCK_RETRIES):
+        try:
+            cur = op()
+            con.commit()
+            return cur
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc) and "busy" not in str(exc):
+                raise
+            con.rollback()
+            if attempt == LOCK_RETRIES - 1:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 8.0)
 
 
 def _delete_batch(con, plan: dict) -> int:
@@ -358,11 +491,15 @@ def _report(plan: dict) -> None:
 
 
 def _report_facts(plan: dict) -> None:
+    held = plan["held"]
     print(f"target        : facts (superseded derived generations)")
-    print(f"min age       : {plan['min_age_days']} days")
+    print(f"min age       : {plan['min_age_days']} days of wall clock since the version last ran")
     print(f"facts now     : {plan['rows_before']:,}")
     print(f"zone ids named by a permanent fact : {plan['referenced_zone_ids']:,}")
-    print(f"held by that reference             : {plan['held_by_reference']:,}")
+    print(f"held — named in engine source      : {held['named_in_code']:,}")
+    print(f"held — ran within the window       : {held['too_recent']:,}")
+    print(f"held — no run history to date them : {held['undatable']:,}")
+    print(f"held — referenced by a permanent   : {held['by_reference']:,}")
     print(f"would delete  : {plan['deletable']:,} "
           f"({plan['deletable'] / max(plan['rows_before'], 1) * 100:.1f}%)")
     if plan["by_kind"]:

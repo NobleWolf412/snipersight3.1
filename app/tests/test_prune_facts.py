@@ -30,21 +30,40 @@ DAY = 86_400
 
 class PruneFactsCase(unittest.TestCase):
     def setUp(self):
+        from engine import runlog
         self.con = sqlite3.connect(":memory:")
         self.con.executescript(store.SCHEMA)
+        self.con.executescript(runlog.RUNS_SCHEMA)
         self.now = int(time.time())
         self.live = prune.current_versions()
 
     def tearDown(self):
         self.con.close()
 
-    def fact(self, kind, version, *, age_days=90, payload=None, symbol="BTC-USD"):
+    def ran(self, version, *, engine="test", days_ago=90):
+        """Record that this algo_version last RAN this long ago. The age gate
+        measures wall clock via engine_runs, never market time."""
+        self.con.execute(
+            "INSERT INTO engine_runs (engine, algo_version, symbol, tf,"
+            " n_inputs, n_new_facts, duration_ms, run_at) "
+            "VALUES (?,?,?,?,0,0,1,?)",
+            (engine, version, "BTC-USD", "1H",
+             self.now - int(days_ago * DAY)))
+        self.con.commit()
+
+    def fact(self, kind, version, *, age_days=90, payload=None, symbol="BTC-USD",
+             last_ran_days_ago=None):
         at = self.now - int(age_days * DAY)
         store.insert_fact(
             self.con, symbol=symbol, tf="1H", kind=kind,
             market_time=at, confirmed_at=at, algo_version=version,
             payload=payload or {"n": age_days})
         self.con.commit()
+        # Default: give the version run history matching the fact's age, so
+        # tests about OTHER gates aren't silently held by the age gate.
+        self.ran(version, days_ago=(last_ran_days_ago
+                                    if last_ran_days_ago is not None
+                                    else age_days))
         # content_hash, not rowid: SQLite reuses a rowid the moment the prune
         # frees it, so the retention fact this very prune writes can land on
         # the id of the row it just deleted and read back as "still there".
@@ -73,10 +92,65 @@ class PruneFactsCase(unittest.TestCase):
         self.assertNotIn(doomed, self.alive())
 
     def test_a_recent_superseded_generation_is_held(self):
-        """An A/B loser is evidence while the comparison is live (spec §4)."""
-        young = self.fact("swing", "swing-v0.2-draft", age_days=3)
+        """An A/B loser is evidence while the comparison is live (spec §4).
+        Age is WALL CLOCK since the version last ran — the original
+        market-time guard made a generation bumped away yesterday 67-76%
+        eligible today, because its facts describe old candles."""
+        young = self.fact("swing", "swing-v0.2-draft",
+                          age_days=200, last_ran_days_ago=3)
         self.prune_facts(min_age_days=30)
         self.assertIn(young, self.alive())
+
+    def test_a_version_with_no_run_history_is_held_not_guessed_old(self):
+        """'We cannot date it' is not 'it is old'. Fail closed."""
+        undatable = self.fact("swing", "swing-v0.2-draft",
+                              age_days=400, last_ran_days_ago=None)
+        self.con.execute("DELETE FROM engine_runs")   # no history at all
+        self.con.commit()
+        plan = self.prune_facts()
+        self.assertIn(undatable, self.alive())
+        self.assertEqual(plan["held"]["undatable"], 1)
+
+    def test_a_version_pinned_in_engine_source_is_never_deleted(self):
+        """The stop-ship finding. swings.py reads structure-v0.2-draft and
+        liq-v0.2-draft by name on every scan cycle — 'not the current
+        version' is not 'nothing reads it', and deleting those rows would
+        change swing tiers under an unmoved swing tag, unrecoverably."""
+        for version, kind in (("structure-v0.2-draft", "structure"),
+                              ("liq-v0.2-draft", "liquidity")):
+            with self.subTest(version=version):
+                pinned = self.fact(kind, version, age_days=400)
+                plan = self.prune_facts()
+                self.assertIn(pinned, self.alive(),
+                              f"{version} is named in engine source")
+                self.assertGreater(plan["held"]["named_in_code"], 0)
+
+    def test_the_pin_scan_actually_sees_the_swings_pins(self):
+        named = prune.versions_named_in_code()
+        self.assertIn("structure-v0.2-draft", named)
+        self.assertIn("liq-v0.2-draft", named)
+
+    def test_every_current_version_is_visible_to_the_pin_scan(self):
+        """The invariant that keeps the scan honest as kinds are added: every
+        DERIVED_KINDS current version is itself a double- or single-quoted
+        literal in engine source, so if the scan cannot see one, either a
+        stem is missing from the regex or the version format drifted —
+        both of which would blind the named-in-code gate to a future pin."""
+        named = prune.versions_named_in_code()
+        for kind, version in prune.current_versions().items():
+            with self.subTest(kind=kind):
+                self.assertIn(version, named,
+                              f"{kind}'s own current version is invisible "
+                              f"to versions_named_in_code — fix the regex "
+                              f"before trusting the named gate")
+
+    def test_a_single_quoted_pin_is_seen(self):
+        """engine source already mixes quote styles (factorstats has
+        single-quoted version literals); a pin spelled 'structure-v0.2-draft'
+        must be as protective as the double-quoted one."""
+        import re as _re
+        self.assertTrue(_re.search(prune._VERSION_IN_CODE,
+                                   "PRIOR_X = 'structure-v0.2-draft'"))
 
     def test_current_versions_are_read_from_the_engines_not_sorted(self):
         """`v0.9` sorts above `v0.13`. Sorting version strings would delete the
@@ -170,6 +244,21 @@ class PruneFactsCase(unittest.TestCase):
         p = json.loads(row[0])
         self.assertEqual("facts", p["target"])
         self.assertEqual(1, p["removed"])
+
+    def test_this_suite_cannot_reach_the_live_store(self):
+        """The mitigation CLAUDE.md documents for suites that exercise
+        dangerous machinery: assert the property about the suite itself.
+        store.connect with no path argument opens the operator's real
+        database, and one future test writing that turns `unittest discover`
+        into a mass delete on the live book."""
+        import re
+        from pathlib import Path
+        src = Path(__file__).read_text(encoding="utf-8")
+        bare = re.findall(r"store\.connect\(\s*\)", src)
+        self.assertEqual([], bare,
+                         "a prune test opened the live store — every "
+                         "connection here must name an explicit temp path "
+                         "or use :memory:")
 
     def test_candles_are_never_touched(self):
         self.con.execute(

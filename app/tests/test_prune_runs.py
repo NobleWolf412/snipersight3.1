@@ -88,6 +88,30 @@ class PruneRunsCase(unittest.TestCase):
         self.assertIn(only_zones, alive, "an engine's ONLY run is also its newest")
         self.assertNotIn(old_swings, alive)
 
+    def test_the_newest_run_of_each_version_survives_not_just_each_engine(self):
+        """Load-bearing for the FACTS prune, not for this one: its 30-day
+        guard dates a superseded version by MAX(run_at) in this table. A
+        GROUP BY that collapses back to engine-only would delete a retired
+        version's last run rows, the version's clock would fall back to some
+        far older surviving row, and the facts prune would date it weeks too
+        old — the market-time defect resurrected through a side door."""
+        import sqlite3 as _sq
+        v1_last = self.con.execute(
+            "INSERT INTO engine_runs (engine, algo_version, symbol, tf,"
+            " n_inputs, n_new_facts, duration_ms, run_at) "
+            "VALUES ('swings','swings-v0.1','BTC-USD','1H',0,0,1,?)",
+            (self.now - 100 * DAY,)).lastrowid
+        self.con.execute(
+            "INSERT INTO engine_runs (engine, algo_version, symbol, tf,"
+            " n_inputs, n_new_facts, duration_ms, run_at) "
+            "VALUES ('swings','swings-v0.2','BTC-USD','1H',0,0,1,?)",
+            (self.now - 50 * DAY,))
+        self.con.commit()
+        self.prune()
+        self.assertIn(v1_last, self.surviving_ids(),
+                      "the retired version's newest run is its wall clock; "
+                      "deleting it silently re-dates the facts prune")
+
     def test_runs_inside_the_keep_window_survive(self):
         recent = self.add_run(age_days=2)
         old = self.add_run(age_days=2)          # same engine, so neither is "newest"

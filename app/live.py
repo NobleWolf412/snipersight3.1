@@ -507,7 +507,11 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
                           + json.dumps(reconciliation, sort_keys=True))
         routed = autotrader.run(con, broker=private_broker)
         if routed["routed"] or routed["refused"]:
-            log.info(f"autotrader {routed['mode']}: {len(routed['routed'])} routed, "
+            # AUTOTRADER is an evidence prefix (runlog.AUDIT_PREFIXES): this
+            # line is the system's own record of sending orders to a venue,
+            # and for a while it was the ONLY trace at any level — INFO,
+            # unmatched by any prefix, discarded on the first log rotation.
+            log.info(f"AUTOTRADER {routed['mode']}: {len(routed['routed'])} routed, "
                      f"{len(routed['refused'])} refused")
     except Exception as exc:
         # Fail closed without taking the data and paper research loop down.

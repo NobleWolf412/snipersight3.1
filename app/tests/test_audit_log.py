@@ -116,6 +116,55 @@ class AuditStreamCase(unittest.TestCase):
         self.assertEqual("", self.audit())
         self.assertIn("cycle done", self.hot())
 
+    def test_a_failed_audit_handler_leaves_no_handler_attached(self):
+        """Attach-as-you-build leaked one engine.log handler per get_logger
+        retry when the audit file was unopenable — read-only being a natural
+        state for a file labelled evidence. Every retry then multiplied
+        writes and every RunRecorder exit raised after its commit."""
+        import unittest.mock as mock
+        lg = logging.getLogger("snipersight")
+        before = len(lg.handlers)
+        real_handler = logging.FileHandler
+
+        def hot_ok_audit_fails(path, *a, **kw):
+            # The leak scenario, precisely: the HOT handler constructs fine,
+            # the AUDIT handler fails. Failing the first construction too
+            # would pass under the old attach-as-you-build code and pin
+            # nothing (audit 2026-08-08, finding 3).
+            if Path(path).name == "engine-audit.log":
+                raise OSError("audit file is read-only")
+            return real_handler(path, *a, **kw)
+
+        with mock.patch.object(runlog.logging, "FileHandler",
+                               side_effect=hot_ok_audit_fails):
+            for _ in range(3):
+                runlog._logger = None
+                with self.assertRaises(OSError):
+                    runlog.get_logger()
+        self.assertEqual(before, len(lg.handlers),
+                         "a failed audit handler must leave NOTHING attached "
+                         "— one leaked hot handler per retry multiplies "
+                         "every line and 500s every write endpoint")
+        runlog._logger = None          # let the next test rebuild cleanly
+
+    def test_an_unrenderable_message_is_kept_not_raised(self):
+        """Handler.handle runs filters outside emit()'s try/except, so a
+        filter that raises turns a bad log line in a write endpoint into a
+        500. It must neither raise nor lose the record."""
+        class _Hostile:
+            def __str__(self):
+                raise RuntimeError("unrenderable")
+        # propagate=False for this call only: pytest's own capture handler
+        # sits on the root logger and re-raises formatting errors by design,
+        # which would test the harness rather than our filter.
+        self.log.propagate = False
+        try:
+            self.log.info(_Hostile())          # must not raise
+        except RuntimeError:
+            self.fail("a bad log message escaped into the caller")
+        finally:
+            self.log.propagate = True
+
     def test_the_evidence_stream_is_a_subset_never_a_replacement(self):
         """Everything in the audit file is also in the hot file. The split is
         about what survives rotation, not about routing lines away."""
@@ -136,36 +185,59 @@ class AuditPrefixCoverageCase(unittest.TestCase):
     the call sites rather than trusted.
     """
 
-    SERVER = Path(__file__).resolve().parent.parent / "server.py"
-    # Operator-action logging lives in the endpoints; these are the INFO lines
-    # in server.py that are NOT operator actions and are heartbeat/among-facts.
-    NOT_EVIDENCE = ("announce filter", "live loop start", "cycle done")
+    APP = Path(__file__).resolve().parent.parent
+    # Files whose INFO lines can be write actions, and the lines in each that
+    # are deliberately NOT evidence (heartbeat, already-in-facts telemetry).
+    # An entry here is a decision, not a default — the test forces every new
+    # INFO line into one list or the other.
+    SCANNED = {
+        "server.py": ("announce filter", "live loop start", "cycle done"),
+        "live.py": ("live loop start", "cycle done", "cycle", "sleeping",
+                    "awake", "WAL checkpoint", "announce filter",
+                    "already announced", "UNIVERSE onboarded", "SETUP FIRED",
+                    "import ", "backfill", "history probe", "universe refresh",
+                    "drift ", "scan "),
+        "prune.py": (),
+    }
+    # The audit that motivated this widening found the original test caught
+    # one of three real spellings. All three are matched now:
+    #   get_logger().info(f"...")     get_logger().info(f'...')
+    #   log = get_logger() ... log.info("...")
+    _CALL = re.compile(r"(?:get_logger\(\)|log(?:ger)?)\s*\.\s*info\(")
+    _LIT = re.compile(r'''f?("([^"]*)"|'([^']*)')''')
 
-    def test_every_info_line_in_server_py_is_classified(self):
-        src = self.SERVER.read_text(encoding="utf-8", errors="replace")
-        # Grab the first string literal that follows each get_logger().info(
-        # call, then the literal prefix before any f-string placeholder.
+    def test_every_info_line_that_could_be_evidence_is_classified(self):
         uncovered = []
-        for m in re.finditer(r"get_logger\(\)\.info\(", src):
-            tail = src[m.end():m.end() + 400]
-            lit = re.search(r'f?"([^"]*)"', tail)
-            if not lit:
-                continue
-            head = lit.group(1).split("{")[0].strip()
-            if not head or len(head) < 3:
-                continue
-            if head.startswith(runlog.AUDIT_PREFIXES):
-                continue
-            if head.startswith(self.NOT_EVIDENCE):
-                continue
-            uncovered.append(head)
+        for name, not_evidence in self.SCANNED.items():
+            src = (self.APP / name).read_text(encoding="utf-8", errors="replace")
+            for m in self._CALL.finditer(src):
+                lit = self._LIT.search(src[m.end():m.end() + 400])
+                if not lit:
+                    continue
+                head = (lit.group(2) or lit.group(3) or "").split("{")[0].strip()
+                if not head or len(head) < 3:
+                    continue
+                if head.startswith(runlog.AUDIT_PREFIXES):
+                    continue
+                if head.lower().startswith(tuple(p.lower() for p in not_evidence)):
+                    continue
+                uncovered.append(f"{name}: {head!r}")
         self.assertEqual(
             [], uncovered,
-            "server.py logs these INFO lines and engine/runlog.py does not "
-            "classify them. If it is an operator write action add its prefix "
-            "to runlog.AUDIT_PREFIXES; if it is heartbeat add it to "
-            "NOT_EVIDENCE here. Leaving it unclassified means it is discarded "
-            "on rotation: " + repr(uncovered))
+            "these INFO lines are neither an evidence prefix nor declared "
+            "heartbeat. If one is a write action add its prefix to "
+            "runlog.AUDIT_PREFIXES; if it is heartbeat add it to SCANNED "
+            "here. Unclassified means silently discarded on rotation: "
+            + repr(uncovered))
+
+    def test_the_autotrader_routing_line_is_evidence(self):
+        """The system sending real orders to a venue is a bigger write action
+        than any manual arm, and for a while its log line was the only trace
+        at any level — INFO, unmatched, gone on first rotation."""
+        self.assertIn("AUTOTRADER", runlog.AUDIT_PREFIXES)
+        live = (self.APP / "live.py").read_text(encoding="utf-8")
+        self.assertIn('f"AUTOTRADER {', live,
+                      "live.py stopped logging routing under the prefix")
 
 
 if __name__ == "__main__":

@@ -20,14 +20,21 @@ LOG_PATH = Path(__file__).resolve().parent.parent / "data" / "engine.log"
 # controls it also discards operator actions and degraded-path warnings at the
 # same rate, and those exist NOWHERE else. They leave the hot stream here,
 # before rotation could ever apply to them. Measured and reasoned in
-# docs/SPEC-log-retention.md; this file grows ~2 MB/year and is never pruned.
+# docs/SPEC-log-retention.md; ~45-77 MB/year at the observed warning rate
+# (an earlier ~2 MB/year figure here was wrong by an order of magnitude —
+# audit 2026-08-08), never pruned. tests/__init__.py redirects this path for
+# the whole test process: the suites drive the real app, and they filled the
+# real file with 78 fixture MANUAL ARMs in its first twelve hours.
 AUDIT_PATH = Path(__file__).resolve().parent.parent / "data" / "engine-audit.log"
 
-# INFO lines that are evidence rather than heartbeat. Every one is an operator
-# write action — the irreversible things done to a real book. WARNING and above
-# are carried regardless, so a new degraded path needs no entry here; a new
-# *operator action* does. `tests/test_audit_log.py` fails if a
-# `get_logger().info(...)` in server.py opens with a prefix this list misses.
+# INFO lines that are evidence rather than heartbeat. Operator write actions —
+# the irreversible things done to a real book — plus the autotrader's routing
+# line, which is a LARGER write action than any manual one: it is the system
+# sending real orders to a venue, and it is the only trace of that at any log
+# level. WARNING and above are carried regardless, so a new degraded path
+# needs no entry here; a new *write action* does. `tests/test_audit_log.py`
+# fails if an INFO call in server.py or live.py opens with a prefix this list
+# misses.
 AUDIT_PREFIXES = (
     "CREDENTIAL",
     "MANUAL ARM",
@@ -38,6 +45,7 @@ AUDIT_PREFIXES = (
     "SETTINGS CHANGED",
     "ANALYSE",
     "RETENTION",
+    "AUTOTRADER",
 )
 
 
@@ -47,7 +55,15 @@ class _AuditFilter(logging.Filter):
     def filter(self, record) -> bool:
         if record.levelno >= logging.WARNING:
             return True
-        return record.getMessage().startswith(AUDIT_PREFIXES)
+        # Handler.handle runs filters OUTSIDE the try/except that guards
+        # emit(), so an exception here would escape into the caller — a bad
+        # log line in a write endpoint becoming a 500. Logging must stay a
+        # non-fatal path: an unrenderable message errs toward KEPT, because
+        # over-capture costs bytes and a lost operator action costs evidence.
+        try:
+            return record.getMessage().startswith(AUDIT_PREFIXES)
+        except Exception:
+            return True
 
 # The index exists for ONE reader: `/api/overview` asks for the last run of
 # each engine, and this table is append-only and enormous — 3,038,265 rows at
@@ -91,21 +107,26 @@ def get_logger() -> logging.Logger:
     global _logger
     if _logger is None:
         LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
         lg = logging.getLogger("snipersight")
         lg.setLevel(logging.DEBUG)
+        # Construct EVERY handler before attaching ANY. Attach-as-you-build
+        # leaked one engine.log handler per retry when the audit file was
+        # unopenable (read-only is a natural thing to make an evidence file)
+        # — each RunRecorder exit then raised after its DB commit, 500ing
+        # every write endpoint while duplicate handlers piled up.
         fh = logging.FileHandler(LOG_PATH, encoding="utf-8")
         fh.setFormatter(logging.Formatter(
             "%(asctime)s %(levelname)-5s %(message)s", "%Y-%m-%d %H:%M:%S"))
-        lg.addHandler(fh)
         ah = logging.FileHandler(AUDIT_PATH, encoding="utf-8")
         ah.setFormatter(logging.Formatter(
             "%(asctime)s %(levelname)-5s %(message)s", "%Y-%m-%d %H:%M:%S"))
         ah.addFilter(_AuditFilter())
-        lg.addHandler(ah)
         sh = logging.StreamHandler()
         sh.setFormatter(logging.Formatter("%(levelname)-5s %(message)s"))
         sh.setLevel(logging.INFO)
-        lg.addHandler(sh)
+        for h in (fh, ah, sh):
+            lg.addHandler(h)
         _logger = lg
     return _logger
 
