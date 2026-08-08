@@ -26,7 +26,12 @@ Safety drills are staged one at a time in TESTNET with the exact acknowledgement
 `RUN TESTNET SAFETY DRILL: <name>`. Staging does not inject a fault or award a
 pass. A pass is written only when the corresponding real code path observes the
 disconnect, restart recovery, stale-state block, rejection, partial fill,
-protective stop, or kill-switch block.
+protective stop, or kill-switch block — and each drill names the evidence its
+pass requires (`automation._DRILL_EVIDENCE`), failing closed when a field is
+missing. Restart specifically requires the process boot id recorded at
+submission to differ from the one observed at recovery: resolving a lost
+response inside one process is disconnect recovery, not a restart, and until
+automation-v0.5 it wrongly passed this drill.
 
 `closed candles → market context → playbook → opportunity → risk decision → execution plan → broker → fill → protected position → exit → reconciliation`
 

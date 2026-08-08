@@ -15,7 +15,12 @@ from .contracts import (AutomationMode, AutomationStatus, DecisionReason,
                         CONTRACT_VERSION)
 
 
-AUTOMATION_VERSION = "automation-v0.4-draft"
+AUTOMATION_VERSION = "automation-v0.5-draft"
+# v0.5: every drill now names and enforces the evidence a pass requires; only
+# `disconnect` had requirements before, so the restart drill passed on any
+# lost-response recovery inside a single process — one of seven gates on
+# TESTNET -> LIVE, satisfiable without a restart. Fail-closed: an observation
+# missing its required fields completes nothing.
 DEFAULT_MODE = AutomationMode.PAPER
 REQUIRED_SAFETY_DRILLS = {"disconnect", "restart", "stale_data",
                           "rejected_order", "partial_fill",
@@ -28,6 +33,31 @@ _DRILL_EVENTS = {
     "PARTIAL_FILL_PROTECTED": "partial_fill",
     "PROTECTIVE_STOP_CONFIRMED": "protective_stop",
     "KILL_SWITCH_BLOCKED": "kill_switch",
+}
+
+# What a PASS must prove, per drill. A drill with no stated evidence is a
+# drill any adjacent code path can satisfy by accident — restart was passed
+# by ordinary lost-response recovery until the boot-id requirement below.
+# `None` means the field must merely be present and truthy; a callable is a
+# predicate on the whole observation.
+_DRILL_EVIDENCE: dict = {
+    "restart": {
+        "intent_id": None, "client_order_id": None,
+        # The submission and the recovery must come from different
+        # processes — that difference IS the restart.
+        "_check": lambda ev: (ev.get("submitting_boot_id") and
+                              ev.get("recovering_boot_id") and
+                              ev["submitting_boot_id"] != ev["recovering_boot_id"]),
+    },
+    "partial_fill": {
+        "intent_id": None,
+        "_check": lambda ev: Decimal(str(ev.get("filled_quantity") or "0")) > 0,
+    },
+    "protective_stop": {"position_id": None, "protection_client_id": None},
+    "kill_switch": {"intent_id": None, "mode": None},
+    "rejected_order": {"intent_id": None},
+    "stale_data": {"environment": None, "observed_at": None},
+    # disconnect keeps its dedicated two-phase check in observe_safety_event.
 }
 
 # Deliberately false in the first implementation.  Evidence and operational
@@ -276,6 +306,19 @@ def observe_safety_event(con, event: str, evidence: dict) -> bool:
         if (evidence.get("intent_id") != failure.get("intent_id") or
                 evidence.get("client_order_id") != failure.get("client_order_id")):
             return False
+    required = _DRILL_EVIDENCE.get(drill)
+    if required:
+        for field, _unused in required.items():
+            if field == "_check":
+                continue
+            if not evidence.get(field):
+                return False
+        check = required.get("_check")
+        try:
+            if check is not None and not check(evidence):
+                return False
+        except Exception:
+            return False          # malformed evidence proves nothing
     now = int(time.time())
     payload = {"drill": drill, "passed": True, "observed_event": event,
                "evidence": {"observation": evidence, "prior": prior_evidence},

@@ -6,6 +6,7 @@ the state, score components, exact prices and reasons already reconciled here.
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import time
 from decimal import Decimal, InvalidOperation
@@ -16,7 +17,14 @@ from .contracts import (DecisionReason, EntryRecommendation, FactorGrade,
                         TopDownDecision, TopDownState, TradeSetup, to_wire)
 
 
-OPPORTUNITY_VERSION = "opportunity-v0.2-draft"
+OPPORTUNITY_VERSION = "opportunity-v0.3-draft"
+# v0.3: real custody overlays the paper lifecycle. The read model derived
+# ORDER_WORKING / POSITION_OPEN / CLOSED from simulator facts only, so with a
+# real testnet position open and no matching paper exec fact, /api/operations
+# said "No setup currently meets entry rules. Scanning continues." — a false
+# record on the one surface the operator trusts. Custody state's OWNER stays
+# the outbox and managed_positions; this module reads it, exactly as it reads
+# risk facts. A PAPER-only database produces byte-identical output.
 
 
 def _decimal(value, default="0") -> Decimal:
@@ -284,6 +292,39 @@ def _latest_by_setup(con, kind: str, version: str, since: int) -> dict[str, dict
     return out
 
 
+def _private_custody_by_setup(con) -> dict[str, tuple]:
+    """Real-venue lifecycle state per setup_id, from the custody authority.
+
+    Latest outbox row per setup (several intents can share a setup when the
+    quantity changed), overlaid with the managed position keyed by intent_id.
+    Only TESTNET/LIVE rows — paper stays with the simulator's account of
+    itself. Missing tables mean no private path has ever run: empty overlay.
+    """
+    try:
+        rows = con.execute(
+            "SELECT o.setup_id, o.state, m.state, "
+            "COALESCE(m.updated_at, o.updated_at) "
+            "FROM execution_outbox o "
+            "LEFT JOIN managed_positions m ON m.position_id = o.intent_id "
+            "WHERE o.mode IN ('TESTNET','LIVE') "
+            "ORDER BY o.updated_at, o.id").fetchall()
+    except Exception:
+        return {}
+    overlay: dict[str, tuple] = {}
+    for setup_id, outbox_state, custody_state, updated_at in rows:
+        # last row per id wins. managed_positions speaks for the position
+        # (OPEN / UNPROTECTED / EMERGENCY_CLOSE / CLOSED); the outbox speaks
+        # for the order (SUBMITTING through LIFECYCLE_COMPLETE).
+        if custody_state in ("OPEN", "UNPROTECTED", "EMERGENCY_CLOSE"):
+            overlay[setup_id] = (OpportunityState.POSITION_OPEN, updated_at)
+        elif custody_state == "CLOSED" or outbox_state in (
+                "LIFECYCLE_COMPLETE", "CUSTODY_CLOSED"):
+            overlay[setup_id] = (OpportunityState.CLOSED, updated_at)
+        elif outbox_state in ("SUBMITTED", "PARTIALLY_FILLED", "SUBMITTING"):
+            overlay[setup_id] = (OpportunityState.ORDER_WORKING, updated_at)
+    return overlay
+
+
 def list_candidates(con, *, include_history: bool = True, now: int | None = None) -> list[dict]:
     observed_at = int(time.time()) if now is None else int(now)
     baseline = store.get_active_baseline(con)
@@ -292,12 +333,29 @@ def list_candidates(con, *, include_history: bool = True, now: int | None = None
     risk_by_id = _latest_by_setup(con, "risk", risk.RISK_VERSION, since)
     order_by_id = _latest_by_setup(con, "order", execsim.EXEC_VERSION, since)
     exec_by_id = _latest_by_setup(con, "exec", execsim.EXEC_VERSION, since)
+    custody = _private_custody_by_setup(con)
     items = []
     for sid, payload in setups_by_id.items():
         payload.setdefault("setup_id", sid)
         item = candidate(payload, risk_fact=risk_by_id.get(sid),
                          order=order_by_id.get(sid), execution=exec_by_id.get(sid),
                          now=observed_at)
+        # Real custody outranks the simulator's story about the same setup:
+        # a real order or position IS the lifecycle state, whatever the
+        # paper book thinks. The overlay never touches READY, so the
+        # autotrader's dispatch condition is unaffected.
+        #
+        # Except a TERMINAL overlay older than the setup fact itself.
+        # setup_id embeds zone and version, so a persistent zone retested
+        # weeks later re-validates under the SAME id — and an old completed
+        # lifecycle stamping the fresh candidate CLOSED would hide a valid,
+        # tradeable setup forever (audit 2026-08-08). A live order or open
+        # position overlays unconditionally: it is a present-tense fact.
+        if sid in custody:
+            _cstate, _cts = custody[sid]
+            if (_cstate != OpportunityState.CLOSED or
+                    int(_cts or 0) >= int(payload.get("confirmed_at") or 0)):
+                item = dataclasses.replace(item, state=_cstate)
         if not include_history and item.state in {
                 OpportunityState.CLOSED, OpportunityState.EXPIRED,
                 OpportunityState.CANCELLED, OpportunityState.REJECTED}:

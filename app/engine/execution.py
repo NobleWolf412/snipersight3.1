@@ -19,8 +19,26 @@ from .contracts import (AutomationMode, BrokerExecution, BrokerOrder, DecisionRe
                         RiskDecision, to_wire)
 
 
-EXECUTION_CORE_VERSION = "execution-core-v0.5-draft"
+EXECUTION_CORE_VERSION = "execution-core-v0.6-draft"
+# v0.6: three audited holes in the private path closed. (1) A resting private
+# entry now honours intent.expires_at — monitor_private cancels the remainder
+# at the venue; before this only the PAPER monitor read expiry, so an expired
+# setup's PostOnly order rested forever and could fill days later against a
+# dead setup's stop. (2) A definitive pre-wire refusal (validate_plan /
+# enforce_one_way / set_leverage / a 4xx on POST — none of which create an
+# order) records SUBMIT_FAILED and is retryable; before, the row stuck at
+# SUBMITTING forever, and silently. Ambiguous failures keep the old, correct
+# never-resubmit behaviour. (3) RESTART_RECOVERED requires the process boot
+# id recorded at SUBMITTING to differ from the current one — resolving a
+# lost response inside one process is not a restart, and it was passing the
+# restart promotion drill.
 PAPER_MAX_HOLDING_BARS = 100
+
+# One id per process, minted at import. Recorded into every SUBMITTING event
+# so recovery can prove "a different process finished this" — the evidence
+# the restart drill exists to demand.
+import uuid as _uuid
+PROCESS_BOOT_ID = _uuid.uuid4().hex
 
 
 class Broker(Protocol):
@@ -265,8 +283,19 @@ def monitor_private(con, broker) -> dict:
             "intent_id": intent_id, "client_order_id": order.client_order_id})
         if _ == "SUBMITTING":
             _event(con, intent_id, "SUBMITTED", to_wire(order))
-            automation.observe_safety_event(con, "RESTART_RECOVERED", {
-                "intent_id": intent_id, "client_order_id": order.client_order_id})
+            # A restart claim needs restart evidence: the boot id recorded
+            # when SUBMITTING was written must belong to a DIFFERENT process
+            # than the one recovering it. Resolving a lost response inside
+            # one process is disconnect recovery, and it was passing the
+            # restart promotion drill without any restart. Legacy rows with
+            # no boot id earn no pass — fail closed.
+            submitting_boot = str(submitted.get("boot_id") or "")
+            if submitting_boot and submitting_boot != PROCESS_BOOT_ID:
+                automation.observe_safety_event(con, "RESTART_RECOVERED", {
+                    "intent_id": intent_id,
+                    "client_order_id": order.client_order_id,
+                    "submitting_boot_id": submitting_boot,
+                    "recovering_boot_id": PROCESS_BOOT_ID})
         local = con.execute(
             "SELECT quantity FROM managed_positions WHERE position_id=?",
             (intent_id,)).fetchone()
@@ -290,10 +319,57 @@ def monitor_private(con, broker) -> dict:
                 symbol=order.symbol, quantity=delta, price=fill_price,
                 fee=delta_fee, occurred_at=order.updated_at)
             positions.apply_fill(con, broker, plan, fill)
+        # Expiry, honoured on the private path the way the paper monitor has
+        # always honoured it. (Paper compares candle open_ts; here it is wall
+        # clock — a small, deliberate skew, because a resting venue order has
+        # no candle.) Any unfilled remainder past expires_at is cancelled at
+        # the venue; fills already recorded above are kept. The failure modes
+        # are loud on purpose: a cancel that races a fill 4xxes, the audit
+        # event says so, and the next poll sees whichever won.
         status = str(order.status).upper().replace("_", "")
+        _active = status not in {"FILLED", "DONE", "CANCELED", "CANCELLED",
+                                 "REJECTED", "EXPIRED"}
+        _total = order.quantity or plan.risk.quantity
+        if (plan.intent.expires_at and _active
+                and int(time.time()) >= int(plan.intent.expires_at)
+                and order.filled_quantity < _total):
+            _cancel_id = (order.client_order_id or
+                          str(submitted.get("client_order_id") or ""))
+            _pre_cancel_fill = order.filled_quantity
+            try:
+                order = broker.cancel(plan.intent.symbol, _cancel_id)
+                # A cancel ack that omits the cumulative fill must not erase
+                # one we already saw — mapping a partially-filled entry to
+                # ENTRY_CANCELED would drop it from this monitor's scan set
+                # while custody still holds the fill.
+                if order.filled_quantity < _pre_cancel_fill:
+                    from dataclasses import replace as _dc_replace
+                    order = _dc_replace(order,
+                                        filled_quantity=_pre_cancel_fill)
+                _audit_event(con, intent_id, "EXPIRY_CANCELLED", {
+                    "expires_at": int(plan.intent.expires_at),
+                    "filled_quantity": str(order.filled_quantity)})
+            except Exception as exc:
+                from .phemex_private import AmbiguousSubmission, PhemexError
+                if isinstance(exc, AmbiguousSubmission):
+                    refused.append({"intent_id": intent_id,
+                                    "reason": "expiry cancel ambiguous; retrying next cycle"})
+                    continue
+                if isinstance(exc, PhemexError):
+                    _audit_event(con, intent_id, "EXPIRY_CANCEL_FAILED", {
+                        "reason": str(exc)[:400]})
+                    from .runlog import get_logger
+                    get_logger().warning(
+                        f"expiry cancel failed for {intent_id}: {exc}")
+                else:
+                    raise
+            status = str(order.status).upper().replace("_", "")
         if status in {"FILLED", "DONE"}:
             next_state = "ENTRY_FILLED"
         elif order.filled_quantity > 0:
+            # Includes a partially-filled entry whose remainder was just
+            # cancelled: it stays PARTIALLY_FILLED until lifecycle qualifies
+            # the exit — pre-existing custody behaviour, deliberately kept.
             next_state = "PARTIALLY_FILLED"
         elif status in {"CANCELED", "CANCELLED", "REJECTED", "EXPIRED"}:
             next_state = "ENTRY_" + status
@@ -310,6 +386,14 @@ def monitor_private(con, broker) -> dict:
                 "intent_id": intent_id, "raw_code": order.raw_code})
         updated.append({"intent_id": intent_id, "state": next_state,
                         "filled_quantity": str(order.filled_quantity)})
+    if refused:
+        # A monitor that cannot resolve an order is a degraded path, and the
+        # house rule is that degraded paths are audible. live.py used to
+        # discard this return entirely.
+        from .runlog import get_logger
+        get_logger().warning(
+            f"private monitor: {len(refused)} intent(s) unresolved — " +
+            "; ".join(f"{r['intent_id']}: {r['reason']}" for r in refused[:5]))
     return {"updated": updated, "refused": refused,
             "environment": broker.environment,
             "version": EXECUTION_CORE_VERSION}
@@ -512,8 +596,11 @@ class Coordinator:
                 f"intent mode {mode.value} does not match active mode {state.mode.value}")
         # The outbox state is the retry authority. Once an intent has crossed a
         # routing boundary, an identical scan/retry returns that recorded state
-        # and must never call the broker a second time.
-        if queued["state"] not in {"PENDING", "SUBMITTING"}:
+        # and must never call the broker a second time. SUBMIT_FAILED is the
+        # one deliberate exception: it is only ever written for failures
+        # proven to have happened BEFORE the wire, so no order can exist and
+        # a retry is safe.
+        if queued["state"] not in {"PENDING", "SUBMITTING", "SUBMIT_FAILED"}:
             return {"submitted": queued["state"] == "SUBMITTED",
                     "state": queued["state"], "queue": queued,
                     "idempotent_replay": True}
@@ -589,8 +676,30 @@ class Coordinator:
                      if hasattr(self.broker, "client_order_id") else
                      "ss-" + plan.intent.idempotency_key[:37])
         _event(con, plan.intent.intent_id, "SUBMITTING", {
-            "client_order_id": client_id, "symbol": plan.intent.symbol})
-        order = self.broker.submit(plan)
+            "client_order_id": client_id, "symbol": plan.intent.symbol,
+            "boot_id": PROCESS_BOOT_ID})
+        try:
+            order = self.broker.submit(plan)
+        except Exception as exc:
+            from .phemex_private import AmbiguousSubmission, PhemexError
+            if isinstance(exc, PhemexError) and not isinstance(exc, AmbiguousSubmission):
+                # Proven pre-wire: validate_plan is pure, enforce_one_way and
+                # set_leverage precede the order POST, and a 4xx creates no
+                # order. No venue order can exist, so the refusal is recorded
+                # as its own state and the intent stays retryable. This must
+                # NOT fire ORDER_REJECTED — that drill is for the venue
+                # rejecting a real submission, and a local refusal passing it
+                # would be the restart-drill defect again in a new spot.
+                _event(con, plan.intent.intent_id, "SUBMIT_FAILED", {
+                    "submitted": False, "reason": str(exc)[:400],
+                    "error_type": type(exc).__name__})
+                from .runlog import get_logger
+                get_logger().warning(
+                    f"dispatch {plan.intent.intent_id} refused before the "
+                    f"wire: {type(exc).__name__}: {exc}")
+                return {"submitted": False, "state": "SUBMIT_FAILED",
+                        "reason": str(exc)[:400], "queue": queued}
+            raise  # ambiguous or unexpected: stay SUBMITTING, never resubmit
         _event(con, plan.intent.intent_id, "SUBMITTED", to_wire(order))
         return {"submitted": True, "state": "SUBMITTED", "order": to_wire(order),
                 "queue": queued}

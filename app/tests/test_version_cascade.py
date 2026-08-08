@@ -38,19 +38,34 @@ from engine import phemex_private, positions
 # label fails the same gate instead of relying on review memory.
 OPERATIONAL_EXPECTED = {
     "contracts": "contracts-v0.3-draft",
-    "automation": "automation-v0.4-draft",
+    # automation-v0.5: every drill names and enforces its required evidence;
+    # restart demands a boot-id change, so lost-response recovery inside one
+    # process can no longer pass one of the seven TESTNET->LIVE gates.
+    "automation": "automation-v0.5-draft",
     # autotrader-v0.4: quantity scales to the dispatch mode's R via
     # risk.dispatch_scale() — the risk fact sizes the paper book (2%), an
     # order sent to TESTNET/LIVE carries 0.25%'s quantity (x0.125).
     "autotrader": "autotrader-v0.4-draft",
-    "execution_core": "execution-core-v0.5-draft",
+    # execution-core-v0.6: private entries honour expires_at (cancel at the
+    # venue), a proven pre-wire refusal is SUBMIT_FAILED and retryable
+    # instead of stuck-SUBMITTING-forever, and RESTART_RECOVERED carries
+    # boot-id evidence.
+    "execution_core": "execution-core-v0.6-draft",
     "positions": "positions-v0.3-draft",
-    "phemex_private": "phemex-private-v0.3-draft",
+    # phemex-private-v0.4: the stop (sent on every order) and every target
+    # are tick-validated for all order kinds; submit() sets the leverage the
+    # plan implies rather than a hardcoded 1x bucket.
+    "phemex_private": "phemex-private-v0.4-draft",
     "lifecycle": "lifecycle-v0.1-draft",
+    # opportunity-v0.3: real custody overlays the paper lifecycle in the
+    # read model. This entry is ALSO the fix for an audit finding: the
+    # version was stamped on every cockpit-facing record and locked nowhere.
+    "opportunities": "opportunity-v0.3-draft",
 }
 
 
 def operational_versions():
+    from engine import opportunities
     return {
         "contracts": contracts.CONTRACT_VERSION,
         "automation": automation.AUTOMATION_VERSION,
@@ -59,6 +74,7 @@ def operational_versions():
         "positions": positions.POSITION_VERSION,
         "phemex_private": phemex_private.PHEMEX_PRIVATE_VERSION,
         "lifecycle": lifecycle.LIFECYCLE_VERSION,
+        "opportunities": opportunities.OPPORTUNITY_VERSION,
     }
 
 # The current, deliberate state of the pipeline. Update WITH the cascade.

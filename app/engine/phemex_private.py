@@ -17,14 +17,25 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 from typing import Callable
 
 from . import automation, phemex
 from .contracts import BrokerExecution, BrokerOrder, ExecutionPlan, OrderKind
 
 
-PHEMEX_PRIVATE_VERSION = "phemex-private-v0.3-draft"
+PHEMEX_PRIVATE_VERSION = "phemex-private-v0.4-draft"
+# v0.4: validate_plan tick-checks the STOP for every order kind (submit sends
+# stopLossRp unconditionally, but only LIMIT entries were checked — an
+# off-tick stop on a MARKET order survived to confirm_attached_protection,
+# whose exact comparison then missed and escalated to ProtectionFailed: a
+# global halt plus emergency close of a real filled position, for what should
+# have been a pre-submit refusal). Targets are tick-checked on the same
+# grounds. And submit() now sets the leverage the plan IMPLIES instead of a
+# hardcoded 1x bucket: risk caps implied leverage at the venue's 10x and the
+# dispatch scale is 0.125, so a tight-stop TESTNET plan can legitimately
+# imply up to 1.25x — above the old bucket, which made the venue refuse for
+# insufficient margin a trade the risk authority had approved.
 TESTNET_API = "https://testnet-api.phemex.com"
 MAINNET_API = "https://api.phemex.com"
 
@@ -193,6 +204,44 @@ class PhemexBroker:
             if intent.entry is None or not self._multiple(intent.entry,
                                                            product.get("tick_size")):
                 raise PhemexError("limit price is not an exact instrument tick multiple")
+        # The stop rides EVERY order (submit sends stopLossRp unconditionally),
+        # so it is validated for every order kind — a MARKET entry with an
+        # off-tick stop is refused here, before any order exists, rather than
+        # discovered by the protection-confirmation path after a real fill.
+        if not self._multiple(intent.stop, product.get("tick_size")):
+            raise PhemexError("stop price is not an exact instrument tick multiple")
+        for target in intent.targets or ():
+            if not self._multiple(target, product.get("tick_size")):
+                raise PhemexError("target price is not an exact instrument tick multiple")
+        # Leverage the plan implies must fit the instrument: submit() sets the
+        # bucket to ceil(implied), and a plan the venue cannot margin is a
+        # refusal that belongs before the wire, not at it. Denomination
+        # caveat: implied_leverage is computed on the paper account's equity,
+        # so venue margin sufficiency is only truly proven at the venue.
+        product_max = Decimal(str(product.get("max_leverage") or "0"))
+        if product_max > 0 and risk_decision.implied_leverage > product_max:
+            raise PhemexError(
+                f"plan implies {risk_decision.implied_leverage}x leverage; "
+                f"instrument maximum is {product_max}x")
+        # The stop must survive liquidation at the BUCKET we will actually
+        # set, not at the plan's implied leverage: submit() ceils implied to
+        # a whole bucket, and a higher bucket pulls liquidation closer than
+        # the risk gate checked. Latent at today's dispatch scale (implied
+        # <= 1.25x -> 2x bucket, liquidation ~49% away) but live the day the
+        # R sizes move — so it is enforced here, not assumed. MARKET orders
+        # carry no entry price to check against; their protection is the
+        # attached stop confirmation after fill.
+        if intent.entry is not None and intent.stop is not None:
+            from . import venues
+            bucket = max(Decimal(1),
+                         risk_decision.implied_leverage.to_integral_value(
+                             rounding=ROUND_CEILING))
+            ok, liq = venues.stop_survives_liquidation(
+                intent.entry, intent.stop, bucket, intent.direction)
+            if not ok:
+                raise PhemexError(
+                    f"stop {intent.stop} does not survive liquidation "
+                    f"(~{liq}) at the {bucket}x isolated bucket")
         notional = risk_decision.notional_usd
         minimum = Decimal(str(product.get("min_notional") or "0"))
         if minimum > 0 and notional < minimum:
@@ -250,7 +299,13 @@ class PhemexBroker:
         intent = plan.intent
         client_id = self._client_id(plan)
         self.enforce_one_way(intent.symbol)
-        self.set_leverage(intent.symbol, Decimal("1"))
+        # The bucket gets the leverage the plan IMPLIES, ceiled to a whole
+        # step, floored at 1x. Hardcoding 1x refused approved tight-stop
+        # plans (implied up to 1.25x post dispatch-scale) for insufficient
+        # margin — the venue contract is per-symbol, never a global constant.
+        self.set_leverage(intent.symbol, max(
+            Decimal(1),
+            plan.risk.implied_leverage.to_integral_value(rounding=ROUND_CEILING)))
         payload = {
             "clOrdID": client_id, "symbol": intent.symbol,
             "side": "Buy" if intent.direction == "LONG" else "Sell",
@@ -269,11 +324,32 @@ class PhemexBroker:
         except AmbiguousSubmission:
             # A POST timeout is not a failure. Query the open book by symbol and
             # recover the order with the same client id before allowing a retry.
-            matches = [o for o in self.open_orders(intent.symbol)
-                       if o.client_order_id == client_id]
+            # The recovery GET failing does NOT resolve the ambiguity — a 429
+            # or 4xx here raises plain PhemexError, and letting that escape
+            # would let the dispatcher classify an order that may exist at the
+            # venue as "proven pre-wire" and retry it (audit 2026-08-08).
+            try:
+                matches = [o for o in self.open_orders(intent.symbol)
+                           if o.client_order_id == client_id]
+            except Exception as rec_exc:
+                raise AmbiguousSubmission(
+                    "order POST was ambiguous and open-book recovery failed; "
+                    "reconcile by client order id before retrying") from rec_exc
             if matches:
                 return matches[0]
             raise
+        except PhemexError as exc:
+            # Post-wire classification. Only two shapes are provably
+            # order-free: an HTTP 4xx (the venue refused the request) and an
+            # explicit venue error code in a 200 body. Both prefixes are
+            # raised by this module, so matching them is a contract with
+            # ourselves. Anything else after the wire — a non-object body
+            # above all — is ambiguous, whatever exception type it wore.
+            msg = str(exc)
+            if msg.startswith("Phemex returned HTTP 4") or msg.startswith("Phemex code "):
+                raise
+            raise AmbiguousSubmission(
+                f"order POST ended indeterminately: {msg[:200]}") from exc
         return self._order(result.get("data") or {}, fallback_client_id=client_id)
 
     def cancel(self, symbol: str, client_order_id: str) -> BrokerOrder:

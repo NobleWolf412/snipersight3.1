@@ -487,10 +487,19 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
                             automation.AutomationMode.LIVE):
             private_broker = broker_factory.phemex_for_mode(custody_mode)
             private_broker.sync_time()
-            execution.monitor_private(con, private_broker)
+            # These returns were discarded, which made every refusal in the
+            # private path silent — the one property a degraded path is not
+            # allowed to have. Non-empty counts get one aggregate line here;
+            # the per-intent detail is logged inside each monitor.
+            _mon = execution.monitor_private(con, private_broker)
             from engine import lifecycle
-            lifecycle.monitor(con, private_broker)
-            positions.monitor_closures(con, private_broker)
+            _lc = lifecycle.monitor(con, private_broker)
+            _cl = positions.monitor_closures(con, private_broker)
+            _stuck = {"unresolved": len(_mon.get("refused") or ()),
+                      "blocked": len(_lc.get("blocked") or ()),
+                      "pending_confirmation": len(_cl.get("pending_confirmation") or ())}
+            if any(_stuck.values()):
+                log.warning(f"private path degraded this cycle: {_stuck}")
             reconciliation = positions.reconcile(
                 con, private_broker, symbols=universe.all_tracked_symbols(con))
             if not reconciliation["matched"]:
