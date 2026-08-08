@@ -20,7 +20,10 @@ from .setups import SETUP_VERSION
 from .swings import compute_atr
 from .runlog import RunRecorder
 
-EXEC_VERSION = "exec-v0.21-draft"
+EXEC_VERSION = "exec-v0.22-draft"
+# v0.22: cascade from setup-v0.18 / risk-v0.22 (R-denominated envelope, paper
+# R back to 2%). No fill, cost or exit rule changed here; `setup_id` is
+# version-scoped, so a new setup generation is a new order flow by definition.
 # v0.21: cascade from setup-v0.17 (VALIDATED setups carry the top-down bias
 # block). The simulator executes whatever setups exist; a new setup generation
 # is a new order flow, the same reason as v0.18/v0.19/v0.20. NOTHING HERE READS

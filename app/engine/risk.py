@@ -18,18 +18,28 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from . import store, venues
+from .contracts import AutomationMode
 from .setups import SETUP_VERSION
 from .execsim import EXEC_VERSION, plan_versions as execsim_plan_versions
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.21-draft"
-# v0.21: first-live safety envelope. The former 2% per trade / two-position /
-# 4% open-risk / 6% daily-loss policy was a paper-research envelope, not a
-# responsible mainnet default. All execution modes now read the same authority:
-# 0.25% per base trade, one base position, 0.5% total open risk and a 1% UTC-day
-# halt. Scale-in sizing is zero because the initial autonomous contract forbids
-# averaging or pyramiding; the strategy switch also defaults off in settings.
+RISK_VERSION = "risk-v0.22-draft"
+# v0.22: the envelope is restated in R — one R being one full stop-out at the
+# per-trade risk — and only the R SIZE differs by mode. Paper is rehearsal for
+# live: the gates (2R total open risk, 4R daily halt, one base position, 0R
+# adds) are identical everywhere, so paper takes the same trades and halts at
+# the same point in the same circumstances; only the dollar magnification
+# changes. Paper/shadow size R at 2%, testnet/live at 0.25%. v0.21 had set one
+# global 0.25% for every mode, which silently resized the research book and
+# left 91 already-armed setup-v0.17 facts contradicting every number downstream.
+# DECISION facts now record `risk_pct` and `pct_basis` so a fact explains
+# itself without this module's constants. Known, deliberate: once mode reaches
+# TESTNET the cockpit budgets show 0.25%-based numbers while the paper book
+# continues enforcing 2% on itself — the paper replay is never mode-aware
+# (a mode flip mid-baseline must not mint a second generation of DECISIONs).
+# v0.21: first-live safety envelope — superseded by v0.22 before any facts
+# were relied on; kept for the record. 0.25% per trade in all modes.
 # v0.20: cascade from setup-v0.17 / exec-v0.21 / cooldown-v0.9 (the top-down
 # bias block upstream). No sizing rule changed and this engine does not read
 # `bias`; it replays the whole account from setup and exec facts, so a new
@@ -83,12 +93,58 @@ RISK_VERSION = "risk-v0.21-draft"
 # v0.2: governs SCALE_IN adds — exempt from the concurrency count (attach to a
 # parent) but consume the total-open-risk budget; REJECTED with PARENT_CLOSED
 # if the parent position already exited.
-SCALE_RISK_PCT = Decimal("0")
-
 START_EQUITY = Decimal("10000")
-RISK_PCT = Decimal("0.0025")          # 0.25% of current equity per trade
-MAX_CONCURRENT = 1
-MAX_TOTAL_OPEN_RISK_PCT = Decimal("0.005")  # 0.5% of equity at risk at once
+
+# ---------------------------------------------------------------- the gates
+#
+# Stated in R, once, and identical in every mode. R-multiples are
+# size-invariant, so two books running these gates at different R sizes take
+# the SAME trades, halt at the SAME point, and produce the SAME R
+# distribution — which is what makes paper a rehearsal rather than a
+# different system. The only mode-dependent number is MODE_RISK_PCT.
+MAX_OPEN_R = Decimal("2")            # total open risk: 2 full stop-outs
+DAILY_LOSS_R = Decimal("4")          # realized -4R in a UTC day -> halt
+MAX_CONCURRENT = 1                   # one base position; adds don't count
+SCALE_ADD_R = Decimal("0")           # pyramiding forbidden by contract
+
+# One R, by mode. OFF maps to paper because the research book keeps running
+# when dispatch is off — OFF is "no orders leave", not "no research happens".
+MODE_RISK_PCT = {
+    AutomationMode.OFF:     Decimal("0.02"),
+    AutomationMode.PAPER:   Decimal("0.02"),
+    AutomationMode.SHADOW:  Decimal("0.02"),
+    AutomationMode.TESTNET: Decimal("0.0025"),
+    AutomationMode.LIVE:    Decimal("0.0025"),
+}
+
+
+def gates_for_mode(mode) -> dict:
+    """THE authority on the envelope. Every reader — the replay, the sizer,
+    the API, diagnostics — gets its numbers here or from a fact this wrote.
+    A module-level pct constant is exactly the bug v0.21 shipped: a reader
+    that never states its mode reports a number some book is not using.
+    """
+    pct = MODE_RISK_PCT[mode]        # KeyError on an unknown mode, on purpose
+    return {
+        "risk_pct": pct,
+        "scale_risk_pct": (SCALE_ADD_R * pct),
+        "max_total_open_risk_pct": (MAX_OPEN_R * pct),
+        "daily_loss_limit_pct": (DAILY_LOSS_R * pct),
+        "max_concurrent": MAX_CONCURRENT,
+        "max_open_r": MAX_OPEN_R,
+        "daily_loss_r": DAILY_LOSS_R,
+    }
+
+
+def dispatch_scale(mode) -> Decimal:
+    """Quantity scale from the paper-sized risk fact to this mode's R.
+
+    The replay sizes the research book at paper R unconditionally (see
+    run()); a TESTNET/LIVE order built from that fact must be scaled down or
+    the first real order goes out 8x oversize. Exact by construction:
+    0.0025 / 0.02 == 0.125.
+    """
+    return MODE_RISK_PCT[mode] / MODE_RISK_PCT[AutomationMode.PAPER]
 # v0.7: shorting and leverage are VENUE capabilities, not process constants.
 # As globals they rejected 31% of all validated setups (44 of 143) — every SHORT
 # the playbook produced — because the only declared venue was Coinbase spot.
@@ -110,7 +166,9 @@ MIN_NOTIONAL_USD = Decimal("1")
 # a second liquidity model. Inert in paper (no fills to move), which is exactly
 # why it must exist BEFORE live: it is a constraint the simulator cannot teach.
 MAX_PARTICIPATION = Decimal("0.005")          # 0.5% of 24h volume
-DAILY_LOSS_LIMIT_PCT = Decimal("0.01")      # realized -1% in a UTC day -> halt
+# The daily halt is DAILY_LOSS_R x one R — see gates_for_mode(). It has no
+# module constant on purpose: as a bare pct it silently stopped meaning "four
+# losers" when the R size moved (at 2% R a 1% cap halted on the FIRST loss).
 MIN_REDUCED_FRACTION = Decimal("0.25")      # reduce below 25% of intended -> reject
 QC = Decimal("0.01")
 
@@ -136,9 +194,17 @@ def _venue_max_leverage(symbol: str) -> Decimal:
 
 
 def size_order(*, equity, entry, sl, direction, symbol, risk_pct=None,
-               open_risk=Decimal(0), vol24=None, is_add=False) -> dict:
+               base_risk_pct=None, open_risk=Decimal(0), vol24=None,
+               is_add=False) -> dict:
     """PURE sizing. No I/O, no facts, no clock — equity and a bracket in, a
     decision out.
+
+    Defaults are PAPER's R deliberately: the callers that omit `risk_pct` are
+    the arming pass and the replay, both of which walk historical bars and
+    must stay deterministic — they must never consult the operating mode.
+    Mode-aware callers pass `risk_pct` explicitly from gates_for_mode().
+    `base_risk_pct` denominates the open-risk budget (2R of the BASE trade
+    even when `risk_pct` itself is an override or an add).
 
     Extracted per the `forming-armed-order-plan` Phase C ruling (option A):
     §9 says the risk authority owns sizing, and it still does — this module owns
@@ -156,7 +222,21 @@ def size_order(*, equity, entry, sl, direction, symbol, risk_pct=None,
     """
     reasons: list = []
     decision = "APPROVED"
-    pct = risk_pct if risk_pct is not None else (SCALE_RISK_PCT if is_add else RISK_PCT)
+    paper = gates_for_mode(AutomationMode.PAPER)
+    pct = risk_pct if risk_pct is not None else (
+        paper["scale_risk_pct"] if is_add else paper["risk_pct"])
+    base_pct = base_risk_pct if base_risk_pct is not None else paper["risk_pct"]
+    if pct <= 0:
+        # 0R is the contract saying this order type does not exist (adds,
+        # today). Falling through here used to produce a misleading
+        # BELOW_MIN_NOTIONAL — or, in run(), a silent APPROVED at zero size.
+        # The reason names the actual condition: an add hit the 0R contract,
+        # anything else was handed a non-positive pct explicitly.
+        return {"decision": "REJECTED",
+                "reasons": ["SCALE_IN_FORBIDDEN" if is_add else "ZERO_RISK_SIZE"],
+                "risk_usd": Decimal(0), "units": Decimal(0),
+                "notional_usd": Decimal(0), "implied_leverage": Decimal(0),
+                "intended_risk_usd": "0.00"}
     intended = (equity * pct).quantize(QC)
     risk_usd = intended
     stop_dist = abs(entry - sl)
@@ -166,7 +246,7 @@ def size_order(*, equity, entry, sl, direction, symbol, risk_pct=None,
                 "notional_usd": Decimal(0), "implied_leverage": Decimal(0),
                 "intended_risk_usd": str(intended)}
 
-    budget = (MAX_TOTAL_OPEN_RISK_PCT * equity - open_risk).quantize(QC)
+    budget = (MAX_OPEN_R * base_pct * equity - open_risk).quantize(QC)
     if budget < intended:
         if budget < intended * MIN_REDUCED_FRACTION:
             return {"decision": "REJECTED", "reasons": ["EXPOSURE_LIMIT"],
@@ -243,6 +323,12 @@ def run(con) -> dict:
     with RunRecorder(con, "risk", RISK_VERSION, "PORTFOLIO", "ALL") as rec:
         baseline = store.get_active_baseline(con)
         baseline_start = baseline["started_at"]
+        # PAPER unconditionally, never the operating mode. The replay
+        # re-derives every DECISION from the first bar of the baseline each
+        # cycle, and facts are content-hashed: a mode flip mid-baseline would
+        # append a second full generation of DECISIONs under this one version
+        # label. Mode is operational state; it never rewrites research.
+        gates = gates_for_mode(AutomationMode.PAPER)
         intents, exits = [], {}
         for sym in _symbols(con):
             for tf in TFS:
@@ -324,7 +410,7 @@ def run(con) -> dict:
                                          "reason": "total drawdown limit reached "
                                                    "— no new entries this window"}):
                             n_new_facts += 1
-                loss_limit = DAILY_LOSS_LIMIT_PCT * day_start_equity[d]
+                loss_limit = gates["daily_loss_limit_pct"] * day_start_equity[d]
                 if d not in halted and daily_pnl[d] <= -loss_limit:
                     halted.add(d)
                     n["KILL"] += 1
@@ -336,6 +422,9 @@ def run(con) -> dict:
                                      "daily_pnl": str(daily_pnl[d]),
                                      "day_start_equity": str(day_start_equity[d]),
                                      "loss_limit_usd": str(loss_limit),
+                                     "loss_limit_r": str(gates["daily_loss_r"]),
+                                     "risk_pct": str(gates["risk_pct"]),
+                                     "pct_basis": "PAPER",
                                      "equity": str(equity),
                                      "baseline_id": baseline["id"],
                                      "baseline_started_at": baseline_start,
@@ -393,7 +482,8 @@ def run(con) -> dict:
             stop_dist = abs(entry - sl)
             reasons, decision = [], "APPROVED"
             is_add = it["strategy"] == "SCALE_IN"
-            intended = (equity * (SCALE_RISK_PCT if is_add else RISK_PCT)).quantize(QC)
+            intended = (equity * (gates["scale_risk_pct"] if is_add
+                                  else gates["risk_pct"])).quantize(QC)
             risk_usd = intended
 
             parents_open = {p["setup_id"] for p in open_pos}
@@ -425,13 +515,19 @@ def run(con) -> dict:
                 decision, reasons = "REJECTED", ["INVALID_STOP_DISTANCE"]
             elif it["direction"] == "SHORT" and not _venue_allows_shorts(it["symbol"]):
                 decision, reasons = "REJECTED", ["SHORT_UNSUPPORTED_COINBASE_SPOT"]
+            elif is_add and gates["scale_risk_pct"] <= 0:
+                # The 0R gate, stated. Without this branch a permitted add
+                # fell through to intended = equity * 0 and booked APPROVED
+                # at zero size — the arithmetic enforced the contract and
+                # nothing said so (audit 2026-08-08, finding 4).
+                decision, reasons = "REJECTED", ["SCALE_IN_FORBIDDEN(0R)"]
             elif is_add and it.get("parent_setup_id") not in parents_open:
                 decision, reasons = "REJECTED", ["PARENT_CLOSED"]
-            elif not is_add and sum(1 for p in open_pos if "|ADD" not in p["setup_id"]) >= MAX_CONCURRENT:
-                decision, reasons = "REJECTED", [f"CONCURRENT_LIMIT({MAX_CONCURRENT})"]
+            elif not is_add and sum(1 for p in open_pos if "|ADD" not in p["setup_id"]) >= gates["max_concurrent"]:
+                decision, reasons = "REJECTED", [f"CONCURRENT_LIMIT({gates['max_concurrent']})"]
             else:
                 open_risk = sum(p["risk_usd"] for p in open_pos)
-                budget = (MAX_TOTAL_OPEN_RISK_PCT * equity - open_risk).quantize(QC)
+                budget = (gates["max_total_open_risk_pct"] * equity - open_risk).quantize(QC)
                 if budget < intended:
                     if budget < intended * MIN_REDUCED_FRACTION:
                         decision, reasons = "REJECTED", ["EXPOSURE_LIMIT"]
@@ -487,11 +583,17 @@ def run(con) -> dict:
                             decision, reasons = "REJECTED", ["PARTICIPATION_TOO_THIN"]
                             risk_usd = Decimal(0)
 
+            if decision != "REJECTED" and risk_usd <= 0:
+                # Belt and braces: no zero-size position may ever book as
+                # APPROVED. Every legitimate zero already carries a REJECTED
+                # above; reaching here means a new code path leaked one.
+                decision, reasons = "REJECTED", ["ZERO_RISK_SIZE"]
             if decision == "REJECTED":
                 risk_usd = Decimal(0)
             payload = {"event": "DECISION", "setup_id": it["setup_id"],
                        "decision": decision, "reasons": reasons or ["WITHIN_LIMITS"],
                        "intended_risk_usd": str(intended), "risk_usd": str(risk_usd),
+                       "risk_pct": str(gates["risk_pct"]), "pct_basis": "PAPER",
                        "equity_at": str(equity), "baseline_id": baseline["id"],
                        "baseline_started_at": baseline_start}
             if decision != "REJECTED" and stop_dist > 0:
@@ -530,6 +632,7 @@ def run(con) -> dict:
                 algo_version=RISK_VERSION,
                 payload={"event": "SUMMARY", "start_equity": str(START_EQUITY),
                          "final_equity": str(equity),
+                         "risk_pct": str(gates["risk_pct"]), "pct_basis": "PAPER",
                          "baseline_id": baseline["id"],
                          "baseline_started_at": baseline_start,
                          "baseline_label": baseline["label"],

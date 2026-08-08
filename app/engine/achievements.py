@@ -32,7 +32,8 @@ def calculate(*, live_gate: dict, automation_status: dict,
     rows = [
         AchievementProgress(
             key="SAFE_DEFAULTS", label="Guardrails locked",
-            description="Initial risk is 0.25%, one position, and a 1% UTC daily halt.",
+            description="One position, 2R total open risk, 4R UTC daily halt; "
+                        "paper sizes R at 2%, live at 0.25%.",
             progress=Decimal("1"), completed=True, completed_at=None,
             version=ACHIEVEMENT_VERSION),
         AchievementProgress(

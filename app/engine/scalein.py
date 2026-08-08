@@ -28,7 +28,11 @@ from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.15-draft"
+SCALE_VERSION = "scale-v0.16-draft"
+# v0.16: cascade from setup-v0.18 / exec-v0.22 / risk-v0.22 (R-denominated
+# envelope). Adds are 0R under the autonomous contract — risk.run REJECTS
+# them with SCALE_IN_FORBIDDEN(0R) rather than approving them at zero size —
+# but the parent generations moved, so this tag moves with them.
 # v0.15: cascade from setup-v0.17 / exec-v0.21 (the top-down bias block
 # upstream). Parents are SETUP_VERSION setups and an add is only placed against
 # a position exec says is open, so both input generations moved under it.

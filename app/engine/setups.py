@@ -30,7 +30,17 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.17-draft"
+SETUP_VERSION = "setup-v0.18-draft"
+# v0.18: cascade from risk-v0.22 (R-denominated envelope, paper R back to 2%).
+# No setup RULE changed, but the FORMING payload bakes `risk.size_order()`
+# output in at arming time — so a sizing change IS a payload change, and a
+# payload change under a live tag is two generations under one label. This is
+# the lesson of risk-v0.21, which moved RISK_PCT without bumping here: 91
+# armed v0.17 facts carried 2% sizing while every fresh emission would have
+# carried 0.25%, under one version string. Those 91 are now inert — every
+# reader pins the current SETUP_VERSION — and the first scan re-arms
+# qualifying zones fresh under v0.18. The trading tail moves as always:
+# exec-v0.22 / risk-v0.22 / scale-v0.16 / cooldown-v0.10.
 # v0.17: VALIDATED setups now carry the TOP-DOWN BIAS BLOCK (`engine/bias.py`).
 # No strategy rule changed and no trade differs — `BIAS_POLICY` below is ALLOW
 # everywhere — but the payload does, and a payload change under a live tag is
@@ -898,9 +908,17 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                     # when the trade is actually taken. So a FORMING fact says
                     # "this is the order", never "you are cleared to take it".
                     from . import risk as _risk
+                    from .contracts import AutomationMode as _Mode
+                    # PAPER R, explicitly and always. Arming replays
+                    # historical bars and must be deterministic — it never
+                    # consults the operating mode. TESTNET/LIVE quantity is
+                    # derived at dispatch via risk.dispatch_scale(mode).
+                    _paper = _risk.gates_for_mode(_Mode.PAPER)
                     _sz = _risk.size_order(
                         equity=_risk.START_EQUITY, entry=entry_f, sl=sl_f,
-                        direction=dir_f, symbol=symbol)
+                        direction=dir_f, symbol=symbol,
+                        risk_pct=_paper["risk_pct"],
+                        base_risk_pct=_paper["risk_pct"])
                     payload = {"setup_id": f"{symbol}|{tf}|{strat_f}|{zone_id}|{SETUP_VERSION}",
                                "strategy": strat_f, "direction": dir_f,
                                "entry": str(entry_f), "sl": str(sl_f), "tp": str(tp_f),

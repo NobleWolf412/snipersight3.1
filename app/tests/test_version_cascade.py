@@ -39,7 +39,10 @@ from engine import phemex_private, positions
 OPERATIONAL_EXPECTED = {
     "contracts": "contracts-v0.3-draft",
     "automation": "automation-v0.4-draft",
-    "autotrader": "autotrader-v0.3-draft",
+    # autotrader-v0.4: quantity scales to the dispatch mode's R via
+    # risk.dispatch_scale() — the risk fact sizes the paper book (2%), an
+    # order sent to TESTNET/LIVE carries 0.25%'s quantity (x0.125).
+    "autotrader": "autotrader-v0.4-draft",
     "execution_core": "execution-core-v0.5-draft",
     "positions": "positions-v0.3-draft",
     "phemex_private": "phemex-private-v0.3-draft",
@@ -160,7 +163,15 @@ EXPECTED = {
     # adds "cooldown": risk replays the account from these facts, scalein only
     # adds to a position the simulator says is open, and cooldowns are derived
     # purely from recorded exits. All five move together.
-    "setup": "setup-v0.17-draft",
+    # setup-v0.18: cascade from risk-v0.22. No setup RULE changed — the FORMING
+    # payload bakes risk.size_order() output in at arming, so a sizing change
+    # IS a payload change. risk-v0.21 proved it by omission: it moved RISK_PCT
+    # under a live setup tag and left 91 armed v0.17 facts carrying 2% sizing
+    # while fresh emissions would have carried 0.25%. CONSUMERS now names
+    # risk -> setup, so the EXPECTED diff below is where the next risk bump
+    # forces the question — the enforcement is that diff plus this map, the
+    # same human-attention gate every producer here relies on.
+    "setup": "setup-v0.18-draft",
     # S50 cascade. exec-v0.13 -> v0.14 corrected the MAKER_THEN_MARKET crossing
     # leg, which booked a market fill at the PLAN's price — two bars stale, and
     # outside the fill bar's own [low, high] on 78 of 95 crossed orders, never
@@ -178,14 +189,19 @@ EXPECTED = {
     # are derived purely from recorded exits. All four move together.
     # scale ALSO changed on its own account — its economics gate now prices the
     # add on the add's own venue instead of the process-wide Coinbase default.
-    "exec": "exec-v0.21-draft",
-    # risk-v0.21 is a risk-only policy move: 0.25% per trade, one base
-    # position, 0.5% total open risk and a 1% UTC-day halt. Risk has no
-    # downstream fact consumer in CONSUMERS; setup/exec/scale/cooldown do not
-    # read risk facts, so no cascade follows it.
-    "risk": "risk-v0.21-draft",
-    "scale": "scale-v0.15-draft",
-    "cooldown": "cooldown-v0.9-draft",
+    "exec": "exec-v0.22-draft",
+    # risk-v0.22: the envelope restated in R, sized by mode (paper/shadow 2%,
+    # testnet/live 0.25%), gates identical everywhere; DECISIONs record their
+    # pct. The v0.21 note above this line claimed "no cascade follows risk" —
+    # true about facts, FALSE about code: setups.py calls risk.size_order()
+    # at arming and bakes the result into FORMING payloads. That miss is the
+    # S37/S40 defect made a third time, caught by audit rather than by this
+    # file. CONSUMERS["risk"] now names the coupling so the EXPECTED diff a
+    # risk bump forces has the answer in view — the map informs the human
+    # gate; it does not mechanically fail on an incomplete cascade.
+    "risk": "risk-v0.22-draft",
+    "scale": "scale-v0.16-draft",
+    "cooldown": "cooldown-v0.10-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
     # every setup they emit. No rule changed in either and no trade differs —
     # both policies are ALLOW everywhere — but the payload does, and a payload
@@ -327,6 +343,13 @@ CONSUMERS = {
     "setup": ("exec", "risk", "scale"),
     "exec": ("risk", "scale", "cooldown"),
     "cooldown": ("risk",),
+    # CODE-level coupling, same class as "ma": setups.py calls
+    # risk.size_order() at arming time and bakes units/risk_usd/notional into
+    # every FORMING payload. No setup ever reads a risk FACT — which is why
+    # this entry was missing, and why risk-v0.21 moved the sizing policy under
+    # a live setup tag with a fully green suite. A risk sizing change is a
+    # setup payload change, full stop.
+    "risk": ("setup",),
 }
 
 
@@ -389,6 +412,13 @@ class VersionLockfile(unittest.TestCase):
                 self.assertIn("from .ma import", inspect.getsource(mod),
                               f"{name} is listed as consuming ma but does not "
                               f"import it — the map has gone stale")
+        # risk -> setup is the same class of coupling and earned its entry the
+        # hard way: risk-v0.21 moved the sizing policy and nothing failed.
+        with self.subTest(engine="setups"):
+            self.assertIn("setup", CONSUMERS["risk"])
+            self.assertIn("size_order", inspect.getsource(setups),
+                          "setup is listed as consuming risk but never calls "
+                          "size_order — the map has gone stale")
 
     def test_a_retired_manual_version_is_still_read_and_still_isolated(self):
         """The migration, held in place.

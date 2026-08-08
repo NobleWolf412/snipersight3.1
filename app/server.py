@@ -857,6 +857,30 @@ def _performance_dimensions(journal: list[dict], baseline: dict) -> dict:
                 ("strategy", "regime", "horizon", "direction", "order_type")}}
 
 
+def _envelope_config(con, eq: float) -> dict:
+    """The envelope of the book being DISPLAYED — the paper book — plus the
+    dispatch mode's R as separate, labelled information.
+
+    One basis per calculation. The meters here divide paper-book dollars by
+    envelope budgets, so the budgets must be paper's (2% R): subtracting a
+    $200 paper position from a 0.25%-mode $50 budget reads as an exhausted
+    envelope while actual testnet exposure is $25 against $50 (cold audit
+    2026-08-08, finding 1). What the CURRENT mode risks per dispatched trade
+    is reported alongside, never mixed into the arithmetic.
+    """
+    mode = automation.current(con)[0]
+    g = risk.gates_for_mode(risk.AutomationMode.PAPER)
+    dispatch_pct = risk.MODE_RISK_PCT[mode]
+    return {"mode": mode.value,
+            "risk_pct": float(g["risk_pct"]) * 100,
+            "max_total_risk_pct": float(g["max_total_open_risk_pct"]) * 100,
+            "max_concurrent": g["max_concurrent"],
+            "max_leverage": float(risk.MAX_LEVERAGE),
+            "daily_loss_pct": float(g["daily_loss_limit_pct"]) * 100,
+            "next_risk_usd": round(eq * float(g["risk_pct"]), 2),
+            "dispatch_risk_pct": float(dispatch_pct) * 100}
+
+
 @app.get("/api/portfolio")
 def portfolio():
     """Paper account state from risk-authority facts (§9/§13 dashboard)."""
@@ -1087,12 +1111,7 @@ def portfolio():
                 "journal": journal,
                 "journal_total": len(journal),
                 "performance_summary": _journal_performance_summary(journal, baseline),
-                "config": {"risk_pct": float(risk.RISK_PCT) * 100,
-                           "max_total_risk_pct": float(risk.MAX_TOTAL_OPEN_RISK_PCT) * 100,
-                           "max_concurrent": risk.MAX_CONCURRENT,
-                           "max_leverage": float(risk.MAX_LEVERAGE),
-                           "daily_loss_pct": float(risk.DAILY_LOSS_LIMIT_PCT) * 100,
-                           "next_risk_usd": round(eq * float(risk.RISK_PCT), 2)}}
+                "config": _envelope_config(con, eq)}
     finally:
         con.close()
 
@@ -2349,12 +2368,16 @@ def trade_config(symbol: str | None = None):
         v = venues.venue_for(symbol) if symbol else venues.COINBASE_SPOT
     except ValueError:
         v = venues.COINBASE_SPOT          # conservative: the costlier venue
+    # PAPER basis: the manual order ticket arms the operator's paper book,
+    # so its sizing constants are that book's. (The dispatch mode's R never
+    # applies here — manual arms do not cross to a real venue.)
+    g = risk.gates_for_mode(risk.AutomationMode.PAPER)
     return {
-        "risk_pct": float(risk.RISK_PCT),
-        "max_total_risk_pct": float(risk.MAX_TOTAL_OPEN_RISK_PCT),
-        "max_concurrent": risk.MAX_CONCURRENT,
+        "risk_pct": float(g["risk_pct"]),
+        "max_total_risk_pct": float(g["max_total_open_risk_pct"]),
+        "max_concurrent": g["max_concurrent"],
         "max_leverage": float(v.max_leverage),
-        "daily_loss_pct": float(risk.DAILY_LOSS_LIMIT_PCT),
+        "daily_loss_pct": float(g["daily_loss_limit_pct"]),
         "venue": {"key": v.key, "kind": v.kind, "quote": v.quote,
                   "allow_shorts": v.allow_shorts,
                   "funding_per_day": v.funding_settlements_per_day,
@@ -2653,21 +2676,28 @@ def operations_read_model():
 
         equity = Decimal(str(pf.get("equity") or risk.START_EQUITY))
         open_risk = Decimal(str(pf.get("open_risk_usd") or 0))
-        total_budget = (equity * risk.MAX_TOTAL_OPEN_RISK_PCT)
+        # PAPER gates, because every dollar below is a paper-book dollar —
+        # equity, open_risk and the journal all come from the research book,
+        # and one basis per calculation is the rule. The dispatch mode's R is
+        # reported as its own labelled field, never subtracted from paper's.
+        _gates = risk.gates_for_mode(risk.AutomationMode.PAPER)
+        _dispatch_pct = risk.MODE_RISK_PCT[automation.current(con)[0]]
+        total_budget = (equity * _gates["max_total_open_risk_pct"])
         utc_day_start = int(time.time()) // 86_400 * 86_400
         today_pnl = sum((Decimal(str(row.get("pnl_usd") or 0))
                          for row in pf.get("journal", [])
                          if int(row.get("ts") or 0) >= utc_day_start), Decimal(0))
         day_open_equity = equity - today_pnl
-        daily_budget = day_open_equity * risk.DAILY_LOSS_LIMIT_PCT
+        daily_budget = day_open_equity * _gates["daily_loss_limit_pct"]
         daily_remaining = max(Decimal(0), daily_budget + min(Decimal(0), today_pnl))
         return {
             "generated_at": int(time.time()), "venue": "PHEMEX_USDT_PERPETUAL",
             "automation": mode,
             "account": {
                 "equity": str(equity.quantize(Decimal("0.01"))),
-                "risk_per_trade_pct": str(risk.RISK_PCT * 100),
-                "next_risk_usd": str((equity * risk.RISK_PCT).quantize(Decimal("0.01"))),
+                "risk_per_trade_pct": str(_gates["risk_pct"] * 100),
+                "next_risk_usd": str((equity * _gates["risk_pct"]).quantize(Decimal("0.01"))),
+                "dispatch_risk_pct": str(_dispatch_pct * 100),
                 "open_risk_usd": str(open_risk.quantize(Decimal("0.01"))),
                 "total_risk_remaining_usd": str(max(Decimal(0), total_budget - open_risk)
                                                 .quantize(Decimal("0.01"))),
@@ -3379,11 +3409,13 @@ def get_settings():
     try:
         values = _settings.all_settings(con)
         # the guardrail panel shows engine-owned limits beside operator ones;
-        # it must read them, never restate them
+        # it must read them, never restate them. PAPER basis: these are the
+        # limits enforced on the book the panel sits beside.
+        _g = risk.gates_for_mode(risk.AutomationMode.PAPER)
         values["risk_config"] = {
-            "daily_loss_pct": float(risk.DAILY_LOSS_LIMIT_PCT) * 100,
-            "max_total_risk_pct": float(risk.MAX_TOTAL_OPEN_RISK_PCT) * 100,
-            "max_concurrent": risk.MAX_CONCURRENT,
+            "daily_loss_pct": float(_g["daily_loss_limit_pct"]) * 100,
+            "max_total_risk_pct": float(_g["max_total_open_risk_pct"]) * 100,
+            "max_concurrent": _g["max_concurrent"],
         }
         return {"values": values, "spec": _settings.describe(),
                 "history": _settings.history(con, 20)}

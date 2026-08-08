@@ -86,16 +86,26 @@ def explain_risk(setup: dict, risk_fact: dict | None) -> list[dict]:
     from . import risk as risk_engine
 
     inputs, missing = _risk_context(setup, risk_fact)
+    # The pct comes from the FACT being explained, not from a module
+    # constant: the fact that decided is the authority on what it decided
+    # with. v0.22+ DECISIONs record `risk_pct`/`pct_basis`. Facts without the
+    # field fall back to paper's pct — right for pre-v0.21 facts (2%), wrong
+    # for the brief v0.21 generation (0.25%), which no current reader pins;
+    # if one ever does, the fallback must learn to read the version tag.
+    from .contracts import AutomationMode as _Mode
+    _paper = risk_engine.gates_for_mode(_Mode.PAPER)
+    _fact_pct = risk_fact.get("risk_pct") or str(_paper["risk_pct"])
     config = {
         "risk_version": risk_engine.RISK_VERSION,
-        "risk_pct": str(risk_engine.RISK_PCT),
-        "scale_risk_pct": str(risk_engine.SCALE_RISK_PCT),
-        "max_concurrent": risk_engine.MAX_CONCURRENT,
-        "max_total_open_risk_pct": str(risk_engine.MAX_TOTAL_OPEN_RISK_PCT),
+        "risk_pct": str(_fact_pct),
+        "pct_basis": risk_fact.get("pct_basis", "PAPER"),
+        "scale_risk_pct": str(_paper["scale_risk_pct"]),
+        "max_concurrent": _paper["max_concurrent"],
+        "max_total_open_risk_pct": str(_paper["max_total_open_risk_pct"]),
         "max_leverage": str(risk_engine.MAX_LEVERAGE),
         "allow_shorts": risk_engine.ALLOW_SHORTS,
         "min_notional_usd": str(risk_engine.MIN_NOTIONAL_USD),
-        "daily_loss_limit_pct": str(risk_engine.DAILY_LOSS_LIMIT_PCT),
+        "daily_loss_limit_pct": str(_paper["daily_loss_limit_pct"]),
         "min_reduced_fraction": str(risk_engine.MIN_REDUCED_FRACTION),
     }
     reasons = risk_fact.get("reasons") or ["UNSPECIFIED"]
@@ -110,6 +120,8 @@ def explain_risk(setup: dict, risk_fact: dict | None) -> list[dict]:
         "PARENT_CLOSED": ("RISK.005", "scale-in parent remains open", "open parent setup", inputs.get("parent_setup_id"), "STATE_DEPENDENCY"),
         "EXPOSURE_LIMIT": ("RISK.007", "requested risk fits remaining portfolio risk budget", "within total-open-risk budget", inputs.get("intended_risk_usd"), "PORTFOLIO_CONTROL"),
         "BELOW_MIN_NOTIONAL": ("RISK.009", "units * entry >= minimum notional", f">= {risk_engine.MIN_NOTIONAL_USD}", inputs.get("notional_usd"), "INPUT_VALIDATION"),
+        "SCALE_IN_FORBIDDEN": ("RISK.010", "scale-in adds are sized above 0R", "adds permitted (>0R)", "0R — pyramiding forbidden by contract", "PORTFOLIO_CONTROL"),
+        "ZERO_RISK_SIZE": ("RISK.011", "an approved position carries positive risk", "> 0", inputs.get("intended_risk_usd"), "INPUT_VALIDATION"),
         "WITHIN_LIMITS": ("RISK.000", "all risk authority rules pass", "all rules pass", decision, "DECISION"),
         "UNSPECIFIED": ("RISK.UNKNOWN", None, "machine-readable reason", None, "MISSING_EVIDENCE"),
     }

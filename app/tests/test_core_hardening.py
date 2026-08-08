@@ -300,8 +300,10 @@ class TestRiskVenueContract(TempStore):
     def test_daily_halt_uses_start_of_day_equity(self):
         candle(self.con, "BTC-USD", "1D", 0, 100, 101, 99, 100)
         day = 86400
-        # Four 1.10R losses at the 0.25% initial risk profile exceed the
-        # deterministic 1% UTC-day halt; the fifth intent must be rejected.
+        # The halt is 4R of paper's 2% R (8% of day-start equity, $800 here).
+        # Four 1.10R losses compound to ~$851 > $800, so the day halts and
+        # the fifth intent must be rejected. The margin is the 0.10R excess
+        # per loss — four flat -1.00R losses would sit exactly AT the limit.
         for i in range(5):
             sid = f"long-{i}"
             confirmed = day + 100 + i * 1000

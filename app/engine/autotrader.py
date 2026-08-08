@@ -17,7 +17,12 @@ from .contracts import (AutomationMode, DecisionReason, ExecutionPlan,
                         OrderIntent, OrderKind, RiskDecision)
 
 
-AUTOTRADER_VERSION = "autotrader-v0.3-draft"
+AUTOTRADER_VERSION = "autotrader-v0.4-draft"
+# v0.4: quantity is scaled to the dispatch mode's R before an intent is
+# minted. The risk fact sizes the PAPER research book (2% R, risk-v0.22); an
+# order sent to TESTNET/LIVE must carry that mode's R (0.25%) or the first
+# real order goes out 8x oversize. risk.dispatch_scale() owns the ratio —
+# the number still has exactly one authority.
 
 
 def _d(value, default="0") -> Decimal:
@@ -35,7 +40,12 @@ def build_plan(row: dict, mode: AutomationMode) -> ExecutionPlan:
     kind = OrderKind(recommendation.get("order_kind") or "NONE")
     if kind == OrderKind.NONE:
         raise ValueError("entry selector recommends no order")
-    quantity = _d(risk.get("units"))
+    # The risk fact sizes the paper research book; this order goes to `mode`.
+    # Scale quantity and the dollar figures together so the plan stays
+    # internally consistent (execution checks plan/intent quantity equality).
+    from . import risk as _risk_engine
+    scale = _risk_engine.dispatch_scale(mode)
+    quantity = (_d(risk.get("units")) * scale).quantize(Decimal("0.00000001"))
     if quantity <= 0:
         raise ValueError("risk authority returned no positive quantity")
     entry = None if kind == OrderKind.MARKET else _d(
@@ -59,9 +69,14 @@ def build_plan(row: dict, mode: AutomationMode) -> ExecutionPlan:
         maker_wait_bars=recommendation.get("maker_wait_bars"))
     decision = RiskDecision(
         approved=True, decision=risk["decision"],
-        risk_usd=_d(risk.get("risk_usd")), quantity=quantity,
-        notional_usd=_d(risk.get("notional_usd")),
-        implied_leverage=_d(risk.get("implied_leverage")),
+        risk_usd=(_d(risk.get("risk_usd")) * scale).quantize(Decimal("0.01")),
+        quantity=quantity,
+        notional_usd=(_d(risk.get("notional_usd")) * scale).quantize(Decimal("0.01")),
+        # Leverage is notional/equity; at fixed equity it scales with the
+        # notional. Left unscaled it records 8x the truth on every
+        # TESTNET/LIVE plan — a durable wire record contradicting its own
+        # risk_usd, and a trap for any future gate that reads it.
+        implied_leverage=(_d(risk.get("implied_leverage")) * scale).quantize(Decimal("0.01")),
         reasons=tuple(DecisionReason(str(reason), str(reason))
                       for reason in risk.get("reasons") or ["WITHIN_LIMITS"]))
     return ExecutionPlan(
