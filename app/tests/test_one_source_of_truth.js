@@ -61,7 +61,14 @@ ok('every symbol count names the set it belongs to', () => {
   // the bare, unanswerable count the audit called out
   assert(!/WATCHING \$\{uc\.admitted\} SYMBOLS/.test(JS),
     'the header still shows a bare symbol count with no set name');
-  assert(JS.includes('TRADEABLE'), 'the header count must name its set');
+  /* Pinned to the CHIP, not to a bare substring. This read
+     `JS.includes('TRADEABLE')` and went vacuous the day the chip was renamed
+     to ELIGIBLE: the only TRADEABLE left in the file was the unrelated
+     NOT_TRADEABLE exclusion label, so the assertion passed on a substring of
+     a different feature and the chip could have lost its set name entirely
+     with the suite still green. */
+  assert(/WATCHING \$\{sets\.tradeable\} [A-Z]+/.test(JS),
+    'the header count must name its set');
   assert(JS.includes('of ${sets.stored} stored'),
     'the tile must state its denominator');
 });

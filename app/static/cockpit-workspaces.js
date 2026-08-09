@@ -19,13 +19,43 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
   const api = path => window.SSData ? SSData.get(path, 0) :
     fetch(path, {cache:'no-store'}).then(r => { if(!r.ok) throw new Error(r.status); return r.json(); });
   const label = value => String(value || 'NOT_REPORTED').replaceAll('_',' ');
+  /* Population and window arrive as store enums, and the strip rendered them
+     raw: "POPULATION FUNDED PAPER TRADES WINDOW ACTIVE BASELINE". A UI audit
+     (2026-08-09) called it a database contract rather than provenance a trader
+     can read. These are the sentences for the enums we ship.
+
+     THE FALLBACK IS DELIBERATELY UGLY (§6 rule 6). An unmapped enum keeps its
+     shouting underscore-stripped form, so a new one added engine-side is
+     visible on sight as missing a sentence rather than being quietly dressed
+     up as English — the same trick funnel.js plays with dx-drift. */
+  const SCOPE_SENTENCES = {
+    FUNDED_PAPER_TRADES: 'Funded paper trades',
+    POINT_IN_TIME_CLOSED_TRADES: 'Closed trades, as known at the time',
+    VALIDATED_FACTOR_COHORTS: 'Factor cohorts that passed validation',
+    PROMOTION_EVENTS_BY_STAGE: 'Promotion events, by stage',
+    MIXED_EVIDENCE_WINDOWS: 'Mixed evidence windows',
+    ACTIVE_BASELINE: 'Since the active baseline',
+    EACH_PANEL_LABELS_ITS_SCOPE: 'Each panel labels its own scope',
+    CUMULATIVE_CURRENT_FACTORSTATS_VERSION: 'All history on the current factor-stats version',
+    CUMULATIVE_CURRENT_FACTORGRADE_VERSION: 'All history on the current factor-grade version',
+    CUMULATIVE_CURRENT_AUTOMATION_VERSION: 'All history on the current automation version',
+    NOT_REPORTED: 'Not reported'
+  };
+  /* Keyed on the underscore spelling, but looked up on either: the server
+     sends FUNDED_PAPER_TRADES while performanceScopeMapping above hands back
+     'MIXED EVIDENCE WINDOWS' already spaced. Normalising here keeps one table
+     instead of two that can drift apart. */
+  const scopeLabel = value => SCOPE_SENTENCES[
+      String(value || 'NOT_REPORTED').trim().replaceAll(' ','_').toUpperCase()
+    ] || label(value);
+  if(typeof window !== 'undefined') window.SSScopeLabel = scopeLabel;
   const money = value => value == null ? 'Not reported' : '$' + Number(value).toLocaleString(undefined,
     {minimumFractionDigits:2,maximumFractionDigits:2});
   const performanceScopes = {};
   function showPerformanceScope(view){
     const scope = performanceScopes[view] || {population:'NOT_REPORTED',window:'NOT_REPORTED'};
-    if($('performancePopulation')) $('performancePopulation').textContent = label(scope.population);
-    if($('performanceWindow')) $('performanceWindow').textContent = label(scope.window);
+    if($('performancePopulation')) $('performancePopulation').textContent = scopeLabel(scope.population);
+    if($('performanceWindow')) $('performanceWindow').textContent = scopeLabel(scope.window);
   }
 
   function dimensionTable(name, rows){
@@ -48,8 +78,8 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
       $('performanceTrust').dataset.verdict = summary.verdict.code === 'REVIEW_CONFIDENCE_INTERVAL'
         ? 'TRUST_BUILDING' : 'NOT_PROVEN';
       $('performanceTrust').innerHTML = `<span class="op-state">Trust verdict</span>
-        <b>${esc(summary.verdict.text)}</b><small>${esc(label(summary.population))} · ${esc(label(summary.window))} · ` +
-        `since ${summary.started_at ? new Date(summary.started_at * 1000).toISOString().slice(0,10) : 'date not reported'} Â· ` +
+        <b>${esc(summary.verdict.text)}</b><small>${esc(scopeLabel(summary.population))} · ${esc(scopeLabel(summary.window))} · ` +
+        `since ${summary.started_at ? new Date(summary.started_at * 1000).toISOString().slice(0,10) : 'date not reported'} · ` +
         `${summary.confidence_interval_r && summary.confidence_interval_r.status === 'MEASURED'
           ? `95% mean-R interval [${summary.confidence_interval_r.lo}, ${summary.confidence_interval_r.hi}]R`
           : `confidence interval unavailable: insufficient evidence (${summary.trades}/${summary.confidence_interval_r && summary.confidence_interval_r.minimum_trades || 10})`}</small>`;
@@ -62,9 +92,9 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
       Object.assign(performanceScopes, performanceScopeMapping({summary,dimensions}));
       showPerformanceScope($('s-results').dataset.activeView || 'overview');
       if($('promotionScopeNote')) $('promotionScopeNote').textContent =
-        `Mixed evidence windows. PAPER uses ${label(summary.population)} / ${label(summary.window)}; ` +
-        `later stages use ${label(mode.evidence_scope && mode.evidence_scope.population)} / ` +
-        `${label(mode.evidence_scope && mode.evidence_scope.window)}.`;
+        `Mixed evidence windows. PAPER uses ${scopeLabel(summary.population)} / ${scopeLabel(summary.window)}; ` +
+        `later stages use ${scopeLabel(mode.evidence_scope && mode.evidence_scope.population)} / ` +
+        `${scopeLabel(mode.evidence_scope && mode.evidence_scope.window)}.`;
       $('promotionSummary').innerHTML = [
         ['Evidence', p.evidence_ready ? 'MET' : 'NOT MET'],
         ['Shadow', p.shadow_ready ? 'MET' : `${op.shadow_days || 0}d · ${op.shadow_intents || 0} intents`],
@@ -78,7 +108,7 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
         ['LIVE', p.live_router_build_enabled ? 'BUILD PRESENT - all live gates still apply' : 'BLOCKED - live router build lock is active']
       ].map(([stage,detail]) => {
         const scope = stage === 'PAPER' ? summary : mode.evidence_scope || {};
-        return `<article><b>${stage}</b><span>${esc(detail)}</span><small>Population: ${esc(label(scope.population))} Â· Window: ${esc(label(scope.window))}</small></article>`;
+        return `<article><b>${stage}</b><span>${esc(detail)}</span><small>Population: ${esc(scopeLabel(scope.population))} · Window: ${esc(scopeLabel(scope.window))}</small></article>`;
       }).join('');
     }catch(err){
       $('performanceTrust').dataset.verdict = 'DEGRADED';

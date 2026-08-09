@@ -596,7 +596,7 @@
     $('scanOrb').className = 'orb ' + tone;
     $('scanTxt').textContent = sc.alive
       // names the SET, so the number is answerable without opening a tooltip
-      ? (sets.tradeable ? `WATCHING ${sets.tradeable} TRADEABLE` : 'WATCHING')
+      ? (sets.tradeable ? `WATCHING ${sets.tradeable} ELIGIBLE` : 'WATCHING')
       : 'NOT WATCHING';
     $('scanChip').title = !sc.alive
       ? 'The engine has stopped watching. No new setups will appear until it restarts.'
@@ -612,7 +612,7 @@
       : fresh ? 'Watching the market' : 'Catching up';
     // names the set, like every other count on screen
     $('sbWatch').textContent = sc.alive && sets.tradeable
-      ? `${sets.tradeable} tradeable · checked ${agoText(sc.age_s)}`
+      ? `${sets.tradeable} eligible · checked ${agoText(sc.age_s)}`
       : '';
 
     if(o.baseline){
@@ -923,7 +923,7 @@
       tone = 'go';
       text = `${n} ${n === 1 ? 'setup' : 'setups'} ready to review, in the deck below.`;
     } else {
-      text = 'Nothing to take right now.';
+      text = 'No trade is ready.';
       if(refused) text += ` ${refused} ${refused === 1 ? 'was' : 'were'} examined and refused.`;
       if(stop) text += ` Also, ${stop.clause}.`;
     }
@@ -4182,6 +4182,29 @@ weighed in. Name the facts you used.`;
     if(foot) foot.textContent = lastGate
       ? (lastGate.build_note || '')
       : `Could not read the criteria — ${gateErr}`;
+    /* The page-level answer, in the SERVER's own words. livegate.py already
+       builds `headline` ("N of 4 met — X is what is missing") from the same
+       criteria the cards render, so the two cannot disagree; counting the
+       cards here instead would be the second authority that lets them (§6
+       rule 9). It sits with gateChip and gateFoot because all three are
+       functions of `lastGate` alone — the rail below renders rows.
+
+       The scope clause is not hedging. These four are the EVIDENCE gate only,
+       so an unqualified "promotion met" would overclaim. But the met branch
+       POINTS at the remaining locks rather than naming them: an audit caught
+       an earlier draft listing "shadow, testnet and the order-router build"
+       from memory, three elements above #promotionSummary, which renders the
+       server's own MET/NOT MET for those same three. Two answers to one
+       question on one panel, and the hard-coded one set in bold. */
+    const verdict = $('gateVerdict');
+    if(verdict){
+      verdict.textContent = !lastGate
+        ? `Live promotion verdict unreadable — ${gateErr}. Nothing is inferred.`
+        : lastGate.ready
+          ? 'Evidence gate met. The remaining locks are the ones marked below.'
+          : `Live promotion blocked on evidence: ${lastGate.headline}.`;
+      verdict.dataset.state = !lastGate ? 'unread' : lastGate.ready ? 'met' : 'blocked';
+    }
     renderProgression();
   }
 
@@ -4532,9 +4555,31 @@ weighed in. Name the facts you used.`;
       said.push(broken
         ? `${broken} thing${broken === 1 ? '' : 's'} failing.`
         : 'Nothing is failing.');
+      /* "Across the book" is not padding — the two sentences have DIFFERENT
+         SCOPES and a UI audit (2026-08-09) read them as one. `broken` counts
+         per-symbol, per-timeframe rows; `h` is /api/pipeline-health fetched
+         with no symbol, so its verdict is whole-store. Unqualified, the pair
+         reads as "the failing market is still being sized", which is the one
+         thing it does not mean. */
       said.push(h.evaluation_allowed
-        ? `The pipeline is ${String(h.status || '').toLowerCase()} and still sizing trades.`
-        : `The pipeline is ${String(h.status || '').toLowerCase()} and has stopped sizing trades.`);
+        ? `Across the book as a whole, the pipeline is ${String(h.status || '').toLowerCase()} and still sizing trades.`
+        : `Across the book as a whole, the pipeline is ${String(h.status || '').toLowerCase()} and has stopped sizing trades.`);
+      /* The consequence of a data gate is a scope, and it is the operator's
+         actual question: does this cost me a market, or a timeframe on one.
+         The three gates do NOT share an answer — QUALITY_BLOCKED drops the
+         whole symbol, NO_DATA drops one timeframe of it, SHORT_HISTORY drops
+         nothing — so this says nothing at all rather than average them. */
+      const kinds = new Set(((t && t.data_gates) || []).map(g => g.gate));
+      /* BOTH, when both are present. An `else if` here meant one quality-blocked
+         symbol silenced the sentence covering twenty missing-candle rows, and
+         the surviving sentence — "skips every engine on the market" — then sat
+         under a count of twenty-one and read as if it described all of them.
+         That is the same scope conflation this block exists to remove, running
+         the other way. */
+      if(kinds.has('QUALITY_BLOCKED'))
+        said.push('A blocked market-data audit skips every engine on the market it names.');
+      if(kinds.has('NO_DATA'))
+        said.push('A missing candle series stops only the timeframe it names; any other timeframe that is also missing is listed as its own row above.');
     }
     /* The bottleneck belongs in the answer: on a surface about why nothing
        fired, the stage that ate the candidates IS the answer, and it was

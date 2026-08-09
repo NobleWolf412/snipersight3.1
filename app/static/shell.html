@@ -173,13 +173,19 @@
                to tell a completed scan from a click that missed. -->
           <div class="t-mono scan-result" id="scanResult" hidden></div>
           <div class="grid cols-4">
-            <div class="tile"><span class="t-label"><span class="term" data-t="universe">Tradeable now</span></span><span class="t-metric" id="mUniverse">—</span><span class="t-sub" id="mUniverseSub"></span></div>
+            <!-- "Eligible markets", not "Tradeable now". A UI audit (2026-08-09)
+                 read "Tradeable now 14" above "Nothing to take right now" and
+                 called it a contradiction, which it is in plain English: this
+                 counts markets the risk authority is ALLOWED to size, not
+                 markets with a trade in them. The three funnel words are now
+                 distinct — eligible markets, setups ready, trade ready. -->
+            <div class="tile"><span class="t-label"><span class="term" data-t="universe">Eligible markets</span></span><span class="t-metric" id="mUniverse">—</span><span class="t-sub" id="mUniverseSub"></span></div>
             <!-- Counts what can still be acted on. It used to count the whole
                  deck payload including REJECTED and expired rows, which is why
                  it read 3 above a deck that said "no setups right now". The
                  refused ones are not hidden: they are named on the sub-line and
                  listed under "Looked at, not taken" below. -->
-            <div class="tile"><span class="t-label"><span class="term" data-t="setup">Active setups</span></span><span class="t-metric" id="mSetups">—</span><span class="t-sub" id="mSetupsSub"></span></div>
+            <div class="tile"><span class="t-label"><span class="term" data-t="setup">Setups ready</span></span><span class="t-metric" id="mSetups">—</span><span class="t-sub" id="mSetupsSub"></span></div>
             <!-- "Closed today" where the equity tile sat: equity already lives
                  in the top bar on every surface, so this slot repeated a number
                  four inches from itself while "how did today actually go" — the
@@ -793,7 +799,16 @@
         <span><b>Population</b> <i id="performancePopulation">Reading server scope</i></span>
         <span><b>Window</b> <i id="performanceWindow">Reading server window</i></span>
         <span><b>Authority</b> Server reported</span>
-        <label><b>Breakdown</b><select id="performanceBreakdown">
+        <!-- SCOPED TO THE VIEW IT DRIVES. Population, Window and Authority
+             describe every Performance view, so they sit here on all five.
+             Breakdown does not: the only thing it filters is
+             #performanceDimensions, which lives on Strategies. On Overview —
+             the tab this surface opens on — changing it did nothing at all,
+             and a control that visibly does nothing reads as broken. It is
+             not broken; it was pointed at a panel four views away.
+             workspaces.js toggles `hidden` on every [data-performance-view]
+             in the surface, so this needs no wiring of its own. -->
+        <label data-performance-view="strategies" hidden><b>Breakdown</b><select id="performanceBreakdown">
           <option value="ALL">All dimensions</option><option value="strategy">Strategy</option>
           <option value="regime">Regime</option><option value="horizon">Horizon</option>
           <option value="direction">Direction</option><option value="order_type">Order type</option>
@@ -891,6 +906,13 @@
           <h2 class="t-section">Progression</h2>
           <span class="chip" id="progCount" style="margin-left:auto">—</span>
         </div>
+        <!-- The verdict before the evidence. A UI audit (2026-08-09) found the
+             carousel showed one gate large and blurred the other three, so the
+             page answered "is data integrity met" when the operator asked "can
+             this go live". This line is the SERVER's headline, read verbatim —
+             engine/livegate.py already computes met/total and names the first
+             unmet criterion, so no count is re-derived here (§6 rule 9). -->
+        <p class="t-body" id="gateVerdict" role="status"></p>
         <p class="t-body mw-lede" id="progLede"></p>
         <p class="population-note" id="promotionScopeNote">Reading promotion evidence population and window.</p>
         <div class="promotion-summary" id="promotionSummary" role="status"></div>

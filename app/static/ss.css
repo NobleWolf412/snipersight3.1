@@ -1143,7 +1143,14 @@ body:not(.dev) #consolePanel{display:none}
 }
 
 @media(max-width:640px){
-  .topbar .brand,#equityChip,#exposureChip,#btnCopilot{display:none}
+  /* #btnCopilot is NOT in this list, and must not go back into it. Shedding it
+     here (and again in the phone topbar block) left the copilot with no general
+     way in on a phone at all: the only survivors were the contextual "Ask
+     copilot" buttons on Setup Radar rows and the `c` key, and a phone has no
+     `c` key. Reported by the operator, 8 Aug 2026, the same day it was hidden.
+     The chips below are the right things to shed — their numbers reappear on
+     row 2 of the phone topbar. A whole feature is not. */
+  .topbar .brand,#equityChip,#exposureChip{display:none}
   #riskChip{max-width:145px}
   .surface-head{align-items:flex-start;flex-direction:column;gap:4px;margin-bottom:var(--lg)}
 }
@@ -1445,7 +1452,8 @@ body:not(.dev) #consolePanel{display:none}
 .managed-custody{margin:var(--md);padding:var(--md);border:1px solid rgba(251,191,36,.38);background:rgba(0,0,0,.28)}
 .managed-custody strong{display:block;margin:6px 0;color:var(--amber)}
 .managed-custody dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sm);margin:var(--sm) 0}
-.managed-custody dt{color:var(--fg-3);font-size:var(--fs-0);text-transform:uppercase}.managed-custody dd{margin:2px 0 0}
+/* --fs-1: --fs-0 is not a rung on this scale, so this line set no size at all */
+.managed-custody dt{color:var(--fg-3);font-size:var(--fs-1);text-transform:uppercase}.managed-custody dd{margin:2px 0 0}
 .ticket.private-managed #tkDir,.ticket.private-managed #tkDirWhy,.ticket.private-managed #tkTabs,
 .ticket.private-managed .ticket-body,.ticket.private-managed #tkBlock,.ticket.private-managed .tk-commit-status{display:none!important}
 .tk-actions .btn{flex:1}
@@ -2610,7 +2618,10 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .fr-grid details p{margin:3px 0 0;line-height:1.45}
 .fr-acts{display:flex;gap:var(--sm);flex-wrap:wrap}
 @media(max-width:900px){
-  .ticket .tk-commit-status{position:sticky;bottom:0;z-index:4;margin-top:var(--md);padding:var(--sm);background:var(--panel);border-top:1px solid var(--line)}
+  /* --card and --border. `var(--panel)` and `var(--line)` are not tokens, so
+     this bar had a TRANSPARENT background and no top border — on the one strip
+     whose job is to stay legible over the ticket scrolling behind it. */
+  .ticket .tk-commit-status{position:sticky;bottom:0;z-index:4;margin-top:var(--md);padding:var(--sm);background:var(--card);border-top:1px solid var(--border)}
   .managed-custody dl{grid-template-columns:1fr}
   .fr-grid{grid-template-columns:1fr}.fr-head{display:block}.fr-head h2{margin:5px 0}
   .fr-acts{display:grid;grid-template-columns:1fr}.fr-acts .btn{width:100%;min-width:0}
@@ -2846,6 +2857,31 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .factor-table th:first-child,.factor-table td:first-child{text-align:left}
 .factor-table td:first-child small{display:block;max-width:300px;overflow:hidden;text-overflow:ellipsis;color:var(--fg-4)}
 .population-note{margin:0 0 var(--md);color:var(--fg-3)}
+/* The conclusion, set above the evidence that supports it. A UI audit
+   (2026-08-09) found both screens led with provenance — enum populations and
+   window identifiers — and buried the answer under it. Normal-case body type,
+   not the tracked mono the chrome uses, because this is the one line on the
+   panel meant to be read as a sentence rather than scanned as a label. */
+.factor-verdict,#gateVerdict{margin:0 0 var(--md);max-width:78ch;
+  font:var(--fs-2)/1.5 var(--f-body);color:var(--fg-2)}
+.factor-verdict b,#gateVerdict{font-weight:650}
+.factor-verdict b{display:block;margin-top:2px;color:var(--amber)}
+/* --green, not --accent: in paper mode --accent IS --amber, so "met" and
+   "blocked" would have rendered the same colour. The words differ either way
+   — colour is never the only distinction here — but two verdicts sharing one
+   hue on the screen that decides live promotion is not a thing to leave. */
+#gateVerdict[data-state="blocked"]{color:var(--amber)}
+#gateVerdict[data-state="met"]{color:var(--green)}
+#gateVerdict[data-state="unread"]{color:var(--red)}
+#gateVerdict:empty{display:none}
+/* The scope strip uppercases everything inside it, which silently undid the
+   whole point of naming these enums: scopeLabel turned FUNDED_PAPER_TRADES
+   into "Funded paper trades" and the strip painted FUNDED PAPER TRADES —
+   byte-identical to what the audit complained about. The LABELS stay mono and
+   tracked because they are chrome; the VALUES are the content, and content is
+   read, not scanned. */
+#performancePopulation,#performanceWindow{text-transform:none;letter-spacing:0;
+  font-family:var(--f-body);color:var(--fg-2)}
 .promotion-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;
   margin:0 var(--lg) var(--md);background:var(--border-soft)}
 .promotion-summary>div{padding:9px;background:var(--bg-2)}
@@ -2857,15 +2893,43 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .journal-tools input{width:100%;min-height:44px;padding:8px 10px;background:rgba(0,0,0,.34);
   border:1px solid var(--border);border-radius:var(--r-md);color:var(--fg);font:var(--fs-2)/1 var(--f-body)}
 .journal-tools input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.journal-tools select{min-height:44px;padding:8px 32px 8px 10px;background:rgba(0,0,0,.34);color:var(--fg);border:1px solid var(--line)}
-.performance-scope{position:sticky;top:0;z-index:7;display:flex;gap:var(--md);flex-wrap:wrap;padding:9px var(--md);margin-bottom:var(--md);background:rgba(17,18,14,.96);border:1px solid var(--line);font:var(--fs-0)/1.4 var(--mono);text-transform:uppercase}
-.performance-scope b{color:var(--fg-3);margin-right:5px}.promotion-stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--sm);margin:var(--md) 0}
+/* --border, not the undefined --line: see .performance-scope. This select had
+   no border at all, beside an input one line up that has one. */
+.journal-tools select{min-height:44px;padding:8px 32px 8px 10px;background:rgba(0,0,0,.34);
+  color:var(--fg);border:1px solid var(--border);border-radius:var(--r-md)}
+/* FOUR TOKEN NAMES HERE DID NOT EXIST, and CSS fails this silently and badly.
+   `--line`, `--mono`, `--fs-0` and `--panel` were never defined — the real
+   names are --border, --f-mono, the scale that starts at --fs-1, and --card.
+   An undefined var() with no fallback does not fall back to a default: the
+   WHOLE declaration becomes invalid at computed-value time, so
+   `border:1px solid var(--line)` computes border-style:none and draws no
+   border at all, and `font:var(--fs-0)/1.4 var(--mono)` drops the size AND
+   the family and inherits body text under a text-transform:uppercase. That
+   is the "rough" this strip looked: an unbordered uppercase band with two
+   borderless dropdowns in it, on the one surface that is meant to read as a
+   record. Reported 8 Aug 2026.
+
+   --fs-0 maps to --fs-1 rather than inventing a smaller step: --fs-1 is
+   documented as the labels-and-micro-metadata size and these are exactly
+   that. A new rung in a type scale is a design decision, not a bug fix.
+
+   Sticky, and BELOW the tabs. Both bars stick; the tabs settle at -(--xl)
+   with a 44px + 1px border box, so their bottom edge lands at 45px - (--xl)
+   and anything sticking at 0 spends 21px underneath them (they win on
+   z-index too). Expressed from the same tokens so the two move together. */
+.performance-scope{position:sticky;top:calc(45px - var(--xl));z-index:7;display:flex;gap:var(--md);
+  flex-wrap:wrap;padding:9px var(--md);margin-bottom:var(--md);background:rgba(17,18,14,.96);
+  border:1px solid var(--border);font:var(--fs-1)/1.4 var(--f-mono);text-transform:uppercase}
+.performance-scope b{color:var(--fg-3);margin-right:5px}
 .performance-scope i{font-style:normal;color:var(--fg)}
+.performance-scope label{display:flex;align-items:center;gap:var(--xs);margin-left:auto}
+.performance-scope select{min-height:44px;background:var(--bg-2);color:var(--fg);
+  border:1px solid var(--border);border-radius:var(--r-md);padding:6px 28px 6px 8px}
 .topbar-account .data-stale{color:var(--red)!important;border-color:rgba(248,113,113,.6)!important}
-.performance-scope label{display:flex;align-items:center;margin-left:auto}.performance-scope select{min-height:44px;background:var(--bg-2);color:var(--fg);border:1px solid var(--line);padding:6px 28px 6px 8px}
-.promotion-stages article{display:flex;flex-direction:column;gap:5px;padding:var(--md);border:1px solid var(--line);background:rgba(0,0,0,.24)}
+.promotion-stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--sm);margin:var(--md) 0}
+.promotion-stages article{display:flex;flex-direction:column;gap:5px;padding:var(--md);border:1px solid var(--border);background:rgba(0,0,0,.24)}
 .promotion-stages span{color:var(--fg-2);font-size:var(--fs-1)}
-.promotion-stages small{color:var(--fg-4);font:var(--fs-0)/1.45 var(--f-mono)}
+.promotion-stages small{color:var(--fg-4);font:var(--fs-1)/1.45 var(--f-mono)}
 
 .system-consequence{margin-bottom:var(--md);padding:var(--md);border-left:2px solid var(--amber);
   background:rgba(255,194,102,.05);color:var(--fg-2);font:var(--fs-2)/1.5 var(--f-body)}
@@ -2910,14 +2974,23 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   :root{--topbar-h:94px}
   .topbar{grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:44px 44px;
     align-content:center;gap:0 6px;padding:2px 8px}
-  .topbar .brand,#venueNote,#btnCopilot{display:none}
+  .topbar .brand,#venueNote{display:none}
   .topbar-identity{display:flex!important;grid-column:1;grid-row:1}
   .topbar-system,.topbar-system:has(#healthChip.degraded){display:flex!important;grid-column:2;grid-row:1;
     min-height:30px;margin:0;padding:0;border:0;overflow:hidden}
   .topbar-system #scanChip{display:none}
   .topbar-system #healthChip{display:inline-flex!important;max-width:100%;overflow:hidden}
   #healthTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .topbar-actions{display:block!important;grid-column:3;grid-row:1}
+  /* TWO buttons here now, not one, and they cannot push HALT off the edge.
+     The row is `auto minmax(0,1fr) auto`: this track is the trailing `auto`, so
+     it takes its content width and #topbar-system — which already truncates
+     #healthTxt with an ellipsis — absorbs whatever is left. That is why no
+     width had to be measured for this to be safe, and why the fix for a
+     crowded phone bar is never to delete the last control in the row. The
+     tighter tracking and padding are so the two read as a pair rather than
+     filling half the bar. */
+  .topbar-actions{display:flex!important;gap:4px;grid-column:3;grid-row:1}
+  .topbar-actions .btn{padding-inline:8px;letter-spacing:.06em;white-space:nowrap}
   .topbar-account{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));grid-column:1/-1;
     grid-row:2;width:100%;border:1px solid var(--border-soft);background:rgba(0,0,0,.22)}
   .topbar-account>span,#equityChip,#riskChip,#exposureChip{display:flex!important;justify-content:center;

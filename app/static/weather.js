@@ -224,9 +224,13 @@
        the universe AND about what "tradeable" meant. */
     const shadow = d.n_shadow || 0, warming = d.n_warming || 0;
     const shadowLive = d.n_shadow_live || 0;
+    /* "Eligible", the same word Command's tile uses, because the comment above
+       is right that this is the same population — and one population under two
+       names on two panels of one screen is the exact defect ssdata.js records
+       having already cost an investigation once. */
     const footer = d.n_live === 0
-      ? 'No tradeable market matches an enabled playbook regime. Watching continues.'
-      : `${d.n_live} of ${d.n_total} tradeable markets match an enabled regime. ` +
+      ? 'No eligible market matches an enabled playbook regime. Watching continues.'
+      : `${d.n_live} of ${d.n_total} eligible markets match an enabled regime. ` +
         'Entry still requires zone confirmation.';
     /* Said plainly rather than folded into the count above. A watched symbol
        that can never be sized is evidence about a venue, not an opportunity.

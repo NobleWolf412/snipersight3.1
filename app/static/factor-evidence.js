@@ -8,6 +8,11 @@
       '"':'&quot;',"'":'&#39;'}[c]));
   const api = path => window.SSData ? SSData.get(path, 30000) :
     fetch(path).then(r => { if(!r.ok) throw new Error(r.status); return r.json(); });
+  /* One scope vocabulary for the whole app, owned by cockpit-workspaces.js.
+     Falls back to the raw enum rather than inventing a second table — two
+     tables for one vocabulary is how two screens come to name one scope
+     differently (§6 rule 9). */
+  const scope = value => (window.SSScopeLabel || (v => String(v || 'not reported')))(value);
   let loaded = false;
 
   async function load(){
@@ -17,14 +22,29 @@
         api('/api/factor-grade'), api('/api/factor-evidence')]);
       const passing = (evidence.rows || []).filter(r => r.passes_evidence);
       const rows = evidence.rows || [];
+      /* Both read models carry the same back-fill warning, and rendering each
+         list where it arrived printed it twice on one screen — a UI audit
+         (2026-08-09) read the repetition as two separate defects. Deduped by
+         text, and NOT dropped: a warning that appears in only one payload is
+         still the only place it appears (§6 rule 6). */
+      const warnings = [...new Set([...(grade.warnings || []),
+                                    ...(evidence.warnings || [])].map(String))];
+      const warningHtml = warnings.map(w =>
+        `<p class="op-warning">${esc(w)}</p>`).join('');
       root.innerHTML = `<section class="panel factor-panel">
         <div class="panel-head"><h2 class="t-section">Factor calibration</h2>
           <span class="chip">${esc(grade.grade || 'UNGRADED')}</span></div>
         <div class="panel-body">
-          <p class="population-note">Factor Stats scope Â· Population: ${esc(evidence.population || 'not reported')} Â·
-            Window: ${esc(evidence.window || 'not reported')}</p>
-          <p class="population-note">FactorGrade scope Â· Population: ${esc(grade.population || 'not reported')} Â·
-            Window: ${esc(grade.window || 'not reported')}</p>
+          <p class="t-body factor-verdict">${passing.length
+            ? `${passing.length} factor cohort${passing.length === 1 ? ' has' : 's have'} proven useful.`
+            : 'No factor has proven useful yet.'}
+            <b>${passing.length
+              ? 'A grade still cannot approve or size a trade on its own.'
+              : 'Do not use factor grades to approve or size trades.'}</b></p>
+          <p class="population-note">Factor Stats scope · Population: ${esc(scope(evidence.population))} ·
+            Window: ${esc(scope(evidence.window))}</p>
+          <p class="population-note">FactorGrade scope · Population: ${esc(scope(grade.population))} ·
+            Window: ${esc(scope(grade.window))}</p>
           <div class="factor-summary">
             <div><span>Setup quality score</span><b>${esc(grade.score == null ? 'not calibrated' : grade.score)}</b></div>
             <div><span>Evidence confidence</span><b>${esc(grade.confidence || 'INSUFFICIENT EVIDENCE')}</b></div>
@@ -36,7 +56,7 @@
           <p class="t-note">${passing.length} factor cohort${passing.length === 1 ? '' : 's'}
             survived chronological validation, forward stability, confidence,
             shrinkage, and multiple-testing correction.</p>
-          ${(grade.warnings || []).map(w => `<p class="op-warning">${esc(w)}</p>`).join('')}
+          ${warningHtml}
           <details class="factor-record"><summary>Factor Stats cohorts (${rows.length})</summary>
             <p class="t-note">${esc(evidence.closed_trades || 0)} closed trades · chronological
               ${esc(Math.round((evidence.split || {}).train * 100 || 0))}% train,
@@ -56,7 +76,6 @@
                 : '<tr><td colspan="8">No factor cohorts were reported.</td></tr>'}
             </tbody></table></div>
           </details>
-          ${(evidence.warnings || []).map(w => `<p class="op-warning">${esc(w)}</p>`).join('')}
         </div></section>`;
     }catch(err){
       root.innerHTML = `<section class="panel op-empty bad"><h2>Factor evidence unavailable</h2>

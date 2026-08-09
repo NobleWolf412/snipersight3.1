@@ -432,11 +432,28 @@
      which is a hole exactly where "why is nothing firing" needs its answer.
      One closed vocabulary, shared with engine/pipeline.GATES; the roster test
      holds the two sides together. */
+  /* Each sentence carries the CONSEQUENCE, and the consequence is a scope.
+     A UI audit (2026-08-09) read "1 thing failing" beside "the pipeline is
+     degraded and still sizing trades" and could not tell whether the failing
+     market was still being traded off broken data. It is not: `pipeline.run_symbol`
+     skips only the timeframe NO_DATA names and keeps the symbol's other
+     timeframes, while QUALITY_BLOCKED is the one that drops the whole symbol.
+     Naming which of the two a row is costs a clause and answers the question.
+
+     NO_DATA says its neighbours are "unaffected by this", NOT that they are
+     still scanning. A draft claimed the market keeps scanning on every other
+     timeframe, which is false for a symbol whose candles are missing in ALL
+     of them — a cold store, or an importer that threw and was logged past in
+     live.py. That symbol trips one row per timeframe, so the honest form is
+     per-gate scope: this row costs this timeframe, and the others speak for
+     themselves by being listed or not. */
   const GATE_LABELS = {
-    NO_DATA: 'no candles stored for this timeframe — the engines were not run',
+    NO_DATA: 'no candles stored for this timeframe — the engines were not run ' +
+             'on it, and no other timeframe on this market is affected by it',
     SHORT_HISTORY: 'history starts later than its floor — engines run, but on ' +
                    'less past than they were designed to see',
-    QUALITY_BLOCKED: 'the market-data audit failed — engines skipped until it clears'
+    QUALITY_BLOCKED: 'the market-data audit failed — every engine on this ' +
+                     'market is skipped until it clears'
   };
 
   /* "Failing now" — the panel Diagnostics leads with. Engine exceptions,

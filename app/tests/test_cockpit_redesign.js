@@ -25,6 +25,54 @@ function ok(name, fn) {
 
 console.log('cockpit redesign');
 
+ok('every custom property this stylesheet uses is one it defines', () => {
+  /* A MISSPELLED TOKEN IS NOT A COSMETIC DEFECT, and this is the only thing
+     that can see one. CSS has no error for it: an undefined var() with no
+     fallback does not fall back, it makes the WHOLE declaration invalid at
+     computed-value time. So `border:1px solid var(--line)` computes
+     border-style:none and draws nothing, and `font:var(--fs-0)/1.4
+     var(--mono)` drops the size and the family together and inherits body
+     text. Nothing throws, nothing logs, node --check cannot look at CSS, and
+     the JS suites assert on markup — the only symptom is a surface that
+     looks slightly wrong to whoever is using it.
+
+     Found 8 Aug 2026 from an operator report that the Performance screen's
+     layout was "rough": --line, --mono, --fs-0 and --panel were all in use
+     and none existed. The real names are --border, --f-mono, --fs-1 and
+     --card. Between them they left the scope strip, both of its dropdowns,
+     the promotion stage cards and the ticket's sticky commit bar with no
+     borders, and the commit bar with no background over scrolling content.
+
+     A fallback is still allowed — `var(--x, 12px)` is a deliberate default,
+     not a typo — so only bare references count. */
+  const rules = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+  const defined = new Set([...rules.matchAll(/(--[a-zA-Z0-9-]+)\s*:/g)].map(m => m[1]));
+  const missing = [...new Set([...rules.matchAll(/var\(\s*(--[a-zA-Z0-9-]+)\s*\)/g)]
+    .map(m => m[1]).filter(name => !defined.has(name)))];
+  assert.deepStrictEqual(missing, [],
+    'ss.css uses custom properties it never defines: ' + missing.join(', ') +
+    '. Every declaration mentioning one of these is silently dropped');
+});
+
+ok('the Breakdown control only appears where it changes something', () => {
+  /* It filters #performanceDimensions and nothing else, and that panel is on
+     the Strategies view. Sitting in the always-visible scope strip, it did
+     nothing at all on Overview — which is the tab this surface opens on — so
+     the operator's read was that the dropdown was broken. It was pointed four
+     views away. workspaces.js hides every [data-performance-view] that is not
+     the active one, so scoping it is an attribute, not new wiring. */
+  const label = HTML.match(/<label[^>]*>\s*(?:<!--[\s\S]*?-->\s*)?<b>Breakdown<\/b>/) ||
+                HTML.match(/<label[^>]*data-performance-view[^>]*>\s*<b>Breakdown<\/b>/);
+  assert(label, 'the Breakdown control is gone, or no longer wraps a <label>');
+  assert(/data-performance-view="strategies"/.test(label[0]),
+    'the Breakdown dropdown is back in the always-on scope strip. It only ' +
+    'drives the Strategies dimension tables — everywhere else it is a live ' +
+    'control that changes nothing, which reads as a broken one');
+  assert(WORKSPACES.includes('panel.hidden = panel.dataset[`${name}View`] !== view'),
+    'the view switcher no longer hides panels by data-*-view, so the ' +
+    'attribute above stopped scoping anything');
+});
+
 ok('opportunities compare compact cards before opening one detail', () => {
   assert(HTML.includes('id="opGroups"'));
   assert(HTML.includes('id="opDetail"'));
@@ -70,7 +118,13 @@ ok('390px command layer keeps every safety fact and HALT visible', () => {
   assert(/@media\(max-width:640px\)[\s\S]*?:root\{--topbar-h:94px\}/.test(CSS));
   assert(/#equityChip,#riskChip,#exposureChip\{display:flex!important/.test(CSS));
   assert(/#healthChip\{display:inline-flex!important/.test(CSS));
-  assert(/\.topbar-actions\{display:block!important/.test(CSS));
+  /* `flex`, not `block`. The actions track carries TWO buttons on a phone now
+     — Copilot was hidden here on 8 Aug 2026 and the operator reported the
+     copilot unreachable on mobile the same day, so it came back. What this
+     line is really asserting is that the track lays out as one row and stays
+     on screen; the display value is how, not what. test_copilot_dock.js pins
+     the other half: no rule anywhere may hide #btnCopilot at any width. */
+  assert(/\.topbar-actions\{display:flex!important/.test(CSS));
 });
 
 ok('opportunity disclosure includes full economics, calibration, trace and non-modal focus', () => {
