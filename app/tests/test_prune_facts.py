@@ -155,8 +155,12 @@ class PruneFactsCase(unittest.TestCase):
     def test_current_versions_are_read_from_the_engines_not_sorted(self):
         """`v0.9` sorts above `v0.13`. Sorting version strings would delete the
         live generation and keep the dead one — the exact inversion this map
-        exists to prevent."""
-        self.assertEqual("zone-v0.13-draft", self.live["zone"])
+        exists to prevent. Asserted against the engine's own constant rather
+        than a literal: a literal restates the value, and went stale the day
+        the agg-v0.2 cascade moved zone to v0.14 — while the property under
+        test (the map reads the ENGINE, whatever it says) never moved."""
+        from engine import zones
+        self.assertEqual(zones.ZONE_VERSION, self.live["zone"])
         self.assertGreater("zone-v0.9-draft", "zone-v0.13-draft",
                            "string order really is inverted here")
 

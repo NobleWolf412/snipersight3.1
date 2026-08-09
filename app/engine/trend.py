@@ -95,7 +95,9 @@ from .setups import (ENTRY_MAX_BARS, ENTRY_MODEL, MAKER_OFFSET_R,
 from .runlog import RunRecorder
 from .swings import SWING_VERSION, compute_atr, quote_ticks
 
-TREND_VERSION = "trend-v0.2-draft"
+TREND_VERSION = "trend-v0.3-draft"
+# v0.3: input cascade from agg-v0.2 (own 4H/1W candle reads, swing-v0.10
+# facts, ma-v0.2 shared code) — acknowledged-partial buckets; no rule change.
 # v0.2: records the TOP-DOWN BIAS BLOCK on every setup. No rule changed and no
 # trade differs — `BIAS_POLICY` below is ALLOW everywhere, so nothing is
 # filtered. The version moves because the payload does, and a payload change

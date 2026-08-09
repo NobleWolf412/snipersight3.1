@@ -65,7 +65,12 @@ from .ma import plain, sig
 from .runlog import RunRecorder
 from .swings import compute_atr
 
-FVG_VERSION = "fvg-v0.1-draft"
+FVG_VERSION = "fvg-v0.2-draft"
+# v0.2: input cascade from agg-v0.2 (own 4H/1W candle reads, ma-v0.2 and
+# swings shared code) — acknowledged-partial buckets change the series gaps
+# are detected over; no rule change here. This engine is not in the version
+# lockfile (pre-existing gap, flagged 2026-08-09) — the bump is recorded here
+# so its facts still segregate by generation.
 
 #: Recording floor, in creation-bar ATRs. Below this the "gap" is bar noise.
 #: A versioned modelling constant — moving it is a new fact generation.

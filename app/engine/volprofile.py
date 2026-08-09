@@ -79,7 +79,12 @@ from . import store
 from .ma import plain, sig
 from .runlog import RunRecorder
 
-VOLPROFILE_VERSION = "volprofile-v0.1-draft"
+VOLPROFILE_VERSION = "volprofile-v0.2-draft"
+# v0.2: input cascade from agg-v0.2 (own 4H/1W candle reads, ma-v0.2 shared
+# code) — acknowledged-partial buckets change the series profiles are built
+# over, and partial buckets carry genuinely smaller volume sums. No rule
+# change here. Not in the version lockfile (pre-existing gap, flagged
+# 2026-08-09) — the bump is recorded here so facts segregate by generation.
 
 VP_WINDOW_BARS = 240          # ~2.5 days of 15m, ~10 days of 1H
 VP_BIN_PCT = Decimal("0.0025")  # bin step = 0.25% of the series' first close

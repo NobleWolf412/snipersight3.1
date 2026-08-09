@@ -23,7 +23,10 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-ZONE_VERSION = "zone-v0.13-draft"
+ZONE_VERSION = "zone-v0.14-draft"
+# v0.14: input cascade from agg-v0.2 via swing-v0.10/structure-v0.13 —
+# acknowledged-partial 4H/1W buckets change the pivots zones cluster, with no
+# rule change here.
 # v0.13: the v0.12 anchor collapse keyed on market_time ALONE, and one bar can
 # legitimately host BOTH a promoted HIGH and a promoted LOW — the 2025-10-10
 # crash bar carries a MAJOR pair on three symbols. The later row shadowed its

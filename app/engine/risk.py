@@ -24,7 +24,10 @@ from .execsim import EXEC_VERSION, plan_versions as execsim_plan_versions
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.22-draft"
+RISK_VERSION = "risk-v0.23-draft"
+# v0.23: input cascade from agg-v0.2 via setup-v0.19/exec-v0.23 — risk replays
+# the account from exec facts and rules on version-scoped setup_ids. No sizing
+# or gate rule changed.
 # v0.22: the envelope is restated in R — one R being one full stop-out at the
 # per-trade risk — and only the R SIZE differs by mode. Paper is rehearsal for
 # live: the gates (2R total open risk, 4R daily halt, one base position, 0R

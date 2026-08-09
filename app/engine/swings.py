@@ -17,7 +17,13 @@ from decimal import Decimal
 from . import store
 from .runlog import RunRecorder
 
-SWING_VERSION = "swing-v0.9-draft"
+SWING_VERSION = "swing-v0.10-draft"
+# v0.10: input cascade from agg-v0.2 — the 4H/1W series now include
+# acknowledged-partial buckets (thin markets regain windows v0.1 discarded;
+# BICO-USD 4H alone regains ~621), so pivots over those series differ with no
+# rule change here. Full-series recompute means new facts would have appended
+# beside the sparse-series generation under one label — the S53 defect — so
+# every fact-level reader moves too; see tests/test_version_cascade.py.
 # v0.9: the promotion payload is now a pure function of the candles. v0.8 embedded
 # `evidence.held_candles` — which accrues per BAR — inside a content-hashed,
 # append-only fact, so every scan cycle re-appended every promoted pivot with the

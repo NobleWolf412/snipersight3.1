@@ -35,6 +35,48 @@ TF_SECONDS = {"5m": 300, "15m": 900, "1H": 3600, "4H": 14400,
 NATIVE_TFS = {"5m": 300, "15m": 900, "1H": 3600, "1D": 86400}
 MAX_CANDLES_PER_REQ = 300
 REQUEST_PAUSE_S = 0.15
+# import_log rows whose range_start predates 2000 are cold-start artefacts:
+# before the pre-listing fix below (2026-07-30) a cold symbol asked for history
+# from 1970 and logged every bucket since as a gap — 6.19bn fabricated entries
+# against ~700k real ones. The rows are retained as evidence but nothing may
+# treat their gap lists as acknowledgment. This constant was born in server.py's
+# /api/health; it lives here now because the importer owns the gap record and
+# three readers (health, quality, aggregator) need the same cutoff.
+PRE_2000 = 946_684_800
+
+
+def acknowledged_gaps(con, symbol: str, tf: str) -> set[int]:
+    """Bucket timestamps the venue itself served nothing for, per import_log.
+
+    LISTED-ONLY, deliberately. `n_gaps` is exact while `gaps` is capped at
+    5000 entries per row, so a count can exceed its list — but a gap that was
+    counted and not listed cannot be attributed to a specific bucket, and the
+    caller (the aggregator, deciding whether a PARTIAL 4H/1W bar may be built)
+    must not accept "some bucket somewhere was empty" as clearance for THIS
+    one. quality._known_gap_buckets budgets on the count instead, and that is
+    the right call there: excusing a symbol's gap tally is a different question
+    from building a bar out of what remains.
+
+    n_bad=0 ONLY. backfill() records a served-but-REJECTED malformed bar in
+    the same gaps list as a bucket with no trades (gap-honesty: rejected data
+    is a genuine hole), and the list does not say which entry is which. A
+    rejected bar means REAL TRADES happened in that bucket, so treating its
+    entry as "nobody traded" would clear a partial bar that omits real
+    volume and possibly the window's true extremes. A row that rejected
+    anything therefore acknowledges nothing (auditor finding, 2026-08-09;
+    zero such rows exist on the live store today, which is why this is a
+    guard and not a migration).
+    """
+    listed: set[int] = set()
+    for (g,) in con.execute(
+            "SELECT gaps FROM import_log WHERE symbol=? AND tf=? "
+            "AND n_gaps>0 AND n_bad=0 AND range_start>=?",
+            (symbol, tf, PRE_2000)):
+        try:
+            listed.update(int(t) for t in json.loads(g))
+        except Exception:
+            continue
+    return listed
 
 
 def _iso(ts: int) -> str:

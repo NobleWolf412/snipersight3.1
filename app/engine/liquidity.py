@@ -16,7 +16,9 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-LIQ_VERSION = "liq-v0.11-draft"
+LIQ_VERSION = "liq-v0.12-draft"
+# v0.12: input cascade from agg-v0.2 via swing-v0.10 — acknowledged-partial
+# 4H/1W buckets change the pivots pools cluster, with no rule change here.
 # v0.11: the v0.10 collapse keyed on market_time alone; a bar hosting both a
 # promoted HIGH and a promoted LOW (2025-10-10 carries a MAJOR pair on three
 # symbols) had one twin shadow the other out of pool membership. Identity is

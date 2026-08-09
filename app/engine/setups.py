@@ -30,7 +30,12 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.18-draft"
+SETUP_VERSION = "setup-v0.19-draft"
+# v0.19: input cascade from agg-v0.2 — acknowledged-partial 4H/1W buckets
+# reach this engine through every producer it reads (swing-v0.10,
+# structure-v0.13, zone-v0.14, liq-v0.12, regime-v0.13) and through its own
+# candle reads. No rule change; setup_id is version-scoped, so the whole
+# trading tail (exec/risk/scale/cooldown) moves with it.
 # v0.18: cascade from risk-v0.22 (R-denominated envelope, paper R back to 2%).
 # No setup RULE changed, but the FORMING payload bakes `risk.size_order()`
 # output in at arming time — so a sizing change IS a payload change, and a

@@ -143,7 +143,9 @@ from . import store
 from .swings import SWING_VERSION, alternate, compute_atr, quote_ticks
 from .runlog import RunRecorder
 
-RANGES_VERSION = "ranges-v0.2-draft"
+RANGES_VERSION = "ranges-v0.3-draft"
+# v0.3: input cascade from agg-v0.2 via swing-v0.10 and this engine's own
+# 4H/1W candle reads — acknowledged-partial buckets; no rule change here.
 # v0.2: cascade from swing-v0.9. No rule change here — this engine reads LOCAL
 # swings, whose payloads never carried the accruing evidence — but the input
 # namespace moved, and a tag must identify the generation of its inputs.

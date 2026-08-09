@@ -25,7 +25,19 @@ RUNG_ORD = {r: i for i, r in enumerate(RUNGS)}
 CODE_RUNG = {
     # DATA
     "NO_CANDLES":              "HALT",
-    "UNKNOWN_TIMEFRAME":       "HALT",
+    # Per-(symbol, tf) — audit_market_inputs `continue`s past an unknown tf and
+    # evaluates the rest, so this cannot break the pipeline the way HALT
+    # implies. It was HALT and the watchdog restart-looped a live scanner every
+    # ~7 minutes on 2026-08-08 over 27 findings that were never data at all:
+    # THIS module reads importer.TF_SECONDS from whatever commit the auditing
+    # process booted from, `5m` had been added after the supervisor started,
+    # and 27 symbols carried 5m candles. The rows were fine; the reader was
+    # two days stale, and restarting the SCANNER could never fix either.
+    # Same reasoning as STALE_SERIES → QUARANTINE and watchdog.py's "a data
+    # verdict is not a process fault" — plus one this code can't see: the
+    # finding may indict the auditing process itself, and the rung must not
+    # hand that process a gun.
+    "UNKNOWN_TIMEFRAME":       "QUARANTINE",
     "OHLC_INVARIANT_FAILURE":  "HALT",
     "SEQUENCE_GAPS":           "HALT",
     "DEVELOPING_CANDLES":      "HALT",
@@ -89,8 +101,14 @@ def _known_gap_buckets(con, sym: str, tf: str) -> tuple[set[int], int]:
     """
     listed: set[int] = set()
     total = 0
+    # range_start >= PRE_2000: the quarantined cold-start rows (importer.py)
+    # hold ~2M fabricated gap entries each. This reader ingested their counts
+    # into its budget until 2026-08-09 — harmless only because those symbols'
+    # real voids dwarfed nothing, but a budget built on fabricated numbers is
+    # the exact defect the quarantine exists to contain.
     for g, n in con.execute(
-            "SELECT gaps, n_gaps FROM import_log WHERE symbol=? AND tf=?", (sym, tf)):
+            "SELECT gaps, n_gaps FROM import_log WHERE symbol=? AND tf=? "
+            "AND range_start>=?", (sym, tf, importer.PRE_2000)):
         total += int(n or 0)
         try:
             listed.update(int(t) for t in json.loads(g))
@@ -354,12 +372,47 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
             actual = {r[0]: r[1:] for r in con.execute(
                 "SELECT open_ts,open,high,low,close,volume FROM candles "
                 "WHERE symbol=? AND tf=?", (sym, target)).fetchall()}
+            src_sec = importer.TF_SECONDS[rule["source"]]
+            # Lazy for the same reason the aggregator's copy is: on a liquid
+            # symbol no bucket is partial and the set is never built.
+            acknowledged: set | None = None
             expected = 0
             for bstart, group in by_bucket.items():
-                if bstart + rule["bucket"] > now or len(group) != rule["n_expected"]:
+                if bstart + rule["bucket"] > now:
                     continue
-                if any(group[i][0] - group[i - 1][0] != importer.TF_SECONDS[rule["source"]]
-                       for i in range(1, len(group))):
+                partial = len(group) != rule["n_expected"]
+                if partial:
+                    # MIRROR OF THE AGGREGATOR'S OWN RULE (agg-v0.2), asked
+                    # independently against the same records: a partial bucket
+                    # is verifiable iff every source candle occupies a slot
+                    # and every missing slot is one the venue acknowledged
+                    # serving nothing for. Before v0.2 this loop skipped every
+                    # partial group, which was correct while the aggregator
+                    # refused to build them and would have been a silent
+                    # verification hole the day it stopped refusing — a
+                    # partial bar on disk that no check ever reconciled.
+                    present = {r[0] for r in group}
+                    slots = range(bstart, bstart + rule["bucket"], src_sec)
+                    if not present.issubset(slots):
+                        # Misaligned source candle beside aligned ones — the
+                        # aggregator refuses the bucket for the same reason,
+                        # and the candle itself is OHLC_INVARIANT_FAILURE's.
+                        continue
+                    missing = [t for t in slots if t not in present]
+                    if acknowledged is None:
+                        acknowledged = importer.acknowledged_gaps(
+                            con, sym, rule["source"])
+                    if any(t not in acknowledged for t in missing):
+                        # Unverifiable absence (never fetched / failed fetch /
+                        # pre-listing). The aggregator refuses these too, so
+                        # there is no bar to check; if one somehow exists it
+                        # reconciles against nothing and stays visible via the
+                        # source-tf SEQUENCE_GAPS check instead.
+                        continue
+                elif any(group[i][0] - group[i - 1][0] != src_sec
+                         for i in range(1, len(group))):
+                    # A full-count group with uneven spacing means a misaligned
+                    # source candle; OHLC_INVARIANT_FAILURE reports it.
                     continue
                 expected += 1
                 want = (group[0][1], str(max(Decimal(r[2]) for r in group)),
@@ -370,17 +423,30 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
                     # A bucket that closed moments ago simply has not been
                     # aggregated yet — that is scheduling lag, not corruption,
                     # and blocking on it wedges the pipeline against itself
-                    # (regression 2026-07-26: ONDO/SUI 4H). Only a bucket that
-                    # stayed unemitted for more than one further bucket period
-                    # is a genuine aggregation failure.
+                    # (regression 2026-07-26: ONDO/SUI 4H). Only a COMPLETE
+                    # bucket that stayed unemitted for more than one further
+                    # bucket period is a genuine aggregation failure. A
+                    # PARTIAL one never escalates past DEGRADED: ~48 stored
+                    # symbols are outside the scan universe, nothing ever
+                    # re-aggregates them, and a HALT the scanner cannot heal
+                    # is the watchdog's documented anti-pattern — the same
+                    # shape as UNKNOWN_TIMEFRAME above.
                     lagging = now - (bstart + rule["bucket"]) <= 2 * rule["bucket"]
-                    _issue(checks, "AGGREGATION",
-                           "DEGRADED" if lagging else "BLOCKED",
-                           "AGGREGATE_PENDING" if lagging else "MISSING_AGGREGATE",
-                           (f"complete {target} bucket {bstart} not yet emitted "
-                            f"(awaiting next aggregation pass)" if lagging else
-                            f"complete {target} bucket {bstart} was not emitted"),
-                           sym, target)
+                    if partial:
+                        _issue(checks, "AGGREGATION", "DEGRADED",
+                               "AGGREGATE_PENDING",
+                               f"qualifying partial {target} bucket {bstart} "
+                               f"({len(group)}/{rule['n_expected']} source candles, "
+                               f"absences venue-acknowledged) not emitted",
+                               sym, target)
+                    else:
+                        _issue(checks, "AGGREGATION",
+                               "DEGRADED" if lagging else "BLOCKED",
+                               "AGGREGATE_PENDING" if lagging else "MISSING_AGGREGATE",
+                               (f"complete {target} bucket {bstart} not yet emitted "
+                                f"(awaiting next aggregation pass)" if lagging else
+                                f"complete {target} bucket {bstart} was not emitted"),
+                               sym, target)
                 elif tuple(map(str, got)) != tuple(map(str, want)):
                     _issue(checks, "AGGREGATION", "BLOCKED", "AGGREGATE_MISMATCH",
                            f"{target} bucket {bstart} does not reconcile to {rule['source']}", sym, target)

@@ -19,7 +19,10 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-STRUCTURE_VERSION = "structure-v0.12-draft"
+STRUCTURE_VERSION = "structure-v0.13-draft"
+# v0.13: input cascade from agg-v0.2, via swing-v0.10 and this engine's own
+# 4H/1W candle reads — acknowledged-partial buckets change both with no rule
+# change here.
 # v0.12: the v0.11 pivot collapse keyed on market_time alone; a bar hosting
 # both a promoted HIGH and a promoted LOW (2025-10-10 carries a MAJOR pair on
 # three symbols) had one twin shadow the other out of the label walk and the

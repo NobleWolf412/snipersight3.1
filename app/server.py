@@ -3560,14 +3560,15 @@ def health():
         # evidence of what happened, including of the bug — but they must not
         # reach this metric: 6,187,847,452 fabricated gaps against 699,726 real
         # ones made `gaps_logged` 99.99% noise, and `risk.py` halts on the
-        # data-health verdict this feeds.
-        PRE_2000 = 946_684_800
+        # data-health verdict this feeds. The cutoff was born here; it lives in
+        # importer.PRE_2000 now because the quality audit and the aggregator
+        # apply the same quarantine to the same rows.
         bad, gaps = con.execute(
             "SELECT COALESCE(SUM(n_bad),0), COALESCE(SUM(n_gaps),0) "
-            "FROM import_log WHERE range_start >= ?", (PRE_2000,)).fetchone()
+            "FROM import_log WHERE range_start >= ?", (importer.PRE_2000,)).fetchone()
         quarantined = con.execute(
             "SELECT COUNT(*), COALESCE(SUM(n_gaps),0) FROM import_log "
-            "WHERE range_start < ?", (PRE_2000,)).fetchone()
+            "WHERE range_start < ?", (importer.PRE_2000,)).fetchone()
         return {"status": "OK" if integrity == "ok" and not stale_maintained
                           else "DEGRADED",
                 "database": integrity, "bad_candles_rejected": bad,

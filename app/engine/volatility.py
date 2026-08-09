@@ -118,7 +118,9 @@ from .ma import ema, plain, sig
 from .runlog import RunRecorder
 from .swings import compute_atr
 
-VOLATILITY_VERSION = "volatility-v0.1-draft"
+VOLATILITY_VERSION = "volatility-v0.2-draft"
+# v0.2: input cascade from agg-v0.2 (own 4H/1W candle reads and ma-v0.2
+# shared code) — acknowledged-partial buckets; no rule change here.
 
 BB_PERIOD = 20
 BB_K = Decimal(2)

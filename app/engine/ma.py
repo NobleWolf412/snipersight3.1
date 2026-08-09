@@ -128,7 +128,9 @@ from .ranges import break_tolerance
 from .runlog import RunRecorder
 from .swings import compute_atr, quote_ticks
 
-MA_VERSION = "ma-v0.1-draft"
+MA_VERSION = "ma-v0.2-draft"
+# v0.2: input cascade from agg-v0.2 — acknowledged-partial 4H/1W buckets
+# change the series every average here is computed over; no rule change.
 
 # (label, kind, period) — evaluated fast to slow. The order is load-bearing:
 # `stack` reads it left to right, so changing it changes the meaning of BULL.

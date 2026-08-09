@@ -24,8 +24,8 @@ engine you changed, and bump those too.
 """
 import unittest
 
-from engine import (bias, breakout, cooldowns, cycles, execsim, venues,
-                    liquidity, ma, manual, momentum, ranges, regime,
+from engine import (aggregator, bias, breakout, cooldowns, cycles, execsim,
+                    venues, liquidity, ma, manual, momentum, ranges, regime,
                     risk, scalein, setups, structure, swings, volatility,
                     volume, zones, trend)
 from engine import automation, autotrader, contracts, execution, lifecycle
@@ -79,6 +79,13 @@ def operational_versions():
 
 # The current, deliberate state of the pipeline. Update WITH the cascade.
 LOCKED = {
+    # Not a fact producer — it writes CANDLES — and locked anyway, for the
+    # strongest reason in this file: it sits UPSTREAM of every engine below,
+    # so a rule change here changes their output while every version constant
+    # they import stays put. It went unlocked from birth to 2026-08-09, over
+    # which time its constant was stamped on nothing and cited by nothing —
+    # a version that cannot force a question is decoration.
+    "agg": aggregator.AGG_VERSION,
     "swing": swings.SWING_VERSION,
     "structure": structure.STRUCTURE_VERSION,
     "zone": zones.ZONE_VERSION,
@@ -127,7 +134,29 @@ RETIRED_MANUAL = tuple(v for v in manual.MANUAL_VERSIONS
                        if v != manual.MANUAL_VERSION)
 
 EXPECTED = {
-    # S53 cascade — the widest this file has recorded, and the reason it exists.
+    # agg-v0.2 cascade, 2026-08-09 — wider than S53, and the first to start
+    # from CANDLES rather than facts. The aggregator now builds a 4H/1W bucket
+    # from the source candles that exist when every missing one is a bucket
+    # the venue acknowledged serving nothing for (import_log, gap-honesty
+    # rule). Thin markets regain the windows v0.1 discarded — BICO-USD 4H
+    # alone regains ~621 bars carrying 1,442 real hours; all 93 symbols move
+    # at least slightly. No downstream RULE changed anywhere, but the input
+    # series change retroactively, and a full-series recompute under an
+    # unmoved tag would append a second generation beside the first — S53's
+    # defect at pipeline width. So: every engine reading 4H/1W candles
+    # directly (swing, structure, ranges, ma, momentum, volatility, volume,
+    # liquidity, setup, exec, scale, breakout, trend) and every fact-level
+    # dependent (zone, regime, bias, risk, cooldown) moves one step.
+    # venues/cycles/manual stay: venues reads no candles, cycles reads BTC 1D
+    # (native), and manual resolves on the finest NATIVE series by design.
+    # The graded book restarts under the new tags — measured cost at the
+    # moment of the change: baseline started 2026-08-08, ZERO trades graded,
+    # zero shadow/testnet days. fvg and volprofile also read 4H/1W: both moved
+    # (v0.2) in this cascade, but remain OUTSIDE this lockfile — locking them
+    # is its own decision, still open.
+    "agg": "agg-v0.2-draft",
+    # S53 cascade — the widest this file had recorded before the above, and
+    # the reason it exists.
     # swing-v0.9 stopped the promotion payload accruing per bar: v0.8 embedded
     # evidence.held_candles — which increments every candle a pivot holds —
     # inside the content-hashed, append-only fact, so every scan cycle appended
@@ -142,7 +171,7 @@ EXPECTED = {
     # below — then regime (reads structure), and the trading tail exec / risk /
     # scale / cooldown through setup. ma, volatility, volume, venues, cycles,
     # manual are the only engines that stay put.
-    "swing": "swing-v0.9-draft",
+    "swing": "swing-v0.10-draft",
     # S53 addendum, caught in the FIRST live v0.9 cycle: the new consumer
     # collapse keyed pivots on market_time alone, and one bar can host both a
     # promoted HIGH and a promoted LOW (2025-10-10 carries a MAJOR pair on
@@ -151,19 +180,19 @@ EXPECTED = {
     # structure/zone/liquidity rules changed, so they and everything downstream
     # move AGAIN — the v0.11/v0.12/v0.10 facts from that one cycle remain in
     # the store as the recorded dud.
-    "structure": "structure-v0.12-draft",
+    "structure": "structure-v0.13-draft",
     # S50: zone-v0.11 closed a creation-time LOOKAHEAD — the cluster count read
     # swings not yet confirmed, inflating formation_quality on 7.9% of zones.
     # CONSUMERS["zone"] is ("setup",), and setup's own consumers are
     # ("exec", "risk", "scale"), so the whole trading path cascades.
-    "zone": "zone-v0.13-draft",
-    "liquidity": "liq-v0.11-draft",
-    "regime": "regime-v0.12-draft",
-    "ranges": "ranges-v0.2-draft",
-    "ma": "ma-v0.1-draft",
-    "momentum": "momentum-v0.2-draft",
-    "volatility": "volatility-v0.1-draft",
-    "volume": "volume-v0.1-draft",
+    "zone": "zone-v0.14-draft",
+    "liquidity": "liq-v0.12-draft",
+    "regime": "regime-v0.13-draft",
+    "ranges": "ranges-v0.3-draft",
+    "ma": "ma-v0.2-draft",
+    "momentum": "momentum-v0.3-draft",
+    "volatility": "volatility-v0.2-draft",
+    "volume": "volume-v0.2-draft",
     # setup-v0.16: WHY prices scale decimals to magnitude — a flat .2f wrote
     # every sub-dollar zone as a degenerate range ("supply zone 0.09-0.09").
     # No strategy rule changed, but the WHY sits inside the content-hashed
@@ -187,7 +216,7 @@ EXPECTED = {
     # risk -> setup, so the EXPECTED diff below is where the next risk bump
     # forces the question — the enforcement is that diff plus this map, the
     # same human-attention gate every producer here relies on.
-    "setup": "setup-v0.18-draft",
+    "setup": "setup-v0.19-draft",
     # S50 cascade. exec-v0.13 -> v0.14 corrected the MAKER_THEN_MARKET crossing
     # leg, which booked a market fill at the PLAN's price — two bars stale, and
     # outside the fill bar's own [low, high] on 78 of 95 crossed orders, never
@@ -205,7 +234,7 @@ EXPECTED = {
     # are derived purely from recorded exits. All four move together.
     # scale ALSO changed on its own account — its economics gate now prices the
     # add on the add's own venue instead of the process-wide Coinbase default.
-    "exec": "exec-v0.22-draft",
+    "exec": "exec-v0.23-draft",
     # risk-v0.22: the envelope restated in R, sized by mode (paper/shadow 2%,
     # testnet/live 0.25%), gates identical everywhere; DECISIONs record their
     # pct. The v0.21 note above this line claimed "no cascade follows risk" —
@@ -215,9 +244,9 @@ EXPECTED = {
     # file. CONSUMERS["risk"] now names the coupling so the EXPECTED diff a
     # risk bump forces has the answer in view — the map informs the human
     # gate; it does not mechanically fail on an incomplete cascade.
-    "risk": "risk-v0.22-draft",
-    "scale": "scale-v0.16-draft",
-    "cooldown": "cooldown-v0.10-draft",
+    "risk": "risk-v0.23-draft",
+    "scale": "scale-v0.17-draft",
+    "cooldown": "cooldown-v0.11-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
     # every setup they emit. No rule changed in either and no trade differs —
     # both policies are ALLOW everywhere — but the payload does, and a payload
@@ -232,7 +261,7 @@ EXPECTED = {
     # was. The day `setups.py` starts recording a bias block — step 3 of the
     # plan — that stops being true and setup/exec/risk/scale/cooldown all move
     # together.
-    "breakout": "breakout-v0.5-draft",
+    "breakout": "breakout-v0.6-draft",
     # trend-v0.1: NEW ENGINE, measured and not enabled. It arrives because
     # grading the MA against the book found LONG x ABOVE = 0 and
     # SHORT x BELOW = 0 across all 477 closed trades — both shipped playbooks
@@ -241,14 +270,14 @@ EXPECTED = {
     # trend-*), but it sits downstream of `ma` and `swing`: it computes the
     # ribbon with ma.ema / ma.sma and takes targets from INTERMEDIATE+ swings,
     # so both appear in its CONSUMERS entries and a bump to either moves this.
-    "trend": "trend-v0.2-draft",
+    "trend": "trend-v0.3-draft",
     # bias-v0.1: NEW SHARED LAYER, record-only. It arrives because three
     # engines answered "does the higher timeframe matter" three different ways
     # — scalein gates hard, setups records and ignores, trend did not look at
     # all — and none of those three answers was chosen by measurement. It reads
     # `regime` and `structure` facts and writes none of its own, so it is
     # downstream of both and upstream of every playbook that records it.
-    "bias": "bias-v0.1-draft",
+    "bias": "bias-v0.2-draft",
     "venues": "venues-v0.2-draft",
     "cycles": "cycles-v0.2-draft",
     # manual-v0.2: partial exits. The one bump on this line with NO cascade, and
@@ -327,6 +356,18 @@ EXPECTED = {
 # rule change silently changes their output even though they read no `ma` fact.
 # All four must bump together; each of their docstrings says so.
 CONSUMERS = {
+    # A THIRD kind of coupling, above both others: these engines read the
+    # CANDLE SERIES the aggregator writes (4H and 1W), so an aggregation rule
+    # change moves their output without a fact or an import in sight. Only
+    # direct candle readers are listed — the fact cascade (zone, regime, bias,
+    # risk, cooldown) follows from their own entries below. `cycles` reads
+    # BTC 1D (native) and `manual` resolves on the finest NATIVE series, so
+    # neither appears; fvg/volprofile also read these series but are not in
+    # this file (they moved with the agg-v0.2 cascade anyway — locking them
+    # is a separate open decision, flagged 2026-08-09).
+    "agg": ("swing", "structure", "ranges", "ma", "momentum", "volatility",
+            "volume", "liquidity", "setup", "exec", "scale", "breakout",
+            "trend"),
     # CODE-level coupling, not fact-level, and it counts the same. momentum,
     # volatility and volume import `ma.ema` / `ma.sma` / `ma.sig` directly, so a
     # change to the EMA formula changes THEIR facts without touching a line of

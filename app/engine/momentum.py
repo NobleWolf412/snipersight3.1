@@ -125,7 +125,10 @@ from .ma import ema, plain, sig
 from .runlog import RunRecorder
 from .swings import SWING_VERSION, alternate
 
-MOMENTUM_VERSION = "momentum-v0.2-draft"
+MOMENTUM_VERSION = "momentum-v0.3-draft"
+# v0.3: input cascade from agg-v0.2 (own 4H/1W candle reads, swing-v0.10
+# facts, and ma-v0.2 shared code) — acknowledged-partial buckets; no rule
+# change here.
 # v0.2: cascade from swing-v0.9. No rule change here — divergences read LOCAL
 # swings, whose payloads never carried the accruing evidence — but the input
 # namespace moved, and a tag must identify the generation of its inputs.

@@ -33,7 +33,10 @@ caller supplies, so a replay reaches the same verdict as the live pass did.
 from . import store
 from .runlog import RunRecorder
 
-COOLDOWN_VERSION = "cooldown-v0.10-draft"
+COOLDOWN_VERSION = "cooldown-v0.11-draft"
+# v0.11: input cascade from agg-v0.2 via exec-v0.23 — cooldowns are derived
+# purely from recorded exits, and the exits are a new generation. No rule
+# change.
 # v0.10: cascade from exec-v0.22 (R-denominated envelope at risk-v0.22,
 # setup-v0.18). Cooldowns are derived purely from recorded exits, so a new
 # exec generation is a new cooldown series.

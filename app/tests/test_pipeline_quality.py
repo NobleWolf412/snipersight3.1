@@ -59,6 +59,90 @@ class TestMarketQuality(QualityStoreCase):
         checks = quality.audit_market_inputs(self.con, "BTC-USD", now=2_000_000)
         self.assertIn("AGGREGATE_MISMATCH", {c["code"] for c in checks})
 
+    def _partial_market(self, *, acknowledged=True, aggregate=True):
+        """Three of four hours traded; 02:00 the venue served nothing for.
+
+        range_start sits at importer.PRE_2000 exactly — acknowledgment rows
+        starting before 2000 are quarantined as cold-start artefacts, and this
+        fixture's candles live near the epoch."""
+        from engine import importer
+        for i in (0, 1, 3):
+            self.candle("1H", i * 3600, op=str(100 + i), hi=str(102 + i),
+                        lo=str(98 + i), cl=str(101 + i))
+        if acknowledged:
+            self.con.execute(
+                "INSERT INTO import_log (symbol, tf, range_start, range_end, "
+                "n_candles, n_gaps, gaps, source, run_at, n_bad) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                ("BTC-USD", "1H", importer.PRE_2000, 20000, 3, 1,
+                 json.dumps([2 * 3600]), "coinbase", 19999, 0))
+        self.con.commit()
+        if aggregate:
+            with patch("engine.aggregator.time.time", return_value=2_000_000):
+                aggregator.aggregate(self.con, "BTC-USD", "4H")
+
+    def test_acknowledged_partial_bar_reconciles(self):
+        """agg-v0.2's mirror: a partial bar the aggregator was entitled to
+        build is VERIFIED, not skipped. Before this, the mirror ignored every
+        partial group — correct while the aggregator refused to build them,
+        and a silent verification hole the day it stopped refusing."""
+        self._partial_market()
+        checks = quality.audit_market_inputs(self.con, "BTC-USD", now=2_000_000)
+        self.assertFalse([c for c in checks if c["status"] == "BLOCKED"])
+        # ...and the bucket counts as verified, so a store whose only closed
+        # buckets are qualifying partials is not reported as unverifiable.
+        self.assertNotIn("NO_COMPLETE_BUCKETS",
+                         {c["code"] for c in checks if c["tf"] == "4H"})
+
+    def test_corrupted_partial_bar_is_blocking(self):
+        """A partial bar that does not reconcile to its present source candles
+        is corruption, exactly as a complete one is."""
+        self._partial_market()
+        self.con.execute(
+            "UPDATE candles SET high='999' WHERE symbol='BTC-USD' AND tf='4H'")
+        self.con.commit()
+        checks = quality.audit_market_inputs(self.con, "BTC-USD", now=2_000_000)
+        self.assertIn("AGGREGATE_MISMATCH", {c["code"] for c in checks})
+
+    def test_unemitted_partial_bucket_flags_without_blocking(self):
+        """A qualifying partial bucket the aggregator has not built yet is a
+        DEGRADED flag, never a HALT — ~48 stored symbols sit outside the scan
+        universe where nothing ever re-aggregates, and a HALT no scanner pass
+        can heal is the watchdog's documented anti-pattern (the
+        UNKNOWN_TIMEFRAME restart loop, 2026-08-08)."""
+        self._partial_market(aggregate=False)
+        checks = quality.audit_market_inputs(self.con, "BTC-USD", now=2_000_000)
+        agg = [c for c in checks if c["tf"] == "4H"]
+        self.assertIn("AGGREGATE_PENDING", {c["code"] for c in agg})
+        self.assertNotIn("MISSING_AGGREGATE", {c["code"] for c in agg})
+        self.assertFalse([c for c in agg if c["status"] == "BLOCKED"])
+
+    def test_unknown_timeframe_is_quarantine_not_halt(self):
+        """Pin for the 2026-08-08 restart loop. An unrecognised tf may indict
+        the AUDITING process rather than the data — this audit reads
+        importer.TF_SECONDS from whatever commit its process booted from, and
+        a supervisor two days stale reported 27 phantom findings while the
+        rows were fine. QUARANTINE never hands the watchdog a restart; HALT
+        did, every ~7 minutes, against a scanner that could not heal it."""
+        self.candle("7H", 0)
+        self.con.commit()
+        checks = quality.audit_market_inputs(self.con, "BTC-USD", now=2_000_000)
+        unknown = [c for c in checks if c["code"] == "UNKNOWN_TIMEFRAME"]
+        self.assertTrue(unknown, "an unrecognised tf must still be reported")
+        self.assertEqual({c["rung"] for c in unknown}, {"QUARANTINE"})
+
+    def test_unacknowledged_partial_stays_outside_the_mirror(self):
+        """No acknowledgment -> the aggregator refuses the bucket and the
+        mirror neither expects a bar nor reports its absence. The missing hour
+        itself stays visible where it belongs: as a gap on the 1H series."""
+        self._partial_market(acknowledged=False, aggregate=False)
+        checks = quality.audit_market_inputs(self.con, "BTC-USD", now=2_000_000)
+        agg_codes = {c["code"] for c in checks if c["tf"] == "4H"}
+        self.assertNotIn("AGGREGATE_PENDING", agg_codes)
+        self.assertNotIn("MISSING_AGGREGATE", agg_codes)
+        self.assertIn("SEQUENCE_GAPS", {c["code"] for c in checks
+                                        if c["tf"] == "1H"})
+
 
 class TestPipelineContracts(QualityStoreCase):
     def test_fact_causality_violation_is_visible(self):

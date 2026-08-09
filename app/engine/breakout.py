@@ -45,7 +45,9 @@ from .setups import (CONFIRM_MAX_BARS, ENTRY_MAX_BARS, ENTRY_MODEL, GOOD_RR,
 from .structure import STRUCTURE_VERSION
 from .swings import SWING_VERSION, compute_atr, quote_ticks
 
-BREAKOUT_VERSION = "breakout-v0.5-draft"
+BREAKOUT_VERSION = "breakout-v0.6-draft"
+# v0.6: input cascade from agg-v0.2 (own 4H/1W candle reads, swing-v0.10 and
+# structure-v0.13 facts) — acknowledged-partial buckets; no rule change here.
 # v0.5: records the TOP-DOWN BIAS BLOCK on every setup. No rule changed and no
 # trade differs — `BIAS_POLICY` is ALLOW everywhere. The version moves because
 # the payload does.

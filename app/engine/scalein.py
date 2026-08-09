@@ -28,7 +28,9 @@ from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.16-draft"
+SCALE_VERSION = "scale-v0.17-draft"
+# v0.17: input cascade from agg-v0.2 via setup-v0.19/exec-v0.23/risk-v0.23 —
+# adds only join positions the simulator says are open. No rule change.
 # v0.16: cascade from setup-v0.18 / exec-v0.22 / risk-v0.22 (R-denominated
 # envelope). Adds are 0R under the autonomous contract — risk.run REJECTS
 # them with SCALE_IN_FORBIDDEN(0R) rather than approving them at zero size —

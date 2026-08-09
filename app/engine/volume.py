@@ -156,7 +156,11 @@ from .ranges import break_tolerance
 from .runlog import RunRecorder
 from .swings import compute_atr, quote_ticks
 
-VOLUME_VERSION = "volume-v0.1-draft"
+VOLUME_VERSION = "volume-v0.2-draft"
+# v0.2: input cascade from agg-v0.2 (own 4H/1W candle reads and ma-v0.2
+# shared code) — acknowledged-partial buckets; no rule change here. RVOL on a
+# thin market is the reading that moves most: partial buckets carry genuinely
+# smaller sums, which is the truth about those windows, not a distortion.
 
 RVOL_PERIOD = 20
 # Entry / exit pairs. The gap IS the deadband; see the docstring.
