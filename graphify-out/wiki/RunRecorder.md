@@ -39,7 +39,7 @@
 - risk.py `EXTRACTED`
 - [volume.py](volume.py.md) `EXTRACTED`
 - [execsim.py](execsim.py.md) `EXTRACTED`
-- [momentum.py](momentum.py.md) `EXTRACTED`
+- momentum.py `EXTRACTED`
 - universe.py `EXTRACTED`
 - [ranges.py](ranges.py.md) `EXTRACTED`
 - trend.py `EXTRACTED`

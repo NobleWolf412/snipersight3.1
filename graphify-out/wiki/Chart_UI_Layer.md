@@ -34,17 +34,17 @@
 ## Relationships
 
 - [Chart Vendor Panes](Chart_Vendor_Panes.md) (8 shared connections)
+- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (3 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (3 shared connections)
 - [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (3 shared connections)
 - [report](report.md) (2 shared connections)
 - [status](status.md) (2 shared connections)
-- [Chart Vendor Auto Scaling](Chart_Vendor_Auto_Scaling.md) (2 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (2 shared connections)
+- [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (2 shared connections)
 - [Chart Vendor Time Scale API](Chart_Vendor_Time_Scale_API.md) (1 shared connections)
-- [Watchdog Kill Attribution Tests](Watchdog_Kill_Attribution_Tests.md) (1 shared connections)
-- [A/B Position Simulation](A-B_Position_Simulation.md) (1 shared connections)
-- [Setup Deck UI](Setup_Deck_UI.md) (1 shared connections)
 - [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (1 shared connections)
 - [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (1 shared connections)
+- [Chart Vendor Layout](Chart_Vendor_Layout.md) (1 shared connections)
+- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
 
 ## Source Files
 

@@ -1,27 +1,37 @@
 # execsim.py
 
-> 4 nodes
+> 15 nodes
 
 ## Key Concepts
 
-- **ProtectedBroker** (5 connections) — `app/tests/test_position_api.py`
-- **test_position_api.py** (3 connections) — `app/tests/test_position_api.py`
-- **.confirm_attached_protection()** (2 connections) — `app/tests/test_position_api.py`
-- **test_position_custody_api_requires_explicit_acknowledgements()** (2 connections) — `app/tests/test_position_api.py`
+- **btcalign.py** (9 connections) — `app/engine/btcalign.py`
+- **annotate()** (6 connections) — `app/engine/btcalign.py`
+- **grade()** (5 connections) — `app/engine/btcalign.py`
+- **alignment()** (3 connections) — `app/engine/btcalign.py`
+- **_btc_regime_series()** (3 connections) — `app/engine/btcalign.py`
+- **regime_asof()** (3 connections) — `app/engine/btcalign.py`
+- **factor_extractors()** (3 connections) — `app/engine/btcalign.py`
+- **main()** (2 connections) — `app/engine/btcalign.py`
+- **BTC alignment — was BTC trending WITH or AGAINST this alt setup? READ-ONLY.  The** (1 connections) — `app/engine/btcalign.py`
+- **OPPOSED / ALIGNED / NEUTRAL, or None when BTC's state is unknowable.** (1 connections) — `app/engine/btcalign.py`
+- **(confirmed_at, regime) for BTC on one timeframe, in confirmation order.** (1 connections) — `app/engine/btcalign.py`
+- **BTC's regime as the system could have known it at `ts` — the latest     fact con** (1 connections) — `app/engine/btcalign.py`
+- **Stamp `btc_regime_asof` / `btc_alignment` onto alt candidates' payloads.      Mu** (1 connections) — `app/engine/btcalign.py`
+- **0/1 flags for outcome_split. Absent when unannotated, so the MISSING     bucket** (1 connections) — `app/engine/btcalign.py`
+- **The whole audition: load, annotate, split, and say what held.** (1 connections) — `app/engine/btcalign.py`
 
 ## Relationships
 
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (3 shared connections)
-- [API Server Endpoints](API_Server_Endpoints.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_position_api.py`
+- `app/engine/btcalign.py`
 
 ## Audit Trail
 
-- EXTRACTED: 9 (75%)
-- INFERRED: 3 (25%)
+- EXTRACTED: 39 (95%)
+- INFERRED: 2 (5%)
 - AMBIGUOUS: 0 (0%)
 
 ---

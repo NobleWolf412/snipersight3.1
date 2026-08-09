@@ -6,7 +6,7 @@
 
 - **re()** (32 connections) — `app/static/lightweight-charts.js`
 - **.getVisibleLogicalRange()** (4 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (3 connections) — `app/static/lightweight-charts.js`
+- **.logicalToCoordinate()** (3 connections) — `app/static/lightweight-charts.js`
 - **.getVisibleRange()** (2 connections) — `app/static/lightweight-charts.js`
 - **.height()** (2 connections) — `app/static/lightweight-charts.js`
 - **.ww()** (2 connections) — `app/static/lightweight-charts.js`
@@ -32,15 +32,14 @@
 
 ## Relationships
 
-- [Setup Deck UI](Setup_Deck_UI.md) (2 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (2 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (2 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (4 shared connections)
+- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (2 shared connections)
 - [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
-- [Chart Vendor Auto Scaling](Chart_Vendor_Auto_Scaling.md) (1 shared connections)
-- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (1 shared connections)
-- [status](status.md) (1 shared connections)
+- [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (1 shared connections)
 - [Chart Vendor Layout](Chart_Vendor_Layout.md) (1 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
+- [status](status.md) (1 shared connections)
+- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (1 shared connections)
 - [Chart UI Layer](Chart_UI_Layer.md) (1 shared connections)
 
 ## Source Files

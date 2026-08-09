@@ -18,7 +18,7 @@
 
 ## Relationships
 
-- [Watchdog Kill Attribution Tests](Watchdog_Kill_Attribution_Tests.md) (1 shared connections)
+- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (1 shared connections)
 
 ## Source Files
 

@@ -33,13 +33,14 @@
 
 ## Relationships
 
-- [Manual Book Tests](Manual_Book_Tests.md) (44 shared connections)
+- [Manual Book Tests](Manual_Book_Tests.md) (43 shared connections)
 - [Manual Settlement Tests](Manual_Settlement_Tests.md) (23 shared connections)
 - [Manual Version Migration Tests](Manual_Version_Migration_Tests.md) (8 shared connections)
 - [Trailing Stop Tests](Trailing_Stop_Tests.md) (7 shared connections)
 - [Manual Order Idempotency Tests](Manual_Order_Idempotency_Tests.md) (6 shared connections)
 - [Scale-Out Settlement Tests](Scale-Out_Settlement_Tests.md) (5 shared connections)
 - [Manual Fill Timing Tests](Manual_Fill_Timing_Tests.md) (1 shared connections)
+- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (1 shared connections)
 
 ## Source Files
 

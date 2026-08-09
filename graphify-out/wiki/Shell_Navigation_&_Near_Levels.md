@@ -22,12 +22,11 @@
 ## Relationships
 
 - [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (15 shared connections)
-- [automation_drill_start](automation_drill_start.md) (2 shared connections)
-- [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (2 shared connections)
+- [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (3 shared connections)
+- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (2 shared connections)
 - [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (2 shared connections)
-- [Chart Vendor Auto Scaling](Chart_Vendor_Auto_Scaling.md) (1 shared connections)
-- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (1 shared connections)
-- [Watchdog Kill Attribution Tests](Watchdog_Kill_Attribution_Tests.md) (1 shared connections)
+- [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (1 shared connections)
+- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (1 shared connections)
 - [status](status.md) (1 shared connections)
 - [Chart Vendor Core](Chart_Vendor_Core.md) (1 shared connections)
 

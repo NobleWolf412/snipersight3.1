@@ -33,10 +33,9 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (6 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (7 shared connections)
 - [Bias Ladder Tests](Bias_Ladder_Tests.md) (1 shared connections)
 - [Funding Rate Engine](Funding_Rate_Engine.md) (1 shared connections)
-- [ranges.py](ranges.py.md) (1 shared connections)
 - [Cycle Detection Engine](Cycle_Detection_Engine.md) (1 shared connections)
 
 ## Source Files

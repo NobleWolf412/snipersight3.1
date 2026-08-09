@@ -33,9 +33,9 @@
 
 ## Relationships
 
-- [A/B Calibration Tests](A-B_Calibration_Tests.md) (5 shared connections)
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (4 shared connections)
+- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (6 shared connections)
 - [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (4 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (3 shared connections)
 - [Notification Delivery](Notification_Delivery.md) (2 shared connections)
 
 ## Source Files

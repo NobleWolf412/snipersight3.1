@@ -1,26 +1,30 @@
 # ei
 
-> 5 nodes
+> 7 nodes
 
 ## Key Concepts
 
-- **ei** (5 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.J()** (1 connections) — `app/static/lightweight-charts.js`
-- **.He()** (1 connections) — `app/static/lightweight-charts.js`
-- **.K()** (1 connections) — `app/static/lightweight-charts.js`
+- **achievements.py** (7 connections) — `app/engine/achievements.py`
+- **calculate()** (6 connections) — `app/engine/achievements.py`
+- **_progress()** (3 connections) — `app/engine/achievements.py`
+- **Decimal** (3 connections)
+- **AchievementProgress** (3 connections) — `app/engine/contracts.py`
+- **Discipline-only progression for the Tactical Cockpit.  Progress is derived from** (1 connections) — `app/engine/achievements.py`
+- **Return safe progression using server-owned evidence and gate state.** (1 connections) — `app/engine/achievements.py`
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (2 shared connections)
+- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (2 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/engine/achievements.py`
+- `app/engine/contracts.py`
 
 ## Audit Trail
 
-- EXTRACTED: 9 (100%)
+- EXTRACTED: 24 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

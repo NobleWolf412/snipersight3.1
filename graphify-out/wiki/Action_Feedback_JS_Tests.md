@@ -15,7 +15,7 @@
 
 ## Relationships
 
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
+- [test_one_source_of_truth.js](test_one_source_of_truth.js.md) (1 shared connections)
 
 ## Source Files
 

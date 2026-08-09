@@ -1,6 +1,6 @@
 # report
 
-> 17 nodes
+> 18 nodes
 
 ## Key Concepts
 
@@ -12,6 +12,7 @@
 - **capTriggers()** (3 connections) — `app/static/glossary.js`
 - **notTakenBlock()** (3 connections) — `app/static/shell.js`
 - **loadPerformance()** (3 connections) — `app/static/shell.js`
+- **buildSettings()** (3 connections) — `app/static/shell.js`
 - **patchSettingsState()** (3 connections) — `app/static/shell.js`
 - **diagReport()** (3 connections) — `app/static/shell.js`
 - **ensure()** (2 connections) — `app/static/glossary.js`
@@ -24,16 +25,13 @@
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (7 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (8 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (5 shared connections)
 - [Chart UI Layer](Chart_UI_Layer.md) (2 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (2 shared connections)
 - [Diagnostics & Edge View UI](Diagnostics_%26_Edge_View_UI.md) (1 shared connections)
-- [Manual Trading Engine](Manual_Trading_Engine.md) (1 shared connections)
-- [ji](ji.md) (1 shared connections)
 - [Shared Data Cache (ssdata.js)](Shared_Data_Cache_%28ssdata.js%29.md) (1 shared connections)
-- [Fact Store Conventions](Fact_Store_Conventions.md) (1 shared connections)
 - [Chart Vendor Layout](Chart_Vendor_Layout.md) (1 shared connections)
-- [Watchdog Kill Attribution Tests](Watchdog_Kill_Attribution_Tests.md) (1 shared connections)
+- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (1 shared connections)
 
 ## Source Files
 
@@ -43,8 +41,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 45 (78%)
-- INFERRED: 13 (22%)
+- EXTRACTED: 47 (77%)
+- INFERRED: 14 (23%)
 - AMBIGUOUS: 0 (0%)
 
 ---

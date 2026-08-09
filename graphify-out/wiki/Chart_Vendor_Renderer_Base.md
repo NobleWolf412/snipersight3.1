@@ -1,6 +1,6 @@
 # Chart Vendor Renderer Base
 
-> 29 nodes
+> 28 nodes
 
 ## Key Concepts
 
@@ -8,7 +8,6 @@
 - **test_testnet_lifecycle.py** (19 connections) — `app/tests/test_testnet_lifecycle.py`
 - **prepared()** (11 connections) — `app/tests/test_testnet_lifecycle.py`
 - **broker_order()** (10 connections) — `app/tests/test_testnet_lifecycle.py`
-- **plan()** (6 connections) — `app/tests/test_testnet_lifecycle.py`
 - **.__init__()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
 - **.confirm_attached_protection()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
 - **.submit_protective_stop()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
@@ -29,13 +28,14 @@
 - **.open_orders()** (1 connections) — `app/tests/test_testnet_lifecycle.py`
 - **test_duplicate_or_incomplete_events_do_not_inflate_promotion()** (1 connections) — `app/tests/test_testnet_lifecycle.py`
 - **test_partial_fill_resizes_one_target_identity_in_place()** (1 connections) — `app/tests/test_testnet_lifecycle.py`
-- *... and 4 more nodes in this community*
+- **test_late_fill_never_replaces_a_target_that_already_filled()** (1 connections) — `app/tests/test_testnet_lifecycle.py`
+- *... and 3 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (7 shared connections)
-- [Chart Vendor Series](Chart_Vendor_Series.md) (4 shared connections)
-- [A/B Calibration Tests](A-B_Calibration_Tests.md) (3 shared connections)
+- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (8 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (2 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (2 shared connections)
 - [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (2 shared connections)
 - [Cycle Detection Engine](Cycle_Detection_Engine.md) (1 shared connections)
 
@@ -45,8 +45,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 91 (85%)
-- INFERRED: 16 (15%)
+- EXTRACTED: 89 (88%)
+- INFERRED: 12 (12%)
 - AMBIGUOUS: 0 (0%)
 
 ---

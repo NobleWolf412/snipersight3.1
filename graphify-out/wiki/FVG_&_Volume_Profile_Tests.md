@@ -33,7 +33,7 @@
 
 ## Relationships
 
-- [ranges.py](ranges.py.md) (2 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (2 shared connections)
 
 ## Source Files
 
