@@ -1,18 +1,29 @@
 # docs/ — what each file is and whether it is current
 
-Two of these are load-bearing; the rest are plans, specs and audits kept as
+One of these is load-bearing; the rest are plans, specs and audits kept as
 the record of decisions. Nothing in here moves — too many files in `app/` and
 in these docs cite each other by path.
 
-## Load-bearing (read these first)
+**The conventions are not in here.** They live in `CLAUDE.md`, the file that is
+always loaded; they were `PROGRAM-PLAN.md` §6 until 2026-08-07, and code
+comments citing `§6` mean that list.
 
-- [PROGRAM-PLAN.md](PROGRAM-PLAN.md) — the program plan, rewritten 2026-07-31
-  against code and fact store. §6 is the convention list `CLAUDE.md` points at.
-  Supersedes the sequencing in REDESIGN-PLAN.
+## Load-bearing (read this first)
+
 - [HARDENING.md](HARDENING.md) — the hardening contract from the 2026-07-21
   audit, venue section revised 2026-07-31. Current authority on
   venue/leverage/shorts being a per-symbol contract, and it matches
   `venues.py`.
+- [AUTONOMY-OPERATIONS.md](AUTONOMY-OPERATIONS.md) — the current operator guide
+  to modes, risk, evidence, promotion gates, execution, and manual custody.
+
+## The program plan (a dated snapshot, and it says so)
+
+- [PROGRAM-PLAN.md](PROGRAM-PLAN.md) — the program plan, written 2026-07-31
+  against code and fact store; supersedes the sequencing in REDESIGN-PLAN. Its
+  statuses and counts are true as of that date and are not re-verified on edit.
+  §6 keeps the parallelisation rules — what agents can and cannot do in
+  parallel here.
 
 Every file below carries its own status in its first lines. **That header is
 the authority, not this list** — a hand-maintained index of what is current
@@ -25,6 +36,8 @@ goes stale exactly as fast as the things it indexes.
   gate.
 - [SPEC-persistence-retention.md](SPEC-persistence-retention.md) — retention
   policy, proposed; deliberately no deletion implemented.
+- [SPEC-log-retention.md](SPEC-log-retention.md) — `data/engine.log` retention,
+  proposed; nothing implemented. The log is unmanaged and 98.5% duplicate.
 
 ## Plans
 

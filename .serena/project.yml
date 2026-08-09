@@ -31,7 +31,9 @@ project_name: "snipersight3.1"
 # When using multiple languages, the first language server that supports a given file will be used for that file.
 # The first language is the default language and the respective language server will be used as a fallback.
 # Note that when using the JetBrains backend, language servers are not used and this list is correspondingly ignored.
-languages: []
+languages:
+  - python
+  - typescript
 
 # the encoding used by text files in the project
 # For a list of possible encodings, see https://docs.python.org/3.11/library/codecs.html#standard-encodings
@@ -72,7 +74,13 @@ additional_workspace_folders: []
 # list of additional paths to ignore in this project.
 # Same syntax as gitignore, so you can use * and **.
 # Note: global ignored_paths from serena_config.yml are also applied additively.
-ignored_paths: []
+ignored_paths:
+  - "graphify-out/**"
+  - "app/data/**"
+  - "app/static/lightweight-charts.js"
+  - "app/node_modules/**"
+  - "**/__pycache__/**"
+  - ".pytest_cache/**"
 
 # whether the project is in read-only mode
 # If set to true, all editing tools will be disabled and attempts to use them will result in an error
@@ -111,7 +119,15 @@ added_modes:
 
 # initial prompt for the project. It will always be given to the LLM upon activating the project
 # (contrary to the memories, which are loaded on demand).
-initial_prompt: ""
+initial_prompt: >-
+  AGENTS.md is authoritative; read it and CLAUDE.md before project work.
+  SniperSight is an append-only, content-hashed trading research system.
+  Never exercise live write endpoints or assume a test is isolated. Behaviour
+  changes require an algo_version bump and its tested consumer cascade. Use
+  Graphify to locate code, then verify flows in source. Preserve unrelated
+  working-tree changes and keep durable truth in tracked project documents,
+  using Serena memory only for investigation notes. Record durable behaviour,
+  not current code inventory, version lists, or counts.
 
 # time budget (seconds) per tool call for the retrieval of additional symbol information
 # such as docstrings or parameter information.
