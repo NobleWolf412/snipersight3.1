@@ -280,7 +280,7 @@
     if(KEYS[e.key]){ e.preventDefault(); go(KEYS[e.key]); return; }
     if(e.key === 'c' && window.SSCopilot){ e.preventDefault(); SSCopilot.toggle(); }
     if(e.key === '?'){ e.preventDefault(); toast(
-      'Keys: 1–7 switch views · c toggles the copilot · Esc closes ' +
+      'Keys: 1–7 switch views · c toggles Spotter · Esc closes ' +
       'popovers. Arming is deliberately not on a key.', 'good'); }
   });
 
@@ -1058,7 +1058,7 @@
              input and the operator presses send. -->
         <button class="btn btn-quiet" data-ask="${esc(t.setup_id || '')}"
                 data-asksym="${esc(t.symbol)}" data-asktf="${esc(t.tf)}"
-                title="ask the copilot whether to hold this — it reads the trace and cannot arm">Ask</button>
+                title="ask Spotter whether to hold this — it reads the trace and cannot arm">Ask</button>
         <button class="btn btn-primary" data-manage="${esc(t.symbol)}"
                 data-managetf="${esc(t.tf)}"
                 title="open the chart — the ticket manages this position">Manage position</button>
@@ -1995,7 +1995,7 @@
                        title="the plain-English reason this was refused">Reasons</button>`
             : `<button class="btn" data-copilot="1" data-sym="${s.symbol}" data-tf="${s.tf}"
                        data-sid="${esc(s.setup_id || '')}"
-                       title="ask the copilot about this setup — it reads the trace and cannot arm">Ask copilot</button>`}
+                       title="ask Spotter about this setup — it reads the trace and cannot arm">Ask Spotter</button>`}
           <button class="btn${mine ? ' btn-amber' : ' btn-primary'}" data-sym="${s.symbol}" data-tf="${
             mine ? heldSyms.get(s.symbol).tf : s.tf}"
                   title="${mine ? 'open the chart on the trade you are holding — the ticket manages it'

@@ -33,6 +33,7 @@ const CHART = S('static/chart.js');
 const FUNNEL = S('static/funnel.js');
 const SHELL = S('static/shell.js');
 const HTML = S('static/shell.html');
+const CSS = S('static/ss.css');
 const SERVER = S('server.py');
 const ENGINE = S('engine/copilot.py');
 
@@ -50,13 +51,26 @@ function ok(name, fn) {
   catch (e) { console.log('  FAIL ' + name + '\n       ' + e.message); process.exitCode = 1; }
 }
 
-console.log('copilot dock');
+console.log('Spotter dock');
 
-ok('one button, in the topbar, bound in one place', () => {
-  assert(/id="btnCopilot"/.test(HTML), 'no topbar button');
-  assert(/getElementById\('btnCopilot'\)/.test(CP), 'copilot.js does not own its button');
-  assert(!/btnCopilot/.test(CHART),
+ok('Spotter has one launcher in the sidebar, bound in one place', () => {
+  assert(/<nav class="nav">[\s\S]*id="btnSpotter"/.test(HTML), 'no Spotter sidebar button');
+  assert(!/id="btnCopilot"/.test(HTML), 'the old topbar Copilot button still exists');
+  assert(/getElementById\('btnSpotter'\)/.test(CP), 'copilot.js does not own the Spotter button');
+  assert(!/btnSpotter/.test(CHART),
     'chart.js still binds the button — the dock is an app feature, not a chart feature');
+});
+
+ok('Spotter survives a phone as the sixth bottom-rail control', () => {
+  const rules = CSS.replace(BLOCK_COMMENT, '');
+  for (let at = rules.indexOf('#btnSpotter'); at !== -1;
+       at = rules.indexOf('#btnSpotter', at + 1)) {
+    const block = rules.slice(at, rules.indexOf('}', at));
+    assert(!/display\s*:\s*none/.test(block),
+      'a CSS rule hides #btnSpotter; phones need a non-keyboard way in');
+  }
+  assert(/grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/.test(rules),
+    'the mobile rail does not reserve a sixth slot for Spotter');
 });
 
 ok('a dock, not a modal', () => {
@@ -64,6 +78,30 @@ ok('a dock, not a modal', () => {
   assert(!/cp-scrim/.test(CP),
     'the scrim is back — asking a question must not dim the page it is about');
   assert(!/aria-modal/.test(CP), 'the dock must not trap the page');
+});
+
+ok('Spotter combines observer chat and local capture', () => {
+  assert(/>Spotter</.test(CP), 'the dock still presents itself as Copilot');
+  assert(/>Observe</.test(CP) && />Capture</.test(CP), 'the two Spotter modes are missing');
+  assert(/getDisplayMedia/.test(CP), 'Capture never asks the browser for a screen or tab');
+  assert(/new window\.MediaRecorder/.test(CP), 'Capture never records the selected stream');
+  assert(/URL\.createObjectURL/.test(CP), 'the finished recording has no local replay');
+  assert(/download="snipersight-spotter-/.test(CP), 'the local recording cannot be downloaded');
+  assert(/Analyze recording/.test(CP), 'the completed capture has no AI review action');
+  assert(/sampleCaptureFrames/.test(CP), 'analysis sends the full video instead of sampled frames');
+  assert(/original video is not uploaded/.test(CP), 'the sampled-frame disclosure is missing');
+  assert(/fetch\('\/api\/spotter\/analyze'/.test(CP), 'sampled frames never reach the reviewer');
+  assert(/spotter_analyze/.test(SERVER), 'the observer-only review endpoint is missing');
+  assert(!/captureBlob[^\n]*fetch/.test(CP), 'Capture uploads the original video blob');
+});
+
+ok('Capture offers the SniperSight tab itself', () => {
+  assert(/preferCurrentTab:\s*true/.test(CP),
+    'the browser is not asked to promote the tab the operator is using');
+  assert(/selfBrowserSurface:\s*'include'/.test(CP),
+    'the browser is allowed to hide the current SniperSight tab again');
+  assert(/displaySurface:\s*'browser'/.test(CP),
+    'the chooser is not told that a browser tab is the preferred surface');
 });
 
 ok('context follows the surface', () => {
@@ -132,7 +170,8 @@ ok('the transcript survives a toggle, keyed by context', () => {
 
 ok('the boundaries did not move', () => {
   assert(/cannot arm/.test(CP), 'the dock stopped saying it cannot arm');
-  assert(/never enters the record/.test(CP), 'the not-recorded promise is gone');
+  assert(/never enters the trading record/.test(CP), 'the capture boundary is gone');
+  assert(/Nothing is uploaded/.test(CP), 'local-only capture is no longer stated');
   assert(/'ss-cp-model'/.test(CP),
     'the model preference must stay the ONE key Settings also writes');
 });

@@ -688,7 +688,7 @@
     if (d) {
       // offered as a chip, not typed into the box — see copilot.js suggestHtml
       if (window.SSCopilot) SSCopilot.open({kind: 'diagnostics', suggest: d.dataset.diag});
-      else alert('The copilot could not be loaded (static/copilot.js).');
+      else alert('Spotter could not be loaded (static/copilot.js).');
       return;
     }
   });

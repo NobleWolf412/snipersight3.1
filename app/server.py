@@ -3326,6 +3326,24 @@ def copilot_chat(payload: dict):
     return out
 
 
+@app.post("/api/spotter/analyze")
+def spotter_analyze(payload: dict):
+    """Analyze sampled recording frames without touching the book or store.
+
+    The browser retains the video and sends a bounded set of timestamped JPEG
+    frames. The engine reviews them through an ephemeral, read-only Codex turn
+    in a temporary directory, then deletes those files before this returns.
+    """
+    from engine import copilot
+    frames = payload.get("frames")
+    if not isinstance(frames, list) or not frames:
+        raise HTTPException(400, "frames required")
+    out = copilot.analyze_frames(frames)
+    if not out.get("ok"):
+        raise HTTPException(502, out.get("error", "Spotter analysis failed"))
+    return out
+
+
 @app.get("/api/manual/live")
 def manual_live():
     """Every open operator order, across every market, with its live state.

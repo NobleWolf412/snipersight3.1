@@ -33,8 +33,11 @@ conversation with full context server-side, so the pack is sent ONCE per
 conversation rather than per message. The UI holds the id per context.
 """
 import json
+import base64
+import binascii
 import shutil
 import subprocess
+import tempfile
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -50,6 +53,9 @@ CWD = Path(__file__).resolve().parents[1] / "data" / "copilot-cwd"
 TIMEOUT_S = 180
 DEFAULT_MODEL = "sonnet"
 ALLOWED_MODELS = ("sonnet", "haiku", "opus")
+SPOTTER_MAX_FRAMES = 12
+SPOTTER_MAX_FRAME_BYTES = 1_500_000
+SPOTTER_TIMEOUT_S = 300
 
 #: Tool names denied outright. The preamble also forbids tool use; this makes
 #: the refusal structural rather than behavioural.
@@ -332,3 +338,77 @@ def ask(message: str, pack: str | None = None, session_id: str | None = None,
             "session_id": env.get("session_id"),
             "model": model,
             "duration_ms": env.get("duration_ms")}
+
+
+def analyze_frames(frames: list[dict]) -> dict:
+    """Review timestamped Spotter frames through an isolated Codex turn.
+
+    The browser keeps the recording. This receives only sampled JPEG frames,
+    writes them into a temporary directory, and removes that directory when
+    the turn ends. Codex is ephemeral, read-only, detached from the repository,
+    and loads neither user config nor repository rules. The result is prose;
+    nothing enters the fact store and there is no path to a trading action.
+    """
+    exe = shutil.which("codex")
+    if not exe:
+        return {"ok": False, "error": "the `codex` CLI is not on PATH"}
+    if not isinstance(frames, list) or not frames:
+        return {"ok": False, "error": "at least one frame is required"}
+    if len(frames) > SPOTTER_MAX_FRAMES:
+        return {"ok": False,
+                "error": f"at most {SPOTTER_MAX_FRAMES} frames may be analyzed"}
+
+    with tempfile.TemporaryDirectory(prefix="snipersight-spotter-") as tmp:
+        root = Path(tmp)
+        image_paths = []
+        timeline = []
+        for i, frame in enumerate(frames):
+            try:
+                timestamp_ms = max(0, int(frame.get("timestamp_ms", 0)))
+                encoded = str(frame.get("image") or "")
+                prefix = "data:image/jpeg;base64,"
+                if not encoded.startswith(prefix):
+                    raise ValueError("frame is not a JPEG data URL")
+                raw = base64.b64decode(encoded[len(prefix):], validate=True)
+            except (TypeError, ValueError, binascii.Error):
+                return {"ok": False, "error": f"frame {i + 1} is invalid"}
+            if not raw or len(raw) > SPOTTER_MAX_FRAME_BYTES:
+                return {"ok": False,
+                        "error": f"frame {i + 1} exceeds the size limit"}
+            seconds = timestamp_ms // 1000
+            stamp = f"{seconds // 60:02d}-{seconds % 60:02d}"
+            path = root / f"frame-{i + 1:02d}-{stamp}.jpg"
+            path.write_bytes(raw)
+            image_paths.append(path)
+            timeline.append(f"image {i + 1}: {seconds // 60:02d}:{seconds % 60:02d}")
+
+        prompt = """You are Spotter, a read-only UI and operational reviewer for
+SniperSight, a trading cockpit. Review the attached timestamped frames as a
+sequence. Diagnose visible UX friction, confusing state, missing feedback,
+layout problems, apparent errors, and safety ambiguity. Do not infer activity
+that is not visible. Do not suggest or perform trades, process restarts,
+deployments, or code changes. Return a concise report with: overall diagnosis,
+timestamped findings ordered by severity, and the three highest-value next
+checks. State when the sampled frames are insufficient.\n\nTIMELINE\n""" + "\n".join(timeline)
+        args = [exe, "exec", "--ephemeral", "--ignore-user-config",
+                "--ignore-rules", "--sandbox", "read-only",
+                "--skip-git-repo-check", "--color", "never", "-C", str(root)]
+        for path in image_paths:
+            args += ["--image", str(path)]
+        args.append("-")
+        try:
+            result = subprocess.run(
+                args, input=prompt, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=SPOTTER_TIMEOUT_S,
+                cwd=str(root))
+        except subprocess.TimeoutExpired:
+            return {"ok": False,
+                    "error": f"Spotter analysis timed out after {SPOTTER_TIMEOUT_S}s"}
+        if result.returncode != 0:
+            return {"ok": False,
+                    "error": (result.stderr or result.stdout or
+                              "Codex analysis failed").strip()[:500]}
+        reply = (result.stdout or "").strip()
+        if not reply:
+            return {"ok": False, "error": "Codex returned an empty analysis"}
+        return {"ok": True, "reply": reply, "frames_analyzed": len(image_paths)}

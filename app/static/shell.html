@@ -56,8 +56,6 @@
 
     <span class="t-mono" id="clock" aria-hidden="true">—</span>
     <div class="topbar-actions">
-      <button class="btn" id="btnCopilot"
-              title="ask the copilot — it reads the facts, it cannot arm anything">Copilot</button>
       <button class="btn btn-red" id="btnHalt" title="stop sizing new entries">HALT</button>
     </div>
   </header>
@@ -69,6 +67,10 @@
     <a href="#trade" data-route="trade" data-s="chart"><span>Trade</span><small>Execution Bay</small></a>
     <a href="#performance" data-route="performance" data-s="results"><span>Performance</span><small>Debrief</small></a>
     <a href="#system" data-route="system" data-s="settings"><span>System</span><small>Control Room</small><span class="nav-count" id="nDiag"></span></a>
+    <button type="button" class="nav-spotter" id="btnSpotter"
+            title="open Spotter — observe the facts or capture a local session">
+      <span>Spotter</span><small>Observe · Capture</small>
+    </button>
     <!-- Compatibility hooks for old bookmarks and contract tests. Hidden from
          users: Settings/Diagnostics and Ledger now live inside their parent. -->
     <a hidden href="#settings" data-s="settings">Settings</a>
@@ -1153,7 +1155,7 @@
           <div class="panel-head"><h2 class="t-section">Claude</h2>
             <span class="chip" id="cpHealth" style="margin-left:auto">—</span></div>
           <div class="panel-body">
-            <label class="set-row"><span>Copilot model</span>
+            <label class="set-row"><span>Spotter model</span>
               <select id="setCpModel" class="btn">
                 <option value="sonnet">Sonnet</option>
                 <option value="haiku">Haiku</option>
@@ -1161,7 +1163,7 @@
               </select></label>
             <div class="set-row"><span>Claude CLI</span>
               <button class="btn" id="btnCpTest"
-                title="runs `claude --version` — the copilot needs the CLI on PATH and a logged-in plan">Test</button></div>
+                title="runs `claude --version` — Spotter Observe needs the CLI on PATH and a logged-in plan">Test</button></div>
           </div>
         </div>
         <!-- The lock that had no key. "Forward paper evidence has not yet
@@ -1463,8 +1465,8 @@
 
   <!-- overlay mounts: modals/drawers render here, above the shell -->
   <div id="tracerRoot"></div>
-  <!-- copilot chat drawer; copilot.js owns it. Observer only, by the same
-       constitution rule the Apex bridge states: analysis in, nothing armed. -->
+  <!-- Spotter dock; copilot.js owns its observer conversation and local-only
+       screen capture. Neither path can arm a trade or write a fact. -->
   <div id="copilotRoot"></div>
   <div id="wizardRoot"></div>
 

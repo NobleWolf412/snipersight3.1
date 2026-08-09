@@ -674,13 +674,15 @@ details.panel.floating > summary{padding-left:var(--lg)}
 
 .nav{border-right:1px solid var(--border-soft);padding:var(--lg) 0;display:flex;flex-direction:column;gap:2px;
   background:linear-gradient(180deg,var(--bg-2),var(--bg))}
-.nav a{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+.nav a,.nav .nav-spotter{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;
   padding:11px var(--lg);text-decoration:none;
   font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.18em;text-transform:uppercase;
   color:var(--fg-3);border-left:2px solid transparent;transition:color .15s,background .15s}
-.nav a small{font-size:9px;font-weight:400;letter-spacing:.08em;text-transform:none;color:var(--fg-4)}
-.nav a:hover{color:var(--fg-2);background:rgba(255,255,255,.02)}
-.nav a.on{color:var(--accent);border-left-color:var(--accent);background:rgba(var(--accent-rgb),.06)}
+.nav .nav-spotter{width:100%;margin-top:auto;border-top:1px solid var(--border-soft);border-right:0;
+  border-bottom:0;background:rgba(var(--accent-rgb),.025);cursor:pointer;text-align:left}
+.nav a small,.nav .nav-spotter small{font-size:9px;font-weight:400;letter-spacing:.08em;text-transform:none;color:var(--fg-4)}
+.nav a:hover,.nav .nav-spotter:hover{color:var(--fg-2);background:rgba(255,255,255,.02)}
+.nav a.on,body.cp-open .nav .nav-spotter{color:var(--accent);border-left-color:var(--accent);background:rgba(var(--accent-rgb),.06)}
 .nav .nav-count{position:absolute;right:var(--lg);top:11px;font-size:var(--fs-1);color:var(--fg-4)}
 .nav a.on .nav-count{color:var(--accent)}
 .nav-sep{height:1px;background:var(--border-soft);margin:var(--md) var(--lg)}
@@ -1093,15 +1095,16 @@ body:not(.dev) #consolePanel{display:none}
   .topbar .chip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .topbar .brand img{max-height:22px}
   #btnHalt{flex:none}
-  /* Five fixed destinations at the bottom: no hidden sixth item and no swipe
-     required to discover System. Text, not colour, identifies every route. */
-  .nav{grid-row:3;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+  /* Five destinations plus Spotter at the bottom; no swipe is required to
+     discover the assistant or capture control. */
+  .nav{grid-row:3;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));
     overflow:visible;gap:0;padding:0;border:0;border-top:1px solid var(--border-soft)}
-  .nav a{min-width:0;min-height:64px;align-items:center;justify-content:center;
+  .nav a,.nav .nav-spotter{min-width:0;min-height:64px;align-items:center;justify-content:center;
     padding:6px 2px;border-left:0;border-top:2px solid transparent;
     font-size:9px;letter-spacing:.02em;text-align:center;white-space:normal}
-  .nav a.on{border-left:0;border-top-color:var(--accent)}
-  .nav a small,.nav .nav-count,.nav a[hidden]{display:none}
+  .nav .nav-spotter{width:auto;margin:0;border-right:0;border-bottom:0;background:transparent}
+  .nav a.on,body.cp-open .nav .nav-spotter{border-left:0;border-top-color:var(--accent)}
+  .nav a small,.nav .nav-spotter small,.nav .nav-count,.nav a[hidden]{display:none}
   .statusbar{display:none}
   .stage{grid-row:2;padding:var(--lg) var(--sm)}
   .op-toolbar{align-items:stretch;flex-direction:column}
@@ -2691,6 +2694,36 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .cp-dock textarea:focus{border-color:var(--accent)}
 .cp-dock .cp-foot{font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.08em;
   color:var(--fg-4);padding:6px 12px 10px;text-align:center}
+.cp-tabs{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--border-soft)}
+.cp-tabs button{min-height:42px;border:0;border-bottom:2px solid transparent;background:transparent;
+  color:var(--fg-3);font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.16em;text-transform:uppercase;
+  cursor:pointer}
+.cp-tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent);
+  background:rgba(var(--accent-rgb),.05)}
+.cp-capture{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:var(--md);padding:var(--xl);text-align:center}
+.cp-capture p{max-width:34ch;margin:0;color:var(--fg-3);font:var(--fs-2)/1.55 var(--f-body)}
+.cp-capture-kicker{color:var(--fg-2)!important;font:600 var(--fs-1)/1.2 var(--f-mono)!important;
+  letter-spacing:.16em;text-transform:uppercase}
+.cp-capture-mark{display:grid;place-items:center;width:76px;height:76px;border:1px solid var(--accent);
+  border-radius:50%;color:var(--accent);font-size:34px;box-shadow:0 0 28px rgba(var(--accent-rgb),.08)}
+.cp-mic{display:flex;align-items:center;gap:8px;color:var(--fg-2);font:var(--fs-2)/1 var(--f-body)}
+.cp-mic input{width:18px;height:18px;accent-color:var(--accent)}
+.cp-capture-note{font-size:var(--fs-1)!important;color:var(--fg-4)!important}
+.cp-capture-error{padding:8px 10px;border:1px solid rgba(248,113,113,.35);color:var(--red-2)!important}
+.cp-recording strong{color:var(--red-2);font:var(--fs-6)/1 var(--f-mono);letter-spacing:.08em}
+.cp-rec-dot{width:14px;height:14px;border-radius:50%;background:var(--red);box-shadow:0 0 0 6px rgba(248,113,113,.1);
+  animation:pulse 1.2s ease-in-out infinite}
+.cp-capture video{display:block;width:100%;max-height:250px;background:#000;border:1px solid var(--border);
+  border-radius:var(--r-md)}
+.cp-capture-actions{display:flex;gap:var(--sm);flex-wrap:wrap;justify-content:center}
+.cp-capture-actions a{text-decoration:none}
+.cp-analysis-state{color:var(--accent)!important}
+.cp-analysis{width:100%;padding:var(--md);border:1px solid rgba(var(--accent-rgb),.28);
+  background:rgba(0,0,0,.24);text-align:left}
+.cp-analysis .cp-capture-kicker{margin-bottom:var(--sm)}
+.cp-analysis pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--fg-2);
+  font:var(--fs-2)/1.55 var(--f-body)}
 .fail-diag{font-size:var(--fs-1);padding:2px 8px}
 
 /* ═══ THE ACTIVE-TRADE BAND ═══
