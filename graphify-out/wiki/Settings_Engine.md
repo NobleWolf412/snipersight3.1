@@ -6,7 +6,7 @@
 
 - **settings.py** (9 connections) — `app/engine/settings.py`
 - **all_settings()** (7 connections) — `app/engine/settings.py`
-- **set_many()** (6 connections) — `app/engine/settings.py`
+- **set_many()** (5 connections) — `app/engine/settings.py`
 - **_ensure()** (4 connections) — `app/engine/settings.py`
 - **_coerce()** (3 connections) — `app/engine/settings.py`
 - **defaults()** (2 connections) — `app/engine/settings.py`
@@ -19,7 +19,7 @@
 
 ## Relationships
 
-- [Venue Policy & Contract](Venue_Policy_%26_Contract.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -27,8 +27,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 38 (97%)
-- INFERRED: 1 (3%)
+- EXTRACTED: 38 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

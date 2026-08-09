@@ -32,14 +32,16 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (3 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (3 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (2 shared connections)
+- [Setup Deck UI](Setup_Deck_UI.md) (2 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (2 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (2 shared connections)
 - [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
-- [Chart Vendor Scales](Chart_Vendor_Scales.md) (1 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (1 shared connections)
+- [Chart Vendor Auto Scaling](Chart_Vendor_Auto_Scaling.md) (1 shared connections)
+- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (1 shared connections)
+- [status](status.md) (1 shared connections)
+- [Chart Vendor Layout](Chart_Vendor_Layout.md) (1 shared connections)
 - [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- [Chart UI Layer](Chart_UI_Layer.md) (1 shared connections)
 
 ## Source Files
 

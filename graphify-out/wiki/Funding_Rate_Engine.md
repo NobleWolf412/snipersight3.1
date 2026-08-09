@@ -1,39 +1,35 @@
 # Funding Rate Engine
 
-> 16 nodes
+> 11 nodes
 
 ## Key Concepts
 
-- **funding.py** (10 connections) — `app/engine/funding.py`
-- **history()** (7 connections) — `app/engine/funding.py`
-- **Decimal** (6 connections)
-- **phemex_history()** (6 connections) — `app/engine/funding.py`
-- **kraken_history()** (5 connections) — `app/engine/funding.py`
-- **report()** (5 connections) — `app/engine/funding.py`
-- **charge()** (4 connections) — `app/engine/funding.py`
-- **_now()** (3 connections) — `app/engine/funding.py`
-- **_get()** (3 connections) — `app/engine/funding.py`
-- **What funding ACTUALLY cost, against the constant the simulator charges. READ-ON** (1 connections) — `app/engine/funding.py`
-- **Wall clock, in one place so a test can pin it.** (1 connections) — `app/engine/funding.py`
-- **(settlement unix seconds, rate) hourly, oldest first.      `relativeFundingRat** (1 connections) — `app/engine/funding.py`
-- **(settlement unix seconds, rate) 8-hourly, oldest first.      Keyed on the INDE** (1 connections) — `app/engine/funding.py`
-- **Real settlements for one symbol, or [] where the venue charges none.      Spot** (1 connections) — `app/engine/funding.py`
-- **What this hold really paid — signed, in price units on entry notional.      SI** (1 connections) — `app/engine/funding.py`
-- **Re-price the recorded book on real funding. Writes nothing.      The R denomin** (1 connections) — `app/engine/funding.py`
+- **analyze()** (10 connections) — `app/engine/factorstats.py`
+- **pearson()** (3 connections) — `app/engine/factorstats.py`
+- **noise_floor()** (3 connections) — `app/engine/factorstats.py`
+- **_covariance()** (3 connections) — `app/engine/factorstats.py`
+- **_clusters()** (3 connections) — `app/engine/factorstats.py`
+- **_std()** (2 connections) — `app/engine/factorstats.py`
+- **Pearson r over paired samples. Returns (r, n); r is None when undefined —     fe** (1 connections) — `app/engine/factorstats.py`
+- **Two-sided 95% floor for a correlation at sample size n. |r| inside this is     i** (1 connections) — `app/engine/factorstats.py`
+- **Pairwise-complete covariance: pairs where either side is missing are dropped** (1 connections) — `app/engine/factorstats.py`
+- **Connected components over the |r| >= REDUNDANT_R graph. Transitivity is the** (1 connections) — `app/engine/factorstats.py`
+- **Grade every factor the extractor produces. Pure computation, no I/O, no RNG,** (1 connections) — `app/engine/factorstats.py`
 
 ## Relationships
 
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
-- [Venue Policy & Contract](Venue_Policy_%26_Contract.md) (1 shared connections)
+- [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (7 shared connections)
+- [Bias Ladder Engine](Bias_Ladder_Engine.md) (1 shared connections)
+- [Toast Isolation Tests](Toast_Isolation_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/funding.py`
+- `app/engine/factorstats.py`
 
 ## Audit Trail
 
-- EXTRACTED: 55 (98%)
-- INFERRED: 1 (2%)
+- EXTRACTED: 28 (97%)
+- INFERRED: 1 (3%)
 - AMBIGUOUS: 0 (0%)
 
 ---

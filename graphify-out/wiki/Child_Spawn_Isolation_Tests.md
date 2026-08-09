@@ -15,7 +15,7 @@
 
 ## Relationships
 
-- [Watchdog Kill Attribution Tests](Watchdog_Kill_Attribution_Tests.md) (1 shared connections)
+- [Watchdog Audit Cadence Tests](Watchdog_Audit_Cadence_Tests.md) (1 shared connections)
 
 ## Source Files
 

@@ -1,66 +1,42 @@
 # Bias, Trend & Setups
 
-> 55 nodes
+> 20 nodes
 
 ## Key Concepts
 
-- **RunRecorder** (59 connections) — `app/engine/runlog.py`
-- **setups.py** (27 connections) — `app/engine/setups.py`
-- **run()** (16 connections) — `app/engine/setups.py`
-- **trend.py** (15 connections) — `app/engine/trend.py`
-- **bias.py** (14 connections) — `app/engine/bias.py`
-- **breakout.py** (13 connections) — `app/engine/breakout.py`
-- **regime.py** (12 connections) — `app/engine/regime.py`
-- **structure.py** (12 connections) — `app/engine/structure.py`
-- **run()** (11 connections) — `app/engine/trend.py`
-- **scalein.py** (10 connections) — `app/engine/scalein.py`
-- **vetoes()** (8 connections) — `app/engine/setups.py`
-- **run()** (6 connections) — `app/engine/breakout.py`
-- **confirms()** (6 connections) — `app/engine/setups.py`
-- **_ribbon()** (6 connections) — `app/engine/trend.py`
-- **load()** (5 connections) — `app/engine/bias.py`
-- **_fp()** (5 connections) — `app/engine/setups.py`
-- **Decimal** (5 connections)
-- **run()** (5 connections) — `app/engine/structure.py`
-- **rungs_above()** (4 connections) — `app/engine/bias.py`
-- **run()** (4 connections) — `app/engine/scalein.py`
-- **reversal_evidence()** (4 connections) — `app/engine/setups.py`
-- **resumes()** (4 connections) — `app/engine/trend.py`
-- **Decimal** (4 connections)
-- **blocked()** (3 connections) — `app/engine/bias.py`
-- **inputs()** (3 connections) — `app/engine/bias.py`
-- *... and 30 more nodes in this community*
+- **AutoPruneCase** (14 connections) — `app/tests/test_auto_prune.py`
+- **.add_run()** (7 connections) — `app/tests/test_auto_prune.py`
+- **.receipts()** (4 connections) — `app/tests/test_auto_prune.py`
+- **.test_the_receipt_is_the_schedule_state()** (4 connections) — `app/tests/test_auto_prune.py`
+- **test_auto_prune.py** (3 connections) — `app/tests/test_auto_prune.py`
+- **.test_first_sweep_runs_and_leaves_a_receipt()** (3 connections) — `app/tests/test_auto_prune.py`
+- **.test_a_second_sweep_the_same_day_is_refused()** (3 connections) — `app/tests/test_auto_prune.py`
+- **.test_kept_rows_survive_the_sweep()** (3 connections) — `app/tests/test_auto_prune.py`
+- **.test_a_facts_receipt_does_not_satisfy_the_runs_cadence()** (2 connections) — `app/tests/test_auto_prune.py`
+- **.test_an_old_receipt_makes_the_sweep_due_again()** (2 connections) — `app/tests/test_auto_prune.py`
+- **.test_the_routine_path_can_never_reach_the_facts_target()** (2 connections) — `app/tests/test_auto_prune.py`
+- **.test_the_heartbeat_is_beaten_per_batch()** (2 connections) — `app/tests/test_auto_prune.py`
+- **.setUp()** (1 connections) — `app/tests/test_auto_prune.py`
+- **.tearDown()** (1 connections) — `app/tests/test_auto_prune.py`
+- **.test_this_suite_cannot_reach_the_live_store()** (1 connections) — `app/tests/test_auto_prune.py`
+- **The scanner's routine telemetry sweep — cadence, receipts, and its cage.  The sw** (1 connections) — `app/tests/test_auto_prune.py`
+- **No sidecar file, no settings row: due-ness is read from the last         runs re** (1 connections) — `app/tests/test_auto_prune.py`
+- **The two targets keep separate clocks — a manual facts prune must         not pos** (1 connections) — `app/tests/test_auto_prune.py`
+- **The cage, pinned at the AST: every function the sweep calls is on         an all** (1 connections) — `app/tests/test_auto_prune.py`
+- **The sweep inherits every keep rule — referenced, failed, newest,         window** (1 connections) — `app/tests/test_auto_prune.py`
 
 ## Relationships
 
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (32 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (14 shared connections)
-- [Indicator Engines](Indicator_Engines.md) (13 shared connections)
-- [Bias Ladder Engine](Bias_Ladder_Engine.md) (6 shared connections)
-- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (6 shared connections)
-- [Pipeline Quality Tests](Pipeline_Quality_Tests.md) (6 shared connections)
-- [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (4 shared connections)
-- [Manual Trading Engine](Manual_Trading_Engine.md) (3 shared connections)
-- [Copilot Pack Builder](Copilot_Pack_Builder.md) (2 shared connections)
-- [Cooldown Engine](Cooldown_Engine.md) (2 shared connections)
-- [Cycle Detection Engine](Cycle_Detection_Engine.md) (2 shared connections)
-- [Volatility Engine](Volatility_Engine.md) (2 shared connections)
+- [Chart Vendor Data Layer](Chart_Vendor_Data_Layer.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/bias.py`
-- `app/engine/breakout.py`
-- `app/engine/regime.py`
-- `app/engine/runlog.py`
-- `app/engine/scalein.py`
-- `app/engine/setups.py`
-- `app/engine/structure.py`
-- `app/engine/trend.py`
+- `app/tests/test_auto_prune.py`
 
 ## Audit Trail
 
-- EXTRACTED: 295 (97%)
-- INFERRED: 10 (3%)
+- EXTRACTED: 57 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

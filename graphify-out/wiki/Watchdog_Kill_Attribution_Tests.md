@@ -1,39 +1,43 @@
 # Watchdog Kill Attribution Tests
 
-> 11 nodes
+> 8 nodes
 
 ## Key Concepts
 
-- **test_watchdog_rung_dispatch.py** (12 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **TestTakeoverHysteresis** (5 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **TestKillAttribution** (4 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.test_an_audit_restart_is_attributed()** (2 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.test_a_death_we_did_not_cause_stays_unattributed()** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.test_probe_timeout_exceeds_the_measured_endpoint()** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.test_takeover_needs_repeated_misses()** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.test_grace_covers_the_slowest_measured_cycle()** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **Watchdog dispatches by Kill-Switch rung, not by hardcoded code lists — so every** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **rc=1 looks identical whether this supervisor sent the terminate or     something** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **`server_up()` probed with a 3s timeout an endpoint measured at 6.9s under     a** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **t()** (28 connections) — `app/tests/test_ticket_math.js`
+- **engaged()** (4 connections) — `app/static/shell.js`
+- **deck()** (4 connections) — `app/static/shell.js`
+- **.M_()** (3 connections) — `app/static/lightweight-charts.js`
+- **lifecycleOf()** (3 connections) — `app/static/shell.js`
+- **storyOf()** (3 connections) — `app/static/shell.js`
+- **buildSettings()** (3 connections) — `app/static/shell.js`
+- **reachableTitles()** (2 connections) — `app/static/shell.js`
 
 ## Relationships
 
-- [Watchdog Audit Cadence Tests](Watchdog_Audit_Cadence_Tests.md) (3 shared connections)
-- [Watchdog Restart Dispatch Tests](Watchdog_Restart_Dispatch_Tests.md) (2 shared connections)
-- [Watchdog Child Capture Tests](Watchdog_Child_Capture_Tests.md) (1 shared connections)
-- [Child Spawn Isolation Tests](Child_Spawn_Isolation_Tests.md) (1 shared connections)
-- [Watchdog Orphan Clearing Tests](Watchdog_Orphan_Clearing_Tests.md) (1 shared connections)
-- [Watchdog Quarantine Persistence Tests](Watchdog_Quarantine_Persistence_Tests.md) (1 shared connections)
-- [Watchdog Supervisor](Watchdog_Supervisor.md) (1 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (7 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (3 shared connections)
+- [Chart Vendor Internals](Chart_Vendor_Internals.md) (2 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (2 shared connections)
+- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (2 shared connections)
+- [report](report.md) (1 shared connections)
+- [Chart UI Layer](Chart_UI_Layer.md) (1 shared connections)
+- [automation_drill_start](automation_drill_start.md) (1 shared connections)
+- [A/B Position Simulation](A-B_Position_Simulation.md) (1 shared connections)
+- [Manual Trading Engine](Manual_Trading_Engine.md) (1 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
+- [Setup Deck UI](Setup_Deck_UI.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_watchdog_rung_dispatch.py`
+- `app/static/lightweight-charts.js`
+- `app/static/shell.js`
+- `app/tests/test_ticket_math.js`
 
 ## Audit Trail
 
-- EXTRACTED: 30 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 17 (34%)
+- INFERRED: 33 (66%)
 - AMBIGUOUS: 0 (0%)
 
 ---

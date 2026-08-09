@@ -1,6 +1,6 @@
 # f()
 
-> God node · 87 connections · `app/static/lightweight-charts.js`
+> God node · 88 connections · `app/static/lightweight-charts.js`
 
 **Community:** [Chart Vendor Panes](Chart_Vendor_Panes.md)
 
@@ -43,6 +43,7 @@
 - S() `INFERRED`
 - S() `INFERRED`
 - read() `INFERRED`
+- S() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`

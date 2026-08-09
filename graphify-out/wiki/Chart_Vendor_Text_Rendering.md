@@ -1,32 +1,31 @@
 # Chart Vendor Text Rendering
 
-> 8 nodes
+> 9 nodes
 
 ## Key Concepts
 
-- **st** (10 connections) — `app/static/lightweight-charts.js`
-- **.bs()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Dt()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Gi()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Ji()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Qi()** (1 connections) — `app/static/lightweight-charts.js`
-- **.yt()** (1 connections) — `app/static/lightweight-charts.js`
+- **test_semantics_and_keyboard.js** (8 connections) — `app/tests/test_semantics_and_keyboard.js`
+- **S()** (2 connections) — `app/tests/test_semantics_and_keyboard.js`
+- **fs** (1 connections) — `app/tests/test_semantics_and_keyboard.js`
+- **path** (1 connections) — `app/tests/test_semantics_and_keyboard.js`
+- **assert** (1 connections) — `app/tests/test_semantics_and_keyboard.js`
+- **HTML** (1 connections) — `app/tests/test_semantics_and_keyboard.js`
+- **GLOSS** (1 connections) — `app/tests/test_semantics_and_keyboard.js`
+- **CSS** (1 connections) — `app/tests/test_semantics_and_keyboard.js`
+- **ok()** (1 connections) — `app/tests/test_semantics_and_keyboard.js`
 
 ## Relationships
 
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (2 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
-- [Chart Vendor Data Layer](Chart_Vendor_Data_Layer.md) (1 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/tests/test_semantics_and_keyboard.js`
 
 ## Audit Trail
 
-- EXTRACTED: 18 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 16 (94%)
+- INFERRED: 1 (6%)
 - AMBIGUOUS: 0 (0%)
 
 ---

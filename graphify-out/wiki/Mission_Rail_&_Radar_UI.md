@@ -1,32 +1,33 @@
 # Mission Rail & Radar UI
 
-> 10 nodes
+> 12 nodes
 
 ## Key Concepts
 
-- **ringSvg()** (9 connections) — `app/static/shell.js`
-- **renderMissions()** (8 connections) — `app/static/shell.js`
+- **renderDeck()** (10 connections) — `app/static/shell.js`
+- **makeRail()** (8 connections) — `app/static/shell.js`
+- **loadOverview()** (7 connections) — `app/static/shell.js`
 - **renderRadar()** (7 connections) — `app/static/shell.js`
-- **ladderHtml()** (6 connections) — `app/static/shell.js`
-- **mineCardInner()** (6 connections) — `app/static/shell.js`
-- **missionCardInner()** (4 connections) — `app/static/shell.js`
-- **ladderRing()** (4 connections) — `app/static/shell.js`
+- **mountRails()** (5 connections) — `app/static/shell.js`
+- **deckSplit()** (4 connections) — `app/static/shell.js`
 - **missionRailSync()** (4 connections) — `app/static/shell.js`
-- **renderPositions()** (3 connections) — `app/static/shell.js`
-- **windowLeft()** (2 connections) — `app/static/shell.js`
+- **mineRailSync()** (3 connections) — `app/static/shell.js`
+- **indexHeld()** (3 connections) — `app/static/shell.js`
+- **deckEmptyHtml()** (2 connections) — `app/static/shell.js`
+- **renderFunnel()** (2 connections) — `app/static/shell.js`
+- **loadRefused()** (2 connections) — `app/static/shell.js`
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (13 shared connections)
-- [Rails & Scoreboard UI](Rails_%26_Scoreboard_UI.md) (3 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (2 shared connections)
-- [Setup Deck UI](Setup_Deck_UI.md) (2 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (2 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (16 shared connections)
+- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (3 shared connections)
+- [Chart UI Layer](Chart_UI_Layer.md) (3 shared connections)
+- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (2 shared connections)
+- [automation_drill_start](automation_drill_start.md) (2 shared connections)
 - [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (2 shared connections)
-- [Shell Disposition & Risk Rendering](Shell_Disposition_%26_Risk_Rendering.md) (2 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (1 shared connections)
-- [Chart Vendor Scales](Chart_Vendor_Scales.md) (1 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
+- [status](status.md) (1 shared connections)
+- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (1 shared connections)
+- [Chart Vendor Auto Scaling](Chart_Vendor_Auto_Scaling.md) (1 shared connections)
 
 ## Source Files
 
@@ -34,8 +35,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 47 (89%)
-- INFERRED: 6 (11%)
+- EXTRACTED: 50 (88%)
+- INFERRED: 7 (12%)
 - AMBIGUOUS: 0 (0%)
 
 ---

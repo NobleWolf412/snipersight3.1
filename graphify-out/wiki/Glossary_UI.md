@@ -1,51 +1,49 @@
 # Glossary UI
 
-> 18 nodes
+> 16 nodes
 
 ## Key Concepts
 
-- **k()** (13 connections) — `app/static/lightweight-charts.js`
-- **L** (5 connections) — `app/static/lightweight-charts.js`
-- **loadSettings()** (5 connections) — `app/static/shell.js`
-- **glossary.js** (4 connections) — `app/static/glossary.js`
-- **perfRows()** (4 connections) — `app/static/shell.js`
-- **capTriggers()** (3 connections) — `app/static/glossary.js`
-- **notTakenBlock()** (3 connections) — `app/static/shell.js`
-- **loadPerformance()** (3 connections) — `app/static/shell.js`
-- **buildSettings()** (3 connections) — `app/static/shell.js`
-- **patchSettingsState()** (3 connections) — `app/static/shell.js`
-- **diagReport()** (3 connections) — `app/static/shell.js`
-- **ensure()** (2 connections) — `app/static/glossary.js`
-- **show()** (2 connections) — `app/static/glossary.js`
-- **markFocusable()** (2 connections) — `app/static/glossary.js`
-- **.X()** (2 connections) — `app/static/lightweight-charts.js`
-- **syncSettingInputs()** (2 connections) — `app/static/shell.js`
+- **.Yr()** (15 connections) — `app/static/lightweight-charts.js`
+- **.Fi()** (9 connections) — `app/static/lightweight-charts.js`
+- **.format()** (6 connections) — `app/static/lightweight-charts.js`
+- **.Qi()** (6 connections) — `app/static/lightweight-charts.js`
+- **nn()** (6 connections) — `app/static/lightweight-charts.js`
+- **.ma()** (6 connections) — `app/static/lightweight-charts.js`
+- **.so()** (6 connections) — `app/static/lightweight-charts.js`
+- **.ql()** (6 connections) — `app/static/lightweight-charts.js`
+- **.Fh()** (6 connections) — `app/static/lightweight-charts.js`
+- **.s_()** (5 connections) — `app/static/lightweight-charts.js`
+- **.l_()** (5 connections) — `app/static/lightweight-charts.js`
+- **.n_()** (5 connections) — `app/static/lightweight-charts.js`
+- **.Yl()** (4 connections) — `app/static/lightweight-charts.js`
+- **.format()** (2 connections) — `app/static/lightweight-charts.js`
+- **.q_()** (2 connections) — `app/static/lightweight-charts.js`
 - **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Z()** (1 connections) — `app/static/lightweight-charts.js`
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (8 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (2 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (14 shared connections)
+- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (6 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (4 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (3 shared connections)
+- [Chart Vendor Layout](Chart_Vendor_Layout.md) (3 shared connections)
 - [Chart Vendor API](Chart_Vendor_API.md) (2 shared connections)
-- [Diagnostics & Edge View UI](Diagnostics_%26_Edge_View_UI.md) (1 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (2 shared connections)
 - [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (1 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
-- [Shared Data Cache (ssdata.js)](Shared_Data_Cache_%28ssdata.js%29.md) (1 shared connections)
-- [Chart Vendor Utilities](Chart_Vendor_Utilities.md) (1 shared connections)
-- [Chart Vendor Data Layer](Chart_Vendor_Data_Layer.md) (1 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (1 shared connections)
+- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (1 shared connections)
+- [ji](ji.md) (1 shared connections)
+- [Chart Vendor Event Handling](Chart_Vendor_Event_Handling.md) (1 shared connections)
+- [Rails & Scoreboard UI](Rails_%26_Scoreboard_UI.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/glossary.js`
 - `app/static/lightweight-charts.js`
-- `app/static/shell.js`
 
 ## Audit Trail
 
-- EXTRACTED: 47 (77%)
-- INFERRED: 14 (23%)
+- EXTRACTED: 90 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

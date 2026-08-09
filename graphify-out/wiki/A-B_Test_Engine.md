@@ -22,10 +22,10 @@
 
 ## Relationships
 
-- [A/B Position Simulation](A-B_Position_Simulation.md) (4 shared connections)
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (3 shared connections)
-- [A/B Calibration Tests](A-B_Calibration_Tests.md) (2 shared connections)
-- [Market Data Importer](Market_Data_Importer.md) (1 shared connections)
+- [A/B Verdict Logic Tests](A-B_Verdict_Logic_Tests.md) (4 shared connections)
+- [ranges.py](ranges.py.md) (3 shared connections)
+- [CalibrationAgainstTheLiveStore](CalibrationAgainstTheLiveStore.md) (2 shared connections)
+- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (1 shared connections)
 
 ## Source Files
 

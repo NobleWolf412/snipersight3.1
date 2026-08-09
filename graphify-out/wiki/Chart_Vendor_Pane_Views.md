@@ -1,59 +1,68 @@
 # Chart Vendor Pane Views
 
-> 28 nodes
+> 56 nodes
 
 ## Key Concepts
 
-- **he** (26 connections) — `app/static/lightweight-charts.js`
-- **.Xb()** (14 connections) — `app/static/lightweight-charts.js`
-- **.ui()** (13 connections) — `app/static/lightweight-charts.js`
-- **.tw()** (12 connections) — `app/static/lightweight-charts.js`
-- **mi** (11 connections) — `app/static/lightweight-charts.js`
-- **gi()** (8 connections) — `app/static/lightweight-charts.js`
-- **.oh()** (8 connections) — `app/static/lightweight-charts.js`
-- **._h()** (6 connections) — `app/static/lightweight-charts.js`
-- **di()** (4 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (4 connections) — `app/static/lightweight-charts.js`
-- **.ya()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Qb()** (4 connections) — `app/static/lightweight-charts.js`
-- **ee()** (3 connections) — `app/static/lightweight-charts.js`
-- **.iw()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Gb()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Jb()** (3 connections) — `app/static/lightweight-charts.js`
-- **le()** (3 connections) — `app/static/lightweight-charts.js`
-- **.dh()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Kb()** (2 connections) — `app/static/lightweight-charts.js`
-- **.nw()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.J()** (1 connections) — `app/static/lightweight-charts.js`
-- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.$t()** (1 connections) — `app/static/lightweight-charts.js`
-- *... and 3 more nodes in this community*
+- **RunRecorder** (61 connections) — `app/engine/runlog.py`
+- **runlog.py** (31 connections) — `app/engine/runlog.py`
+- **setups.py** (28 connections) — `app/engine/setups.py`
+- **quote_ticks()** (20 connections) — `app/engine/swings.py`
+- **run()** (16 connections) — `app/engine/setups.py`
+- **trend.py** (15 connections) — `app/engine/trend.py`
+- **breakout.py** (13 connections) — `app/engine/breakout.py`
+- **regime.py** (12 connections) — `app/engine/regime.py`
+- **structure.py** (12 connections) — `app/engine/structure.py`
+- **run()** (11 connections) — `app/engine/trend.py`
+- **liquidity.py** (10 connections) — `app/engine/liquidity.py`
+- **scalein.py** (10 connections) — `app/engine/scalein.py`
+- **vetoes()** (8 connections) — `app/engine/setups.py`
+- **run()** (6 connections) — `app/engine/breakout.py`
+- **confirms()** (6 connections) — `app/engine/setups.py`
+- **_ribbon()** (6 connections) — `app/engine/trend.py`
+- **_fp()** (5 connections) — `app/engine/setups.py`
+- **Decimal** (5 connections)
+- **run()** (5 connections) — `app/engine/structure.py`
+- **basis.py** (4 connections) — `app/engine/basis.py`
+- **run()** (4 connections) — `app/engine/liquidity.py`
+- **run()** (4 connections) — `app/engine/scalein.py`
+- **reversal_evidence()** (4 connections) — `app/engine/setups.py`
+- **resumes()** (4 connections) — `app/engine/trend.py`
+- **Decimal** (4 connections)
+- *... and 31 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (10 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (8 shared connections)
-- [Chart Vendor Series](Chart_Vendor_Series.md) (6 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (5 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (5 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (4 shared connections)
-- [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (3 shared connections)
-- [Chart Vendor Time Scale API](Chart_Vendor_Time_Scale_API.md) (3 shared connections)
-- [Chart Vendor Event Handling](Chart_Vendor_Event_Handling.md) (2 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (2 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (2 shared connections)
-- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (2 shared connections)
+- [ranges.py](ranges.py.md) (34 shared connections)
+- [Indicator Engines](Indicator_Engines.md) (19 shared connections)
+- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (9 shared connections)
+- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (9 shared connections)
+- [TestMarketQuality](TestMarketQuality.md) (8 shared connections)
+- [Bias Ladder Engine](Bias_Ladder_Engine.md) (6 shared connections)
+- [volume.py](volume.py.md) (5 shared connections)
+- [cycles.py](cycles.py.md) (4 shared connections)
+- [_facts](_facts.md) (4 shared connections)
+- [Cooldown Engine](Cooldown_Engine.md) (3 shared connections)
+- [Chart Vendor Utilities](Chart_Vendor_Utilities.md) (3 shared connections)
+- [Copilot Pack Builder](Copilot_Pack_Builder.md) (2 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/engine/basis.py`
+- `app/engine/breakout.py`
+- `app/engine/liquidity.py`
+- `app/engine/regime.py`
+- `app/engine/runlog.py`
+- `app/engine/scalein.py`
+- `app/engine/setups.py`
+- `app/engine/structure.py`
+- `app/engine/swings.py`
+- `app/engine/trend.py`
 
 ## Audit Trail
 
-- EXTRACTED: 139 (97%)
-- INFERRED: 4 (3%)
+- EXTRACTED: 341 (97%)
+- INFERRED: 10 (3%)
 - AMBIGUOUS: 0 (0%)
 
 ---

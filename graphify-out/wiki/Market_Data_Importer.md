@@ -1,34 +1,52 @@
 # Market Data Importer
 
-> 10 nodes
+> 28 nodes
 
 ## Key Concepts
 
-- **importer.py** (8 connections) — `app/engine/importer.py`
-- **backfill()** (6 connections) — `app/engine/importer.py`
-- **_fetch_rows()** (4 connections) — `app/engine/importer.py`
-- **_fetch()** (3 connections) — `app/engine/importer.py`
-- **native_tfs()** (3 connections) — `app/engine/importer.py`
-- **_iso()** (2 connections) — `app/engine/importer.py`
-- **Market-data importer (public endpoints, no credentials — §16).  Multi-venue si** (1 connections) — `app/engine/importer.py`
-- **Timeframes imported directly for THIS symbol.      Phemex *can* serve 4H nativ** (1 connections) — `app/engine/importer.py`
-- **Normalised (open_ts, open, high, low, close, volume) for either venue.      Co** (1 connections) — `app/engine/importer.py`
-- **Import [start_ts, end_ts) for a native timeframe. Returns import summary.** (1 connections) — `app/engine/importer.py`
+- **positions.py** (23 connections) — `app/engine/positions.py`
+- **apply_fill()** (9 connections) — `app/engine/positions.py`
+- **ProtectionFailed** (8 connections) — `app/engine/positions.py`
+- **_ensure()** (8 connections) — `app/engine/positions.py`
+- **reconcile()** (8 connections) — `app/engine/positions.py`
+- **ControlOwner** (7 connections) — `app/engine/contracts.py`
+- **Decimal** (7 connections)
+- **monitor_closures()** (7 connections) — `app/engine/positions.py`
+- **ReconciliationBlocked** (6 connections) — `app/engine/positions.py`
+- **_event()** (5 connections) — `app/engine/positions.py`
+- **_signed_broker_quantity()** (5 connections) — `app/engine/positions.py`
+- **manual_override()** (5 connections) — `app/engine/positions.py`
+- **return_control()** (5 connections) — `app/engine/positions.py`
+- **_execution_event_once()** (4 connections) — `app/engine/positions.py`
+- **_position_quantity()** (4 connections) — `app/engine/positions.py`
+- **private_environments_with_exposure()** (3 connections) — `app/engine/positions.py`
+- **require_reconciled()** (3 connections) — `app/engine/positions.py`
+- **RuntimeError** (2 connections)
+- **_known_order_clients()** (2 connections) — `app/engine/positions.py`
+- **managed()** (2 connections) — `app/engine/positions.py`
+- **Reconciled position custody and mandatory protection.  No new TESTNET/LIVE entry** (1 connections) — `app/engine/positions.py`
+- **Record one operational finding per stable payload, not per poll.** (1 connections) — `app/engine/positions.py`
+- **Private environments that still require custody, regardless of mode.** (1 connections) — `app/engine/positions.py`
+- **Compare broker truth to durable local custody and record the verdict.** (1 connections) — `app/engine/positions.py`
+- **Confirm venue-flat custody twice before closing a durable position.      Attache** (1 connections) — `app/engine/positions.py`
+- *... and 3 more nodes in this community*
 
 ## Relationships
 
-- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
-- [A/B Test Engine](A-B_Test_Engine.md) (1 shared connections)
-- [Venue Policy & Contract](Venue_Policy_%26_Contract.md) (1 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (5 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (4 shared connections)
+- [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (4 shared connections)
+- [Notification Delivery](Notification_Delivery.md) (2 shared connections)
 
 ## Source Files
 
-- `app/engine/importer.py`
+- `app/engine/contracts.py`
+- `app/engine/positions.py`
 
 ## Audit Trail
 
-- EXTRACTED: 29 (97%)
-- INFERRED: 1 (3%)
+- EXTRACTED: 122 (93%)
+- INFERRED: 9 (7%)
 - AMBIGUOUS: 0 (0%)
 
 ---

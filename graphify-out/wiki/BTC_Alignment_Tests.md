@@ -33,7 +33,7 @@
 
 ## Relationships
 
-- [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
 
 ## Source Files
 

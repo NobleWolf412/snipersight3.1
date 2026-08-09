@@ -1,53 +1,58 @@
 # Manual Trading Engine
 
-> 70 nodes
+> 25 nodes
 
 ## Key Concepts
 
-- **manual.py** (43 connections) — `app/engine/manual.py`
-- **Decimal** (19 connections)
-- **run()** (14 connections) — `app/engine/manual.py`
-- **create_intent()** (13 connections) — `app/engine/manual.py`
-- **IntentRejected** (11 connections) — `app/engine/manual.py`
-- **_walk()** (10 connections) — `app/engine/manual.py`
-- **status()** (9 connections) — `app/engine/manual.py`
-- **close_engine_position()** (8 connections) — `app/engine/manual.py`
-- **unresolved()** (8 connections) — `app/engine/manual.py`
-- **cancel_intent()** (8 connections) — `app/engine/manual.py`
-- **_risk_of()** (8 connections) — `app/engine/manual.py`
-- **_facts()** (7 connections) — `app/engine/manual.py`
-- **adopt_position()** (7 connections) — `app/engine/manual.py`
-- **live()** (7 connections) — `app/engine/manual.py`
-- **risk_per_unit()** (6 connections) — `app/engine/manual.py`
-- **validate_partials()** (6 connections) — `app/engine/manual.py`
-- **_resolution()** (6 connections) — `app/engine/manual.py`
-- **_exit_walk()** (6 connections) — `app/engine/manual.py`
-- **validate()** (5 connections) — `app/engine/manual.py`
-- **validate_position()** (5 connections) — `app/engine/manual.py`
-- **_terms()** (5 connections) — `app/engine/manual.py`
-- **_finer_series()** (5 connections) — `app/engine/manual.py`
-- **blend_r()** (5 connections) — `app/engine/manual.py`
-- **_weighted()** (5 connections) — `app/engine/manual.py`
-- **_same_side_open()** (4 connections) — `app/engine/manual.py`
-- *... and 45 more nodes in this community*
+- **u()** (11 connections) — `app/static/lightweight-charts.js`
+- **.Mt()** (8 connections) — `app/static/lightweight-charts.js`
+- **xi** (7 connections) — `app/static/lightweight-charts.js`
+- **H** (6 connections) — `app/static/lightweight-charts.js`
+- **it** (6 connections) — `app/static/lightweight-charts.js`
+- **.X()** (6 connections) — `app/static/lightweight-charts.js`
+- **Cn** (6 connections) — `app/static/lightweight-charts.js`
+- **.J()** (4 connections) — `app/static/lightweight-charts.js`
+- **.bt()** (3 connections) — `app/static/lightweight-charts.js`
+- **.gt()** (2 connections) — `app/static/lightweight-charts.js`
+- **.gt()** (2 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (2 connections) — `app/static/lightweight-charts.js`
+- **.oe()** (2 connections) — `app/static/lightweight-charts.js`
+- **.K()** (2 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (2 connections) — `app/static/lightweight-charts.js`
+- **.K()** (2 connections) — `app/static/lightweight-charts.js`
+- **.Za()** (2 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.J()** (1 connections) — `app/static/lightweight-charts.js`
+- **.kr()** (1 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
 
 ## Relationships
 
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (4 shared connections)
-- [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (3 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (2 shared connections)
-- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
-- [Venue Policy & Contract](Venue_Policy_%26_Contract.md) (1 shared connections)
-- [Refresh Repair Tests](Refresh_Repair_Tests.md) (1 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (8 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (5 shared connections)
+- [Chart Vendor Auto Scaling](Chart_Vendor_Auto_Scaling.md) (3 shared connections)
+- [Chart Vendor Layout](Chart_Vendor_Layout.md) (3 shared connections)
+- [Funnel UI](Funnel_UI.md) (1 shared connections)
+- [Setup Deck UI](Setup_Deck_UI.md) (1 shared connections)
+- [report](report.md) (1 shared connections)
+- [Fact Store Conventions](Fact_Store_Conventions.md) (1 shared connections)
+- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (1 shared connections)
+- [status](status.md) (1 shared connections)
+- [Watchdog Kill Attribution Tests](Watchdog_Kill_Attribution_Tests.md) (1 shared connections)
+- [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/manual.py`
+- `app/static/lightweight-charts.js`
 
 ## Audit Trail
 
-- EXTRACTED: 303 (99%)
-- INFERRED: 2 (1%)
+- EXTRACTED: 73 (90%)
+- INFERRED: 8 (10%)
 - AMBIGUOUS: 0 (0%)
 
 ---

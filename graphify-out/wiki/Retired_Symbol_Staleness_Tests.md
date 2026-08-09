@@ -1,34 +1,33 @@
 # Retired Symbol Staleness Tests
 
-> 10 nodes
+> 7 nodes
 
 ## Key Concepts
 
-- **RetiredSymbolStalenessTest** (9 connections) — `app/tests/test_pipeline_quality.py`
-- **.test_fails_open_when_the_universe_is_unreadable()** (4 connections) — `app/tests/test_pipeline_quality.py`
-- **._stale_symbols()** (3 connections) — `app/tests/test_pipeline_quality.py`
-- **.test_retired_symbol_is_not_reported_stale()** (2 connections) — `app/tests/test_pipeline_quality.py`
-- **.test_live_set_is_not_shared_across_connections()** (2 connections) — `app/tests/test_pipeline_quality.py`
-- **.setUp()** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **.tearDown()** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **Staleness is only meaningful for a symbol we still track.      Switching the u** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **If we cannot tell what is live, warn rather than silently suppress.** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **A module-level cache keyed on nothing would let an audit of one         databas** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **test_abtest.py** (9 connections) — `app/tests/test_abtest.py`
+- **Summary** (3 connections) — `app/tests/test_abtest.py`
+- **Determinism** (2 connections) — `app/tests/test_abtest.py`
+- **.test_same_inputs_produce_identical_results()** (2 connections) — `app/tests/test_abtest.py`
+- **.test_missed_orders_are_counted_but_never_scored_as_zero()** (1 connections) — `app/tests/test_abtest.py`
+- **.test_empty_book_refuses_rather_than_reporting_zero()** (1 connections) — `app/tests/test_abtest.py`
+- **2x2 replay harness — the properties that make its verdict believable.  The har** (1 connections) — `app/tests/test_abtest.py`
 
 ## Relationships
 
-- [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (1 shared connections)
-- [Pipeline Quality Tests](Pipeline_Quality_Tests.md) (1 shared connections)
-- [Multi-Venue Universe Tests](Multi-Venue_Universe_Tests.md) (1 shared connections)
+- [Simulator Convention Tests](Simulator_Convention_Tests.md) (3 shared connections)
+- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (1 shared connections)
+- [CalibrationAgainstTheLiveStore](CalibrationAgainstTheLiveStore.md) (1 shared connections)
+- [momentum.py](momentum.py.md) (1 shared connections)
+- [test_orientation_and_axes.js](test_orientation_and_axes.js.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_pipeline_quality.py`
+- `app/tests/test_abtest.py`
 
 ## Audit Trail
 
-- EXTRACTED: 23 (92%)
-- INFERRED: 2 (8%)
+- EXTRACTED: 19 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

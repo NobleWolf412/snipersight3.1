@@ -1,53 +1,35 @@
 # Chart Vendor Utilities
 
-> 21 nodes
+> 12 nodes
 
 ## Key Concepts
 
-- **E()** (8 connections) — `app/static/lightweight-charts.js`
-- **I** (8 connections) — `app/static/lightweight-charts.js`
-- **.Mt()** (8 connections) — `app/static/lightweight-charts.js`
-- **.W()** (6 connections) — `app/static/lightweight-charts.js`
-- **H** (6 connections) — `app/static/lightweight-charts.js`
-- **Cn** (6 connections) — `app/static/lightweight-charts.js`
-- **$** (5 connections) — `app/static/lightweight-charts.js`
-- **.Pn()** (3 connections) — `app/static/lightweight-charts.js`
-- **.U()** (2 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (2 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (2 connections) — `app/static/lightweight-charts.js`
-- **.ar()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Za()** (2 connections) — `app/static/lightweight-charts.js`
-- **.op()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.j()** (1 connections) — `app/static/lightweight-charts.js`
-- **.H()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
+- **volatility.py** (15 connections) — `app/engine/volatility.py`
+- **run()** (9 connections) — `app/engine/volatility.py`
+- **Decimal** (6 connections)
+- **keltner()** (6 connections) — `app/engine/volatility.py`
+- **bollinger()** (5 connections) — `app/engine/volatility.py`
+- **atr_regime()** (4 connections) — `app/engine/volatility.py`
+- **atr_percentiles()** (4 connections) — `app/engine/volatility.py`
+- **Volatility engine — ATR percentile, Bollinger width, and the squeeze. algo vola** (1 connections) — `app/engine/volatility.py`
+- **(middle, upper, lower) per bar index; None inside the warmup.      POPULATION** (1 connections) — `app/engine/volatility.py`
+- **(middle, upper, lower) per bar index, EMA-centred and ATR-scaled.      ATR is** (1 connections) — `app/engine/volatility.py`
+- **Schmitt-triggered percentile bucket. Enter at 20/80, leave at 30/70.** (1 connections) — `app/engine/volatility.py`
+- **Rank of each ATR within the trailing `window` values, as a percentage.      MI** (1 connections) — `app/engine/volatility.py`
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (7 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (4 shared connections)
-- [Chart Vendor Data Layer](Chart_Vendor_Data_Layer.md) (3 shared connections)
-- [Chart Vendor Primitives](Chart_Vendor_Primitives.md) (2 shared connections)
-- [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (2 shared connections)
-- [Chart Vendor Event Handling](Chart_Vendor_Event_Handling.md) (1 shared connections)
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (1 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
-- [Glossary UI](Glossary_UI.md) (1 shared connections)
-- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (1 shared connections)
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (1 shared connections)
+- [Indicator Engines](Indicator_Engines.md) (8 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (3 shared connections)
+- [ranges.py](ranges.py.md) (3 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/engine/volatility.py`
 
 ## Audit Trail
 
-- EXTRACTED: 69 (100%)
+- EXTRACTED: 54 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

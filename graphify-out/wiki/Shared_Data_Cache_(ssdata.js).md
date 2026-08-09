@@ -17,7 +17,7 @@
 
 ## Relationships
 
-- [Glossary UI](Glossary_UI.md) (1 shared connections)
+- [report](report.md) (1 shared connections)
 
 ## Source Files
 

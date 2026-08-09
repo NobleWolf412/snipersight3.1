@@ -15,7 +15,7 @@
 
 ## Relationships
 
-- [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (1 shared connections)
+- [Bias Ladder Engine](Bias_Ladder_Engine.md) (1 shared connections)
 - [Bias Alignment Tests](Bias_Alignment_Tests.md) (1 shared connections)
 
 ## Source Files

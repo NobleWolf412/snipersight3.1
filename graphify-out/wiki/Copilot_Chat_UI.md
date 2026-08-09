@@ -1,22 +1,35 @@
 # Copilot Chat UI
 
-> 13 nodes
+> 34 nodes
 
 ## Key Concepts
 
-- **copilot.js** (12 connections) — `app/static/copilot.js`
-- **render()** (7 connections) — `app/static/copilot.js`
-- **wire()** (5 connections) — `app/static/copilot.js`
+- **copilot.js** (21 connections) — `app/static/copilot.js`
+- **render()** (12 connections) — `app/static/copilot.js`
+- **tracer.js** (11 connections) — `app/static/tracer.js`
+- **wire()** (9 connections) — `app/static/copilot.js`
+- **startCapture()** (6 connections) — `app/static/copilot.js`
+- **render()** (6 connections) — `app/static/tracer.js`
+- **openTrace()** (6 connections) — `app/static/tracer.js`
+- **close()** (5 connections) — `app/static/copilot.js`
+- **shell()** (5 connections) — `app/static/tracer.js`
+- **paint()** (5 connections) — `app/static/tracer.js`
+- **failed()** (5 connections) — `app/static/tracer.js`
+- **stopCapture()** (4 connections) — `app/static/copilot.js`
+- **analyzeCapture()** (4 connections) — `app/static/copilot.js`
 - **send()** (4 connections) — `app/static/copilot.js`
 - **open()** (4 connections) — `app/static/copilot.js`
-- **close()** (4 connections) — `app/static/copilot.js`
 - **clear()** (4 connections) — `app/static/copilot.js`
+- **notFound()** (4 connections) — `app/static/tracer.js`
+- **summary()** (4 connections) — `app/static/tracer.js`
 - **storageFailed()** (3 connections) — `app/static/copilot.js`
 - **saveMsgs()** (3 connections) — `app/static/copilot.js`
-- **loadMsgs()** (2 connections) — `app/static/copilot.js`
-- **surfaceCtx()** (2 connections) — `app/static/copilot.js`
-- **suggestHtml()** (2 connections) — `app/static/copilot.js`
-- **toggle()** (2 connections) — `app/static/copilot.js`
+- **elapsed()** (3 connections) — `app/static/copilot.js`
+- **captureHtml()** (3 connections) — `app/static/copilot.js`
+- **finishCapture()** (3 connections) — `app/static/copilot.js`
+- **discardCapture()** (3 connections) — `app/static/copilot.js`
+- **waitMedia()** (3 connections) — `app/static/copilot.js`
+- *... and 9 more nodes in this community*
 
 ## Relationships
 
@@ -25,11 +38,12 @@
 ## Source Files
 
 - `app/static/copilot.js`
+- `app/static/tracer.js`
 
 ## Audit Trail
 
-- EXTRACTED: 50 (93%)
-- INFERRED: 4 (7%)
+- EXTRACTED: 142 (89%)
+- INFERRED: 18 (11%)
 - AMBIGUOUS: 0 (0%)
 
 ---

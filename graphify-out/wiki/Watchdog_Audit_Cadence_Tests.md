@@ -1,31 +1,30 @@
 # Watchdog Audit Cadence Tests
 
-> 14 nodes
+> 11 nodes
 
 ## Key Concepts
 
-- **_FakeChild** (11 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **TestAuditCadenceOnSkip** (4 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.kill()** (3 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.test_a_sustained_quarantine_is_still_reported()** (3 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.test_db_skip_stamps_at()** (3 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.test_the_real_scan_can_actually_see_a_process()** (3 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **._run()** (2 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.test_import_skip_stamps_at()** (2 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.__init__()** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **.alive()** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **Mirrors Child.kill: records our own hand, then terminates. The         attributi** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **Not restarting must not mean not telling. The operator still needs to         kn** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **Skip returns (import or db) must still stamp `at` so cadence stays 60s     inste** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
-- **NOT mocked, deliberately.          The first version of _orphans() shelled out t** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **test_watchdog_rung_dispatch.py** (12 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **TestTakeoverHysteresis** (5 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **TestKillAttribution** (4 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **.test_an_audit_restart_is_attributed()** (2 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **.test_a_death_we_did_not_cause_stays_unattributed()** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **.test_probe_timeout_exceeds_the_measured_endpoint()** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **.test_takeover_needs_repeated_misses()** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **.test_grace_covers_the_slowest_measured_cycle()** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **Watchdog dispatches by Kill-Switch rung, not by hardcoded code lists — so every** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **rc=1 looks identical whether this supervisor sent the terminate or     something** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
+- **`server_up()` probed with a 3s timeout an endpoint measured at 6.9s under     a** (1 connections) — `app/tests/test_watchdog_rung_dispatch.py`
 
 ## Relationships
 
-- [Watchdog Kill Attribution Tests](Watchdog_Kill_Attribution_Tests.md) (3 shared connections)
+- [Chart Vendor Grid & Axis](Chart_Vendor_Grid_%26_Axis.md) (3 shared connections)
 - [Watchdog Restart Dispatch Tests](Watchdog_Restart_Dispatch_Tests.md) (2 shared connections)
-- [Watchdog Quarantine Persistence Tests](Watchdog_Quarantine_Persistence_Tests.md) (2 shared connections)
-- [Multi-Venue Universe Tests](Multi-Venue_Universe_Tests.md) (1 shared connections)
+- [Watchdog Child Capture Tests](Watchdog_Child_Capture_Tests.md) (1 shared connections)
+- [Child Spawn Isolation Tests](Child_Spawn_Isolation_Tests.md) (1 shared connections)
 - [Watchdog Orphan Clearing Tests](Watchdog_Orphan_Clearing_Tests.md) (1 shared connections)
+- [Watchdog Quarantine Persistence Tests](Watchdog_Quarantine_Persistence_Tests.md) (1 shared connections)
+- [Watchdog Supervisor](Watchdog_Supervisor.md) (1 shared connections)
 
 ## Source Files
 
@@ -33,8 +32,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 36 (97%)
-- INFERRED: 1 (3%)
+- EXTRACTED: 30 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

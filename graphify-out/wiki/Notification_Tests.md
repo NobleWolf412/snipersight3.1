@@ -34,7 +34,6 @@
 ## Relationships
 
 - [Live Scanner Loop](Live_Scanner_Loop.md) (1 shared connections)
-- [Multi-Venue Universe Tests](Multi-Venue_Universe_Tests.md) (1 shared connections)
 
 ## Source Files
 
@@ -42,8 +41,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 165 (99%)
-- INFERRED: 1 (1%)
+- EXTRACTED: 165 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -2,7 +2,7 @@
 
 > God node · 58 connections · `app/static/lightweight-charts.js`
 
-**Community:** [Chart Vendor Primitives](Chart_Vendor_Primitives.md)
+**Community:** [Chart Vendor Internals](Chart_Vendor_Internals.md)
 
 ## Connections by Relation
 

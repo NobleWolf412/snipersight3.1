@@ -18,8 +18,8 @@
 
 ## Relationships
 
-- [Watchdog Audit Cadence Tests](Watchdog_Audit_Cadence_Tests.md) (2 shared connections)
-- [Watchdog Kill Attribution Tests](Watchdog_Kill_Attribution_Tests.md) (1 shared connections)
+- [Chart Vendor Grid & Axis](Chart_Vendor_Grid_%26_Axis.md) (2 shared connections)
+- [Watchdog Audit Cadence Tests](Watchdog_Audit_Cadence_Tests.md) (1 shared connections)
 
 ## Source Files
 

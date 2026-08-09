@@ -1,59 +1,57 @@
 # Chart Vendor Series
 
-> 52 nodes
+> 63 nodes
 
 ## Key Concepts
 
-- **ne()** (12 connections) — `app/static/lightweight-charts.js`
-- **.Hs()** (11 connections) — `app/static/lightweight-charts.js`
-- **.Ys()** (10 connections) — `app/static/lightweight-charts.js`
-- **te()** (10 connections) — `app/static/lightweight-charts.js`
-- **qt** (9 connections) — `app/static/lightweight-charts.js`
-- **At** (8 connections) — `app/static/lightweight-charts.js`
-- **zt** (8 connections) — `app/static/lightweight-charts.js`
-- **ie()** (7 connections) — `app/static/lightweight-charts.js`
-- **xt()** (6 connections) — `app/static/lightweight-charts.js`
-- **.Js()** (6 connections) — `app/static/lightweight-charts.js`
-- **se()** (6 connections) — `app/static/lightweight-charts.js`
-- **kt** (5 connections) — `app/static/lightweight-charts.js`
-- **.Fs()** (5 connections) — `app/static/lightweight-charts.js`
-- **.Ks()** (5 connections) — `app/static/lightweight-charts.js`
-- **.Gs()** (5 connections) — `app/static/lightweight-charts.js`
-- **bi()** (5 connections) — `app/static/lightweight-charts.js`
-- **A()** (4 connections) — `app/static/lightweight-charts.js`
-- **.js()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Ks()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Ks()** (4 connections) — `app/static/lightweight-charts.js`
-- **.be()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Us()** (3 connections) — `app/static/lightweight-charts.js`
-- **.qs()** (3 connections) — `app/static/lightweight-charts.js`
-- **.ne()** (3 connections) — `app/static/lightweight-charts.js`
-- **.qs()** (3 connections) — `app/static/lightweight-charts.js`
-- *... and 27 more nodes in this community*
+- **OrderIntent** (26 connections) — `app/engine/contracts.py`
+- **RiskDecision** (25 connections) — `app/engine/contracts.py`
+- **_FakeCancelBroker** (22 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **make_plan()** (20 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **test_testnet_safety_fixes.py** (16 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **StopAndLeverageValidation** (16 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **_RefusesPreWire** (15 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **memory()** (14 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **ExpiryCancelsTheVenueOrder** (13 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **autotrader.py** (12 connections) — `app/engine/autotrader.py`
+- **PreWireRefusalIsRetryableAndLoud** (12 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **RestartNeedsARestart** (11 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **EveryDrillNamesItsEvidence** (11 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **build_plan()** (10 connections) — `app/engine/autotrader.py`
+- **enter_testnet()** (10 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **broker_with()** (9 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **_submitted_private_intent()** (7 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **.test_pre_wire_rejection_marks_submit_failed_and_permits_retry()** (6 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **.test_pre_wire_failure_never_awards_the_rejected_order_drill()** (6 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **.test_submit_sets_the_leverage_the_plan_implies_never_a_hardcoded_bucket()** (5 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **.test_a_recovery_failure_after_an_ambiguous_post_stays_ambiguous()** (5 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **.test_a_non_object_200_response_on_the_order_post_is_ambiguous()** (5 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **.test_a_cancel_ack_that_omits_the_fill_does_not_erase_a_seen_partial()** (5 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **._dispatch()** (5 connections) — `app/tests/test_testnet_safety_fixes.py`
+- **.submit()** (5 connections) — `app/tests/test_testnet_safety_fixes.py`
+- *... and 38 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (13 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (7 shared connections)
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (6 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (4 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (3 shared connections)
-- [Chart Vendor Price Scale Formatting](Chart_Vendor_Price_Scale_Formatting.md) (3 shared connections)
-- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (3 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (3 shared connections)
-- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (3 shared connections)
-- [Chart Vendor Event Handling](Chart_Vendor_Event_Handling.md) (1 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (1 shared connections)
-- [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (1 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (41 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (14 shared connections)
+- [Cycle Detection Engine](Cycle_Detection_Engine.md) (9 shared connections)
+- [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (8 shared connections)
+- [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (4 shared connections)
+- [CustodyOverridesTheSimulatorsStory](CustodyOverridesTheSimulatorsStory.md) (3 shared connections)
+- [One Source of Truth JS Tests](One_Source_of_Truth_JS_Tests.md) (2 shared connections)
+- [test_phemex_private.py](test_phemex_private.py.md) (2 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/engine/autotrader.py`
+- `app/engine/contracts.py`
+- `app/tests/test_testnet_safety_fixes.py`
 
 ## Audit Trail
 
-- EXTRACTED: 183 (92%)
-- INFERRED: 16 (8%)
+- EXTRACTED: 292 (75%)
+- INFERRED: 97 (25%)
 - AMBIGUOUS: 0 (0%)
 
 ---

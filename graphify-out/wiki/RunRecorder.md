@@ -1,8 +1,8 @@
 # RunRecorder
 
-> God node · 59 connections · `app/engine/runlog.py`
+> God node · 61 connections · `app/engine/runlog.py`
 
-**Community:** [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md)
+**Community:** [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md)
 
 ## Connections by Relation
 
@@ -36,18 +36,18 @@
 - swings.py `EXTRACTED`
 - setups.py `EXTRACTED`
 - ma.py `EXTRACTED`
-- volume.py `EXTRACTED`
-- execsim.py `EXTRACTED`
-- momentum.py `EXTRACTED`
-- universe.py `EXTRACTED`
 - risk.py `EXTRACTED`
-- ranges.py `EXTRACTED`
+- [volume.py](volume.py.md) `EXTRACTED`
+- [execsim.py](execsim.py.md) `EXTRACTED`
+- [momentum.py](momentum.py.md) `EXTRACTED`
+- universe.py `EXTRACTED`
+- [ranges.py](ranges.py.md) `EXTRACTED`
 - trend.py `EXTRACTED`
 - volatility.py `EXTRACTED`
 - breakout.py `EXTRACTED`
 - zones.py `EXTRACTED`
 - cooldowns.py `EXTRACTED`
-- cycles.py `EXTRACTED`
+- [cycles.py](cycles.py.md) `EXTRACTED`
 - regime.py `EXTRACTED`
 - structure.py `EXTRACTED`
 - volprofile.py `EXTRACTED`
@@ -63,12 +63,12 @@
 - Context manager: times an engine run and records it on exit. `EXTRACTED`
 
 ### uses
+- [TestMarketQuality](TestMarketQuality.md) `INFERRED`
 - IntentRejected `INFERRED`
 - QualityStoreCase `INFERRED`
 - RetiredSymbolStalenessTest `INFERRED`
 - TestKillSwitchRungs `INFERRED`
 - TestPipelineContracts `INFERRED`
-- TestMarketQuality `INFERRED`
 - _RateLimiter `INFERRED`
 - TestStrategyRulesRemainFrozen `INFERRED`
 

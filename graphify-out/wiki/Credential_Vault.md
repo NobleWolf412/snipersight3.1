@@ -5,7 +5,7 @@
 ## Key Concepts
 
 - **credentials.py** (12 connections) — `app/engine/credentials.py`
-- **store_secret()** (7 connections) — `app/engine/credentials.py`
+- **store_secret()** (6 connections) — `app/engine/credentials.py`
 - **_load()** (5 connections) — `app/engine/credentials.py`
 - **_Blob** (4 connections) — `app/engine/credentials.py`
 - **_out_bytes()** (4 connections) — `app/engine/credentials.py`
@@ -23,7 +23,7 @@
 
 ## Relationships
 
-- [Venue Policy & Contract](Venue_Policy_%26_Contract.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -31,8 +31,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 58 (98%)
-- INFERRED: 1 (2%)
+- EXTRACTED: 58 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

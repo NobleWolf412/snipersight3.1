@@ -33,8 +33,8 @@
 
 ## Relationships
 
-- [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (1 shared connections)
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
+- [ranges.py](ranges.py.md) (1 shared connections)
 
 ## Source Files
 

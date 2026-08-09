@@ -18,7 +18,7 @@
 
 ## Relationships
 
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (2 shared connections)
+- [ranges.py](ranges.py.md) (2 shared connections)
 
 ## Source Files
 

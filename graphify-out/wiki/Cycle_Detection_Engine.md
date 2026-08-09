@@ -1,42 +1,61 @@
 # Cycle Detection Engine
 
-> 19 nodes
+> 28 nodes
 
 ## Key Concepts
 
-- **cycles.py** (12 connections) — `app/engine/cycles.py`
-- **run()** (7 connections) — `app/engine/cycles.py`
-- **summarize()** (6 connections) — `app/engine/cycles.py`
-- **detect_lows()** (5 connections) — `app/engine/cycles.py`
-- **classify_cycles()** (4 connections) — `app/engine/cycles.py`
-- **four_year_windows()** (4 connections) — `app/engine/cycles.py`
-- **btc_series()** (3 connections) — `app/engine/cycles.py`
-- **_ts()** (3 connections) — `app/engine/cycles.py`
-- **add_months()** (3 connections) — `app/engine/cycles.py`
-- **fractal_lows()** (3 connections) — `app/engine/cycles.py`
-- **date** (1 connections)
-- **Nested Cycle Satellite — Bob Loukas / Camel Finance school. OBSERVATIONAL ONLY.** (1 connections) — `app/engine/cycles.py`
-- **Which stored series to read Bitcoin's cycle from.      Deepest daily history win** (1 connections) — `app/engine/cycles.py`
-- **Indices whose low is strictly the lowest of +/-w neighbors.** (1 connections) — `app/engine/cycles.py`
-- **Walk forward from the seed low, confirming one low per timing band.     Returns** (1 connections) — `app/engine/cycles.py`
-- **Completed cycles between consecutive lows: top, translation, failed flag.** (1 connections) — `app/engine/cycles.py`
-- **Two INDEPENDENT window estimates — never merged. Disagreement is data.     TWO p** (1 connections) — `app/engine/cycles.py`
-- **Pure summary for the API — computed, never stored (facts hold detections).** (1 connections) — `app/engine/cycles.py`
-- **Emit detection facts (BTC 1D only). Summary stays computed, not stored.      The** (1 connections) — `app/engine/cycles.py`
+- **AutomationMode** (40 connections) — `app/engine/contracts.py`
+- **automation.py** (18 connections) — `app/engine/automation.py`
+- **transition()** (9 connections) — `app/engine/automation.py`
+- **ModeConflict** (7 connections) — `app/engine/automation.py`
+- **ModeRejected** (7 connections) — `app/engine/automation.py`
+- **current()** (7 connections) — `app/engine/automation.py`
+- **status()** (6 connections) — `app/engine/automation.py`
+- **start_safety_drill()** (6 connections) — `app/engine/automation.py`
+- **AutomationStatus** (6 connections) — `app/engine/contracts.py`
+- **_ensure()** (5 connections) — `app/engine/automation.py`
+- **broker_factory.py** (5 connections) — `app/engine/broker_factory.py`
+- **promotion_summary()** (4 connections) — `app/engine/automation.py`
+- **observe_safety_event()** (4 connections) — `app/engine/automation.py`
+- **BrokerConfigurationError** (4 connections) — `app/engine/broker_factory.py`
+- **phemex_for_mode()** (4 connections) — `app/engine/broker_factory.py`
+- **_criterion()** (2 connections) — `app/engine/automation.py`
+- **safety_drills()** (2 connections) — `app/engine/automation.py`
+- **operational_evidence()** (2 connections) — `app/engine/automation.py`
+- **RuntimeError** (1 connections)
+- **ValueError** (1 connections)
+- **history()** (1 connections) — `app/engine/automation.py`
+- **Persistent automation mode and promotion-gate authority.  Mode is operational st** (1 connections) — `app/engine/automation.py`
+- **Read mode without creating state during a GET request.** (1 connections) — `app/engine/automation.py`
+- **Stage one real TESTNET fault drill; this never performs the fault.** (1 connections) — `app/engine/automation.py`
+- **Complete only the staged drill whose real code path was observed.** (1 connections) — `app/engine/automation.py`
+- *... and 3 more nodes in this community*
 
 ## Relationships
 
-- [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (2 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (9 shared connections)
+- [Chart Vendor Series](Chart_Vendor_Series.md) (9 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (7 shared connections)
+- [Volatility Engine](Volatility_Engine.md) (4 shared connections)
+- [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (3 shared connections)
+- [Diagnostics Engine](Diagnostics_Engine.md) (2 shared connections)
+- [test_autonomy_contracts.py](test_autonomy_contracts.py.md) (2 shared connections)
+- [cycles.py](cycles.py.md) (1 shared connections)
+- [Bias Ladder Engine](Bias_Ladder_Engine.md) (1 shared connections)
 - [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
+- [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/cycles.py`
+- `app/engine/automation.py`
+- `app/engine/broker_factory.py`
+- `app/engine/contracts.py`
 
 ## Audit Trail
 
-- EXTRACTED: 59 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 112 (76%)
+- INFERRED: 36 (24%)
 - AMBIGUOUS: 0 (0%)
 
 ---

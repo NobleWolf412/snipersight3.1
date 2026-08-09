@@ -33,14 +33,15 @@
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (9 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (7 shared connections)
 - [Chart Vendor Panes](Chart_Vendor_Panes.md) (6 shared connections)
+- [A/B Position Simulation](A-B_Position_Simulation.md) (2 shared connections)
 - [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
-- [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (1 shared connections)
-- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (1 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
-- [Chart Vendor Series](Chart_Vendor_Series.md) (1 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (1 shared connections)
+- [Rails & Scoreboard UI](Rails_%26_Scoreboard_UI.md) (1 shared connections)
+- [Chart Vendor Auto Scaling](Chart_Vendor_Auto_Scaling.md) (1 shared connections)
+- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (1 shared connections)
+- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (1 shared connections)
+- [Watchdog Kill Attribution Tests](Watchdog_Kill_Attribution_Tests.md) (1 shared connections)
 
 ## Source Files
 

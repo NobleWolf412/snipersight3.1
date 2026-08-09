@@ -17,7 +17,7 @@
 
 ## Relationships
 
-- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (1 shared connections)
+- [Manual Trading Engine](Manual_Trading_Engine.md) (1 shared connections)
 
 ## Source Files
 

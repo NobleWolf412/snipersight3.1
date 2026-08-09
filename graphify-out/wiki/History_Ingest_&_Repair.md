@@ -9,9 +9,9 @@
 - **missing_history()** (5 connections) — `app/engine/ingest.py`
 - **repair_history()** (5 connections) — `app/engine/ingest.py`
 - **backfill_history()** (4 connections) — `app/engine/ingest.py`
-- **run_engines()** (4 connections) — `app/engine/ingest.py`
 - **onboard()** (4 connections) — `app/engine/ingest.py`
 - **_native_first()** (3 connections) — `app/engine/ingest.py`
+- **run_engines()** (3 connections) — `app/engine/ingest.py`
 - **_native_count()** (2 connections) — `app/engine/ingest.py`
 - **Per-symbol onboarding — backfill history, aggregate, run all fact engines.  Used** (1 connections) — `app/engine/ingest.py`
 - **Earliest timestamp worth requesting for a symbol with NO candles yet.      Exist** (1 connections) — `app/engine/ingest.py`
@@ -24,7 +24,7 @@
 
 ## Relationships
 
-- [Multi-Venue Universe Tests](Multi-Venue_Universe_Tests.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -32,8 +32,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 48 (98%)
-- INFERRED: 1 (2%)
+- EXTRACTED: 48 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

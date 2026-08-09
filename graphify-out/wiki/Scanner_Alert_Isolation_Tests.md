@@ -16,7 +16,7 @@
 ## Relationships
 
 - [Toast Flag Tests](Toast_Flag_Tests.md) (3 shared connections)
-- [Notification Delivery](Notification_Delivery.md) (1 shared connections)
+- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
 - [Alert Idempotency Tests](Alert_Idempotency_Tests.md) (1 shared connections)
 - [Remote Alert Sink Tests](Remote_Alert_Sink_Tests.md) (1 shared connections)
 - [Heartbeat Assertion Tests](Heartbeat_Assertion_Tests.md) (1 shared connections)

@@ -33,11 +33,10 @@
 
 ## Relationships
 
-- [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (13 shared connections)
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (11 shared connections)
-- [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (8 shared connections)
-- [Volatility Engine](Volatility_Engine.md) (8 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (4 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (19 shared connections)
+- [ranges.py](ranges.py.md) (12 shared connections)
+- [Chart Vendor Utilities](Chart_Vendor_Utilities.md) (8 shared connections)
+- [volume.py](volume.py.md) (5 shared connections)
 - [Divergence & Factor Grading](Divergence_%26_Factor_Grading.md) (1 shared connections)
 - [Divergence Stats Tests](Divergence_Stats_Tests.md) (1 shared connections)
 

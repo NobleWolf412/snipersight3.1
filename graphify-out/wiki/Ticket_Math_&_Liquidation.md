@@ -18,7 +18,7 @@
 
 ## Relationships
 
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (1 shared connections)
+- [Watchdog Kill Attribution Tests](Watchdog_Kill_Attribution_Tests.md) (1 shared connections)
 
 ## Source Files
 

@@ -1,11 +1,11 @@
 # Strategy Registry Tests
 
-> 20 nodes
+> 21 nodes
 
 ## Key Concepts
 
+- **Shape** (6 connections) — `app/tests/test_registry.py`
 - **MatchesTheEngine** (5 connections) — `app/tests/test_registry.py`
-- **Shape** (5 connections) — `app/tests/test_registry.py`
 - **test_registry.py** (4 connections) — `app/tests/test_registry.py`
 - **MatchesSettings** (3 connections) — `app/tests/test_registry.py`
 - **.test_declared_regimes_are_regimes_the_engine_admits()** (2 connections) — `app/tests/test_registry.py`
@@ -17,6 +17,7 @@
 - **.test_pullback_needs_no_extra_evidence()** (1 connections) — `app/tests/test_registry.py`
 - **.test_planned_strategies_carry_a_measured_gap_and_no_record()** (1 connections) — `app/tests/test_registry.py`
 - **.test_keys_are_unique_and_slug_shaped()** (1 connections) — `app/tests/test_registry.py`
+- **.test_every_strategy_declares_the_public_evidence_contract()** (1 connections) — `app/tests/test_registry.py`
 - **.test_lookup_by_engine_name_is_case_insensitive_and_total()** (1 connections) — `app/tests/test_registry.py`
 - **The registry must describe the engine, not an intention.  Its whole reason to ex** (1 connections) — `app/tests/test_registry.py`
 - **A registry naming a regime the playbook refuses would put a strategy         on** (1 connections) — `app/tests/test_registry.py`
@@ -35,7 +36,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 38 (100%)
+- EXTRACTED: 40 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

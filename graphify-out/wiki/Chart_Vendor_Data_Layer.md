@@ -1,59 +1,50 @@
 # Chart Vendor Data Layer
 
-> 43 nodes
+> 22 nodes
 
 ## Key Concepts
 
-- **Rs** (32 connections) — `app/static/lightweight-charts.js`
-- **ii** (20 connections) — `app/static/lightweight-charts.js`
-- **.vp()** (12 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (10 connections) — `app/static/lightweight-charts.js`
-- **.X()** (9 connections) — `app/static/lightweight-charts.js`
-- **.ap()** (9 connections) — `app/static/lightweight-charts.js`
-- **.gp()** (9 connections) — `app/static/lightweight-charts.js`
-- **.Qa()** (8 connections) — `app/static/lightweight-charts.js`
-- **N** (7 connections) — `app/static/lightweight-charts.js`
-- **ki()** (7 connections) — `app/static/lightweight-charts.js`
-- **.lp()** (7 connections) — `app/static/lightweight-charts.js`
-- **.ir()** (7 connections) — `app/static/lightweight-charts.js`
-- **.kp()** (7 connections) — `app/static/lightweight-charts.js`
-- **.wp()** (7 connections) — `app/static/lightweight-charts.js`
-- **.fm()** (7 connections) — `app/static/lightweight-charts.js`
-- **.Gi()** (6 connections) — `app/static/lightweight-charts.js`
-- **._m()** (6 connections) — `app/static/lightweight-charts.js`
-- **.bp()** (5 connections) — `app/static/lightweight-charts.js`
-- **.Bi()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Uh()** (4 connections) — `app/static/lightweight-charts.js`
-- **.io()** (4 connections) — `app/static/lightweight-charts.js`
-- **.S()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Jv()** (4 connections) — `app/static/lightweight-charts.js`
-- **.do()** (4 connections) — `app/static/lightweight-charts.js`
-- **q()** (3 connections) — `app/static/lightweight-charts.js`
-- *... and 18 more nodes in this community*
+- **prune.py** (21 connections) — `app/prune.py`
+- **apply_runs()** (7 connections) — `app/prune.py`
+- **main()** (7 connections) — `app/prune.py`
+- **apply_facts()** (6 connections) — `app/prune.py`
+- **maybe_auto_prune_runs()** (5 connections) — `app/prune.py`
+- **plan_runs()** (4 connections) — `app/prune.py`
+- **last_runs_prune_at()** (3 connections) — `app/prune.py`
+- **_retry_locked()** (3 connections) — `app/prune.py`
+- **_delete_batch()** (3 connections) — `app/prune.py`
+- **_freelist_bytes()** (3 connections) — `app/prune.py`
+- **test_prune_facts.py** (3 connections) — `app/tests/test_prune_facts.py`
+- **_report()** (2 connections) — `app/prune.py`
+- **_report_facts()** (2 connections) — `app/prune.py`
+- **Retention — delete what nothing can read, and nothing else.  `docs/SPEC-persiste** (1 connections) — `app/prune.py`
+- **What would go, and what each keep rule is protecting.      Four keeps, and every** (1 connections) — `app/prune.py`
+- **Delete in retried batches; ALWAYS leave a retention fact behind.      The fact i** (1 connections) — `app/prune.py`
+- **When the runs target last pruned — read from the receipts themselves.      The r** (1 connections) — `app/prune.py`
+- **The scanner's routine telemetry sweep. Runs target ONLY, ever.      The runs tab** (1 connections) — `app/prune.py`
+- **Run one write op through lock contention; the scanner is a legitimate     concur** (1 connections) — `app/prune.py`
+- **One batch, retried through contention. Raises only if it never lands.      The s** (1 connections) — `app/prune.py`
+- **Delete in batches, then record the deletion as a fact.      The fact matters mor** (1 connections) — `app/prune.py`
+- **Retention on superseded derived facts — the reference test, mostly.  `SPEC-persi** (1 connections) — `app/tests/test_prune_facts.py`
 
 ## Relationships
 
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (16 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (14 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (8 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (8 shared connections)
-- [Chart Vendor Primitives](Chart_Vendor_Primitives.md) (6 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (6 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (5 shared connections)
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (5 shared connections)
-- [Chart Vendor Scales](Chart_Vendor_Scales.md) (5 shared connections)
-- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (4 shared connections)
-- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (4 shared connections)
-- [Chart Vendor Utilities](Chart_Vendor_Utilities.md) (3 shared connections)
+- [BTC Alignment Engine](BTC_Alignment_Engine.md) (6 shared connections)
+- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
+- [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (1 shared connections)
+- [Shell Disposition & Risk Rendering](Shell_Disposition_%26_Risk_Rendering.md) (1 shared connections)
+- [Chart Vendor Scales](Chart_Vendor_Scales.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/prune.py`
+- `app/tests/test_prune_facts.py`
 
 ## Audit Trail
 
-- EXTRACTED: 231 (100%)
-- INFERRED: 1 (0%)
+- EXTRACTED: 76 (97%)
+- INFERRED: 2 (3%)
 - AMBIGUOUS: 0 (0%)
 
 ---

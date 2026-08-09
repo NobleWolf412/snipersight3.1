@@ -1,38 +1,55 @@
 # Shared Pipeline Loop Tests
 
-> 14 nodes
+> 36 nodes
 
 ## Key Concepts
 
-- **test_pipeline_gates.py** (7 connections) — `app/tests/test_pipeline_gates.py`
-- **VocabularyCase** (6 connections) — `app/tests/test_pipeline_gates.py`
-- **OneLoopCase** (4 connections) — `app/tests/test_pipeline_gates.py`
-- **fake_engine()** (2 connections) — `app/tests/test_pipeline_gates.py`
-- **.setUp()** (2 connections) — `app/tests/test_pipeline_gates.py`
-- **.test_live_cycle_uses_the_shared_loop()** (1 connections) — `app/tests/test_pipeline_gates.py`
-- **.test_ingest_uses_the_shared_loop()** (1 connections) — `app/tests/test_pipeline_gates.py`
-- **.test_every_reason_setups_can_write_is_canonical()** (1 connections) — `app/tests/test_pipeline_gates.py`
-- **.test_every_canonical_reason_has_a_funnel_sentence()** (1 connections) — `app/tests/test_pipeline_gates.py`
-- **.test_every_gate_has_a_funnel_sentence()** (1 connections) — `app/tests/test_pipeline_gates.py`
-- **.test_the_endpoint_marks_unlabelled_reasons()** (1 connections) — `app/tests/test_pipeline_gates.py`
-- **The engine loop is one function, and absence has a name.  Two defects this file** (1 connections) — `app/tests/test_pipeline_gates.py`
-- **Both runners must call THE loop — asserted on source, the same way the     roste** (1 connections) — `app/tests/test_pipeline_gates.py`
-- **The cross-boundary drift guard. Reasons are minted in Python and given     sente** (1 connections) — `app/tests/test_pipeline_gates.py`
+- **Broker** (34 connections) — `app/tests/test_position_safety.py`
+- **Fill** (26 connections) — `app/engine/contracts.py`
+- **test_position_safety.py** (22 connections) — `app/tests/test_position_safety.py`
+- **memory()** (16 connections) — `app/tests/test_position_safety.py`
+- **plan()** (16 connections) — `app/tests/test_position_safety.py`
+- **AccountWideBroker** (13 connections) — `app/tests/test_position_safety.py`
+- **DuplicateAndOrphanBroker** (13 connections) — `app/tests/test_position_safety.py`
+- **order()** (11 connections) — `app/tests/test_position_safety.py`
+- **test_lingering_stop_from_closed_position_blocks_reconciliation()** (6 connections) — `app/tests/test_position_safety.py`
+- **test_flat_partial_fill_cannot_close_while_entry_remainder_is_active()** (6 connections) — `app/tests/test_position_safety.py`
+- **test_first_and_partial_fills_resize_confirmed_protection()** (5 connections) — `app/tests/test_position_safety.py`
+- **test_failed_protection_emergency_closes_and_halts_new_entries()** (5 connections) — `app/tests/test_position_safety.py`
+- **test_manual_override_keeps_stop_and_requires_explicit_return()** (5 connections) — `app/tests/test_position_safety.py`
+- **test_emergency_close_failure_halts_and_records_unknown_exposure()** (5 connections) — `app/tests/test_position_safety.py`
+- **test_reconciliation_rejects_equal_size_opposite_direction()** (5 connections) — `app/tests/test_position_safety.py`
+- **test_own_protective_order_is_known_and_partial_fill_amends_it()** (5 connections) — `app/tests/test_position_safety.py`
+- **test_managed_read_model_exposes_server_custody_fields()** (5 connections) — `app/tests/test_position_safety.py`
+- **test_unprotected_exposure_remains_in_private_custody_and_reconciliation()** (5 connections) — `app/tests/test_position_safety.py`
+- **test_two_distinct_venue_flat_snapshots_close_custody_without_lifecycle_credit()** (5 connections) — `app/tests/test_position_safety.py`
+- **test_startup_reconciliation_is_required_and_unknown_state_blocks()** (3 connections) — `app/tests/test_position_safety.py`
+- **test_account_wide_reconciliation_finds_untracked_foreign_order()** (3 connections) — `app/tests/test_position_safety.py`
+- **test_reconciliation_emits_deduplicated_promotion_failures()** (3 connections) — `app/tests/test_position_safety.py`
+- **test_stale_reconciliation_does_not_authorize_dispatch()** (3 connections) — `app/tests/test_position_safety.py`
+- **.open_orders()** (2 connections) — `app/tests/test_position_safety.py`
+- **.confirm_attached_protection()** (2 connections) — `app/tests/test_position_safety.py`
+- *... and 11 more nodes in this community*
 
 ## Relationships
 
-- [Pipeline Gate Tests](Pipeline_Gate_Tests.md) (2 shared connections)
-- [Live Scanner Loop](Live_Scanner_Loop.md) (1 shared connections)
-- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (1 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (17 shared connections)
+- [Chart Vendor Series](Chart_Vendor_Series.md) (8 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (6 shared connections)
+- [Market Data Importer](Market_Data_Importer.md) (4 shared connections)
+- [Cycle Detection Engine](Cycle_Detection_Engine.md) (3 shared connections)
+- [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (2 shared connections)
+- [One Source of Truth JS Tests](One_Source_of_Truth_JS_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_pipeline_gates.py`
+- `app/engine/contracts.py`
+- `app/tests/test_position_safety.py`
 
 ## Audit Trail
 
-- EXTRACTED: 30 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 178 (74%)
+- INFERRED: 63 (26%)
 - AMBIGUOUS: 0 (0%)
 
 ---

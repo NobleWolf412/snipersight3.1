@@ -1,11 +1,13 @@
 # Version Cascade Lockfile
 
-> 16 nodes
+> 18 nodes
 
 ## Key Concepts
 
-- **VersionLockfile** (8 connections) — `app/tests/test_version_cascade.py`
-- **test_version_cascade.py** (2 connections) — `app/tests/test_version_cascade.py`
+- **VersionLockfile** (9 connections) — `app/tests/test_version_cascade.py`
+- **test_version_cascade.py** (3 connections) — `app/tests/test_version_cascade.py`
+- **operational_versions()** (2 connections) — `app/tests/test_version_cascade.py`
+- **.test_operational_versions_are_locked()** (2 connections) — `app/tests/test_version_cascade.py`
 - **.test_pipeline_versions_are_what_we_think_they_are()** (2 connections) — `app/tests/test_version_cascade.py`
 - **.test_downstream_engines_actually_import_what_they_claim_to_consume()** (2 connections) — `app/tests/test_version_cascade.py`
 - **.test_function_level_dependents_import_what_the_map_claims()** (2 connections) — `app/tests/test_version_cascade.py`
@@ -31,7 +33,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 30 (100%)
+- EXTRACTED: 36 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

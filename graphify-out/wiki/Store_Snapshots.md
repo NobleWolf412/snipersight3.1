@@ -4,7 +4,7 @@
 
 ## Key Concepts
 
-- **snapshot()** (4 connections) — `app/engine/snapshot.py`
+- **snapshot()** (3 connections) — `app/engine/snapshot.py`
 - **snapshot.py** (2 connections) — `app/engine/snapshot.py`
 - **Path** (1 connections)
 - **Consistent point-in-time copies of the fact store.  Every measurement in this pr** (1 connections) — `app/engine/snapshot.py`
@@ -12,7 +12,7 @@
 
 ## Relationships
 
-- [Multi-Venue Universe Tests](Multi-Venue_Universe_Tests.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -20,8 +20,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 8 (89%)
-- INFERRED: 1 (11%)
+- EXTRACTED: 8 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

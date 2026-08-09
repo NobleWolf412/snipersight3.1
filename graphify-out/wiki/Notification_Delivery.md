@@ -1,47 +1,49 @@
 # Notification Delivery
 
-> 21 nodes
+> 25 nodes
 
 ## Key Concepts
 
-- **notify.py** (16 connections) — `app/notify.py`
-- **deliver_pending()** (9 connections) — `app/notify.py`
-- **config()** (5 connections) — `app/notify.py`
-- **toast()** (4 connections) — `app/notify.py`
-- **enqueue()** (4 connections) — `app/notify.py`
-- **_send_remote()** (4 connections) — `app/notify.py`
-- **toast_enabled()** (4 connections) — `app/notify.py`
-- **heartbeat()** (4 connections) — `app/notify.py`
-- **event()** (4 connections) — `app/notify.py`
-- **_queue()** (3 connections) — `app/notify.py`
-- **_xml_escape()** (2 connections) — `app/notify.py`
-- **_post()** (2 connections) — `app/notify.py`
-- **Alerts: one entry point, several destinations, and a queue between them.  WHY A** (1 connections) — `app/notify.py`
-- **Show a Windows toast. Returns whether the toast pipeline reported success.** (1 connections) — `app/notify.py`
-- **Record that something happened. Returns True if this is the first time.      Che** (1 connections) — `app/notify.py`
-- **Remote destinations, or {} when the operator has not set any up.      Absent fil** (1 connections) — `app/notify.py`
-- **One remote destination. Returns a short outcome string for the record.      Two** (1 connections) — `app/notify.py`
-- **Whether the Windows toast sink runs. OFF unless explicitly turned on.      MEASU** (1 connections) — `app/notify.py`
-- **Send what is queued. Call this from the WATCHDOG tick, never the scanner.      E** (1 connections) — `app/notify.py`
-- **Tell an OUTSIDE service this machine is still alive.      A heartbeat emitted by** (1 connections) — `app/notify.py`
-- **Queue an alert, and optionally send it now.      `deliver=False` is the default** (1 connections) — `app/notify.py`
+- **lifecycle.py** (22 connections) — `app/engine/lifecycle.py`
+- **monitor()** (12 connections) — `app/engine/lifecycle.py`
+- **record_order()** (10 connections) — `app/engine/lifecycle.py`
+- **LifecycleBlocked** (9 connections) — `app/engine/lifecycle.py`
+- **ensure_emergency()** (9 connections) — `app/engine/lifecycle.py`
+- **Decimal** (8 connections)
+- **ensure_stop()** (8 connections) — `app/engine/lifecycle.py`
+- **ensure_target()** (8 connections) — `app/engine/lifecycle.py`
+- **_status()** (7 connections) — `app/engine/lifecycle.py`
+- **_ensure()** (7 connections) — `app/engine/lifecycle.py`
+- **recover_child_orders()** (7 connections) — `app/engine/lifecycle.py`
+- **_persist_executions()** (4 connections) — `app/engine/lifecycle.py`
+- **_weighted()** (4 connections) — `app/engine/lifecycle.py`
+- **_cancel_and_confirm()** (3 connections) — `app/engine/lifecycle.py`
+- **_position_event()** (2 connections) — `app/engine/lifecycle.py`
+- **_entry_identity()** (2 connections) — `app/engine/lifecycle.py`
+- **_flat_count()** (2 connections) — `app/engine/lifecycle.py`
+- **RuntimeError** (1 connections)
+- **Promotion-grade private lifecycle evidence.  Flatness proves custody ended; it d** (1 connections) — `app/engine/lifecycle.py`
+- **Record the venue identity of an already accepted child order.** (1 connections) — `app/engine/lifecycle.py`
+- **Create or resize the deterministic standalone stop before relying on it.** (1 connections) — `app/engine/lifecycle.py`
+- **Create or resize one deterministic reduce-only target, restart-safely.** (1 connections) — `app/engine/lifecycle.py`
+- **Submit one restart-recoverable reduce-only emergency close.** (1 connections) — `app/engine/lifecycle.py`
+- **Resolve pre-acceptance crash windows by deterministic client identity.** (1 connections) — `app/engine/lifecycle.py`
+- **Qualify exact bot-owned TESTNET exits; everything uncertain stays open.** (1 connections) — `app/engine/lifecycle.py`
 
 ## Relationships
 
-- [Watchdog Supervisor](Watchdog_Supervisor.md) (2 shared connections)
-- [Live Scanner Loop](Live_Scanner_Loop.md) (1 shared connections)
-- [Scanner Alert Isolation Tests](Scanner_Alert_Isolation_Tests.md) (1 shared connections)
-- [Onboarding Announce Tests](Onboarding_Announce_Tests.md) (1 shared connections)
-- [Toast Isolation Tests](Toast_Isolation_Tests.md) (1 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (9 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (3 shared connections)
+- [Market Data Importer](Market_Data_Importer.md) (2 shared connections)
 
 ## Source Files
 
-- `app/notify.py`
+- `app/engine/lifecycle.py`
 
 ## Audit Trail
 
-- EXTRACTED: 68 (97%)
-- INFERRED: 2 (3%)
+- EXTRACTED: 129 (98%)
+- INFERRED: 3 (2%)
 - AMBIGUOUS: 0 (0%)
 
 ---

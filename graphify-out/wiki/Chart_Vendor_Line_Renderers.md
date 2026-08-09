@@ -1,47 +1,44 @@
 # Chart Vendor Line Renderers
 
-> 23 nodes
+> 20 nodes
 
 ## Key Concepts
 
-- **u()** (11 connections) — `app/static/lightweight-charts.js`
-- **jt** (8 connections) — `app/static/lightweight-charts.js`
-- **it** (6 connections) — `app/static/lightweight-charts.js`
-- **.X()** (6 connections) — `app/static/lightweight-charts.js`
-- **ct** (6 connections) — `app/static/lightweight-charts.js`
-- **dt()** (4 connections) — `app/static/lightweight-charts.js`
-- **.K()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Mi()** (4 connections) — `app/static/lightweight-charts.js`
-- **.nr()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Gs()** (3 connections) — `app/static/lightweight-charts.js`
-- **.K()** (2 connections) — `app/static/lightweight-charts.js`
-- **.oe()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (2 connections) — `app/static/lightweight-charts.js`
-- **.xi()** (2 connections) — `app/static/lightweight-charts.js`
-- **.K()** (2 connections) — `app/static/lightweight-charts.js`
+- **ai** (12 connections) — `app/static/lightweight-charts.js`
+- **ut** (9 connections) — `app/static/lightweight-charts.js`
+- **.Mt()** (9 connections) — `app/static/lightweight-charts.js`
+- **.bt()** (9 connections) — `app/static/lightweight-charts.js`
+- **.On()** (7 connections) — `app/static/lightweight-charts.js`
+- **.qr()** (5 connections) — `app/static/lightweight-charts.js`
+- **.Kr()** (4 connections) — `app/static/lightweight-charts.js`
+- **.On()** (4 connections) — `app/static/lightweight-charts.js`
+- **.On()** (3 connections) — `app/static/lightweight-charts.js`
+- **.Ur()** (3 connections) — `app/static/lightweight-charts.js`
+- **.gt()** (3 connections) — `app/static/lightweight-charts.js`
+- **.Hh()** (3 connections) — `app/static/lightweight-charts.js`
+- **.jr()** (2 connections) — `app/static/lightweight-charts.js`
+- **.Hr()** (2 connections) — `app/static/lightweight-charts.js`
+- **.On()** (2 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.X()** (1 connections) — `app/static/lightweight-charts.js`
 - **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
 - **.bt()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.J()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.us()** (1 connections) — `app/static/lightweight-charts.js`
-- **.J()** (1 connections) — `app/static/lightweight-charts.js`
-- **.ir()** (1 connections) — `app/static/lightweight-charts.js`
+- **.yt()** (1 connections) — `app/static/lightweight-charts.js`
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (7 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (3 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (3 shared connections)
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (2 shared connections)
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (2 shared connections)
-- [Funnel UI](Funnel_UI.md) (1 shared connections)
+- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (5 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (4 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (4 shared connections)
+- [Chart Vendor Layout](Chart_Vendor_Layout.md) (3 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (2 shared connections)
+- [Rails & Scoreboard UI](Rails_%26_Scoreboard_UI.md) (2 shared connections)
+- [status](status.md) (2 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (2 shared connections)
+- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (1 shared connections)
 - [Glossary UI](Glossary_UI.md) (1 shared connections)
-- [Chart Vendor Utilities](Chart_Vendor_Utilities.md) (1 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (1 shared connections)
-- [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (1 shared connections)
-- [Chart Vendor Series](Chart_Vendor_Series.md) (1 shared connections)
+- [Manual Trading Engine](Manual_Trading_Engine.md) (1 shared connections)
+- [ji](ji.md) (1 shared connections)
 
 ## Source Files
 
@@ -49,8 +46,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 66 (89%)
-- INFERRED: 8 (11%)
+- EXTRACTED: 82 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

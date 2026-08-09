@@ -6,9 +6,9 @@
 
 - **cooldowns.py** (12 connections) — `app/engine/cooldowns.py`
 - **record()** (6 connections) — `app/engine/cooldowns.py`
+- **horizon_for()** (5 connections) — `app/engine/cooldowns.py`
 - **key()** (4 connections) — `app/engine/cooldowns.py`
 - **run()** (4 connections) — `app/engine/cooldowns.py`
-- **horizon_for()** (3 connections) — `app/engine/cooldowns.py`
 - **duration_hours()** (3 connections) — `app/engine/cooldowns.py`
 - **blocked_at()** (3 connections) — `app/engine/cooldowns.py`
 - **blocked()** (3 connections) — `app/engine/cooldowns.py`
@@ -24,8 +24,8 @@
 
 ## Relationships
 
-- [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (2 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (3 shared connections)
+- [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (2 shared connections)
 
 ## Source Files
 
@@ -33,7 +33,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 49 (100%)
+- EXTRACTED: 51 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

@@ -1,10 +1,10 @@
 # Product Charter & Build Journal
 
-> 14 nodes
+> 13 nodes
 
 ## Key Concepts
 
-- **Execution Simulator (execsim.py)** (7 connections) — `app/BUILDLOG.md`
+- **SniperSight README** (6 connections) — `README.md`
 - **SniperSight Product Charter (PRODUCT.md)** (5 connections) — `PRODUCT.md`
 - **Setup Detector & Playbooks (setups.py)** (4 connections) — `app/BUILDLOG.md`
 - **REVERSAL Strategy Record** (4 connections) — `app/BUILDLOG.md`
@@ -14,29 +14,27 @@
 - **Maker-Then-Market Entry Model** (2 connections) — `app/BUILDLOG.md`
 - **Factor Grading (factorstats)** (2 connections) — `app/BUILDLOG.md`
 - **Indicator Engines (ma/momentum/volatility/volume)** (2 connections) — `app/BUILDLOG.md`
-- **Validation Report 001 pre-gate (exec-v0.3)** (2 connections) — `app/verification/validation-001-pregate.md`
-- **Validation Report 001 (exec-v0.3, net of costs)** (2 connections) — `app/verification/validation-001.md`
-- **Edge Statistics (bootstrap CI, edgestats)** (1 connections) — `app/BUILDLOG.md`
+- **Serena Project Config** (1 connections) — `.serena/project.yml`
+- **Paper Trading Only** (1 connections) — `PRODUCT.md`
 - **Nested Cycle Satellite (cycles.py, observational)** (1 connections) — `app/BUILDLOG.md`
 
 ## Relationships
 
-- [Fact Store Conventions](Fact_Store_Conventions.md) (2 shared connections)
-- [Design Health Reviews](Design_Health_Reviews.md) (1 shared connections)
-- [Working Notes & Risk Authority](Working_Notes_%26_Risk_Authority.md) (1 shared connections)
-- [Venue Seam & Order Ticket](Venue_Seam_%26_Order_Ticket.md) (1 shared connections)
+- [Venue Seam & Order Ticket](Venue_Seam_%26_Order_Ticket.md) (3 shared connections)
+- [CI Workflow & Test Conventions](CI_Workflow_%26_Test_Conventions.md) (1 shared connections)
+- [Fact Contract & Core Engines](Fact_Contract_%26_Core_Engines.md) (1 shared connections)
 
 ## Source Files
 
+- `.serena/project.yml`
 - `PRODUCT.md`
+- `README.md`
 - `app/BUILDLOG.md`
-- `app/verification/validation-001-pregate.md`
-- `app/verification/validation-001.md`
 
 ## Audit Trail
 
-- EXTRACTED: 37 (95%)
-- INFERRED: 2 (5%)
+- EXTRACTED: 31 (89%)
+- INFERRED: 4 (11%)
 - AMBIGUOUS: 0 (0%)
 
 ---

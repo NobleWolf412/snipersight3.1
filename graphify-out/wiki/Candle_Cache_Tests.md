@@ -1,6 +1,6 @@
 # Candle Cache Tests
 
-> 21 nodes
+> 22 nodes
 
 ## Key Concepts
 
@@ -18,6 +18,7 @@
 - **.tearDown()** (1 connections) — `app/tests/test_candle_cache.py`
 - **.test_cached_and_uncached_reads_are_equal()** (1 connections) — `app/tests/test_candle_cache.py`
 - **.test_two_connections_do_not_share_a_cache()** (1 connections) — `app/tests/test_candle_cache.py`
+- **.test_the_scope_survives_an_engine_raising()** (1 connections) — `app/tests/test_candle_cache.py`
 - **.test_the_walk_runs_inside_the_scope()** (1 connections) — `app/tests/test_candle_cache.py`
 - **.test_no_roster_engine_writes_candles()** (1 connections) — `app/tests/test_candle_cache.py`
 - **One read per series per walk — and the invariant that makes it safe.  The engine** (1 connections) — `app/tests/test_candle_cache.py`
@@ -28,7 +29,7 @@
 
 ## Relationships
 
-- [Multi-Venue Universe Tests](Multi-Venue_Universe_Tests.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -36,7 +37,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 49 (100%)
+- EXTRACTED: 50 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

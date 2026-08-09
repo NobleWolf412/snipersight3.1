@@ -33,7 +33,7 @@
 
 ## Relationships
 
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
 - [Facts Window Tests](Facts_Window_Tests.md) (1 shared connections)
 
 ## Source Files

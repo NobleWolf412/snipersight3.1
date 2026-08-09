@@ -6,11 +6,11 @@
 
 - **costs.py** (9 connections) — `app/engine/costs.py`
 - **CostProfile** (7 connections) — `app/engine/costs.py`
-- **by_version()** (5 connections) — `app/engine/costs.py`
+- **by_version()** (4 connections) — `app/engine/costs.py`
 - **_assert_venue_rates()** (4 connections) — `app/engine/costs.py`
-- **profile_for()** (4 connections) — `app/engine/costs.py`
 - **estimated_round_trip_cost()** (4 connections) — `app/engine/costs.py`
 - **_check_profiles_match_venues()** (3 connections) — `app/engine/costs.py`
+- **profile_for()** (3 connections) — `app/engine/costs.py`
 - **record()** (3 connections) — `app/engine/costs.py`
 - **.payload()** (2 connections) — `app/engine/costs.py`
 - **Decimal** (2 connections)
@@ -22,7 +22,7 @@
 
 ## Relationships
 
-- [Venue Policy & Contract](Venue_Policy_%26_Contract.md) (2 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -30,8 +30,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 46 (96%)
-- INFERRED: 2 (4%)
+- EXTRACTED: 46 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

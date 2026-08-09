@@ -1,37 +1,39 @@
 # Venue Seam & Order Ticket
 
-> 8 nodes
+> 10 nodes
 
 ## Key Concepts
 
-- **Venue Seam (venues.py)** (5 connections) — `app/BUILDLOG.md`
+- **Execution Simulator (execsim.py)** (7 connections) — `app/BUILDLOG.md`
+- **Venue Seam (venues.py)** (4 connections) — `app/BUILDLOG.md`
 - **Ticket-Math / Engine Agreement Contract** (3 connections) — `CLAUDE.md`
-- **Chart Surface & Order Ticket** (3 connections) — `app/static/shell.html`
 - **Fee-Aware Setup Gate** (2 connections) — `app/BUILDLOG.md`
-- **Commit Bar** (2 connections) — `app/static/shell.html`
+- **Validation Report 001 pre-gate (exec-v0.3)** (2 connections) — `app/verification/validation-001-pregate.md`
+- **Validation Report 001 (exec-v0.3, net of costs)** (2 connections) — `app/verification/validation-001.md`
 - **Validation Report 002 (exec-v0.4, post fee-gate)** (2 connections) — `app/verification/validation-002.md`
 - **Venue Derived From Symbol** (1 connections) — `README.md`
 - **Phemex Perp Adapter (phemex.py)** (1 connections) — `app/BUILDLOG.md`
+- **Edge Statistics (bootstrap CI, edgestats)** (1 connections) — `app/BUILDLOG.md`
 
 ## Relationships
 
-- [Design Health Reviews](Design_Health_Reviews.md) (2 shared connections)
+- [Product Charter & Build Journal](Product_Charter_%26_Build_Journal.md) (3 shared connections)
 - [CI Workflow & Test Conventions](CI_Workflow_%26_Test_Conventions.md) (1 shared connections)
-- [Fact Store Conventions](Fact_Store_Conventions.md) (1 shared connections)
-- [Product Charter & Build Journal](Product_Charter_%26_Build_Journal.md) (1 shared connections)
+- [Working Notes & Risk Authority](Working_Notes_%26_Risk_Authority.md) (1 shared connections)
 
 ## Source Files
 
 - `CLAUDE.md`
 - `README.md`
 - `app/BUILDLOG.md`
-- `app/static/shell.html`
+- `app/verification/validation-001-pregate.md`
+- `app/verification/validation-001.md`
 - `app/verification/validation-002.md`
 
 ## Audit Trail
 
-- EXTRACTED: 13 (68%)
-- INFERRED: 6 (32%)
+- EXTRACTED: 19 (76%)
+- INFERRED: 6 (24%)
 - AMBIGUOUS: 0 (0%)
 
 ---

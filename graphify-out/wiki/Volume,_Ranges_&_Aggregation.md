@@ -1,54 +1,43 @@
 # Volume, Ranges & Aggregation
 
-> 32 nodes
+> 15 nodes
 
 ## Key Concepts
 
-- **volume.py** (20 connections) — `app/engine/volume.py`
-- **ranges.py** (15 connections) — `app/engine/ranges.py`
-- **run()** (14 connections) — `app/engine/volume.py`
-- **break_tolerance()** (10 connections) — `app/engine/ranges.py`
-- **run()** (10 connections) — `app/engine/ranges.py`
-- **Decimal** (7 connections)
-- **Decimal** (5 connections)
-- **contained()** (5 connections) — `app/engine/ranges.py`
-- **aggregator.py** (4 connections) — `app/engine/aggregator.py`
-- **is_flat()** (4 connections) — `app/engine/ranges.py`
-- **price_bin()** (4 connections) — `app/engine/volume.py`
-- **bin_price()** (4 connections) — `app/engine/volume.py`
-- **typical()** (4 connections) — `app/engine/volume.py`
-- **rvol_state()** (4 connections) — `app/engine/volume.py`
-- **point_of_control()** (4 connections) — `app/engine/volume.py`
-- **boundaries()** (3 connections) — `app/engine/ranges.py`
-- **session_start()** (3 connections) — `app/engine/volume.py`
-- **_bucket_start()** (2 connections) — `app/engine/aggregator.py`
-- **aggregate()** (2 connections) — `app/engine/aggregator.py`
-- **Canonical higher-timeframe candle aggregator (§19).  4H is built from 1H (UTC-al** (1 connections) — `app/engine/aggregator.py`
-- **Range engine — horizontal ranges, their boundaries, and their lifecycle. algo r** (1 connections) — `app/engine/ranges.py`
-- **The house break tolerance: max(1 tick, 0.05*ATR).      structure.py, zones.py** (1 connections) — `app/engine/ranges.py`
-- **(top, bottom, n_top, n_bottom) — the EXTREME of each cluster, not its mean.** (1 connections) — `app/engine/ranges.py`
-- **Do the pivots CLUSTER at two levels rather than march in one direction?      S** (1 connections) — `app/engine/ranges.py`
-- **Did every bar of the formation window close inside the band?      Closes only** (1 connections) — `app/engine/ranges.py`
-- *... and 7 more nodes in this community*
+- **factorstats.py** (28 connections) — `app/engine/factorstats.py`
+- **evidence_report()** (7 connections) — `app/engine/factorstats.py`
+- **_round()** (6 connections) — `app/engine/factorstats.py`
+- **_uplift_interval()** (5 connections) — `app/engine/factorstats.py`
+- **_bh_q_values()** (4 connections) — `app/engine/factorstats.py`
+- **_dimension_value()** (4 connections) — `app/engine/factorstats.py`
+- **_mean()** (3 connections) — `app/engine/factorstats.py`
+- **outcome_split()** (3 connections) — `app/engine/factorstats.py`
+- **_sample_variance()** (2 connections) — `app/engine/factorstats.py`
+- **Factor statistics — read-only grading of confluence factors. "Does this factor d** (1 connections) — `app/engine/factorstats.py`
+- **Fixed-precision rounding on the way out. Identical input already produces     id** (1 connections) — `app/engine/factorstats.py`
+- **Deterministic 95% normal interval for high bucket minus control bucket.      The** (1 connections) — `app/engine/factorstats.py`
+- **Benjamini-Hochberg false-discovery correction, in place.** (1 connections) — `app/engine/factorstats.py`
+- **Chronological, point-in-time factor evidence by trading cohort.      Thresholds** (1 connections) — `app/engine/factorstats.py`
+- **Split closed trades on one factor and report what each side actually earned.** (1 connections) — `app/engine/factorstats.py`
 
 ## Relationships
 
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (12 shared connections)
-- [Indicator Engines](Indicator_Engines.md) (8 shared connections)
-- [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (4 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (2 shared connections)
-- [Volume Engine Tests](Volume_Engine_Tests.md) (1 shared connections)
+- [Funding Rate Engine](Funding_Rate_Engine.md) (7 shared connections)
+- [Tracer UI](Tracer_UI.md) (5 shared connections)
+- [Toast Isolation Tests](Toast_Isolation_Tests.md) (4 shared connections)
+- [Cooldown Engine](Cooldown_Engine.md) (2 shared connections)
+- [Venue Policy & Contract](Venue_Policy_%26_Contract.md) (2 shared connections)
+- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/aggregator.py`
-- `app/engine/ranges.py`
-- `app/engine/volume.py`
+- `app/engine/factorstats.py`
 
 ## Audit Trail
 
-- EXTRACTED: 136 (99%)
-- INFERRED: 1 (1%)
+- EXTRACTED: 65 (96%)
+- INFERRED: 3 (4%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -7,10 +7,10 @@
 - **kraken.py** (10 connections) — `app/engine/kraken.py`
 - **_get()** (7 connections) — `app/engine/kraken.py`
 - **list_products()** (5 connections) — `app/engine/kraken.py`
-- **fetch_candles()** (5 connections) — `app/engine/kraken.py`
 - **_RateLimiter** (4 connections) — `app/engine/kraken.py`
 - **maintenance_margin()** (4 connections) — `app/engine/kraken.py`
 - **rank_by_volume()** (4 connections) — `app/engine/kraken.py`
+- **fetch_candles()** (4 connections) — `app/engine/kraken.py`
 - **funding_rate()** (3 connections) — `app/engine/kraken.py`
 - **.acquire()** (2 connections) — `app/engine/kraken.py`
 - **Decimal** (2 connections)
@@ -27,7 +27,6 @@
 ## Relationships
 
 - [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
-- [Venue Policy & Contract](Venue_Policy_%26_Contract.md) (1 shared connections)
 
 ## Source Files
 
@@ -35,8 +34,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 54 (98%)
-- INFERRED: 1 (2%)
+- EXTRACTED: 54 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

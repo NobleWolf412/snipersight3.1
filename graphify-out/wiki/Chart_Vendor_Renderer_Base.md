@@ -1,57 +1,52 @@
 # Chart Vendor Renderer Base
 
-> 24 nodes
+> 29 nodes
 
 ## Key Concepts
 
-- **ai** (12 connections) — `app/static/lightweight-charts.js`
-- **.Mt()** (9 connections) — `app/static/lightweight-charts.js`
-- **wt** (8 connections) — `app/static/lightweight-charts.js`
-- **li()** (8 connections) — `app/static/lightweight-charts.js`
-- **nt** (7 connections) — `app/static/lightweight-charts.js`
-- **.J()** (6 connections) — `app/static/lightweight-charts.js`
-- **hi()** (5 connections) — `app/static/lightweight-charts.js`
-- **.qr()** (5 connections) — `app/static/lightweight-charts.js`
-- **.Kr()** (4 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Gs()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Ur()** (3 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Ds()** (2 connections) — `app/static/lightweight-charts.js`
-- **.$r()** (2 connections) — `app/static/lightweight-charts.js`
-- **.xl()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
-- **.yt()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (1 connections) — `app/static/lightweight-charts.js`
+- **LifecycleBroker** (21 connections) — `app/tests/test_testnet_lifecycle.py`
+- **test_testnet_lifecycle.py** (19 connections) — `app/tests/test_testnet_lifecycle.py`
+- **prepared()** (11 connections) — `app/tests/test_testnet_lifecycle.py`
+- **broker_order()** (10 connections) — `app/tests/test_testnet_lifecycle.py`
+- **plan()** (6 connections) — `app/tests/test_testnet_lifecycle.py`
+- **.__init__()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **.confirm_attached_protection()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **.submit_protective_stop()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **.submit_target()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **.replace()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **.order_status()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **.cancel()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **.executions()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **test_fill_handoff_records_standalone_stop_and_target_identities()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **test_known_exit_receipt_cleanup_and_two_flat_polls_earn_one_lifecycle()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **test_flat_without_known_exit_receipt_never_qualifies()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **test_legacy_flat_only_event_does_not_block_later_qualification()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **test_manual_override_exit_closes_no_autonomous_evidence()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **test_ambiguous_target_submit_recovers_by_client_id_without_resubmit()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **test_mixed_exit_roles_halt_and_never_qualify()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **test_matching_client_with_wrong_broker_order_id_never_qualifies()** (2 connections) — `app/tests/test_testnet_lifecycle.py`
+- **.positions()** (1 connections) — `app/tests/test_testnet_lifecycle.py`
+- **.open_orders()** (1 connections) — `app/tests/test_testnet_lifecycle.py`
+- **test_duplicate_or_incomplete_events_do_not_inflate_promotion()** (1 connections) — `app/tests/test_testnet_lifecycle.py`
+- **test_partial_fill_resizes_one_target_identity_in_place()** (1 connections) — `app/tests/test_testnet_lifecycle.py`
+- *... and 4 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (5 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (3 shared connections)
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (3 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (3 shared connections)
-- [Chart Vendor Utilities](Chart_Vendor_Utilities.md) (2 shared connections)
-- [Chart Vendor Scales](Chart_Vendor_Scales.md) (2 shared connections)
-- [Chart Vendor Grid & Axis](Chart_Vendor_Grid_%26_Axis.md) (2 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (2 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (2 shared connections)
-- [Chart Vendor Series](Chart_Vendor_Series.md) (1 shared connections)
-- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (1 shared connections)
-- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (1 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (7 shared connections)
+- [Chart Vendor Series](Chart_Vendor_Series.md) (4 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (3 shared connections)
+- [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (2 shared connections)
+- [Cycle Detection Engine](Cycle_Detection_Engine.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/tests/test_testnet_lifecycle.py`
 
 ## Audit Trail
 
-- EXTRACTED: 89 (99%)
-- INFERRED: 1 (1%)
+- EXTRACTED: 91 (85%)
+- INFERRED: 16 (15%)
 - AMBIGUOUS: 0 (0%)
 
 ---

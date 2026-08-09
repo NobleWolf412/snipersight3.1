@@ -24,12 +24,13 @@
 
 ## Relationships
 
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (2 shared connections)
-- [Notification Delivery](Notification_Delivery.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
+- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
 - [Boundary Wake Grid Tests](Boundary_Wake_Grid_Tests.md) (1 shared connections)
 - [Notification Tests](Notification_Tests.md) (1 shared connections)
 - [Onboarding Announce Tests](Onboarding_Announce_Tests.md) (1 shared connections)
-- [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (1 shared connections)
+- [Pipeline Gate Tests](Pipeline_Gate_Tests.md) (1 shared connections)
+- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
 - [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (1 shared connections)
 
 ## Source Files

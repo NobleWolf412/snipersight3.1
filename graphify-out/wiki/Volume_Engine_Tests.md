@@ -33,7 +33,7 @@
 
 ## Relationships
 
-- [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (1 shared connections)
+- [ranges.py](ranges.py.md) (1 shared connections)
 
 ## Source Files
 

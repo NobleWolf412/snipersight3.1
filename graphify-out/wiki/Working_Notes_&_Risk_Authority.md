@@ -20,7 +20,7 @@
 ## Relationships
 
 - [CI Workflow & Test Conventions](CI_Workflow_%26_Test_Conventions.md) (1 shared connections)
-- [Product Charter & Build Journal](Product_Charter_%26_Build_Journal.md) (1 shared connections)
+- [Venue Seam & Order Ticket](Venue_Seam_%26_Order_Ticket.md) (1 shared connections)
 
 ## Source Files
 

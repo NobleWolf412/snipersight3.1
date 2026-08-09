@@ -1,59 +1,48 @@
 # Chart Vendor Scales
 
-> 46 nodes
+> 38 nodes
 
 ## Key Concepts
 
-- **pn** (37 connections) — `app/static/lightweight-charts.js`
-- **.p()** (14 connections) — `app/static/lightweight-charts.js`
-- **.S()** (11 connections) — `app/static/lightweight-charts.js`
-- **.Yo()** (10 connections) — `app/static/lightweight-charts.js`
-- **.Fu()** (9 connections) — `app/static/lightweight-charts.js`
-- **.um()** (9 connections) — `app/static/lightweight-charts.js`
-- **.dr()** (8 connections) — `app/static/lightweight-charts.js`
-- **.Jc()** (8 connections) — `app/static/lightweight-charts.js`
-- **.E_()** (7 connections) — `app/static/lightweight-charts.js`
-- **.On()** (7 connections) — `app/static/lightweight-charts.js`
-- **.Ta()** (6 connections) — `app/static/lightweight-charts.js`
-- **.N_()** (6 connections) — `app/static/lightweight-charts.js`
-- **.fd()** (6 connections) — `app/static/lightweight-charts.js`
-- **.fp()** (6 connections) — `app/static/lightweight-charts.js`
-- **.Pb()** (6 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (5 connections) — `app/static/lightweight-charts.js`
-- **.s_()** (5 connections) — `app/static/lightweight-charts.js`
-- **.S()** (5 connections) — `app/static/lightweight-charts.js`
-- **.Eo()** (5 connections) — `app/static/lightweight-charts.js`
-- **.On()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Ba()** (4 connections) — `app/static/lightweight-charts.js`
-- **.P_()** (4 connections) — `app/static/lightweight-charts.js`
-- **.nd()** (4 connections) — `app/static/lightweight-charts.js`
-- **.eb()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Db()** (4 connections) — `app/static/lightweight-charts.js`
-- *... and 21 more nodes in this community*
+- **PruneFactsCase** (27 connections) — `app/tests/test_prune_facts.py`
+- **.fact()** (16 connections) — `app/tests/test_prune_facts.py`
+- **.prune_facts()** (14 connections) — `app/tests/test_prune_facts.py`
+- **.alive()** (13 connections) — `app/tests/test_prune_facts.py`
+- **.test_the_current_generation_is_never_deleted()** (5 connections) — `app/tests/test_prune_facts.py`
+- **.test_a_recent_superseded_generation_is_held()** (5 connections) — `app/tests/test_prune_facts.py`
+- **.test_a_version_with_no_run_history_is_held_not_guessed_old()** (5 connections) — `app/tests/test_prune_facts.py`
+- **.test_a_version_pinned_in_engine_source_is_never_deleted()** (5 connections) — `app/tests/test_prune_facts.py`
+- **.test_a_reference_protects_every_generation_of_that_zone()** (5 connections) — `app/tests/test_prune_facts.py`
+- **.test_an_unclassified_kind_is_never_touched()** (5 connections) — `app/tests/test_prune_facts.py`
+- **.test_a_superseded_generation_goes()** (4 connections) — `app/tests/test_prune_facts.py`
+- **.test_a_superseded_zone_a_setup_names_is_kept()** (4 connections) — `app/tests/test_prune_facts.py`
+- **.test_an_unreferenced_superseded_zone_goes()** (4 connections) — `app/tests/test_prune_facts.py`
+- **.test_orders_and_risk_decisions_also_hold_a_reference()** (4 connections) — `app/tests/test_prune_facts.py`
+- **.test_permanent_kinds_are_never_eligible()** (4 connections) — `app/tests/test_prune_facts.py`
+- **.ran()** (3 connections) — `app/tests/test_prune_facts.py`
+- **.test_planning_alone_deletes_nothing()** (3 connections) — `app/tests/test_prune_facts.py`
+- **.test_the_prune_records_itself_as_a_fact()** (3 connections) — `app/tests/test_prune_facts.py`
+- **.test_candles_are_never_touched()** (3 connections) — `app/tests/test_prune_facts.py`
+- **.test_every_current_version_is_visible_to_the_pin_scan()** (2 connections) — `app/tests/test_prune_facts.py`
+- **.test_a_single_quoted_pin_is_seen()** (2 connections) — `app/tests/test_prune_facts.py`
+- **.test_current_versions_are_read_from_the_engines_not_sorted()** (2 connections) — `app/tests/test_prune_facts.py`
+- **.test_this_suite_cannot_reach_the_live_store()** (2 connections) — `app/tests/test_prune_facts.py`
+- **.setUp()** (1 connections) — `app/tests/test_prune_facts.py`
+- **.tearDown()** (1 connections) — `app/tests/test_prune_facts.py`
+- *... and 13 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor Core](Chart_Vendor_Core.md) (23 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (15 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (13 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (13 shared connections)
-- [Chart Vendor Primitives](Chart_Vendor_Primitives.md) (9 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (6 shared connections)
-- [Chart Vendor Data Layer](Chart_Vendor_Data_Layer.md) (5 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (4 shared connections)
-- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (4 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (4 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (3 shared connections)
-- [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (2 shared connections)
+- [Chart Vendor Data Layer](Chart_Vendor_Data_Layer.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/tests/test_prune_facts.py`
 
 ## Audit Trail
 
-- EXTRACTED: 241 (98%)
-- INFERRED: 4 (2%)
+- EXTRACTED: 155 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---
