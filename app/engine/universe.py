@@ -304,8 +304,15 @@ def current_symbols(con) -> list[str]:
         syms = [s["symbol"] for s in p["members"] if s["state"] == "ADMITTED"]
         if syms:
             return syms
+    # Reference-series keys (BICOUSDT@binance-spot) hold 1D candles too, and
+    # this fallback fires exactly when the universe fact is missing — a cold
+    # or damaged store. Leaking them here would put an unsizeable key into
+    # the TRADEABLE set at the worst possible moment; venues.venue_for would
+    # refuse it downstream, but refusal-at-sizing is a fault, not a filter.
+    from . import venues
     have = [r[0] for r in con.execute(
-        "SELECT DISTINCT symbol FROM candles WHERE tf='1D'").fetchall()]
+        "SELECT DISTINCT symbol FROM candles WHERE tf='1D'").fetchall()
+        if not venues.is_reference_key(r[0])]
     return have or list(SEED)
 
 

@@ -26,7 +26,11 @@ from decimal import Decimal
 # Cost profiles live with the venue because they are venue facts. Historical
 # reports must never silently rewrite these — introduce a new profile version
 # instead of editing one in place.
-VENUES_VERSION = "venues-v0.2-draft"
+VENUES_VERSION = "venues-v0.3-draft"
+# v0.3: the REFERENCE contract — a per-symbol pointer to the deepest venue's
+# candle series for analysis (operator ruling 2026-08-09), plus the `@`-key
+# refusal in venue_for that keeps every money path off it. Venue descriptors
+# themselves are unchanged, so nothing downstream moves.
 # v0.2: Kraken Futures added (operator ruling 2026-07-30 — CFTC-regulated US
 # perps settle the access question Phemex left open), and `margin_mode` is now
 # DECLARED rather than implied. The liquidation model was always the isolated
@@ -131,6 +135,16 @@ def venue_for(symbol: str) -> Venue:
     guessing a venue would mean guessing whether shorting is allowed."""
     if not symbol:
         raise ValueError("empty symbol")
+    if "@" in symbol:
+        # A REFERENCE-SERIES key (see REFERENCE below). Nothing trades on it,
+        # so it has no venue — and this raise is the load-bearing half of the
+        # design: sizing, liquidation, participation and fills all reach a
+        # venue through this function, so a reference series is unreachable
+        # from every path that touches money. The suffix rules below happen to
+        # refuse these keys anyway; that is a coincidence of spelling, and
+        # this check is the contract.
+        raise ValueError(f"{symbol!r} is a reference-series key; it has no "
+                         f"venue and nothing may be sized against it")
     if symbol.endswith("-USD"):
         return COINBASE_SPOT
     if symbol.startswith("PF_") and symbol.upper().endswith("USD"):
@@ -138,6 +152,63 @@ def venue_for(symbol: str) -> Venue:
     if "-" not in symbol and symbol.endswith("USDT"):
         return PHEMEX_PERP
     raise ValueError(f"cannot determine venue for symbol {symbol!r}")
+
+
+# ── Reference feeds: the deepest venue's SERIES, never a venue to trade ──
+#
+# A thin market's own candles under-describe it — BICO-USD trades $9M/day on
+# Coinbase in bursts, with 24% of its hours empty, while Binance prints the
+# same market at ~$1.5M/hour nearly continuously. Price levels are shared
+# across venues (arbitrage keeps them within basis points), so the deep
+# venue's series is PRICE-TRUE for analysis; its liquidity is NOT yours, so
+# nothing about execution may read it. Averaging venues was explicitly
+# rejected (operator, 2026-08-09): an averaged bar is a price nobody traded,
+# and a second authority for "what is the price".
+#
+# The map is the per-symbol contract, same doctrine as the venue rules above:
+# stated once, absent means absent (reference_for returns None — a valid
+# state, not a guess). Values are (venue_key, native_symbol_on_that_venue) —
+# the cross-venue symbol spelling lives HERE and nowhere else.
+#
+# Pilot membership, measured 2026-08-09: BICO-USD is the only ADMITTED symbol
+# with material thinness (24.5% of 1H empty; every other admitted symbol is a
+# Phemex perp at 0.0%). BTCUSDT joins as the liquid CONTROL: the basis fact
+# stream over-represents liquid hours on thin symbols by construction (a
+# bucket the thin venue served nothing for produces no fact), so grading it
+# needs a series without that bias. IMU-USD (WARMING) was probed and is not
+# listed on Binance.
+REFERENCE = {
+    "BICO-USD": ("binance-spot", "BICOUSDT"),
+    "BTCUSDT": ("binance-spot", "BTCUSDT"),
+}
+
+
+def reference_for(symbol: str) -> tuple[str, str] | None:
+    """(venue_key, native_symbol) of this symbol's reference feed, or None.
+    None is the normal state and callers must treat it as 'no feed', never
+    fall back to a guess."""
+    return REFERENCE.get(symbol)
+
+
+def ref_key(symbol: str) -> str:
+    """The storage key the reference series lives under — 'BICOUSDT@binance-spot'.
+
+    Self-describing on purpose: the part before '@' is the venue's own symbol
+    spelling (what the adapter fetches), the part after is the `source` the
+    candles are labelled with. A distinct key rather than a source-column
+    distinction because candles are PRIMARY KEY (symbol, tf, open_ts) with
+    INSERT OR REPLACE — under the trading symbol, a reference bar would
+    silently REPLACE the execution venue's bar, and execsim would fill on
+    prices nobody traded at the venue the book lives on."""
+    ref = REFERENCE.get(symbol)
+    if ref is None:
+        raise ValueError(f"{symbol!r} has no reference feed")
+    venue_key, native = ref
+    return f"{native}@{venue_key}"
+
+
+def is_reference_key(symbol: str) -> bool:
+    return "@" in (symbol or "")
 
 
 def by_key(key: str) -> Venue:

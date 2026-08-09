@@ -16,10 +16,15 @@ import urllib.request
 from decimal import Decimal
 from datetime import datetime, timezone
 
-from . import kraken, phemex, venues
+from . import binance, kraken, phemex, venues
 
 API = "https://api.exchange.coinbase.com"
-IMPORTER_VERSION = "importer-v0.3-draft"
+IMPORTER_VERSION = "importer-v0.4-draft"
+# v0.4: reference keys ('BICOUSDT@binance-spot') route to the Binance data
+# mirror, labelled with the source their own tail names, and the venue-unknown
+# fallback to Coinbase is LOUD — it used to fetch and honestly-label garbage
+# in silence. (This constant is still outside the version lockfile; joining it
+# is the same open decision flagged for fvg/volprofile on 2026-08-09.)
 # v0.3: venue-routed fetch and a truthful `source` column. It was hard-coded
 # "coinbase", which would have labelled Phemex perp candles as spot data — and
 # the quality audit's known-venue-gap allowances are keyed on source, so the
@@ -114,9 +119,29 @@ def _fetch_rows(symbol: str, tf: str, gran: int, start_ts: int, end_ts: int):
     venue-agnostic — the alternative is two copies of the OHLC integrity check,
     which is exactly the sort of duplication that drifts apart.
     """
+    # Reference keys FIRST, before venue_for — which raises on them by
+    # contract. The key names its own fetch spelling (the part before '@'),
+    # so no second mapping exists to drift from venues.REFERENCE.
+    if venues.is_reference_key(symbol):
+        native = symbol.split("@", 1)[0]
+        for c in binance.fetch_candles(native, tf, start_ts, end_ts):
+            yield (int(c["open_ts"]), Decimal(c["open"]), Decimal(c["high"]),
+                   Decimal(c["low"]), Decimal(c["close"]), Decimal(c["volume"]))
+        return
     try:
         v = venues.venue_for(symbol)
     except ValueError:
+        # LOUD, as of 2026-08-09. This fallback silently fetched a Coinbase
+        # product for any symbol the venue contract refused, and labelled the
+        # rows `coinbase` — which is how a reference key fed to the old code
+        # would have imported garbage under a truthful-looking source. The
+        # fallback survives because retiring it is a separate decision, but a
+        # degraded path that says nothing is a bug, not a safety net.
+        from .runlog import get_logger
+        get_logger().warning(
+            f"importer: no venue contract for {symbol!r}; falling back to "
+            f"Coinbase spot — if this symbol is not a Coinbase product, "
+            f"these rows are garbage under an honest-looking label")
         v = venues.COINBASE_SPOT
     if v.key == "kraken-perp":
         for c in kraken.fetch_candles(symbol, tf, start_ts, end_ts):
@@ -145,10 +170,15 @@ def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int) -> dict:
     gran = native[tf]
     # `source` records WHICH venue served the bar. It was hard-coded "coinbase",
     # which would have silently labelled Phemex perp candles as spot data.
-    try:
-        src = venues.venue_for(symbol).key
-    except ValueError:
-        src = "coinbase"
+    # A reference key carries its source in its own tail ('BICOUSDT@binance-spot'
+    # → 'binance-spot'), so the label cannot drift from the key.
+    if venues.is_reference_key(symbol):
+        src = symbol.split("@", 1)[1]
+    else:
+        try:
+            src = venues.venue_for(symbol).key
+        except ValueError:
+            src = "coinbase"
     start_ts -= start_ts % gran
     now = int(time.time())
     end_ts = min(end_ts, now - now % gran)  # never import the developing candle (§5)

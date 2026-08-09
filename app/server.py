@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 from engine import registry, store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
 from engine import momentum, volatility, volume, ma, fvg, volprofile, ranges
-from engine import costs
+from engine import costs, venues
 from engine import achievements, automation, broker_factory, contracts, execution, learning, market_context, opportunities, positions, venues
 from engine import factorgrade as factorgrade_engine, factorstats as factorstats_engine
 from engine import edgestats
@@ -1739,7 +1739,12 @@ def ticker():
     the human sees the market move between candle closes."""
     con = store.connect()
     try:
-        symbols = universe.all_tracked_symbols(con)
+        # Reference keys hold candles and therefore appear in tracked symbols,
+        # but this endpoint polls the EXECUTION venues' tickers — asking
+        # Coinbase for 'BICOUSDT@binance-spot' is a guaranteed 404 painted as
+        # a permanently DEGRADED row, every poll, forever.
+        symbols = [s for s in universe.all_tracked_symbols(con)
+                   if not venues.is_reference_key(s)]
     finally:
         con.close()
     return marketdata.fetch_tickers(symbols)
@@ -2040,8 +2045,12 @@ def weather():
         else:
             # No ranking snapshot yet. Everything with candles is a truer answer
             # than an empty strip, and the missing ranks say so by being null.
+            # Minus reference keys: labelling an unsizeable '@'-series
+            # "ADMITTED" on the weather strip is the same cold-store leak
+            # universe.current_symbols filters, display-side.
             members = [{"symbol": s, "rank": None, "state": "ADMITTED"}
-                       for s in universe.all_tracked_symbols(con)]
+                       for s in universe.all_tracked_symbols(con)
+                       if not venues.is_reference_key(s)]
 
         latest: dict[tuple, str] = {}
         syms = [m["symbol"] for m in members]

@@ -10,7 +10,7 @@ import json
 import time
 from decimal import Decimal
 
-from . import aggregator, importer
+from . import aggregator, importer, venues
 
 STAGES = ("DATA", "AGGREGATION", "FACTS", "SETUP", "RISK", "EXECUTION", "ACCOUNTING")
 ORDER = {"PASS": 0, "DEGRADED": 1, "BLOCKED": 2}
@@ -67,6 +67,28 @@ CODE_RUNG = {
     # ACCOUNTING
     "ACCOUNT_SUMMARY_MISSING": "HALT",
     "EQUITY_RECONCILIATION_FAILED": "HALT",
+    # REFERENCE SERIES (symbols carrying an '@' — venues.is_reference_key).
+    # Every finding on one is demoted at the end of audit_market_inputs to a
+    # REFERENCE_-prefixed code at QUARANTINE, DEGRADED — never BLOCKED, never
+    # HALT — because a reference feed gates no trade and sizes no order, so a
+    # blocking verdict from one could only do two kinds of damage: wedge the
+    # store-wide evaluation gate over data nothing trades on, or hand the
+    # watchdog a restart the scanner cannot heal (the 2026-08-08 loop). The
+    # finding itself survives, visibly, under its own name.
+    "REFERENCE_NO_CANDLES":             "QUARANTINE",
+    "REFERENCE_STALE_SERIES":           "QUARANTINE",
+    "REFERENCE_UNKNOWN_TIMEFRAME":      "QUARANTINE",
+    "REFERENCE_OHLC_INVARIANT_FAILURE": "QUARANTINE",
+    "REFERENCE_SEQUENCE_GAPS":          "QUARANTINE",
+    "REFERENCE_DEVELOPING_CANDLES":     "QUARANTINE",
+    "REFERENCE_MISSING_AGGREGATE":      "QUARANTINE",
+    "REFERENCE_AGGREGATE_MISMATCH":     "QUARANTINE",
+    "REFERENCE_ORPHAN_AGGREGATE":       "QUARANTINE",
+    # ...and the fact-level codes a per-symbol audit of an '@'-key can demote
+    # (facts on a reference key are themselves a bug — see the demotion pass
+    # in audit()). Any REFERENCE_ code not declared here falls to _rung_for's
+    # DEGRADED default, SERVE_FLAG, which is also non-blocking by design.
+    "REFERENCE_CAUSALITY_VIOLATION":    "QUARANTINE",
 }
 
 
@@ -133,9 +155,13 @@ def _live_symbols(con) -> set:
         return set(universe.current_symbols(con))
     except Exception:
         # Fail OPEN: if we cannot tell what is live, report staleness rather
-        # than silently suppressing a real one.
+        # than silently suppressing a real one. Minus reference keys — they
+        # are never universe members, and letting the fallback include them
+        # would route their staleness through the tradeable-symbol check
+        # instead of the REFERENCE_STALE_SERIES branch that owns it.
         return {r[0] for r in con.execute(
-            "SELECT DISTINCT symbol FROM candles").fetchall()}
+            "SELECT DISTINCT symbol FROM candles").fetchall()
+            if not venues.is_reference_key(r[0])}
 
 
 def _issue(checks, stage, status, code, details, symbol=None, tf=None):
@@ -356,6 +382,21 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
         if rows and sym in live and now - (rows[-1][0] + sec) > 2 * sec:
             _issue(checks, "DATA", "DEGRADED", "STALE_SERIES",
                    f"latest closed candle is {now - (rows[-1][0] + sec)}s old", sym, tf)
+        # A reference key is never in `live` (current_symbols excludes it by
+        # design), so the check above structurally cannot see one — and a
+        # DEAD REFERENCE FEED IS THE FAILURE THIS FEED WILL ACTUALLY HAVE:
+        # Binance delists a symbol routinely, every later import serves
+        # nothing, backfill returns candles=0 gaps=0 (nothing served is not a
+        # gap), and the basis stream quietly ends while grading accumulates a
+        # sample that stopped without a word. Loud-fallback rule: the one
+        # series whose silence IS the failure mode gets its own staleness
+        # check, at the rung reference findings live on.
+        elif rows and venues.is_reference_key(sym) \
+                and now - (rows[-1][0] + sec) > 2 * sec:
+            _issue(checks, "DATA", "DEGRADED", "REFERENCE_STALE_SERIES",
+                   f"reference feed's latest closed candle is "
+                   f"{now - (rows[-1][0] + sec)}s old — a delisted or dead "
+                   f"feed ends the basis stream silently", sym, tf)
 
     for target, rule in aggregator.RULES.items():
         sources = con.execute(
@@ -457,6 +498,24 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
             if expected == 0 and source_rows:
                 _issue(checks, "AGGREGATION", "DEGRADED", "NO_COMPLETE_BUCKETS",
                        f"no complete closed {target} bucket could be verified", sym, target)
+
+    # ── Reference-series demotion, ONE choke point ──
+    # Every check above ran at full strength on reference keys — the series
+    # get the same OHLC, gap, and aggregation scrutiny as tradeable ones,
+    # deliberately. What changes is only what a finding is ALLOWED TO DO:
+    # nothing trades on a reference series, so a BLOCKED verdict from one
+    # could only wedge the store-wide evaluation gate or hand the watchdog an
+    # unhealable restart (2026-08-08). Demoting here, after all issuers,
+    # rather than at each _issue site: a future check added to the loops
+    # above is then demoted automatically instead of arriving as a new HALT
+    # nobody scoped. The REFERENCE_ codes are declared in CODE_RUNG per this
+    # module's own rule that no mapping may be implicit.
+    for c in checks:
+        if c["symbol"] and venues.is_reference_key(str(c["symbol"])) \
+                and c["status"] == "BLOCKED":
+            c["status"] = "DEGRADED"
+            c["code"] = "REFERENCE_" + c["code"]
+            c["rung"] = _rung_for("DEGRADED", c["code"])
     return checks
 
 
@@ -572,6 +631,23 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
         if Decimal(p["final_equity"]) != expected:
             _issue(checks, "ACCOUNTING", "BLOCKED", "EQUITY_RECONCILIATION_FAILED",
                    f"summary {p['final_equity']} does not equal ledger {expected}")
+
+    # The same demotion audit_market_inputs applies, repeated over the FULL
+    # check list — the fact-level issuers above (CAUSALITY_VIOLATION and
+    # friends) run after that function returned, and the invariant is about
+    # the report, not one section of it: no finding on a reference key may
+    # reach BLOCKED or HALT, because nothing trades on one and a blocking
+    # verdict could only wedge evaluation or restart-loop the scanner. Only
+    # reachable if descriptive facts are ever written on an '@'-key (e.g.
+    # /api/analyse handed one), which is a bug — that bug should surface as
+    # QUARANTINE findings, not as a wedge.
+    for c in checks:
+        if c["symbol"] and venues.is_reference_key(str(c["symbol"])) \
+                and c["status"] == "BLOCKED":
+            c["status"] = "DEGRADED"
+            if not c["code"].startswith("REFERENCE_"):
+                c["code"] = "REFERENCE_" + c["code"]
+            c["rung"] = _rung_for("DEGRADED", c["code"])
 
     stages = [{"stage": stage, "status": _stage_status(checks, stage),
                "rung": _stage_rung(checks, stage),

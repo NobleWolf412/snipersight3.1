@@ -24,10 +24,10 @@ engine you changed, and bump those too.
 """
 import unittest
 
-from engine import (aggregator, bias, breakout, cooldowns, cycles, execsim,
-                    venues, liquidity, ma, manual, momentum, ranges, regime,
-                    risk, scalein, setups, structure, swings, volatility,
-                    volume, zones, trend)
+from engine import (aggregator, basis, bias, breakout, cooldowns, cycles,
+                    execsim, venues, liquidity, ma, manual, momentum, ranges,
+                    regime, risk, scalein, setups, structure, swings,
+                    volatility, volume, zones, trend)
 from engine import automation, autotrader, contracts, execution, lifecycle
 from engine import phemex_private, positions
 
@@ -113,6 +113,12 @@ LOCKED = {
     # most invisible form and it is exactly what this file exists to catch.
     "bias": bias.BIAS_VERSION,
     "venues": venues.VENUES_VERSION,
+    # Reads two candle series nothing else pairs (execution venue vs the
+    # reference feed) and writes one fact stream nothing reads. Locked from
+    # birth for the reason `trend` was: a version that only starts being
+    # tracked once something consumes it is a version whose early facts
+    # nobody can place.
+    "basis": basis.BASIS_VERSION,
     # Observational satellite with no consumers — locked anyway, because
     # "nothing reads it" is exactly how it went dead unnoticed for 21 hours.
     "cycles": cycles.CYCLES_VERSION,
@@ -278,7 +284,22 @@ EXPECTED = {
     # `regime` and `structure` facts and writes none of its own, so it is
     # downstream of both and upstream of every playbook that records it.
     "bias": "bias-v0.2-draft",
-    "venues": "venues-v0.2-draft",
+    # venues-v0.3: the REFERENCE contract — a per-symbol pointer to the
+    # deepest venue's candle series (operator ruling 2026-08-09), stored under
+    # '@'-keys that venue_for REFUSES, which is the enforcement keeping every
+    # money path (sizing, liquidation, participation, fills) off the deep
+    # venue's numbers. Venue descriptors are unchanged, so nothing downstream
+    # moves — the same no-cascade shape as manual's bumps, for the same
+    # reason: what changed is policy this module owns alone.
+    "venues": "venues-v0.3-draft",
+    # basis-v0.1: NEW ENGINE, measured and nothing more — records the close-
+    # to-close spread between the execution venue and the reference feed, per
+    # bar, on the trading symbol. Gates nothing, sizes nothing, and has no
+    # CONSUMERS entry; the day something reads a basis fact it gains one, in
+    # the same commit. The recorded number deliberately blends venue spread
+    # with USD/USDT (ref_quote is on every fact) — normalising is an operator
+    # decision deferred to grading.
+    "basis": "basis-v0.1-draft",
     "cycles": "cycles-v0.2-draft",
     # manual-v0.2: partial exits. The one bump on this line with NO cascade, and
     # the reason is the same reason `manual` has no CONSUMERS entry — nothing

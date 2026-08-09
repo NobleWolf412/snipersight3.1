@@ -26,7 +26,7 @@ from pathlib import Path
 import notify
 from engine import (automation, autotrader, broker_factory, execution, positions, store,
                     importer, aggregator, risk, universe, ingest, quality,
-                    marketdata, pipeline)
+                    marketdata, pipeline, venues)
 from engine.runlog import get_logger
 
 # ---------------------------------------------------------------- exit forensics
@@ -395,6 +395,35 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
                         log.warning(f"live import {sym} {tf}: {r['gaps']} gaps")
         except Exception as exc:
             log.warning(f"import skipped {sym}: {type(exc).__name__} {exc}")
+            continue
+
+    # ── Reference feeds: the deepest venue's series for thin markets ──────
+    # Stored under their own '@'-keys (venues.ref_key), fetched through the
+    # same backfill path as everything else so gap-honesty, import_log and
+    # the aggregator's acknowledged-partial rule apply unchanged. Aggregation
+    # needs no special casing either: all_tracked_symbols is DISTINCT-symbols-
+    # with-1D, so reference keys join the 4H/1W roll-up automatically. Same
+    # per-symbol isolation as the scan loop above, same reason — one venue's
+    # bad afternoon must not cost the others their import.
+    for tsym in sorted(venues.REFERENCE):
+        rkey = venues.ref_key(tsym)
+        _beat(f"import reference {rkey}")
+        try:
+            for tf, gran in importer.native_tfs(rkey).items():
+                last = con.execute(
+                    "SELECT MAX(open_ts) FROM candles WHERE symbol=? AND tf=? "
+                    "AND source NOT LIKE 'agg:%'", (rkey, tf)).fetchone()[0]
+                closed_until = now - now % gran
+                start = (last + gran) if last else ingest.history_floor(tf, now)
+                if start < closed_until:
+                    r = importer.backfill(con, rkey, tf, start, now)
+                    new_candles += r["candles"]
+                    if r["gaps"]:
+                        log.warning(f"reference import {rkey} {tf}: "
+                                    f"{r['gaps']} gaps")
+        except Exception as exc:
+            log.warning(f"reference import skipped {rkey}: "
+                        f"{type(exc).__name__} {exc}")
             continue
 
     # ── The operator's open trades, WHEREVER they are ─────────────────────
