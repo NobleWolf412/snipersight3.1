@@ -368,6 +368,57 @@ def apply_facts(con, plan: dict) -> dict:
             "reclaimable_bytes": reclaimable}
 
 
+# The scanner's own sweep cadence. Daily deliberately, not weekly: the table
+# grows ~240k rows/day, batches run ~6s each, so a daily sweep is a ~5-minute
+# pause in scanning while a weekly one would be over half an hour. Small bites
+# beat surgery, and the cadence lives here so the CLI and the loop agree.
+AUTO_PRUNE_EVERY_DAYS = 1
+
+
+def last_runs_prune_at(con) -> int | None:
+    """When the runs target last pruned — read from the receipts themselves.
+
+    The retention facts ARE the schedule state: no sidecar file, no settings
+    row, nothing that can drift from what actually happened. Retention facts
+    stay rare (one per sweep), so scanning them newest-first is cheap.
+    """
+    try:
+        rows = con.execute(
+            "SELECT confirmed_at, payload FROM facts WHERE kind='retention' "
+            "ORDER BY id DESC LIMIT 200").fetchall()
+    except sqlite3.OperationalError:
+        return None
+    for ts, payload in rows:
+        try:
+            if json.loads(payload).get("target") == "runs":
+                return int(ts)
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+def maybe_auto_prune_runs(con, beat=None) -> dict | None:
+    """The scanner's routine telemetry sweep. Runs target ONLY, ever.
+
+    The runs table is the one class of data whose deletion rules are fully
+    mechanical — keep what facts reference, keep failures, keep the newest
+    per (engine, version), keep the window — so it is the one class safe to
+    sweep without a human trigger. The facts target deletes research and
+    keeps its human trigger by design; nothing routed through here may ever
+    touch it.
+
+    Returns None when not yet due, else apply_runs' result. Every sweep
+    leaves a retention fact — including a zero-removed one, which is the
+    receipt saying "checked, nothing eligible" rather than silence.
+    """
+    last = last_runs_prune_at(con)
+    now = int(time.time())
+    if last is not None and now - last < AUTO_PRUNE_EVERY_DAYS * 86_400:
+        return None
+    plan = plan_runs(con, DEFAULT_KEEP_DAYS)
+    return apply_runs(con, plan, beat=beat)
+
+
 def _retry_locked(con, op):
     """Run one write op through lock contention; the scanner is a legitimate
     concurrent writer, not an error condition."""
@@ -420,13 +471,17 @@ def _freelist_bytes(con) -> int:
     return page * free
 
 
-def apply_runs(con, plan: dict) -> dict:
+def apply_runs(con, plan: dict, beat=None) -> dict:
     """Delete in batches, then record the deletion as a fact.
 
     The fact matters more than it looks. Without it, a store that has been
     pruned is indistinguishable from a store whose scanner was down for the
     same period — the absence of rows reads as an outage, forever. A
     `retention` fact is the note saying the gap was chosen.
+
+    `beat` is the scanner's heartbeat callback: when the live loop runs this
+    in-cycle, each batch beats so the cockpit's staleness check (90s) and the
+    watchdog never mistake a long prune for a hung scanner.
     """
     log = get_logger()
     con.execute(f"PRAGMA busy_timeout={LOCK_TIMEOUT_MS}")
@@ -446,6 +501,8 @@ def apply_runs(con, plan: dict) -> dict:
         if cur <= 0:
             break
         removed += cur
+        if beat is not None:
+            beat("retention")
         log.info(f"RETENTION runs: {removed:,}/{plan['deletable']:,} deleted")
 
     after = con.execute("SELECT COUNT(*) FROM engine_runs").fetchone()[0]

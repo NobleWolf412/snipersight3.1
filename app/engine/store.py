@@ -160,7 +160,15 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
     con = sqlite3.connect(db_path)
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
-    con.execute("PRAGMA busy_timeout=5000")
+    # 60s, not 5s. Two writers is the normal shape here: the scanner runs a
+    # long cycle over a 3.4 GB store while the API server writes on POSTs, and
+    # SQLite still only allows one writer at a time. `prune.py` already ran
+    # into this — 25,000-row batches lost the lock on the first real run — and
+    # settled on a 60s timeout for the same reason. At 5s the scanner logged
+    # `live cycle failed: database is locked` sporadically (8 times on
+    # 2026-08-08 alone) whenever a heavier API write held the lock through the
+    # scanner's next commit. The lock is not the bug; the impatience was.
+    con.execute("PRAGMA busy_timeout=60000")
     # The WAL reached 966 MB against a 1.7 GB database on 2026-07-30, and every
     # read had to work through it: /api/overview took 57 SECONDS. A restart
     # checkpointed it to 1 MB and the same request took 0.90s. The data was

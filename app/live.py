@@ -550,6 +550,21 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     _beat("audit")
     quality.audit(con, now=now, persist=True)
 
+    # Routine telemetry sweep — the RUNS target only; the facts target
+    # deletes research and keeps its human trigger. Fail-closed like the
+    # autotrader block above: retention is housekeeping, and housekeeping
+    # must never stop the market being recorded. Each batch beats the
+    # heartbeat so a sweep is never mistaken for a hang.
+    _beat("retention")
+    try:
+        import prune as _prune
+        swept = _prune.maybe_auto_prune_runs(con, beat=_beat)
+        if swept and swept.get("removed"):
+            log.info(f"RETENTION sweep: {swept['removed']:,} telemetry rows "
+                     f"removed, {swept['rows_after']:,} kept")
+    except Exception as exc:
+        log.error(f"retention sweep failed closed: {type(exc).__name__}: {exc}")
+
     # A notification claims something is actionable NOW. A new fact ROW is not
     # that claim: onboarding a symbol backfills years of candles, the engines
     # re-derive the setups those years contained, and every one arrives as a
