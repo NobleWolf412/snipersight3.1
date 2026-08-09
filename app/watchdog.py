@@ -44,10 +44,46 @@ AUDIT_INTERVAL_SEC = 60           # kill-switch audit cadence (SQLite read)
 # allowed to complete its work cannot clear the condition being complained
 # about.
 QUARANTINE_CLIMB_TICKS = 3        # consecutive audits elevated-and-not-recovering
+# HALT codes RESTARTING THE SCANNER CANNOT CLEAR, so a restart does nothing
+# but interrupt the cycle. `UNKNOWN_TIMEFRAME` is the concrete case, and the
+# reason is that THIS process reads the timeframe list, not the child it kills.
+#
+# `quality.audit()` runs here, in the supervisor, against
+# `importer.TF_SECONDS` — imported once and held for the life of the process.
+# The scanner restarts constantly and therefore always runs current code; the
+# supervisor can be days old. Add a timeframe and the two disagree, and every
+# series on the new timeframe reads as UNKNOWN to the only process that can
+# act on it.
+#
+# Measured 2026-08-08. The supervisor had been up since 06 Aug 17:40, from a
+# commit whose TF_SECONDS was {15m,1H,4H,1D,1W}; `5m` was added after. 27
+# symbols carried 5m candles, the audit reported exactly 27 UNKNOWN_TIMEFRAME
+# findings on every tick, and the scanner was killed every ~7 minutes while
+# its own log ("22 new candles, 0 new setups") showed it working normally. The
+# same audit run against the same database with current code found ZERO. On
+# restarting the supervisor at 20:26 the count went 27 -> 0 with nothing in
+# the store having changed.
+#
+# So the store was never damaged, and an earlier draft of this comment was
+# wrong to say a bad row was stuck in it. The guard still stands, for a
+# stronger reason than the one it was written for: the scanner is not the
+# process holding the stale reading, so killing it is guaranteed not to help.
+# Same shape as the QUARANTINE hysteresis below — a data verdict is not a
+# process fault — narrowed to this one code because other HALT codes
+# (NO_CANDLES, OHLC_INVARIANT_FAILURE) CAN be healed by the scanner's next
+# import.
+#
+# What this does NOT do is fix the underlying condition. The toast is the only
+# thing that will tell you, and the answer is almost always "restart the
+# supervisor", which `/api/system/restart` cannot do — it restarts the
+# children and refuses outright if the watchdog is down.
+UNHEALABLE_HALT_CODES = frozenset({"UNKNOWN_TIMEFRAME"})
 RESTART_GRACE_SEC = 420           # > the slowest cycle measured (347.1s)
 SERVER_PROBE_TIMEOUT = 15         # > /api/status measured at 6.9s under load
 SERVER_MISSES_BEFORE_TAKEOVER = 3 # one slow answer is not a disappearance
 ERR_LOG_CAP_BYTES = 8 * 1024 * 1024   # a diagnostic must not fill the disk
+ENGINE_LOG_CAP_BYTES = 64 * 1024 * 1024
+ENGINE_LOG_GENERATIONS = 1  # live file plus one retained 64 MB generation
 # Windows creation flags. Each child gets its own console and its own process
 # group, so a console control event cannot travel between them — see start().
 CREATE_NO_WINDOW = 0x08000000
@@ -173,6 +209,86 @@ def clear_orphans(exclude: set[int] | None = None) -> None:
             log(f"could not clear orphaned {what} pid={pid}: {e}")
 
 
+def rotate_engine_log(cap: int = ENGINE_LOG_CAP_BYTES,
+                      generations: int = ENGINE_LOG_GENERATIONS) -> bool:
+    """Bound the duplicated/operational stream while both children are down.
+
+    The scanner and API server both hold ``engine.log`` open, so rotating from
+    either process is unsafe on Windows. The watchdog is the single owner and
+    calls this only after clearing old children and before starting new ones.
+    ``engine-audit.log`` is intentionally outside this policy.
+    """
+    path = APP / "data" / "engine.log"
+    try:
+        if generations < 1 or not path.exists() or path.stat().st_size <= cap:
+            return False
+        for candidate in path.parent.glob(f"{path.name}.*"):
+            suffix = candidate.name.removeprefix(f"{path.name}.")
+            if suffix.isdigit() and int(suffix) >= generations:
+                candidate.unlink()
+        for number in range(generations - 1, 0, -1):
+            source = path.with_name(f"{path.name}.{number}")
+            if source.exists():
+                source.replace(path.with_name(f"{path.name}.{number + 1}"))
+        path.replace(path.with_name(f"{path.name}.1"))
+        log(f"engine.log rotated at {cap // (1024 * 1024)}MB; "
+            f"keeping {generations} generations")
+        return True
+    except Exception as exc:
+        # Retention must never prevent supervision from starting.
+        log(f"engine.log rotation skipped ({type(exc).__name__}: {exc})")
+        return False
+
+
+def retention_tick(live_child, server_child, *, external_server: bool,
+                   pending: bool = False,
+                   cap: int = ENGINE_LOG_CAP_BYTES) -> bool:
+    """Coordinate a safe hot-log rollover during a scanner idle boundary.
+
+    Returns whether a rollover is still pending. Both writers must release the
+    file before Windows can rename it. Exposure defers housekeeping: preserving
+    custody is more important than enforcing the byte cap immediately.
+    """
+    path = APP / "data" / "engine.log"
+    try:
+        oversized = path.exists() and path.stat().st_size > cap
+    except OSError:
+        return pending
+    if not (oversized or pending):
+        return False
+    if external_server:
+        return False  # watchdog cannot safely stop a process it does not own
+    try:
+        heartbeat = json.loads(
+            (APP / "data" / "heartbeat.json").read_text(encoding="utf-8"))
+        scanner_idle = heartbeat.get("phase") == "idle"
+    except (OSError, ValueError, TypeError):
+        scanner_idle = False
+    if not pending and not scanner_idle:
+        return False
+    if not pending:
+        sys.path.insert(0, str(APP))
+        try:
+            from engine import positions, store
+            con = store.connect()
+            try:
+                if positions.private_environments_with_exposure(con):
+                    return False
+            finally:
+                con.close()
+        except Exception as exc:
+            log(f"engine.log rotation deferred; custody check failed ({exc})")
+            return False
+        for child in (live_child, server_child):
+            if child.alive():
+                child.kill("coordinated engine.log rotation")
+        return True
+    if live_child.alive() or server_child.alive():
+        return True
+    rotate_engine_log(cap=cap)
+    return False
+
+
 def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
     """Call quality.audit() and dispatch by Kill-Switch rung.
 
@@ -244,9 +360,22 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
     #
     # Nothing is silenced — a sustained quarantine still logs and toasts.
     reason = None
-    if halt_now:
+    halt_codes = sorted({b["code"] for b in report.get("blockers", [])})
+    unhealable_only = bool(halt_codes) and set(halt_codes).issubset(
+        UNHEALABLE_HALT_CODES)
+    if halt_now and not unhealable_only:
         reason = f"HALT ({halt_now} finding(s))"
-    elif streak == QUARANTINE_CLIMB_TICKS:
+    elif halt_now and unhealable_only:
+        # Same reasoning as sustained QUARANTINE (below): the process is not
+        # the fault. Log and toast; do not restart. Fall through so QUARANTINE
+        # hysteresis on the same tick still works.
+        log(f"audit: worst={worst} counts={counts} — HALT ({halt_now} "
+            f"finding(s)) codes={halt_codes[:6]}. NOT restarting: the scanner "
+            f"has no code path that can heal these rows.")
+        toast("⚠ SniperSight data HALT",
+              f"{halt_now} finding(s) the scanner cannot heal: "
+              f"{', '.join(halt_codes[:4]) or '(none)'}")
+    if streak == QUARANTINE_CLIMB_TICKS and not reason:
         codes = sorted({c["code"] for c in report.get("warnings", [])
                         if c.get("rung") == "QUARANTINE"})
         log(f"audit: worst={worst} counts={counts} — QUARANTINE {quarantine_now} "
@@ -670,6 +799,7 @@ def main():
     # running is an orphan, and starting beside it would put two scanners on one
     # database.
     clear_orphans()
+    rotate_engine_log()
     # Only the scanner gets its stderr captured: it is the process whose exits
     # needed explaining, it runs under -X utf8 so the capture is clean, and
     # uvicorn demonstrably cannot tolerate the same treatment.
@@ -702,8 +832,15 @@ def main():
     # audit warmup above, and the same failure it prevents.
     alert_state: dict = alert_tick({"at": 0.0}, live, warmup=True)
     misses = 0
+    retention_pending = False
     try:
         while True:
+            retention_pending = retention_tick(
+                live, server, external_server=external_server,
+                pending=retention_pending)
+            if retention_pending:
+                time.sleep(1)
+                continue
             live.tick()
             if not external_server:
                 server.tick()

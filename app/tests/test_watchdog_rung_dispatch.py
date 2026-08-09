@@ -59,6 +59,38 @@ class TestWatchdogRungDispatch(unittest.TestCase):
         child.proc.terminate.assert_called_once()
         toast.assert_called_once()
 
+    def test_unknown_timeframe_halt_does_not_restart(self):
+        """The 2026-08-08 loop. Candles are keyed (symbol, tf, open_ts) and
+        the scanner only ever writes recognised tfs, so a bad-tf row in the
+        store cannot be displaced by any import — it re-finds itself on every
+        audit. The supervisor was killing the scanner every ~7 minutes over
+        27 findings that no restart could touch, while the scanner's own log
+        lines showed it doing useful work between kills. Same reasoning the
+        QUARANTINE hysteresis (below) rests on: a process is not the fault."""
+        report = {"worst_rung": "HALT",
+                  "rung_counts": {"HALT": 27, "SERVE_FLAG": 108,
+                                   "QUARANTINE": 0, "AUTO_DISABLE": 0,
+                                   "SERVE": 0},
+                  "blockers": [{"code": "UNKNOWN_TIMEFRAME", "rung": "HALT"}] * 27,
+                  "warnings": []}
+        _, child, toast = self._run(report)
+        child.proc.terminate.assert_not_called()
+        toast.assert_called_once()             # still noisy — not silenced
+
+    def test_mixed_halt_including_healable_code_still_restarts(self):
+        """The exemption is narrow. If any HALT finding names a code the
+        scanner CAN heal (a NO_CANDLES the next import will fill, a stale
+        OHLC row `INSERT OR REPLACE` will overwrite), the restart still fires
+        — the process is a plausible response to that half of the report."""
+        report = {"worst_rung": "HALT",
+                  "rung_counts": {"HALT": 2, "SERVE_FLAG": 0, "QUARANTINE": 0,
+                                   "AUTO_DISABLE": 0, "SERVE": 0},
+                  "blockers": [{"code": "UNKNOWN_TIMEFRAME", "rung": "HALT"},
+                               {"code": "NO_CANDLES", "rung": "HALT"}],
+                  "warnings": []}
+        _, child, toast = self._run(report)
+        child.proc.terminate.assert_called_once()
+
     def test_a_single_quarantine_climb_does_not_restart(self):
         """THE 184-RESTART BUG. One tick of climb used to be a kill.
 
@@ -407,6 +439,67 @@ class TestChildErrorCapture(unittest.TestCase):
         self.assertTrue(c._err_path.with_suffix(".old.log").exists(),
                         "the oversized capture was not rotated aside")
         self.assertFalse(c._err_path.exists(), "the live file was not reset")
+
+    def test_engine_log_rotation_keeps_two_files_total_and_not_audit(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp)
+            (app / "data").mkdir()
+            hot = app / "data" / "engine.log"
+            audit = app / "data" / "engine-audit.log"
+            hot.write_text("newest", encoding="utf-8")
+            hot.with_name("engine.log.1").write_text("older", encoding="utf-8")
+            hot.with_name("engine.log.2").write_text("oldest", encoding="utf-8")
+            audit.write_text("evidence", encoding="utf-8")
+            with patch.object(watchdog, "APP", app), patch.object(watchdog, "log"):
+                self.assertTrue(watchdog.rotate_engine_log(cap=1))
+            self.assertEqual("newest", hot.with_name("engine.log.1").read_text())
+            self.assertFalse(hot.with_name("engine.log.2").exists())
+            self.assertEqual("evidence", audit.read_text())
+            self.assertFalse(hot.exists())
+
+    def test_retention_coordinates_both_writers_only_at_idle_without_exposure(self):
+        import tempfile
+        from engine import positions, store
+        class FakeChild:
+            def __init__(self): self.running, self.reasons = True, []
+            def alive(self): return self.running
+            def kill(self, reason): self.reasons.append(reason); self.running = False
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp); (app / "data").mkdir()
+            (app / "data" / "engine.log").write_text("oversized")
+            (app / "data" / "heartbeat.json").write_text('{"phase":"idle"}')
+            live, server = FakeChild(), FakeChild()
+            con = MagicMock()
+            with patch.object(watchdog, "APP", app), \
+                    patch.object(watchdog, "log"), \
+                    patch.object(store, "connect", return_value=con), \
+                    patch.object(positions, "private_environments_with_exposure",
+                                 return_value=set()):
+                pending = watchdog.retention_tick(
+                    live, server, external_server=False, cap=1)
+                self.assertTrue(pending)
+                self.assertTrue(live.reasons and server.reasons)
+                pending = watchdog.retention_tick(
+                    live, server, external_server=False, pending=True, cap=1)
+                self.assertFalse(pending)
+            self.assertTrue((app / "data" / "engine.log.1").exists())
+
+    def test_retention_defers_while_private_exposure_exists(self):
+        import tempfile
+        from engine import positions, store
+        child = MagicMock(); child.alive.return_value = True
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp); (app / "data").mkdir()
+            (app / "data" / "engine.log").write_text("oversized")
+            (app / "data" / "heartbeat.json").write_text('{"phase":"idle"}')
+            with patch.object(watchdog, "APP", app), \
+                    patch.object(store, "connect", return_value=MagicMock()), \
+                    patch.object(positions, "private_environments_with_exposure",
+                                 return_value={"testnet"}):
+                self.assertFalse(watchdog.retention_tick(
+                    child, child, external_server=False, cap=1))
+            child.kill.assert_not_called()
 
     def test_capture_failure_never_blocks_a_start(self):
         """Logging is housekeeping; it must not stop the scanner coming back."""

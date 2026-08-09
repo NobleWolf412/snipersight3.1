@@ -1,8 +1,11 @@
 # SPEC — Log Retention (`data/engine.log`)
 
 **Written:** 2026-08-07. Measured, not estimated.
-**Status:** policy proposed; **nothing implemented**. The log is unmanaged today
-and grows without bound.
+**Status:** implemented 2026-08-07. The evidence split is enforced in
+`engine/runlog.py`; the watchdog checks the hot stream before starting either
+child, retaining one 64 MB prior generation plus the live file. During normal
+supervision it also coordinates both children at an idle boundary, waits for
+their handles to close, rotates, and restarts them.
 
 Companion to [SPEC-persistence-retention.md](SPEC-persistence-retention.md),
 which covers the fact store and deliberately says nothing about logs. This spec
@@ -147,16 +150,18 @@ Acceptable, and worth stating so nobody later reads it as a bug.
 
 ---
 
-## 6. Why nothing is implemented here
+## 6. Implementation
 
-Same posture as the retention spec it accompanies. The measurement is the
-deliverable; the change touches `runlog.py`, which every engine imports, and the
-file `/api/console` reads on a 30s poll from every cockpit surface. That is not
-a change to make in the same breath as writing it down.
+`engine/runlog.py` routes all warnings, errors, and classified operator actions
+to the unbounded evidence stream. `watchdog.rotate_engine_log()` owns rotation
+of `engine.log`; it runs after orphaned children are cleared and before either
+new child starts, avoiding cross-process rename races on Windows. The periodic
+check uses the same rule and defers while private exposure exists. It also
+defers when the API server is external, because the watchdog cannot safely
+close a file handle owned by a process it does not supervise.
 
-What is decided: the file needs a policy, the policy is a split rather than a
-truncation, and the split is worth doing before the log passes a gigabyte —
-which at the measured rate is **around 2026-09-27**.
+Rotation is best-effort and can never block supervision. Tests pin both
+classification and the two-file startup rotation policy.
 
 ---
 
