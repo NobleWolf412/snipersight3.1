@@ -23,8 +23,27 @@ from pathlib import Path
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP))
 
-from engine import abtest, costs, execsim, store  # noqa: E402
+from engine import abtest, costs, execsim, store, venues  # noqa: E402
 from engine.universe import all_tracked_symbols   # noqa: E402
+
+
+def tradeable_symbols(con) -> list[str]:
+    """The tracked set, minus the reference series.
+
+    `all_tracked_symbols` is "everything with stored candles", and since the
+    reference feed (venues.REFERENCE) that includes '@'-keys like
+    BICOUSDT@binance-spot. Those carry a deep venue's price series for
+    analysis and deliberately have NO venue: `venues.venue_for` raises on
+    them, and that raise is the contract keeping a borrowed order book away
+    from anything that sizes money.
+
+    Calibration prices trades, so it reaches costs.profile_for and through it
+    that raise. Filtering here rather than loosening the raise is the point —
+    the enforcement should stay absolute, and it is the caller's job to not
+    ask what a reference series would fill at.
+    """
+    return [s for s in all_tracked_symbols(con) if not venues.is_reference_key(s)]
+
 
 TFS = ("15m", "1H", "4H", "1D", "1W")
 
@@ -247,7 +266,7 @@ class CalibrationAgainstTheLiveStore(unittest.TestCase):
         if not (APP / "data" / "snipersight.db").exists():
             raise unittest.SkipTest("no live store")
         cls.con = store.connect()
-        cls.cal = abtest.calibrate(cls.con, all_tracked_symbols(cls.con), TFS)
+        cls.cal = abtest.calibrate(cls.con, tradeable_symbols(cls.con), TFS)
 
     @classmethod
     def tearDownClass(cls):
@@ -301,7 +320,7 @@ class CalibrationAgainstTheLiveStore(unittest.TestCase):
             self.skipTest("no scale-in adds in the recorded book")
         from engine.scalein import SCALE_VERSION
         recorded = {}
-        for symbol in all_tracked_symbols(self.con):
+        for symbol in tradeable_symbols(self.con):
             for tf in TFS:
                 for r in store.get_facts(self.con, symbol, tf, "exec",
                                          execsim.EXEC_VERSION):
@@ -310,7 +329,7 @@ class CalibrationAgainstTheLiveStore(unittest.TestCase):
                             and p["outcome"] != "MISSED"):
                         recorded[p["setup_id"]] = p
         replayed = {r["setup_id"]: r for r in abtest.run_variant(
-            self.con, all_tracked_symbols(self.con), TFS, SCALE_VERSION,
+            self.con, tradeable_symbols(self.con), TFS, SCALE_VERSION,
             managed=False, entry_model="MAKER_THEN_MARKET") if r.get("filled")}
         self.assertEqual(len(recorded), cal["scale_in_set_aside"])
         for sid, p in recorded.items():
@@ -327,7 +346,7 @@ class CalibrationAgainstTheLiveStore(unittest.TestCase):
         along; only the crossed orders ever diverged. A book with no crosses
         would pin nothing while reporting success."""
         crossed = filled = 0
-        for symbol in all_tracked_symbols(self.con):
+        for symbol in tradeable_symbols(self.con):
             for tf in TFS:
                 for r in store.get_facts(self.con, symbol, tf, "exec",
                                          execsim.EXEC_VERSION):
