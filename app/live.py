@@ -404,9 +404,11 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     # needs no special casing either: all_tracked_symbols is DISTINCT-symbols-
     # with-1D, so reference keys join the 4H/1W roll-up automatically. Same
     # per-symbol isolation as the scan loop above, same reason — one venue's
-    # bad afternoon must not cost the others their import.
-    for tsym in sorted(venues.REFERENCE):
-        rkey = venues.ref_key(tsym)
+    # bad afternoon must not cost the others their import. Deduped on the KEY,
+    # not the trading symbol: several symbols share one reference series
+    # (BTCUSDT and PF_XBTUSD both read BTCUSDT@binance-spot), and one tape
+    # needs one fetch.
+    for rkey in sorted({venues.ref_key(t) for t in venues.REFERENCE}):
         _beat(f"import reference {rkey}")
         try:
             for tf, gran in importer.native_tfs(rkey).items():

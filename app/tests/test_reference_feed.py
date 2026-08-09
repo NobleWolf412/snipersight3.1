@@ -47,9 +47,11 @@ class TestReferenceContract(unittest.TestCase):
                 venues.venue_for(rkey)
 
     def test_reference_for_is_absent_not_guessed(self):
-        self.assertIsNone(venues.reference_for("ETHUSDT"))
+        # IMU-USD is genuinely unmapped — Binance does not list it (probed
+        # 2026-08-09). Absence must read as None, never as a guessed spelling.
+        self.assertIsNone(venues.reference_for("IMU-USD"))
         with self.assertRaises(ValueError):
-            venues.ref_key("ETHUSDT")
+            venues.ref_key("IMU-USD")
 
     def test_trading_symbols_still_resolve(self):
         # The '@' guard must not have widened: every real symbol class resolves.
@@ -253,6 +255,11 @@ class TestBasisEngine(RefStoreCase):
         self.assertEqual(basis.run(self.con, "BICO-USD", "1H", 3600)["facts"], 1)
 
     def test_silent_for_unmapped_symbols_and_other_tfs(self):
+        # ETHUSDT is mapped since the 2026-08-09 widening, so it passes the
+        # reference gate — but this store holds no candles for it, so zero
+        # facts is still the required answer (absence is never zero). IMU-USD
+        # pins the truly-unmapped branch.
+        self.assertEqual(basis.run(self.con, "IMU-USD", "1H", 3600)["facts"], 0)
         self.assertEqual(basis.run(self.con, "ETHUSDT", "1H", 3600)["facts"], 0)
         self.assertEqual(basis.run(self.con, "BICO-USD", "15m", 900)["facts"], 0)
 

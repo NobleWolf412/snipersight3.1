@@ -170,16 +170,49 @@ def venue_for(symbol: str) -> Venue:
 # state, not a guess). Values are (venue_key, native_symbol_on_that_venue) —
 # the cross-venue symbol spelling lives HERE and nowhere else.
 #
-# Pilot membership, measured 2026-08-09: BICO-USD is the only ADMITTED symbol
-# with material thinness (24.5% of 1H empty; every other admitted symbol is a
-# Phemex perp at 0.0%). BTCUSDT joins as the liquid CONTROL: the basis fact
-# stream over-represents liquid hours on thin symbols by construction (a
-# bucket the thin venue served nothing for produces no fact), so grading it
-# needs a series without that bias. IMU-USD (WARMING) was probed and is not
-# listed on Binance.
+# Membership: EVERY symbol the system trades or is warming toward that
+# Binance carries — operator ruling 2026-08-09, superseding the same-day
+# two-symbol pilot ("this was meant to be worked as a fix for any arbitrage
+# opp"). The feed serves two purposes with different natural scopes: chart
+# completeness only matters where the execution venue is thin (BICO-USD,
+# 24.5% of 1H empty; every admitted Phemex perp is at 0.0%), but the BASIS
+# stream is research into cross-venue stretch and is only as good as its
+# breadth — a perp can drift from spot with perfectly complete candles.
+#
+# Several trading symbols deliberately share one reference series (BTCUSDT
+# and PF_XBTUSD both point at BTCUSDT@binance-spot): the deep venue has one
+# tape, each trading symbol gets its own basis stream measured against it,
+# and the import loop dedupes on the key so the feed is fetched once.
+#
+# Absent because Binance does not list them (probed 2026-08-09, both spot
+# spellings 400): IMU-USD / IMUUSDT, PF_HYPEUSD / HYPEUSDT. Absence means
+# absence — reference_for returns None and basis records nothing.
 REFERENCE = {
-    "BICO-USD": ("binance-spot", "BICOUSDT"),
-    "BTCUSDT": ("binance-spot", "BTCUSDT"),
+    # admitted — Phemex perps vs Binance spot (the perp-basis measurement)
+    "BTCUSDT":   ("binance-spot", "BTCUSDT"),
+    "ETHUSDT":   ("binance-spot", "ETHUSDT"),
+    "BNBUSDT":   ("binance-spot", "BNBUSDT"),
+    "SOLUSDT":   ("binance-spot", "SOLUSDT"),
+    "SUIUSDT":   ("binance-spot", "SUIUSDT"),
+    "LINKUSDT":  ("binance-spot", "LINKUSDT"),
+    "DOGEUSDT":  ("binance-spot", "DOGEUSDT"),
+    "XRPUSDT":   ("binance-spot", "XRPUSDT"),
+    "ADAUSDT":   ("binance-spot", "ADAUSDT"),
+    "TAOUSDT":   ("binance-spot", "TAOUSDT"),
+    "PUMPUSDT":  ("binance-spot", "PUMPUSDT"),
+    "ENAUSDT":   ("binance-spot", "ENAUSDT"),
+    # admitted — the one thin spot market (chart completeness AND basis)
+    "BICO-USD":  ("binance-spot", "BICOUSDT"),
+    # shadow — Kraken perps warming toward the book; XBT is Kraken's BTC
+    "PF_XBTUSD":  ("binance-spot", "BTCUSDT"),
+    "PF_ETHUSD":  ("binance-spot", "ETHUSDT"),
+    "PF_SOLUSD":  ("binance-spot", "SOLUSDT"),
+    "PF_ZECUSD":  ("binance-spot", "ZECUSDT"),
+    "PF_XRPUSD":  ("binance-spot", "XRPUSDT"),
+    "PF_ADAUSD":  ("binance-spot", "ADAUSDT"),
+    "PF_BICOUSD": ("binance-spot", "BICOUSDT"),
+    "PF_DOGEUSD": ("binance-spot", "DOGEUSDT"),
+    "PF_TAOUSD":  ("binance-spot", "TAOUSDT"),
 }
 
 
