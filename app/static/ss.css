@@ -2696,11 +2696,23 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   width:min(380px,94vw);z-index:55;display:flex;flex-direction:column;
   background:var(--card);border-left:1px solid var(--accent);
   box-shadow:-14px 0 34px rgba(0,0,0,.45)}
+/* The head WRAPS and its buttons never shrink. Adding Minimize (9cbf635)
+   made six items share one non-wrapping row, and on a phone-width dock the
+   flex algorithm's answer was to push the LAST item — Close, the one control
+   that must always be reachable — past the dock's edge, clipping the word.
+   Reported 2026-08-10. Buttons are flex:none so a squeeze can never eat a
+   label; the row wraps instead, and the subtitle gives way first on a phone
+   because the tabs directly beneath it already say "observe · capture". */
 .cp-dock .cp-head{display:flex;align-items:center;gap:8px;padding:10px 12px;
-  border-bottom:1px solid var(--border-soft)}
+  flex-wrap:wrap;border-bottom:1px solid var(--border-soft)}
+.cp-dock .cp-head .btn{flex:none}
 .cp-dock .cp-title{font-family:var(--f-display);font-size:var(--fs-3);letter-spacing:.08em}
 .cp-dock .cp-sub{font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.1em;
   color:var(--fg-4);margin-right:auto}
+@media (max-width:640px){.cp-dock .cp-sub{display:none}
+  /* margin-right:auto lived on the subtitle; with it hidden the title takes
+     over pushing the controls to the right edge */
+  .cp-dock .cp-title{margin-right:auto}}
 .cp-dock .cp-chips{padding:8px 12px 0;display:flex;gap:6px;flex-wrap:wrap}
 .cp-dock .cp-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;
   flex-direction:column;gap:8px}

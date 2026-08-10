@@ -188,6 +188,23 @@ ok('minimize folds to a beacon without touching the recording', () => {
     'CLOSE can keep meaning stop');
 });
 
+ok('the head wraps and its buttons never shrink — Close stays whole', () => {
+  /* Adding Minimize made six items share one non-wrapping flex row; on a
+     phone-width dock the flex algorithm pushed the LAST item — Close — past
+     the dock's edge, clipping the word (reported 2026-08-10). Geometry can't
+     be proven from source, but the two properties that make the clip
+     impossible can: the row may wrap, and no button may shrink. */
+  const at = CSS.indexOf('.cp-dock .cp-head{');
+  const rule = CSS.slice(at, CSS.indexOf('}', at));
+  assert(/flex-wrap:wrap/.test(rule),
+    'the head row cannot wrap, so a squeeze clips its last control');
+  assert(/\.cp-dock \.cp-head \.btn\{flex:none\}/.test(CSS),
+    'head buttons can shrink below their label again');
+  assert(/\.cp-dock \.cp-sub\{display:none\}/.test(CSS),
+    'the subtitle no longer gives way on phones — it duplicates the tabs ' +
+    'directly beneath it, and it was the space Close needed');
+});
+
 ok('the beacon is a real button and a minimized recording stays loud', () => {
   assert(/class="cp-beacon/.test(CP) && /<button type="button" class="cp-beacon/.test(CP.replace(/\s+/g, ' ')),
     'the beacon is not a <button> — the keyboard cannot restore what the ' +
