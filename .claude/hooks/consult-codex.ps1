@@ -1,6 +1,16 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# Codex answers in prose, and prose from a model contains curly quotes, em
+# dashes and arrows. Windows PowerShell 5.1 writes stdout through the console's
+# OEM codepage, which turned every one of them into the mojibake this repo has
+# already paid for once ("yes" arriving as <?oyes<??). The hook's whole output
+# is JSON destined for a UTF-8 reader, so say so on both ends: the pipe out,
+# and the response file coming in — Get-Content guesses ANSI on a BOM-less
+# file, and codex writes one.
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+$OutputEncoding = [Console]::OutputEncoding
+
 $projectRoot = if ($env:CLAUDE_PROJECT_DIR) {
     [IO.Path]::GetFullPath($env:CLAUDE_PROJECT_DIR)
 } else {
@@ -47,9 +57,26 @@ should consider. Do not implement the task. If the prompt is casual or needs no
 engineering second opinion, say that briefly.
 "@
 
-        $consultPrompt | & codex exec --ephemeral --sandbox read-only `
-            --cd $projectRoot --output-last-message $responseFile - `
-            2> $errorFile | Out-Null
+        # `2>` on a NATIVE command is the trap here. Windows PowerShell 5.1
+        # wraps each stderr line in a NativeCommandError, and with
+        # $ErrorActionPreference='Stop' that is TERMINATING — it aborts the try
+        # block before line 53 ever reads the exit code. codex greets you on
+        # stderr on every run ("OpenAI Codex v0.147.0", workdir, model), so
+        # this hook could not succeed with a real call at all: the reason it
+        # reported as "unavailable" was simply codex's first stderr line,
+        # which is why it looked like a different fault every session
+        # (a models-cache error while the CLI was stale, the banner once it
+        # was not). Dropped to Continue for the call only, so the exit code
+        # below stays the thing that decides success.
+        $previousErrorAction = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $consultPrompt | & codex exec --ephemeral --sandbox read-only `
+                --cd $projectRoot --output-last-message $responseFile - `
+                2> $errorFile | Out-Null
+        } finally {
+            $ErrorActionPreference = $previousErrorAction
+        }
         if ($LASTEXITCODE -ne 0) {
             $detail = if (Test-Path $errorFile) {
                 (Get-Content -Raw $errorFile).Trim()
@@ -58,7 +85,7 @@ engineering second opinion, say that briefly.
             }
             throw "Codex exited with code $LASTEXITCODE. $detail"
         }
-        $codexResponse = (Get-Content -Raw $responseFile).Trim()
+        $codexResponse = (Get-Content -Raw -Encoding UTF8 $responseFile).Trim()
         if ([string]::IsNullOrWhiteSpace($codexResponse)) {
             throw 'Codex returned an empty consultation.'
         }
