@@ -214,6 +214,36 @@ class TestAggregator(EngineStoreCase):
 
 
 class TestImporter(EngineStoreCase):
+    def test_empty_answer_after_listing_acknowledges_the_quiet_window(self):
+        """importer-v0.5. A steady-state cycle imports exactly the newest
+        bucket; on a thin market a quiet bucket arrives as its own EMPTY
+        response, and until this change nothing ever vouched for it — the
+        unexplained-hole count crept up until SEQUENCE_GAPS halted the store
+        (PENGU-USD, 2026-08-10, 122 unvouched quiet minutes). A successful
+        empty answer about a post-listing window is the venue saying "no
+        trades here", and it is recorded as exactly that."""
+        insert_candle(self.con, "1H", 0)             # the market has listed
+        with patch("engine.importer._fetch", return_value=[]), \
+             patch("engine.importer.time.time", return_value=10000), \
+             patch("engine.importer.time.sleep"):
+            r = importer.backfill(self.con, "BTC-USD", "1H", 3600, 7200)
+        self.assertEqual(r["candles"], 0)
+        self.assertEqual(r["gaps"], 1, "the quiet bucket went unvouched again")
+        self.assertEqual(r["pre_listing"], 0)
+        listed = self.con.execute(
+            "SELECT gaps FROM import_log ORDER BY id DESC LIMIT 1").fetchone()[0]
+        self.assertEqual(json.loads(listed), [3600])
+
+    def test_empty_answer_before_listing_acknowledges_nothing(self):
+        # No prior candles: this range may simply predate the listing, and
+        # recording gaps would claim the venue lost data it never had.
+        with patch("engine.importer._fetch", return_value=[]), \
+             patch("engine.importer.time.time", return_value=10000), \
+             patch("engine.importer.time.sleep"):
+            r = importer.backfill(self.con, "BTC-USD", "1H", 3600, 7200)
+        self.assertEqual(r["gaps"], 0)
+        self.assertEqual(r["pre_listing"], 1)
+
     def test_malformed_candle_is_rejected_and_logged_as_gap(self):
         # Coinbase response order: time, low, high, open, close, volume.
         rows = [[0, Decimal("110"), Decimal("100"), Decimal("105"),

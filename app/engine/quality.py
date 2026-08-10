@@ -405,7 +405,8 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
             (rule["source"], symbol) if symbol else (rule["source"],)).fetchall()
         for (sym,) in sources:
             source_rows = con.execute(
-                "SELECT open_ts,open,high,low,close,volume FROM candles "
+                "SELECT open_ts,open,high,low,close,volume,imported_at "
+                "FROM candles "
                 "WHERE symbol=? AND tf=? ORDER BY open_ts", (sym, rule["source"])).fetchall()
             by_bucket = {}
             for row in source_rows:
@@ -472,7 +473,23 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
                     # re-aggregates them, and a HALT the scanner cannot heal
                     # is the watchdog's documented anti-pattern — the same
                     # shape as UNKNOWN_TIMEFRAME above.
-                    lagging = now - (bstart + rule["bucket"]) <= 2 * rule["bucket"]
+                    #
+                    # AND A BUCKET WHOSE SOURCES JUST ARRIVED IS LAG TOO,
+                    # however old its market_time. Onboarding a symbol imports
+                    # months of history in one cycle, every historical 4H
+                    # window becomes complete instantly, and the bucket-age
+                    # test alone read all of them as ancient failures —
+                    # 2026-08-10 13:46: OPUSDT joined the universe, 63
+                    # MISSING_AGGREGATE HALTs fired mid-onboarding, and the
+                    # watchdog shot the scanner seconds before the same
+                    # cycle's aggregation pass would have built every one of
+                    # them. The import stamp is the honest discriminator: a
+                    # bucket can only be MISSING once its sources have sat
+                    # unaggregated longer than a scan cycle could plausibly
+                    # take (~5-6 min measured; 900s is generous).
+                    fresh_sources = now - max(r[6] for r in group) <= 900
+                    lagging = fresh_sources or \
+                        now - (bstart + rule["bucket"]) <= 2 * rule["bucket"]
                     if partial:
                         _issue(checks, "AGGREGATION", "DEGRADED",
                                "AGGREGATE_PENDING",

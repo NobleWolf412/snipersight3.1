@@ -144,6 +144,42 @@ class TestMarketQuality(QualityStoreCase):
                                         if c["tf"] == "1H"})
 
 
+class TestOnboardingIsNotAFailure(QualityStoreCase):
+    def candle_at(self, tf, ts, imported_at):
+        self.con.execute(
+            "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ("BTC-USD", tf, ts, "100", "102", "98", "101", "1", "coinbase",
+             imported_at))
+
+    def test_freshly_imported_history_is_lag_not_missing(self):
+        """2026-08-10 13:46: OPUSDT joined the universe, one cycle imported
+        months of history, every historical 4H window became complete at
+        once, and the bucket-age test alone read all 63 as ancient
+        aggregation failures — HALT — killing the scanner seconds before its
+        own aggregation pass. Sources imported within the last ~cycle are
+        scheduling lag whatever their market_time says."""
+        now = 2_000_000
+        for i in range(8):                       # two complete 4H windows,
+            self.candle_at("1H", i * 3600, now - 60)   # imported a minute ago
+        self.con.commit()
+        checks = quality.audit_market_inputs(self.con, "BTC-USD", now=now)
+        agg = [c for c in checks if c["tf"] == "4H"]
+        self.assertIn("AGGREGATE_PENDING", {c["code"] for c in agg})
+        self.assertNotIn("MISSING_AGGREGATE", {c["code"] for c in agg})
+        self.assertFalse([c for c in agg if c["status"] == "BLOCKED"])
+
+    def test_long_unaggregated_history_still_blocks(self):
+        # The same shape with STALE imports is a genuine failure: the sources
+        # have sat for hours and no aggregation pass picked them up.
+        now = 2_000_000
+        for i in range(8):
+            self.candle_at("1H", i * 3600, now - 7200)  # imported 2h ago
+        self.con.commit()
+        checks = quality.audit_market_inputs(self.con, "BTC-USD", now=now)
+        self.assertIn("MISSING_AGGREGATE",
+                      {c["code"] for c in checks if c["tf"] == "4H"})
+
+
 class TestPipelineContracts(QualityStoreCase):
     def test_fact_causality_violation_is_visible(self):
         store.insert_fact(self.con, symbol="BTC-USD", tf="1H", kind="test",

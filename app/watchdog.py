@@ -386,9 +386,16 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
               f"{streak} audits: {', '.join(codes[:4]) or '(none)'}")
 
     if reason:
-        codes = sorted({b["code"] for b in report.get("blockers", [])} |
-                       {c["code"] for c in report.get("warnings", [])
-                        if c.get("rung") == "QUARANTINE"})
+        # BLOCKER codes only. This union used to fold QUARANTINE codes into
+        # the restart announcement, so on 2026-08-10 13:46 the operator's
+        # phone read "restarting … Codes: MISSING_AGGREGATE, STALE_SERIES" —
+        # naming STALE_SERIES, a rung that never restarts anything, as a
+        # restart cause. The toast names what pulled the trigger; the
+        # quarantine tally rides along labelled as what it is.
+        codes = sorted({b["code"] for b in report.get("blockers", [])})
+        q_codes = sorted({c["code"] for c in report.get("warnings", [])
+                          if c.get("rung") == "QUARANTINE"})
+        q_note = f" (also quarantined: {', '.join(q_codes[:3])})" if q_codes else ""
         # Killing a scanner that has not yet had time to finish a pass is how
         # the restart loop sustained itself. Say so and wait rather than
         # silently doing nothing — a suppressed safety action must be visible.
@@ -409,7 +416,7 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
             f"codes={codes[:6]})")
         toast("⚠ SniperSight audit restart",
               f"{reason} — restarting live-scanner. "
-              f"Codes: {', '.join(codes[:6]) or '(none)'}")
+              f"Codes: {', '.join(codes[:6]) or '(none)'}{q_note}")
         if live_child.alive():
             live_child.kill(f"audit: {reason}")
         streak = 0                       # the restart is the response; re-arm

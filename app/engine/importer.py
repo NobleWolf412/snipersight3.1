@@ -19,7 +19,13 @@ from datetime import datetime, timezone
 from . import binance, kraken, phemex, venues
 
 API = "https://api.exchange.coinbase.com"
-IMPORTER_VERSION = "importer-v0.4-draft"
+IMPORTER_VERSION = "importer-v0.5-draft"
+# v0.5: a successful EMPTY response about a post-listing window now
+# acknowledges its buckets as venue-quiet (gap-honesty extended to the
+# steady-state single-bucket import, whose quiet buckets nothing ever
+# vouched for — the PENGU-USD SEQUENCE_GAPS halt of 2026-08-10). Pre-listing
+# emptiness still acknowledges nothing, and a failed fetch still raises
+# before any accounting happens.
 # v0.4: reference keys ('BICOUSDT@binance-spot') route to the Binance data
 # mirror, labelled with the source their own tail names, and the venue-unknown
 # fallback to Coinbase is LOUD — it used to fetch and honestly-label garbage
@@ -234,10 +240,35 @@ def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int) -> dict:
         gaps = [t for t in expected if t not in seen]
         pre_listing = len([t for t in range(start_ts, first, gran)])
     else:
-        # Nothing served at all. That is not a range full of gaps; it is a
-        # symbol with no data in this window, and it is recorded as such.
-        gaps = []
-        pre_listing = len(range(start_ts, end_ts, gran))
+        # Nothing served at all. Two different absences, told apart by what
+        # the store already knows:
+        #
+        # POST-LISTING (candles exist before this range): the venue answered
+        # a successful request with "no data here", about a window after the
+        # market demonstrably listed. That IS the venue acknowledging a quiet
+        # spell — the same statement it makes by omitting a bucket inside a
+        # served span — and refusing to record it was how thin markets rotted:
+        # every steady-state cycle imports exactly the newest bucket, a quiet
+        # bucket arrives as its own empty response, nothing acknowledged it,
+        # and the unexplained-hole count crept up until SEQUENCE_GAPS halted
+        # the store. PENGU-USD tripped it on 2026-08-10 after accumulating
+        # 122 unvouched quiet minutes since late July; any thin young symbol
+        # repeats this on schedule. (A FAILED fetch never reaches this line —
+        # it raises out of backfill — so only a real answer acknowledges.)
+        #
+        # PRE-LISTING (no prior candles): nothing listed yet in this range,
+        # not "no trades" — recording gaps would claim the venue lost data it
+        # never had. Unchanged.
+        prior = con.execute(
+            "SELECT 1 FROM candles WHERE symbol=? AND tf=? AND open_ts<? "
+            "AND source NOT LIKE 'agg:%' LIMIT 1",
+            (symbol, tf, start_ts)).fetchone()
+        if prior:
+            gaps = list(range(start_ts, end_ts, gran))
+            pre_listing = 0
+        else:
+            gaps = []
+            pre_listing = len(range(start_ts, end_ts, gran))
     con.execute(
         "INSERT INTO import_log "
         "(symbol, tf, range_start, range_end, n_candles, n_gaps, gaps, source, run_at, n_bad) "
