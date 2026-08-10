@@ -168,6 +168,72 @@ ok('the transcript survives a toggle, keyed by context', () => {
   assert(/'diag'/.test(CP), 'the diagnostics conversation has no stable key');
 });
 
+/* MINIMIZE IS NOT CLOSE — operator request 2026-08-10, after the floating
+   beacon in the old snipersight-trading cockpit. Close stops a recording;
+   minimize folds the dock into a draggable beacon while the recording, the
+   elapsed clock, the transcript and a thinking reply all keep running. The
+   pins below are the properties a later session could quietly undo. */
+ok('minimize folds to a beacon without touching the recording', () => {
+  assert(/id="cpMin"/.test(CP), 'the dock has no Minimize control');
+  const h = CP.slice(CP.indexOf("getElementById('cpMin')"),
+                     CP.indexOf("getElementById('cpMin')") + 300);
+  assert(/minimized = true/.test(h), 'Minimize does not set the minimized state');
+  assert(!/stopCapture|close\(\)/.test(h),
+    'Minimize travels close\'s path — folding the dock away mid-capture is ' +
+    'exactly when the recording must keep running');
+  const cl = CP.slice(CP.indexOf('function close()'),
+                      CP.indexOf('function close()') + 220);
+  assert(/stopCapture\(\)/.test(cl),
+    'close() no longer stops an active recording — minimize exists so that ' +
+    'CLOSE can keep meaning stop');
+});
+
+ok('the beacon is a real button and a minimized recording stays loud', () => {
+  assert(/class="cp-beacon/.test(CP) && /<button type="button" class="cp-beacon/.test(CP.replace(/\s+/g, ' ')),
+    'the beacon is not a <button> — the keyboard cannot restore what the ' +
+    'mouse minimized');
+  assert(/aria-label="Restore Spotter/.test(CP), 'the beacon does not say what it does');
+  assert(/REC <span id="cpElapsed"/.test(CP),
+    'a minimized recording loses its clock — the capture timer looks up ' +
+    '#cpElapsed by id each tick, so the beacon must carry it');
+  assert(/\.cp-beacon\.rec/.test(CSS) && /--red/.test(CSS.slice(CSS.indexOf('.cp-beacon.rec'), CSS.indexOf('.cp-beacon.rec') + 300)),
+    'the recording state has no red register on the beacon');
+});
+
+ok('a drag is not a click, measured from the press point', () => {
+  assert(/if\(moved\)\{ moved = false; return; \}/.test(CP),
+    'the click that ends a drag also restores the dock');
+  assert(/drag\.x0/.test(CP) && /drag\.y0/.test(CP),
+    'drag slop is not measured from where the pointer went down — measured ' +
+    'against the stored position it skips itself on first use, and every ' +
+    'phone tap becomes a micro-drag that swallows the restore');
+  assert(/setPointerCapture/.test(CP), 'the drag loses the pointer at the viewport edge');
+});
+
+ok('the beacon position survives, clamped to the screen that loads it', () => {
+  assert((CP.match(/ss-cp-beacon-pos/g) || []).length >= 2,
+    'the dragged position is not both read and written');
+  assert(/function clampBeacon/.test(CP),
+    'no clamp — a position saved on a desktop strands the beacon off-screen ' +
+    'on a phone');
+  assert(/addEventListener\('resize'/.test(CP.replace(/window\./g, '')) || /addEventListener\("resize"/.test(CP),
+    'nothing re-clamps on resize or rotation');
+  assert(/touch-action:none/.test(CSS.slice(CSS.indexOf('.cp-beacon{'), CSS.indexOf('.cp-beacon{') + 400)),
+    'without touch-action:none the browser claims the drag gesture for scroll');
+  assert(/min-height:44px/.test(CSS.slice(CSS.indexOf('.cp-beacon{'), CSS.indexOf('.cp-beacon{') + 400)),
+    'the beacon is under the 44px thumb floor every other control holds');
+});
+
+ok('explicit opens unfold; the sidebar button restores before it closes', () => {
+  const op = CP.slice(CP.indexOf('function open('), CP.indexOf('function open(') + 300);
+  assert(/minimized = false/.test(op),
+    'a Diagnose row or Ask button calling open() leaves the dock folded, ' +
+    'with the question trapped behind a beacon');
+  assert(/if\(ctx && minimized\)\{ minimized = false; render\(\); return; \}/.test(CP),
+    'the sidebar button closes a minimized Spotter instead of restoring it — ' +
+    'killing a session the operator only folded away');
+});
+
 ok('the boundaries did not move', () => {
   assert(/cannot arm/.test(CP), 'the dock stopped saying it cannot arm');
   assert(/never enters the trading record/.test(CP), 'the capture boundary is gone');

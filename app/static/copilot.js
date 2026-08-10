@@ -22,6 +22,15 @@
    toggling the dock, switching surfaces and reloading all return to the
    conversation where it was left.
 
+   MINIMIZE IS NOT CLOSE. Close ends the session's presence and stops an
+   active recording; minimize folds the dock into a floating, draggable
+   BEACON (operator request 2026-08-10, after the same pattern in the old
+   snipersight-trading cockpit) while everything underneath keeps running —
+   the recording keeps recording, the elapsed clock keeps ticking on the
+   beacon itself, a thinking reply keeps thinking. Click the beacon (or the
+   sidebar button) to unfold. Drag it anywhere; the position survives
+   reloads; a drag is not a click.
+
    Public: window.SSCopilot.open({kind?, symbol?, tf?, setupId?, prefill?, ask?})
            / .toggle() / .close() / .clear() */
 (() => {
@@ -48,6 +57,12 @@
   let captureNote = '';
   let analysisBusy = false;
   let analysisText = '';
+  let minimized = false;
+  /* The beacon's dragged position, {left, top} in px, persisted so it stays
+     where the operator's thumb put it. null = the CSS default corner. */
+  let beaconPos = null;
+  try{ beaconPos = JSON.parse(localStorage.getItem('ss-cp-beacon-pos')); }
+  catch(e){ beaconPos = null; }
 
   const ctxKey = c => c.kind === 'diagnostics'
     ? 'diag' : `${c.symbol}|${c.tf}|${c.setupId || ''}`;
@@ -146,9 +161,95 @@
       <div class="cp-foot">local only · nothing is sent until you choose to share it</div>`;
   }
 
+  /* ---------- the beacon: Spotter, folded ---------- */
+  function clampBeacon(pos){
+    // Re-clamped on every use, not just on drag: a position saved on a desktop
+    // must not strand the beacon off-screen on the phone that loads it next.
+    const w = 44, m = 4;
+    return {left: Math.min(Math.max(pos.left, m), window.innerWidth - w - m),
+            top: Math.min(Math.max(pos.top, m), window.innerHeight - w - m)};
+  }
+  function beaconHtml(){
+    const rec = captureActive();
+    const thinking = busy || analysisBusy;
+    const state = rec ? 'recording' : thinking ? 'thinking' : 'idle';
+    const style = beaconPos
+      ? (p => `style="left:${p.left}px;top:${p.top}px;right:auto;bottom:auto"`)(clampBeacon(beaconPos))
+      : '';
+    /* A real <button>, so the keyboard can restore what the mouse minimized.
+       While recording it carries the SAME #cpElapsed the dock uses — the
+       capture timer looks the element up by id each tick, so the clock keeps
+       ticking on the beacon with no extra wiring, and a minimized recording
+       stays conspicuous instead of becoming invisible. */
+    return `
+      <button type="button" class="cp-beacon${rec ? ' rec' : thinking ? ' busy' : ''}"
+              id="cpBeacon" ${style}
+              aria-label="Restore Spotter (${state})"
+              title="Spotter is ${state} — click to restore, drag to move">
+        <span class="cp-beacon-orb" aria-hidden="true"></span>
+        <span class="cp-beacon-label">${rec
+          ? `REC <span id="cpElapsed">${elapsed()}</span>`
+          : thinking ? 'Spotter…' : 'Spotter'}</span>
+      </button>`;
+  }
+  function wireBeacon(){
+    const b = document.getElementById('cpBeacon');
+    let drag = null, moved = false;
+    b.addEventListener('pointerdown', e => {
+      const r = b.getBoundingClientRect();
+      drag = {dx: e.clientX - r.left, dy: e.clientY - r.top,
+              x0: e.clientX, y0: e.clientY};
+      moved = false;
+      b.setPointerCapture(e.pointerId);
+    });
+    b.addEventListener('pointermove', e => {
+      if(!drag) return;
+      // 4px of slop from the PRESS POINT before a press becomes a drag — a
+      // thumb is not a crosshair, and without it every tap on a phone
+      // registered a micro-drag and the beacon became impossible to click.
+      // Measured against where the pointer went down, not the stored
+      // position: that is null until the first drag ever happens, and a
+      // guard that skips itself on first use is no guard.
+      if(!moved && Math.abs(e.clientX - drag.x0) < 4 &&
+         Math.abs(e.clientY - drag.y0) < 4) return;
+      const next = {left: e.clientX - drag.dx, top: e.clientY - drag.dy};
+      moved = true;
+      beaconPos = clampBeacon(next);
+      b.style.left = beaconPos.left + 'px';
+      b.style.top = beaconPos.top + 'px';
+      b.style.right = 'auto';
+      b.style.bottom = 'auto';
+    });
+    b.addEventListener('pointerup', () => {
+      drag = null;
+      if(moved && beaconPos){
+        try{ localStorage.setItem('ss-cp-beacon-pos', JSON.stringify(beaconPos)); }
+        catch(e){ /* position is a nicety; losing it is not worth a warning */ }
+      }
+    });
+    // A drag must not ALSO restore — the click that ends a drag is the same
+    // click event, so the moved flag decides which gesture this was.
+    b.addEventListener('click', () => {
+      if(moved){ moved = false; return; }
+      minimized = false;
+      render();
+    });
+  }
+  addEventListener('resize', () => {
+    if(minimized && ctx && beaconPos) render();
+  });
+
   function render(){
     if(!ctx){ ROOT.innerHTML = ''; document.body.classList.remove('cp-open'); return; }
     document.body.classList.add('cp-open');
+    if(minimized){
+      // The dock's DOM goes away but NOTHING else does: recorder, stream,
+      // timer, transcript and context all live in module state, which is the
+      // entire difference between minimize and close.
+      ROOT.innerHTML = beaconHtml();
+      wireBeacon();
+      return;
+    }
     const chip = ctx.kind === 'diagnostics'
       ? 'diagnosing the machine — faults · gates · quality · log'
       : `${esc(ctx.symbol)} ${esc(ctx.tf)}${ctx.setupId ? ' · setup attached' : ''}`;
@@ -163,6 +264,9 @@
             <option value="opus"${model==='opus'?' selected':''}>Opus</option>
           </select>
           <button class="btn" id="cpClear" title="forget this conversation">New</button>` : ''}
+          <button class="btn" id="cpMin"
+                  title="fold Spotter into a floating beacon — a recording keeps recording"
+                  aria-label="Minimize Spotter">–</button>
           <button class="btn" id="cpClose">Close</button>
         </div>
         <div class="cp-tabs" role="tablist" aria-label="Spotter mode">
@@ -193,6 +297,13 @@
 
   function wire(){
     document.getElementById('cpClose').addEventListener('click', close);
+    // Minimize must never travel close's path: close() stops an active
+    // recording, and folding the dock away mid-capture is exactly when the
+    // recording must keep running.
+    document.getElementById('cpMin').addEventListener('click', () => {
+      minimized = true;
+      render();
+    });
     document.getElementById('cpObserve').addEventListener('click', () => {
       mode = 'observe'; render();
     });
@@ -481,6 +592,9 @@
   }
 
   function open(c){
+    // Any explicit open unfolds: a Diagnose row or an Ask button calling in
+    // wants the dock, not a beacon with a question trapped behind it.
+    minimized = false;
     if(c && (c.kind || c.symbol)) mode = 'observe';
     const next = c && (c.kind || c.symbol)
       ? {kind: c.kind || 'chart', symbol: c.symbol || null, tf: c.tf || '1H',
@@ -490,10 +604,16 @@
     msgs = loadMsgs(next);
     render();
   }
-  function toggle(){ ctx ? close() : open(); }
+  function toggle(){
+    // Minimized is nearer closed than open: the sidebar button restores the
+    // dock rather than killing a session the operator only folded away.
+    if(ctx && minimized){ minimized = false; render(); return; }
+    ctx ? close() : open();
+  }
   function close(){
     if(captureActive()) stopCapture();
     ctx = null;
+    minimized = false;
     render();
   }
   function clear(){
