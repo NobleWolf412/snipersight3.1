@@ -1177,6 +1177,14 @@ body:not(.dev) #consolePanel{display:none}
   touch-action:none}
 .lvl:hover,.lvl.drag{background:currentColor}
 .lvl:hover span,.lvl.drag span{color:#000}
+/* The pill's label grew with the state vocabulary — "NOT TRADED · ENTRY" plus
+   a price is wider than a 360px chart, and nowrap text at left:0 simply runs
+   off the right edge. Clamped to the chart with an ellipsis on phones: the
+   STATE word leads every label, so it is the tail (the price) that truncates,
+   and the price is on the axis anyway. */
+@media (max-width:640px){
+  .lvl{max-width:calc(100vw - 56px);overflow:hidden;text-overflow:ellipsis}
+}
 .lvl-entry{color:var(--cyan)} .lvl-tp{color:var(--green)} .lvl-sl{color:var(--red-2)}
 /* A GRAB TARGET A THUMB CAN FIND. The visible pill is ~20px tall, which is
    fine under a cursor and far under the ~44px a fingertip needs. The mark
@@ -2854,6 +2862,22 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .trade-state[data-state="ORDER_WORKING"] b,.trade-state[data-state="POSITION_MANAGED"] b{color:var(--amber-2)}
 .trade-mobile-bar{display:none}
 .layers-pop{width:min(310px,calc(100vw - 24px));padding:0;max-height:min(72vh,610px);overflow:auto}
+/* ON A PHONE THE POPUP ANCHORS TO THE VIEWPORT, NOT THE BUTTON. `right:0`
+   pins the panel's right edge to the Layers BUTTON's right edge — and on a
+   phone the chart-top row wraps, so the button lands mid-row and a 310px
+   panel extends left past x=0. The width cap above cannot save it: capping
+   how wide it is does nothing about WHERE it is. Reported cut off on the
+   operator's phone, 2026-08-10. Fixed positioning with BOTH edges set is the
+   only anchor that cannot leave the screen, wherever the button wrapped to.
+   (Safe here: no ancestor carries transform/filter, so fixed means the
+   viewport.) vh line first, dvh where the engine has it — Android's vh
+   includes the retracted browser chrome, the house pattern everywhere else. */
+@media (max-width:900px){
+  .layers-pop{position:fixed;left:10px;right:10px;width:auto;
+    top:calc(var(--topbar-h) + 10px);
+    max-height:calc(100vh - var(--topbar-h) - 190px);
+    max-height:calc(100dvh - var(--topbar-h) - 190px)}
+}
 .layer-group{padding:7px;border-bottom:1px solid var(--border-soft)}
 .layer-group:last-child{border-bottom:0}
 .layer-group>span{display:block;padding:4px 7px 6px;font:650 9px/1 var(--f-mono);

@@ -275,4 +275,25 @@ ok('a layer fetching its data says so', () => {
     'the loading pulse ignores reduced-motion');
 });
 
+ok('on a phone the popup anchors to the viewport, not the button', () => {
+  /* `right:0` pins the panel to the Layers BUTTON's right edge; on a phone
+     the chart-top row wraps, the button lands mid-row, and a 310px panel ran
+     left past the screen edge (operator's phone, 2026-08-10). A width cap
+     cannot fix a position. The pin: inside a phone media query, the popup is
+     position:fixed with BOTH horizontal edges set — the only anchor that
+     cannot leave the screen wherever the button wrapped to. */
+  const at = CSS.indexOf('.layers-pop{position:fixed');
+  assert(at > 0, 'the phone rule is gone — the popup anchors to the button again');
+  const rule = CSS.slice(at, CSS.indexOf('}', at));
+  assert(/left:10px/.test(rule) && /right:10px/.test(rule),
+    'only one horizontal edge is set, so the other can still leave the screen');
+  const before = CSS.slice(Math.max(0, at - 600), at);
+  assert(/@media \(max-width:900px\)/.test(before),
+    'the fixed anchoring is not scoped to phones — on a desktop the popup ' +
+    'belongs beside the button that opened it');
+  assert(/100dvh/.test(rule),
+    'no dvh cap — Android vh includes retracted browser chrome, so a vh-sized ' +
+    'popup runs past the real bottom of the screen');
+});
+
 console.log('\n  ' + passed + ' passed');
