@@ -17,7 +17,7 @@
 
 ## Relationships
 
-- [on](on.md) (1 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
 
 ## Source Files
 

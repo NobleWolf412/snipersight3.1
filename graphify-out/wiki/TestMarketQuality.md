@@ -1,12 +1,11 @@
 # TestMarketQuality
 
-> 50 nodes
+> 40 nodes
 
 ## Key Concepts
 
 - **TestMarketQuality** (12 connections) — `app/tests/test_pipeline_quality.py`
 - **QualityStoreCase** (10 connections) — `app/tests/test_pipeline_quality.py`
-- **RetiredSymbolStalenessTest** (9 connections) — `app/tests/test_pipeline_quality.py`
 - **test_pipeline_quality.py** (8 connections) — `app/tests/test_pipeline_quality.py`
 - **TestKillSwitchRungs** (8 connections) — `app/tests/test_pipeline_quality.py`
 - **._partial_market()** (7 connections) — `app/tests/test_pipeline_quality.py`
@@ -22,18 +21,20 @@
 - **.candle_at()** (3 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_freshly_imported_history_is_lag_not_missing()** (3 connections) — `app/tests/test_pipeline_quality.py`
 - **TestStrategyRulesRemainFrozen** (3 connections) — `app/tests/test_pipeline_quality.py`
-- **._stale_symbols()** (3 connections) — `app/tests/test_pipeline_quality.py`
-- **.test_fails_open_when_the_universe_is_unreadable()** (3 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_complete_aggregates_reconcile()** (2 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_gap_blocks_downstream_engines()** (2 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_aggregate_mismatch_is_blocking()** (2 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_long_unaggregated_history_still_blocks()** (2 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_run_recorder_carries_lineage_envelope()** (2 connections) — `app/tests/test_pipeline_quality.py`
-- *... and 25 more nodes in this community*
+- **.test_stale_series_routes_to_quarantine_not_halt()** (2 connections) — `app/tests/test_pipeline_quality.py`
+- **.setUp()** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **.tearDown()** (1 connections) — `app/tests/test_pipeline_quality.py`
+- *... and 15 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (9 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (8 shared connections)
+- [T](T.md) (1 shared connections)
 
 ## Source Files
 
@@ -41,8 +42,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 137 (94%)
-- INFERRED: 8 (6%)
+- EXTRACTED: 114 (94%)
+- INFERRED: 7 (6%)
 - AMBIGUOUS: 0 (0%)
 
 ---

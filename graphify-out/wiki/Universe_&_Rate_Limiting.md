@@ -5,7 +5,7 @@
 ## Key Concepts
 
 - **get_logger()** (38 connections) — `app/engine/runlog.py`
-- **universe.py** (19 connections) — `app/engine/universe.py`
+- **universe.py** (20 connections) — `app/engine/universe.py`
 - **importer.py** (9 connections) — `app/engine/importer.py`
 - **rank_by_volume()** (7 connections) — `app/engine/universe.py`
 - **refresh()** (7 connections) — `app/engine/universe.py`
@@ -35,16 +35,16 @@
 
 - [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (9 shared connections)
 - [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (4 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (3 shared connections)
 - [API Server Endpoints](API_Server_Endpoints.md) (3 shared connections)
+- [A/B Test Engine](A-B_Test_Engine.md) (2 shared connections)
 - [binance.py](binance.py.md) (2 shared connections)
 - [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (2 shared connections)
 - [Kraken Adapter](Kraken_Adapter.md) (2 shared connections)
 - [_facts](_facts.md) (2 shared connections)
 - [Chart Vendor Data Layer](Chart_Vendor_Data_Layer.md) (2 shared connections)
 - [Portfolio & Position Endpoints](Portfolio_%26_Position_Endpoints.md) (2 shared connections)
+- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (2 shared connections)
 - [volume.py](volume.py.md) (1 shared connections)
-- [A/B Test Engine](A-B_Test_Engine.md) (1 shared connections)
 
 ## Source Files
 
@@ -56,7 +56,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 171 (92%)
+- EXTRACTED: 172 (92%)
 - INFERRED: 14 (8%)
 - AMBIGUOUS: 0 (0%)
 

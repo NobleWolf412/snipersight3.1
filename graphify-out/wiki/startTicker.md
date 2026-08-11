@@ -1,27 +1,31 @@
 # startTicker
 
-> 4 nodes
+> 8 nodes
 
 ## Key Concepts
 
-- **startTicker()** (4 connections) — `app/static/chart.js`
-- **stopTicker()** (3 connections) — `app/static/chart.js`
-- **tickOnce()** (2 connections) — `app/static/chart.js`
-- **onHide()** (2 connections) — `app/static/chart.js`
+- **test_ssdata.js** (7 connections) — `app/tests/test_ssdata.js`
+- **sleep()** (3 connections) — `app/tests/test_ssdata.js`
+- **load()** (3 connections) — `app/tests/test_ssdata.js`
+- **fs** (1 connections) — `app/tests/test_ssdata.js`
+- **path** (1 connections) — `app/tests/test_ssdata.js`
+- **assert** (1 connections) — `app/tests/test_ssdata.js`
+- **SRC** (1 connections) — `app/tests/test_ssdata.js`
+- **ok()** (1 connections) — `app/tests/test_ssdata.js`
 
 ## Relationships
 
-- [Chart UI Layer](Chart_UI_Layer.md) (4 shared connections)
-- [BTC Alignment Engine](BTC_Alignment_Engine.md) (1 shared connections)
+- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/chart.js`
+- `app/tests/test_ssdata.js`
 
 ## Audit Trail
 
-- EXTRACTED: 11 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 16 (89%)
+- INFERRED: 2 (11%)
 - AMBIGUOUS: 0 (0%)
 
 ---

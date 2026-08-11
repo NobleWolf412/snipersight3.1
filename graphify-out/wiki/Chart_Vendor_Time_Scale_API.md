@@ -1,12 +1,14 @@
 # Chart Vendor Time Scale API
 
-> 23 nodes
+> 25 nodes
 
 ## Key Concepts
 
 - **re()** (32 connections) — `app/static/lightweight-charts.js`
 - **.getVisibleLogicalRange()** (4 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (3 connections) — `app/static/lightweight-charts.js`
 - **.getVisibleRange()** (2 connections) — `app/static/lightweight-charts.js`
+- **.height()** (2 connections) — `app/static/lightweight-charts.js`
 - **.ww()** (2 connections) — `app/static/lightweight-charts.js`
 - **.gw()** (2 connections) — `app/static/lightweight-charts.js`
 - **.scrollPosition()** (1 connections) — `app/static/lightweight-charts.js`
@@ -30,13 +32,13 @@
 
 ## Relationships
 
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (4 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (3 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (3 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (3 shared connections)
+- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (2 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (2 shared connections)
 - [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
 - [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
 - [Chart UI Layer](Chart_UI_Layer.md) (1 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
-- [status](status.md) (1 shared connections)
 
 ## Source Files
 
@@ -44,8 +46,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 60 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 64 (98%)
+- INFERRED: 1 (2%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -4,36 +4,32 @@
 
 ## Key Concepts
 
-- **load()** (22 connections) — `app/static/chart.js`
-- **wire()** (20 connections) — `app/static/chart.js`
-- **paintSymBtn()** (6 connections) — `app/static/chart.js`
-- **populate()** (5 connections) — `app/static/chart.js`
-- **pickSym()** (5 connections) — `app/static/chart.js`
-- **open()** (5 connections) — `app/static/chart.js`
-- **renderSymList()** (4 connections) — `app/static/chart.js`
-- **ensureLayer()** (3 connections) — `app/static/chart.js`
-- **venueName()** (3 connections) — `app/static/chart.js`
-- **openPicker()** (3 connections) — `app/static/chart.js`
-- **closePicker()** (3 connections) — `app/static/chart.js`
-- **loadContext()** (2 connections) — `app/static/chart.js`
+- **volatility.py** (15 connections) — `app/engine/volatility.py`
+- **run()** (9 connections) — `app/engine/volatility.py`
+- **Decimal** (6 connections)
+- **keltner()** (6 connections) — `app/engine/volatility.py`
+- **bollinger()** (5 connections) — `app/engine/volatility.py`
+- **atr_regime()** (4 connections) — `app/engine/volatility.py`
+- **atr_percentiles()** (4 connections) — `app/engine/volatility.py`
+- **Volatility engine — ATR percentile, Bollinger width, and the squeeze. algo vola** (1 connections) — `app/engine/volatility.py`
+- **(middle, upper, lower) per bar index; None inside the warmup.      POPULATION** (1 connections) — `app/engine/volatility.py`
+- **(middle, upper, lower) per bar index, EMA-centred and ATR-scaled.      ATR is** (1 connections) — `app/engine/volatility.py`
+- **Schmitt-triggered percentile bucket. Enter at 20/80, leave at 30/70.** (1 connections) — `app/engine/volatility.py`
+- **Rank of each ATR within the trailing `window` values, as a percentage.      MI** (1 connections) — `app/engine/volatility.py`
 
 ## Relationships
 
-- [Chart UI Layer](Chart_UI_Layer.md) (27 shared connections)
-- [ni](ni.md) (6 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (4 shared connections)
-- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (2 shared connections)
-- [startTicker](startTicker.md) (1 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
+- [Indicator Engines](Indicator_Engines.md) (8 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (6 shared connections)
 
 ## Source Files
 
-- `app/static/chart.js`
+- `app/engine/volatility.py`
 
 ## Audit Trail
 
-- EXTRACTED: 74 (91%)
-- INFERRED: 7 (9%)
+- EXTRACTED: 54 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

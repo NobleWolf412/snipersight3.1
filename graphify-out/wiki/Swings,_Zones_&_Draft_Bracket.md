@@ -1,57 +1,40 @@
 # Swings, Zones & Draft Bracket
 
-> 24 nodes
+> 14 nodes
 
 ## Key Concepts
 
-- **mi** (11 connections) — `app/static/lightweight-charts.js`
-- **ci()** (9 connections) — `app/static/lightweight-charts.js`
-- **xt()** (6 connections) — `app/static/lightweight-charts.js`
-- **._h()** (6 connections) — `app/static/lightweight-charts.js`
-- **.Gs()** (5 connections) — `app/static/lightweight-charts.js`
-- **oi()** (5 connections) — `app/static/lightweight-charts.js`
-- **bi()** (5 connections) — `app/static/lightweight-charts.js`
-- **di()** (4 connections) — `app/static/lightweight-charts.js`
-- **.ne()** (3 connections) — `app/static/lightweight-charts.js`
-- **ui()** (3 connections) — `app/static/lightweight-charts.js`
-- **vi()** (3 connections) — `app/static/lightweight-charts.js`
-- **.K()** (2 connections) — `app/static/lightweight-charts.js`
-- **.dh()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Ih()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Vh()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Bl()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.J()** (1 connections) — `app/static/lightweight-charts.js`
-- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Eh()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.$t()** (1 connections) — `app/static/lightweight-charts.js`
+- **ranges.py** (15 connections) — `app/engine/ranges.py`
+- **break_tolerance()** (10 connections) — `app/engine/ranges.py`
+- **run()** (10 connections) — `app/engine/ranges.py`
+- **alternate()** (7 connections) — `app/engine/swings.py`
+- **Decimal** (5 connections)
+- **contained()** (5 connections) — `app/engine/ranges.py`
+- **is_flat()** (4 connections) — `app/engine/ranges.py`
+- **boundaries()** (3 connections) — `app/engine/ranges.py`
+- **Range engine — horizontal ranges, their boundaries, and their lifecycle. algo r** (1 connections) — `app/engine/ranges.py`
+- **The house break tolerance: max(1 tick, 0.05*ATR).      structure.py, zones.py** (1 connections) — `app/engine/ranges.py`
+- **(top, bottom, n_top, n_bottom) — the EXTREME of each cluster, not its mean.** (1 connections) — `app/engine/ranges.py`
+- **Do the pivots CLUSTER at two levels rather than march in one direction?      S** (1 connections) — `app/engine/ranges.py`
+- **Did every bar of the formation window close inside the band?      Closes only** (1 connections) — `app/engine/ranges.py`
+- **Collapse to a strictly alternating HIGH/LOW pivot sequence, keeping the     mor** (1 connections) — `app/engine/swings.py`
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (8 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (5 shared connections)
-- [Chart Vendor Primitives](Chart_Vendor_Primitives.md) (3 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (3 shared connections)
-- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (2 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
-- [funding.py](funding.py.md) (1 shared connections)
-- [Chart Vendor Crosshair](Chart_Vendor_Crosshair.md) (1 shared connections)
-- [.Mt](Mt.md) (1 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (1 shared connections)
-- [Fact Store Conventions](Fact_Store_Conventions.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (10 shared connections)
+- [Indicator Engines](Indicator_Engines.md) (5 shared connections)
+- [volume.py](volume.py.md) (3 shared connections)
+- [Volume Engine Tests](Volume_Engine_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/engine/ranges.py`
+- `app/engine/swings.py`
 
 ## Audit Trail
 
-- EXTRACTED: 78 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 64 (98%)
+- INFERRED: 1 (2%)
 - AMBIGUOUS: 0 (0%)
 
 ---

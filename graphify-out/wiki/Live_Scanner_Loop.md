@@ -30,7 +30,7 @@
 - [Notification Tests](Notification_Tests.md) (1 shared connections)
 - [Onboarding Announce Tests](Onboarding_Announce_Tests.md) (1 shared connections)
 - [Pipeline Gate Tests](Pipeline_Gate_Tests.md) (1 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
+- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (1 shared connections)
 - [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (1 shared connections)
 
 ## Source Files

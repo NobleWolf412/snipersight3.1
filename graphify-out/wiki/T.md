@@ -1,49 +1,33 @@
 # T
 
-> 17 nodes
+> 10 nodes
 
 ## Key Concepts
 
-- **.$o()** (14 connections) — `app/static/lightweight-charts.js`
-- **st** (10 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (10 connections) — `app/static/lightweight-charts.js`
-- **.Xi()** (5 connections) — `app/static/lightweight-charts.js`
-- **un()** (5 connections) — `app/static/lightweight-charts.js`
-- **.O_()** (5 connections) — `app/static/lightweight-charts.js`
-- **.Go()** (5 connections) — `app/static/lightweight-charts.js`
-- **.y_()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Ki()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Qv()** (3 connections) — `app/static/lightweight-charts.js`
-- **.bs()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Dt()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Gi()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Ji()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Qi()** (1 connections) — `app/static/lightweight-charts.js`
-- **.yt()** (1 connections) — `app/static/lightweight-charts.js`
+- **RetiredSymbolStalenessTest** (9 connections) — `app/tests/test_pipeline_quality.py`
+- **._stale_symbols()** (3 connections) — `app/tests/test_pipeline_quality.py`
+- **.test_fails_open_when_the_universe_is_unreadable()** (3 connections) — `app/tests/test_pipeline_quality.py`
+- **.test_retired_symbol_is_not_reported_stale()** (2 connections) — `app/tests/test_pipeline_quality.py`
+- **.test_live_set_is_not_shared_across_connections()** (2 connections) — `app/tests/test_pipeline_quality.py`
+- **.setUp()** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **.tearDown()** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **Staleness is only meaningful for a symbol we still track.      Switching the u** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **If we cannot tell what is live, warn rather than silently suppress.** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **A module-level cache keyed on nothing would let an audit of one         databas** (1 connections) — `app/tests/test_pipeline_quality.py`
 
 ## Relationships
 
-- [Chart Vendor Core](Chart_Vendor_Core.md) (7 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (6 shared connections)
-- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (4 shared connections)
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (4 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (2 shared connections)
-- [on](on.md) (2 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (1 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
+- [TestMarketQuality](TestMarketQuality.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/tests/test_pipeline_quality.py`
 
 ## Audit Trail
 
-- EXTRACTED: 72 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 23 (96%)
+- INFERRED: 1 (4%)
 - AMBIGUOUS: 0 (0%)
 
 ---

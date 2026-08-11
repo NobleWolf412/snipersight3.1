@@ -4,35 +4,34 @@
 
 ## Key Concepts
 
-- **loadPortfolio()** (13 connections) — `app/static/shell.js`
-- **renderMine()** (8 connections) — `app/static/shell.js`
-- **renderRiskBudget()** (5 connections) — `app/static/shell.js`
-- **setAccentMode()** (4 connections) — `app/static/shell.js`
-- **renderMineAside()** (3 connections) — `app/static/shell.js`
-- **bindingConstraint()** (2 connections) — `app/static/shell.js`
-- **renderJournal()** (2 connections) — `app/static/shell.js`
-- **renderTodayTile()** (2 connections) — `app/static/shell.js`
-- **setSub()** (2 connections) — `app/static/shell.js`
-- **drawCurve()** (2 connections) — `app/static/shell.js`
-- **loadRisk()** (2 connections) — `app/static/shell.js`
+- **J** (13 connections) — `app/static/lightweight-charts.js`
+- **.Di()** (8 connections) — `app/static/lightweight-charts.js`
+- **.gt()** (4 connections) — `app/static/lightweight-charts.js`
+- **.Kt()** (3 connections) — `app/static/lightweight-charts.js`
+- **.Vi()** (3 connections) — `app/static/lightweight-charts.js`
+- **.Ai()** (3 connections) — `app/static/lightweight-charts.js`
+- **.zi()** (3 connections) — `app/static/lightweight-charts.js`
+- **.ki()** (2 connections) — `app/static/lightweight-charts.js`
+- **.Oi()** (2 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (12 shared connections)
-- [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (4 shared connections)
-- [makeRail](makeRail.md) (2 shared connections)
-- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (1 shared connections)
-- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (1 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
+- [Chart Vendor Layout](Chart_Vendor_Layout.md) (5 shared connections)
+- [ni](ni.md) (3 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
+- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
+- [.ol](ol.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/shell.js`
+- `app/static/lightweight-charts.js`
 
 ## Audit Trail
 
-- EXTRACTED: 43 (96%)
-- INFERRED: 2 (4%)
+- EXTRACTED: 43 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -1,10 +1,11 @@
 # SSData JS Tests
 
-> 17 nodes
+> 18 nodes
 
 ## Key Concepts
 
 - **test_cockpit_redesign.js** (17 connections) — `app/tests/test_cockpit_redesign.js`
+- **vm** (2 connections) — `app/tests/test_cockpit_redesign.js`
 - **fs** (1 connections) — `app/tests/test_cockpit_redesign.js`
 - **path** (1 connections) — `app/tests/test_cockpit_redesign.js`
 - **assert** (1 connections) — `app/tests/test_cockpit_redesign.js`
@@ -32,7 +33,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 33 (100%)
+- EXTRACTED: 35 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

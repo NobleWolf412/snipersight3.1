@@ -32,7 +32,7 @@
 ## Relationships
 
 - [report](report.md) (1 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
+- [Chart UI Layer](Chart_UI_Layer.md) (1 shared connections)
 
 ## Source Files
 

@@ -1,6 +1,6 @@
 # Chart Vendor Crosshair
 
-> 31 nodes
+> 33 nodes
 
 ## Key Concepts
 
@@ -29,18 +29,14 @@
 - **.Kf()** (4 connections) — `app/static/lightweight-charts.js`
 - **.Hf()** (4 connections) — `app/static/lightweight-charts.js`
 - **.Gf()** (4 connections) — `app/static/lightweight-charts.js`
-- *... and 6 more nodes in this community*
+- *... and 8 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (7 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (4 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (4 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (2 shared connections)
-- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (1 shared connections)
-- [Chart Vendor Primitives](Chart_Vendor_Primitives.md) (1 shared connections)
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (1 shared connections)
-- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (1 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (9 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (6 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (5 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
 
 ## Source Files
 
@@ -48,7 +44,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 212 (100%)
+- EXTRACTED: 216 (100%)
 - INFERRED: 1 (0%)
 - AMBIGUOUS: 0 (0%)
 

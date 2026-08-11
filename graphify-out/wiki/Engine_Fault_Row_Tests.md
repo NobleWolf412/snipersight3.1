@@ -1,6 +1,6 @@
 # Engine Fault Row Tests
 
-> 14 nodes
+> 13 nodes
 
 ## Key Concepts
 
@@ -10,7 +10,6 @@
 - **mineCardInner()** (6 connections) — `app/static/shell.js`
 - **missionCardInner()** (4 connections) — `app/static/shell.js`
 - **ladderRing()** (4 connections) — `app/static/shell.js`
-- **storyOf()** (3 connections) — `app/static/shell.js`
 - **htfChip()** (2 connections) — `app/static/shell.js`
 - **expiresIn()** (2 connections) — `app/static/shell.js`
 - **foundAgo()** (2 connections) — `app/static/shell.js`
@@ -21,12 +20,11 @@
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (16 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (17 shared connections)
 - [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (4 shared connections)
-- [makeRail](makeRail.md) (2 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
+- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (1 shared connections)
 - [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (1 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
 
 ## Source Files
 
@@ -34,8 +32,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 54 (95%)
-- INFERRED: 3 (5%)
+- EXTRACTED: 52 (96%)
+- INFERRED: 2 (4%)
 - AMBIGUOUS: 0 (0%)
 
 ---

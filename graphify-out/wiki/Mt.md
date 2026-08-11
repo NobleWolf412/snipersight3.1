@@ -4,25 +4,27 @@
 
 ## Key Concepts
 
-- **I** (8 connections) — `app/static/lightweight-charts.js`
-- **.W()** (6 connections) — `app/static/lightweight-charts.js`
-- **$** (5 connections) — `app/static/lightweight-charts.js`
-- **.Pn()** (3 connections) — `app/static/lightweight-charts.js`
-- **.U()** (2 connections) — `app/static/lightweight-charts.js`
+- **.Ys()** (10 connections) — `app/static/lightweight-charts.js`
+- **At** (8 connections) — `app/static/lightweight-charts.js`
+- **.Fs()** (5 connections) — `app/static/lightweight-charts.js`
+- **.js()** (4 connections) — `app/static/lightweight-charts.js`
+- **.Us()** (3 connections) — `app/static/lightweight-charts.js`
+- **qs()** (3 connections) — `app/static/lightweight-charts.js`
+- **.gt()** (2 connections) — `app/static/lightweight-charts.js`
 - **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.j()** (1 connections) — `app/static/lightweight-charts.js`
-- **.H()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
 
 ## Relationships
 
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (3 shared connections)
 - [Chart Vendor API](Chart_Vendor_API.md) (2 shared connections)
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (1 shared connections)
-- [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (1 shared connections)
-- [report](report.md) (1 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (1 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (2 shared connections)
+- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (2 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (2 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
+- [Simulator Convention Tests](Simulator_Convention_Tests.md) (1 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
+- [execsim.py](execsim.py.md) (1 shared connections)
+- [Chart Vendor Price Scale Formatting](Chart_Vendor_Price_Scale_Formatting.md) (1 shared connections)
 
 ## Source Files
 
@@ -30,8 +32,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 28 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 35 (95%)
+- INFERRED: 2 (5%)
 - AMBIGUOUS: 0 (0%)
 
 ---

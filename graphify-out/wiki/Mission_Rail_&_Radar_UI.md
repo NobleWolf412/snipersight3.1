@@ -1,6 +1,6 @@
 # Mission Rail & Radar UI
 
-> 18 nodes
+> 16 nodes
 
 ## Key Concepts
 
@@ -12,9 +12,7 @@
 - **renderRadar()** (7 connections) — `app/static/shell.js`
 - **deckSplit()** (4 connections) — `app/static/shell.js`
 - **missionRailSync()** (4 connections) — `app/static/shell.js`
-- **S()** (3 connections) — `app/static/lightweight-charts.js`
 - **renderDisposition()** (3 connections) — `app/static/shell.js`
-- **closePosition()** (3 connections) — `app/static/shell.js`
 - **explainRefusal()** (3 connections) — `app/static/shell.js`
 - **indexHeld()** (3 connections) — `app/static/shell.js`
 - **renderPositions()** (3 connections) — `app/static/shell.js`
@@ -25,14 +23,14 @@
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (20 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (22 shared connections)
 - [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (4 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (4 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (4 shared connections)
-- [status](status.md) (3 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (3 shared connections)
 - [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (3 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (2 shared connections)
-- [makeRail](makeRail.md) (2 shared connections)
+- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (3 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (2 shared connections)
+- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (2 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
 
 ## Source Files
 
@@ -41,8 +39,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 70 (83%)
-- INFERRED: 14 (17%)
+- EXTRACTED: 64 (82%)
+- INFERRED: 14 (18%)
 - AMBIGUOUS: 0 (0%)
 
 ---

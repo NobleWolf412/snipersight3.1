@@ -25,14 +25,12 @@
 
 ## Relationships
 
+- [Chart UI Layer](Chart_UI_Layer.md) (3 shared connections)
 - [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (3 shared connections)
-- [BTC Alignment Engine](BTC_Alignment_Engine.md) (2 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (2 shared connections)
 - [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (1 shared connections)
 - [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
 - [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (1 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (1 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
-- [makeRail](makeRail.md) (1 shared connections)
 
 ## Source Files
 

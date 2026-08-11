@@ -15,8 +15,8 @@
     "semantic_hash": "d233f75b0f1ff0119becfb20f8ce6edd"
   },
   "app/engine/abtest.py": {
-    "mtime": 1786155211.1878748,
-    "ast_hash": "0d8a306e49769be4af01c5db2eb51d42",
+    "mtime": 1786438916.8155782,
+    "ast_hash": "51ac2ed5b9eda0cbb2e868e9ea512c89",
     "semantic_hash": ""
   },
   "app/engine/aggregator.py": {
@@ -1392,6 +1392,16 @@
   "app/tests/test_trader_translation.js": {
     "mtime": 1786293982.8581378,
     "ast_hash": "d11931a12ace534dfeb86f3a5c9a3c38",
+    "semantic_hash": ""
+  },
+  "app/engine/strategygrade.py": {
+    "mtime": 1786438522.706265,
+    "ast_hash": "ebfce64a50877d31913961fc21f6a2bc",
+    "semantic_hash": ""
+  },
+  "app/tests/test_strategy_grade.py": {
+    "mtime": 1786438569.264346,
+    "ast_hash": "649546da1ad0ef45b0673ed72af9c656",
     "semantic_hash": ""
   }
 }

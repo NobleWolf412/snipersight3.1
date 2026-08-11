@@ -18,7 +18,7 @@
 
 ## Relationships
 
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
 
 ## Source Files
 
