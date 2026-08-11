@@ -49,7 +49,25 @@ from . import costs, execsim, store
 from .importer import TF_SECONDS
 from .swings import compute_atr
 
-ABTEST_VERSION = "abtest-v0.1"
+# v0.2: `by_strategy` decides on a CLUSTER bootstrap over symbols instead of
+# the IID one, and replays each version under the entry model its own facts
+# recorded. The verdict this harness reports therefore changed meaning, and a
+# stored result labelled v0.1 was produced by a different question — which is
+# the whole reason a research harness carries a version at all.
+ABTEST_VERSION = "abtest-v0.2"
+
+# A cluster is a symbol, and eight is the floor for saying anything about the
+# spread between them. Below that the resample keeps drawing the same two or
+# three markets and the interval describes those, not the strategy. This is a
+# floor on CLUSTERS and sits beside `edgestats.MIN_TRADES`, not instead of it:
+# both must clear, because forty trades on three symbols is three observations
+# and three trades on forty symbols is not a sample either.
+MIN_CLUSTERS = 8
+
+# Same 64-bit mask the source LCG uses. Named here rather than imported so the
+# two bootstraps cannot drift into different arithmetic without somebody
+# noticing they were ever supposed to match.
+_MASK64 = (1 << 64) - 1
 
 # The engine's own window, not a copy that "matches" it. A comment claiming
 # equality is the roster disease — the number it describes drifts and the
@@ -405,6 +423,57 @@ def run_variant(con, symbols, tfs, setup_version, *, managed, entry_model,
     return results
 
 
+def _cluster_bootstrap(rows, resamples: int) -> dict | None:
+    """Bootstrap the mean by resampling SYMBOLS, not trades.
+
+    The IID bootstrap in `edgestats` asks "if I drew these trades again one at
+    a time, how much would the mean move". That question has the wrong shape
+    for a playbook. A strategy fires on every symbol that meets its conditions,
+    and when BTC turns, forty alt-coins turn with it — so the same market move
+    is counted forty times as forty independent draws, and the interval comes
+    out far tighter than the evidence supports. TREND_CONTINUATION has 3,567
+    trades across 43 symbols; treating those as 3,567 independent facts is the
+    single easiest way to manufacture a confident verdict here.
+
+    Resampling whole symbols keeps the within-symbol correlation intact: a
+    symbol is either in a resample with all its trades or out of it entirely.
+    That is the standard cluster bootstrap, and it is deliberately the
+    CONSERVATIVE choice — it widens intervals, so its failure mode is refusing
+    to promote something that works, not promoting something that does not.
+
+    Same deterministic LCG as `edgestats._bootstrap_mean`, and for the same
+    reason (§4): two runs over identical data must resample identical clusters
+    in identical order. Constants are the source module's.
+
+    Returns None when there are too few CLUSTERS to say anything — four
+    symbols' worth of trades is four observations however many rows it holds.
+    """
+    from . import edgestats
+    clusters: dict[str, list[float]] = {}
+    for r in rows:
+        clusters.setdefault(r["symbol"], []).append(float(r["r"]))
+    keys = sorted(clusters)
+    k = len(keys)
+    n_total = sum(len(clusters[c]) for c in keys)
+    if k < MIN_CLUSTERS or n_total < edgestats.MIN_TRADES:
+        return None
+    s = 0x2545F4914F6CDD1D
+    means = []
+    for _ in range(resamples):
+        tot, cnt = 0.0, 0
+        for _ in range(k):
+            s = (s * 6364136223846793005 + 1442695040888963407) & _MASK64
+            for v in clusters[keys[(s >> 33) % k]]:
+                tot += v
+                cnt += 1
+        means.append(tot / cnt if cnt else 0.0)
+    means.sort()
+    return {"resamples": resamples, "clusters": k,
+            "ci_lo": means[int(0.025 * resamples)],
+            "ci_hi": means[int(0.975 * resamples)],
+            "p_gt_zero": sum(1 for m in means if m > 0) / resamples}
+
+
 def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000) -> dict:
     """Replay the live book and split it by PLAYBOOK, with intervals.
 
@@ -418,6 +487,30 @@ def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000) -> dict:
     and no verdict, because the alternative is a confident number computed from
     nothing.
 
+    THE CLUSTERED INTERVAL IS THE ONE THAT DECIDES. `ci_lo`/`ci_hi` are kept as
+    the IID pair because they are what `edgestats` reports elsewhere and
+    dropping them would make two surfaces disagree silently — but they are too
+    tight for a playbook (see `_cluster_bootstrap`), and `clears_zero` is
+    computed from the clustered pair alone.
+
+    Measured on BREAKOUT_RETEST, 2026-08-11, n=79 over 32 symbols: IID
+    [-0.7191, -0.0013] at 2,000 resamples and [-0.7149, +0.0001] at 4,000,
+    against clustered [-0.750, +0.012] and [-0.7503, +0.0123]. Two things to
+    read there. The clustered interval covers zero at both resample counts,
+    while the IID upper bound FLICKERS ACROSS IT with nothing but the resample
+    draw — a verdict of "measurably negative" that survives only at one
+    setting of a knob is not a verdict. And the widening is modest here (32
+    clusters, trades spread fairly evenly) which is worth knowing: clustering
+    is not a large correction on this book, it is the correction that decides
+    the one strategy sitting on the line.
+
+    ENTRY MODEL IS READ, NOT ASSUMED. Each setup version is replayed under the
+    `entry_model` its own facts recorded. Every current playbook records
+    MAKER_THEN_MARKET, so this changes no number today — it stops the docstring
+    promise of "any version" from being a lie the first time a playbook records
+    something else, which is the kind of thing that surfaces as a wrong verdict
+    rather than an error.
+
     Read only through a TRUSTWORTHY calibration: the caller is responsible for
     checking `calibrate()` first, and this returns its verdict alongside so a
     result can never be quoted without it.
@@ -426,29 +519,43 @@ def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000) -> dict:
     from .setups import SETUP_VERSION
     versions = versions or (SETUP_VERSION, scalein.SCALE_VERSION)
 
-    strategies = {}
+    strategies, models = {}, {}
     for symbol in symbols:
         for tf in tfs:
             for version in versions:
                 for r in store.get_facts(con, symbol, tf, "setup", version):
                     p = json.loads(r["payload"])
                     strategies[(version, p["setup_id"])] = p.get("strategy")
+                    if p.get("entry_model"):
+                        models.setdefault(version, set()).add(p["entry_model"])
 
-    groups: dict[str, list[float]] = {}
+    groups: dict[str, list[dict]] = {}
+    missed: dict[str, int] = {}
     for version in versions:
+        seen = models.get(version) or set()
+        # One recorded model or none: fall back to the incumbent contract, and
+        # say so in the payload rather than deciding quietly. A version whose
+        # facts disagree with themselves is not gradeable under one model, so
+        # it is left to the caller as a named condition.
+        model = seen.pop() if len(seen) == 1 else "MAKER_THEN_MARKET"
         for r in run_variant(con, symbols, tfs, version, managed=False,
-                             entry_model="MAKER_THEN_MARKET"):
-            if not r.get("filled"):
-                continue
+                             entry_model=model):
             name = strategies.get((version, r["setup_id"])) or "UNATTRIBUTED"
-            groups.setdefault(name, []).append(float(r["r"]))
+            if not r.get("filled"):
+                missed[name] = missed.get(name, 0) + 1
+                continue
+            groups.setdefault(name, []).append(
+                {"symbol": r["symbol"], "r": float(r["r"])})
 
     out = {}
-    for name, rs in sorted(groups.items()):
+    for name, rows in sorted(groups.items()):
+        rs = [x["r"] for x in rows]
         wins = [x for x in rs if x > 0]
         losses = [x for x in rs if x < 0]
         b = (edgestats._bootstrap_mean(rs, resamples)
              if len(rs) >= edgestats.MIN_TRADES else None)
+        cb = _cluster_bootstrap(rows, resamples)
+        n_miss = missed.get(name, 0)
         out[name] = {
             "n": len(rs), "sum_r": round(sum(rs), 2),
             "expectancy_r": round(sum(rs) / len(rs), 4),
@@ -458,11 +565,23 @@ def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000) -> dict:
             "ci_lo": None if b is None else round(b["ci_lo"], 4),
             "ci_hi": None if b is None else round(b["ci_hi"], 4),
             "p_gt_zero": None if b is None else b["p_gt_zero"],
-            "clears_zero": bool(b and b["ci_lo"] > 0),
-            "sample_ok": b is not None,
+            # Expectancy is PER FILLED TRADE. A miss is a real outcome and is
+            # not a zero, so it is reported beside the number rather than
+            # folded into it — a playbook that only fills when it is wrong
+            # would otherwise read as merely unprofitable.
+            "missed": n_miss,
+            "fill_pct": (round(100 * len(rs) / (len(rs) + n_miss), 1)
+                         if len(rs) + n_miss else None),
+            "clusters": None if cb is None else cb["clusters"],
+            "cluster_ci_lo": None if cb is None else round(cb["ci_lo"], 4),
+            "cluster_ci_hi": None if cb is None else round(cb["ci_hi"], 4),
+            "cluster_p_gt_zero": None if cb is None else cb["p_gt_zero"],
+            "clears_zero": bool(cb and cb["ci_lo"] > 0),
+            "sample_ok": cb is not None,
         }
     cal = calibrate(con, symbols, tfs)
-    return {"calibration": cal, "trustworthy": cal.get("trustworthy", False),
+    return {"version": ABTEST_VERSION,
+            "calibration": cal, "trustworthy": cal.get("trustworthy", False),
             "strategies": out}
 
 
