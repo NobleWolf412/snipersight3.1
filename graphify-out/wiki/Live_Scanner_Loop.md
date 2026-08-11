@@ -24,7 +24,7 @@
 
 ## Relationships
 
-- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
 - [momentum.py](momentum.py.md) (1 shared connections)
 - [Boundary Wake Grid Tests](Boundary_Wake_Grid_Tests.md) (1 shared connections)
 - [Notification Tests](Notification_Tests.md) (1 shared connections)

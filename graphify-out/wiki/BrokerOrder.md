@@ -64,7 +64,7 @@
 - EveryDrillNamesItsEvidence `INFERRED`
 - RestartNeedsARestart `INFERRED`
 - LifecycleBlocked `INFERRED`
-- ProtectedBroker `INFERRED`
+- [ProtectedBroker](ProtectedBroker.md) `INFERRED`
 
 ---
 

@@ -18,14 +18,12 @@
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (11 shared connections)
-- [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (2 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (12 shared connections)
+- [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (4 shared connections)
 - [makeRail](makeRail.md) (2 shared connections)
-- [ranges.py](ranges.py.md) (2 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (1 shared connections)
+- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (1 shared connections)
 - [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (1 shared connections)
-- [he](he.md) (1 shared connections)
-- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (1 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
 
 ## Source Files
 

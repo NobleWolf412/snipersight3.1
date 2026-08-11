@@ -4,35 +4,36 @@
 
 ## Key Concepts
 
-- **go()** (8 connections) — `app/static/shell.js`
-- **refresh()** (6 connections) — `app/static/shell.js`
-- **pollConsole()** (5 connections) — `app/static/shell.js`
-- **markDegraded()** (3 connections) — `app/static/shell.js`
-- **closePosition()** (3 connections) — `app/static/shell.js`
-- **paint()** (3 connections) — `app/static/shell.js`
-- **setDev()** (3 connections) — `app/static/shell.js`
-- **loadLedger()** (3 connections) — `app/static/shell.js`
-- **storageFailed()** (2 connections) — `app/static/shell.js`
-- **ageText()** (2 connections) — `app/static/shell.js`
-- **scanResult()** (2 connections) — `app/static/shell.js`
+- **execsim.py** (19 connections) — `app/engine/execsim.py`
+- **run()** (8 connections) — `app/engine/execsim.py`
+- **settle()** (4 connections) — `app/engine/execsim.py`
+- **simulate_entry()** (4 connections) — `app/engine/execsim.py`
+- **walk_exit()** (3 connections) — `app/engine/execsim.py`
+- **cross_fill()** (3 connections) — `app/engine/execsim.py`
+- **Execution simulator — paper-trades every VALIDATED setup. algo exec-v0.1-draft.** (1 connections) — `app/engine/execsim.py`
+- **Walk forward from the fill bar to a terminal outcome.      Returns (outcome, e** (1 connections) — `app/engine/execsim.py`
+- **The price a crossing market order actually gets, and the ONE definition.** (1 connections) — `app/engine/execsim.py`
+- **Price one closed leg: slippage, fees, funding, and the R they leave.      THE** (1 connections) — `app/engine/execsim.py`
+- **Turn a PLAN into the fill it actually got: which bar, what price, whose     fee** (1 connections) — `app/engine/execsim.py`
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (11 shared connections)
-- [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (3 shared connections)
-- [ranges.py](ranges.py.md) (1 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (1 shared connections)
-- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (1 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (8 shared connections)
+- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (4 shared connections)
+- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
+- [Edge Statistics Engine](Edge_Statistics_Engine.md) (1 shared connections)
+- [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (1 shared connections)
+- [he](he.md) (1 shared connections)
+- [_facts](_facts.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/shell.js`
+- `app/engine/execsim.py`
 
 ## Audit Trail
 
-- EXTRACTED: 39 (98%)
-- INFERRED: 1 (2%)
+- EXTRACTED: 46 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

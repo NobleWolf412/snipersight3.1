@@ -1,6 +1,6 @@
 # Universe & Rate Limiting
 
-> 46 nodes
+> 52 nodes
 
 ## Key Concepts
 
@@ -24,27 +24,27 @@
 - **native_tfs()** (3 connections) — `app/engine/importer.py`
 - **current_symbols()** (3 connections) — `app/engine/universe.py`
 - **shadow_symbols()** (3 connections) — `app/engine/universe.py`
+- **manual_arm()** (3 connections) — `app/server.py`
+- **manual_cancel()** (3 connections) — `app/server.py`
+- **post_settings()** (3 connections) — `app/server.py`
 - **_bucket_start()** (2 connections) — `app/engine/aggregator.py`
 - **acknowledged_gaps()** (2 connections) — `app/engine/importer.py`
-- **_iso()** (2 connections) — `app/engine/importer.py`
-- **_is_stable()** (2 connections) — `app/engine/universe.py`
-- **.acquire()** (2 connections) — `app/engine/universe.py`
-- *... and 21 more nodes in this community*
+- *... and 27 more nodes in this community*
 
 ## Relationships
 
-- [QualityStoreCase](QualityStoreCase.md) (7 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (4 shared connections)
-- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (4 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (9 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (4 shared connections)
+- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (3 shared connections)
 - [API Server Endpoints](API_Server_Endpoints.md) (3 shared connections)
-- [A/B Test Engine](A-B_Test_Engine.md) (2 shared connections)
 - [binance.py](binance.py.md) (2 shared connections)
+- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (2 shared connections)
 - [Kraken Adapter](Kraken_Adapter.md) (2 shared connections)
 - [_facts](_facts.md) (2 shared connections)
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (2 shared connections)
 - [Chart Vendor Data Layer](Chart_Vendor_Data_Layer.md) (2 shared connections)
 - [Portfolio & Position Endpoints](Portfolio_%26_Position_Endpoints.md) (2 shared connections)
 - [volume.py](volume.py.md) (1 shared connections)
+- [A/B Test Engine](A-B_Test_Engine.md) (1 shared connections)
 
 ## Source Files
 
@@ -52,11 +52,12 @@
 - `app/engine/importer.py`
 - `app/engine/runlog.py`
 - `app/engine/universe.py`
+- `app/server.py`
 
 ## Audit Trail
 
-- EXTRACTED: 162 (94%)
-- INFERRED: 11 (6%)
+- EXTRACTED: 171 (92%)
+- INFERRED: 14 (8%)
 - AMBIGUOUS: 0 (0%)
 
 ---

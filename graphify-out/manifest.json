@@ -175,8 +175,8 @@
     "semantic_hash": ""
   },
   "app/engine/pipeline.py": {
-    "mtime": 1786293482.4118142,
-    "ast_hash": "6d5c1c4031092ba90f5f31f99c2a50e8",
+    "mtime": 1786416301.8359926,
+    "ast_hash": "2f0e87c4e9da4928359c5fd8b7ad1f8a",
     "semantic_hash": ""
   },
   "app/engine/quality.py": {
@@ -195,8 +195,8 @@
     "semantic_hash": ""
   },
   "app/engine/registry.py": {
-    "mtime": 1786156707.1106324,
-    "ast_hash": "26708a92032ef685fb3ffbbaa308bfc5",
+    "mtime": 1786416311.152223,
+    "ast_hash": "231f64d56c4723d9c7932456225472aa",
     "semantic_hash": ""
   },
   "app/engine/risk.py": {
@@ -215,8 +215,8 @@
     "semantic_hash": ""
   },
   "app/engine/settings.py": {
-    "mtime": 1786154171.8403182,
-    "ast_hash": "35bec480ff494cbd023cf0c2df132654",
+    "mtime": 1786416370.2558327,
+    "ast_hash": "44b86ca1429281d61d098fed6cafc659",
     "semantic_hash": ""
   },
   "app/engine/setups.py": {
@@ -250,8 +250,8 @@
     "semantic_hash": "b28e8adb05374f1da42e060030520d10"
   },
   "app/engine/trend.py": {
-    "mtime": 1786246657.8672268,
-    "ast_hash": "b6956186ddc74b58fa14576d4e013b09",
+    "mtime": 1786416349.8159146,
+    "ast_hash": "8ed978aefe573e6274cd320808342593",
     "semantic_hash": ""
   },
   "app/engine/universe.py": {
@@ -360,8 +360,8 @@
     "semantic_hash": "bb318371ce8811435f42f4a6ba8d64a7"
   },
   "app/static/shell.js": {
-    "mtime": 1786293899.9907777,
-    "ast_hash": "1b31b0e1d50322d8cd01d819d14d38d2",
+    "mtime": 1786416189.4189672,
+    "ast_hash": "3e631de04220ba626c9fce9b844952d3",
     "semantic_hash": ""
   },
   "app/static/ssdata.js": {
@@ -720,9 +720,9 @@
     "semantic_hash": "52ce558a7f8aac658a90d77fb486c30c"
   },
   "app/tests/test_rules_surface.js": {
-    "mtime": 1786072501.3970706,
-    "ast_hash": "900f92229bc96f705f9ea438c9503be6",
-    "semantic_hash": "900f92229bc96f705f9ea438c9503be6"
+    "mtime": 1786416234.2135243,
+    "ast_hash": "453b8f1ba8800db9e8a8a7e8c9cc232d",
+    "semantic_hash": ""
   },
   "app/tests/test_second_opinion.js": {
     "mtime": 1786216981.920153,

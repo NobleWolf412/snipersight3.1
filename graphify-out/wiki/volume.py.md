@@ -1,6 +1,6 @@
 # volume.py
 
-> 30 nodes
+> 28 nodes
 
 ## Key Concepts
 
@@ -9,7 +9,6 @@
 - **run()** (14 connections) — `app/engine/volume.py`
 - **break_tolerance()** (10 connections) — `app/engine/ranges.py`
 - **run()** (10 connections) — `app/engine/ranges.py`
-- **alternate()** (7 connections) — `app/engine/swings.py`
 - **Decimal** (7 connections)
 - **Decimal** (5 connections)
 - **contained()** (5 connections) — `app/engine/ranges.py`
@@ -26,28 +25,27 @@
 - **(top, bottom, n_top, n_bottom) — the EXTREME of each cluster, not its mean.** (1 connections) — `app/engine/ranges.py`
 - **Do the pivots CLUSTER at two levels rather than march in one direction?      S** (1 connections) — `app/engine/ranges.py`
 - **Did every bar of the formation window close inside the band?      Closes only** (1 connections) — `app/engine/ranges.py`
-- **Collapse to a strictly alternating HIGH/LOW pivot sequence, keeping the     mor** (1 connections) — `app/engine/swings.py`
 - **Volume engine — relative volume, session VWAP, and where volume actually sat. al** (1 connections) — `app/engine/volume.py`
 - **Index of the 4-significant-digit bin containing `p`.      Scale-free by construc** (1 connections) — `app/engine/volume.py`
-- *... and 5 more nodes in this community*
+- **The representative (lower-edge) price of a bin. Exact inverse of     `price_bin`** (1 connections) — `app/engine/volume.py`
+- **(high + low + close) / 3 — the standard single-price proxy for where a     bar's** (1 connections) — `app/engine/volume.py`
+- *... and 3 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (12 shared connections)
-- [Indicator Engines](Indicator_Engines.md) (10 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (6 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (18 shared connections)
+- [Indicator Engines](Indicator_Engines.md) (8 shared connections)
 - [Volume Engine Tests](Volume_Engine_Tests.md) (1 shared connections)
 - [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (1 shared connections)
 
 ## Source Files
 
 - `app/engine/ranges.py`
-- `app/engine/swings.py`
 - `app/engine/volume.py`
 
 ## Audit Trail
 
-- EXTRACTED: 135 (99%)
+- EXTRACTED: 127 (99%)
 - INFERRED: 1 (1%)
 - AMBIGUOUS: 0 (0%)
 

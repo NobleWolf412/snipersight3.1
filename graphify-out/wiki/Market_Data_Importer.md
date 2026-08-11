@@ -33,9 +33,9 @@
 
 ## Relationships
 
-- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (6 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (5 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (4 shared connections)
 - [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (4 shared connections)
-- [A/B Calibration Tests](A-B_Calibration_Tests.md) (3 shared connections)
 - [Notification Delivery](Notification_Delivery.md) (2 shared connections)
 
 ## Source Files

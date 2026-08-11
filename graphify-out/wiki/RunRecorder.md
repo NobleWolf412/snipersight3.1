@@ -2,7 +2,7 @@
 
 > God node · 62 connections · `app/engine/runlog.py`
 
-**Community:** [QualityStoreCase](QualityStoreCase.md)
+**Community:** [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md)
 
 ## Connections by Relation
 

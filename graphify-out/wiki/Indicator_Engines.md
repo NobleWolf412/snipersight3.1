@@ -1,6 +1,6 @@
 # Indicator Engines
 
-> 50 nodes
+> 60 nodes
 
 ## Key Concepts
 
@@ -10,6 +10,7 @@
 - **volatility.py** (15 connections) — `app/engine/volatility.py`
 - **plain()** (14 connections) — `app/engine/ma.py`
 - **run()** (13 connections) — `app/engine/ma.py`
+- **volprofile.py** (11 connections) — `app/engine/volprofile.py`
 - **fvg.py** (10 connections) — `app/engine/fvg.py`
 - **ema()** (10 connections) — `app/engine/ma.py`
 - **run()** (10 connections) — `app/engine/momentum.py`
@@ -20,23 +21,20 @@
 - **Decimal** (6 connections)
 - **Decimal** (6 connections)
 - **keltner()** (6 connections) — `app/engine/volatility.py`
+- **walk_states()** (6 connections) — `app/engine/volprofile.py`
 - **sma()** (5 connections) — `app/engine/ma.py`
 - **stack()** (5 connections) — `app/engine/ma.py`
 - **position()** (5 connections) — `app/engine/ma.py`
 - **bollinger()** (5 connections) — `app/engine/volatility.py`
+- **bin_step()** (5 connections) — `app/engine/volprofile.py`
+- **run()** (5 connections) — `app/engine/volprofile.py`
 - **detect()** (4 connections) — `app/engine/fvg.py`
-- **slope_state()** (4 connections) — `app/engine/ma.py`
-- **_rsi()** (4 connections) — `app/engine/momentum.py`
-- **compute_macd()** (4 connections) — `app/engine/momentum.py`
-- **rsi_band()** (4 connections) — `app/engine/momentum.py`
-- *... and 25 more nodes in this community*
+- *... and 35 more nodes in this community*
 
 ## Relationships
 
-- [QualityStoreCase](QualityStoreCase.md) (18 shared connections)
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (12 shared connections)
-- [volume.py](volume.py.md) (10 shared connections)
-- [cached_audit](cached_audit.md) (5 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (34 shared connections)
+- [volume.py](volume.py.md) (8 shared connections)
 - [Divergence & Factor Grading](Divergence_%26_Factor_Grading.md) (1 shared connections)
 - [Divergence Stats Tests](Divergence_Stats_Tests.md) (1 shared connections)
 
@@ -46,10 +44,11 @@
 - `app/engine/ma.py`
 - `app/engine/momentum.py`
 - `app/engine/volatility.py`
+- `app/engine/volprofile.py`
 
 ## Audit Trail
 
-- EXTRACTED: 259 (100%)
+- EXTRACTED: 296 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

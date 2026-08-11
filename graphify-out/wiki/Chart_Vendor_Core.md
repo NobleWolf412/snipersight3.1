@@ -1,12 +1,12 @@
 # Chart Vendor Core
 
-> 75 nodes
+> 105 nodes
 
 ## Key Concepts
 
 - **vn** (114 connections) — `app/static/lightweight-charts.js`
-- **f()** (88 connections) — `app/static/lightweight-charts.js`
 - **.h_()** (30 connections) — `app/static/lightweight-charts.js`
+- **.Lc()** (22 connections) — `app/static/lightweight-charts.js`
 - **.Po()** (16 connections) — `app/static/lightweight-charts.js`
 - **.Qs()** (14 connections) — `app/static/lightweight-charts.js`
 - **.Th()** (13 connections) — `app/static/lightweight-charts.js`
@@ -20,31 +20,31 @@
 - **tn()** (10 connections) — `app/static/lightweight-charts.js`
 - **.Eh()** (10 connections) — `app/static/lightweight-charts.js`
 - **.t_()** (10 connections) — `app/static/lightweight-charts.js`
-- **.Mt()** (9 connections) — `app/static/lightweight-charts.js`
+- **.hd()** (10 connections) — `app/static/lightweight-charts.js`
+- **.ss()** (9 connections) — `app/static/lightweight-charts.js`
+- **.Jl()** (9 connections) — `app/static/lightweight-charts.js`
 - **ln()** (9 connections) — `app/static/lightweight-charts.js`
 - **.Hh()** (9 connections) — `app/static/lightweight-charts.js`
 - **.Oo()** (9 connections) — `app/static/lightweight-charts.js`
 - **.Io()** (9 connections) — `app/static/lightweight-charts.js`
-- **.Do()** (8 connections) — `app/static/lightweight-charts.js`
-- **.Go()** (8 connections) — `app/static/lightweight-charts.js`
-- **.No()** (8 connections) — `app/static/lightweight-charts.js`
-- **.Fo()** (8 connections) — `app/static/lightweight-charts.js`
-- *... and 50 more nodes in this community*
+- **.Kl()** (9 connections) — `app/static/lightweight-charts.js`
+- **.Fu()** (9 connections) — `app/static/lightweight-charts.js`
+- *... and 80 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (34 shared connections)
-- [funding.py](funding.py.md) (30 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (25 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (22 shared connections)
-- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (20 shared connections)
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (18 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (12 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (8 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (7 shared connections)
-- [he](he.md) (7 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (6 shared connections)
-- [execsim.py](execsim.py.md) (6 shared connections)
+- [Chart Vendor Internals](Chart_Vendor_Internals.md) (33 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (31 shared connections)
+- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (27 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (22 shared connections)
+- [funding.py](funding.py.md) (19 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (17 shared connections)
+- [status](status.md) (14 shared connections)
+- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (11 shared connections)
+- [Chart Vendor Layout](Chart_Vendor_Layout.md) (11 shared connections)
+- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (10 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (7 shared connections)
+- [T](T.md) (7 shared connections)
 
 ## Source Files
 
@@ -52,8 +52,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 615 (96%)
-- INFERRED: 26 (4%)
+- EXTRACTED: 770 (99%)
+- INFERRED: 7 (1%)
 - AMBIGUOUS: 0 (0%)
 
 ---

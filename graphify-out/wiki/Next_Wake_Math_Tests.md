@@ -1,46 +1,33 @@
 # Next Wake Math Tests
 
-> 13 nodes
+> 11 nodes
 
 ## Key Concepts
 
-- **T()** (17 connections) — `app/static/lightweight-charts.js`
-- **ot()** (6 connections) — `app/static/lightweight-charts.js`
-- **R()** (5 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (5 connections) — `app/static/lightweight-charts.js`
-- **.ls()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Gs()** (3 connections) — `app/static/lightweight-charts.js`
-- **In()** (3 connections) — `app/static/lightweight-charts.js`
-- **.format()** (2 connections) — `app/static/lightweight-charts.js`
-- **.q_()** (2 connections) — `app/static/lightweight-charts.js`
-- **.q_()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Ad()** (2 connections) — `app/static/lightweight-charts.js`
-- **.createPriceLine()** (2 connections) — `app/static/lightweight-charts.js`
-- **.hs()** (1 connections) — `app/static/lightweight-charts.js`
+- **Child** (10 connections) — `app/watchdog.py`
+- **.tick()** (7 connections) — `app/watchdog.py`
+- **.start()** (6 connections) — `app/watchdog.py`
+- **._rotate_err()** (4 connections) — `app/watchdog.py`
+- **._child_env()** (3 connections) — `app/watchdog.py`
+- **._last_error()** (3 connections) — `app/watchdog.py`
+- **.__init__()** (1 connections) — `app/watchdog.py`
+- **Start the child with its stderr captured to a file.          It used to inherit** (1 connections) — `app/watchdog.py`
+- **The scanner does not spawn desktop notifications.          Every toast spawns a** (1 connections) — `app/watchdog.py`
+- **Keep the capture file bounded. It reached 48 MB in hours once, and a         dia** (1 connections) — `app/watchdog.py`
+- **The tail of the child's stderr, so the exit explains itself.** (1 connections) — `app/watchdog.py`
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (5 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (3 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (3 shared connections)
-- [Simulator Convention Tests](Simulator_Convention_Tests.md) (2 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (2 shared connections)
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (2 shared connections)
-- [he](he.md) (2 shared connections)
-- [Chart Vendor Crosshair](Chart_Vendor_Crosshair.md) (2 shared connections)
-- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (1 shared connections)
-- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (1 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
-- [funding.py](funding.py.md) (1 shared connections)
+- [Watchdog Supervisor](Watchdog_Supervisor.md) (10 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/watchdog.py`
 
 ## Audit Trail
 
-- EXTRACTED: 52 (98%)
-- INFERRED: 1 (2%)
+- EXTRACTED: 38 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

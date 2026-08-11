@@ -4,30 +4,27 @@
 
 ## Key Concepts
 
-- **trend.py** (15 connections) — `app/engine/trend.py`
-- **run()** (11 connections) — `app/engine/trend.py`
-- **_ribbon()** (6 connections) — `app/engine/trend.py`
-- **resumes()** (4 connections) — `app/engine/trend.py`
-- **Decimal** (4 connections)
-- **main()** (2 connections) — `app/engine/trend.py`
-- **Trend continuation — buy strength inside an established trend. UNGRADED.  WHY** (1 connections) — `app/engine/trend.py`
-- **Did this CLOSED bar prove the trend resumed?      `setups.confirms` requires t** (1 connections) — `app/engine/trend.py`
-- **Per-bar ribbon values, computed with ma.py's OWN functions.      Returns one l** (1 connections) — `app/engine/trend.py`
+- **draft.py** (9 connections) — `app/engine/draft.py`
+- **for_symbol()** (6 connections) — `app/engine/draft.py`
+- **bracket()** (4 connections) — `app/engine/draft.py`
+- **_latest_by_id()** (3 connections) — `app/engine/draft.py`
+- **Decimal** (3 connections)
+- **Structure-anchored DRAFT bracket for the order ticket. Writes nothing.  ## What** (1 connections) — `app/engine/draft.py`
+- **Last recorded state per object. Facts are append-only, so a zone appears     onc** (1 connections) — `app/engine/draft.py`
+- **Draft entry/stop/target from live structure, or None if there is none.      Retu** (1 connections) — `app/engine/draft.py`
+- **Draft for one symbol/timeframe, read straight from the stored facts.** (1 connections) — `app/engine/draft.py`
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (8 shared connections)
-- [Indicator Engines](Indicator_Engines.md) (5 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (3 shared connections)
-- [Trend Engine Tests](Trend_Engine_Tests.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (5 shared connections)
 
 ## Source Files
 
-- `app/engine/trend.py`
+- `app/engine/draft.py`
 
 ## Audit Trail
 
-- EXTRACTED: 45 (100%)
+- EXTRACTED: 29 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

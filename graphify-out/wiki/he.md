@@ -1,57 +1,38 @@
 # he
 
-> 22 nodes
+> 16 nodes
 
 ## Key Concepts
 
-- **t()** (28 connections) — `app/tests/test_ticket_math.js`
-- **he** (26 connections) — `app/static/lightweight-charts.js`
-- **.Xb()** (14 connections) — `app/static/lightweight-charts.js`
-- **.tw()** (12 connections) — `app/static/lightweight-charts.js`
-- **.Jh()** (6 connections) — `app/static/lightweight-charts.js`
-- **se()** (6 connections) — `app/static/lightweight-charts.js`
-- **.ya()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Qb()** (4 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (3 connections) — `app/static/lightweight-charts.js`
-- **.M_()** (3 connections) — `app/static/lightweight-charts.js`
-- **ee()** (3 connections) — `app/static/lightweight-charts.js`
-- **.fd()** (3 connections) — `app/static/lightweight-charts.js`
-- **.iw()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Gb()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Jb()** (3 connections) — `app/static/lightweight-charts.js`
-- **le()** (3 connections) — `app/static/lightweight-charts.js`
-- **.addCandlestickSeries()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Kb()** (2 connections) — `app/static/lightweight-charts.js`
-- **.nw()** (2 connections) — `app/static/lightweight-charts.js`
-- **reachableTitles()** (2 connections) — `app/static/shell.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.S()** (1 connections) — `app/static/lightweight-charts.js`
+- **funding.py** (10 connections) — `app/engine/funding.py`
+- **Decimal** (6 connections)
+- **phemex_history()** (6 connections) — `app/engine/funding.py`
+- **history()** (6 connections) — `app/engine/funding.py`
+- **kraken_history()** (5 connections) — `app/engine/funding.py`
+- **report()** (5 connections) — `app/engine/funding.py`
+- **charge()** (4 connections) — `app/engine/funding.py`
+- **_now()** (3 connections) — `app/engine/funding.py`
+- **_get()** (3 connections) — `app/engine/funding.py`
+- **What funding ACTUALLY cost, against the constant the simulator charges. READ-ON** (1 connections) — `app/engine/funding.py`
+- **Wall clock, in one place so a test can pin it.** (1 connections) — `app/engine/funding.py`
+- **(settlement unix seconds, rate) hourly, oldest first.      `relativeFundingRat** (1 connections) — `app/engine/funding.py`
+- **(settlement unix seconds, rate) 8-hourly, oldest first.      Keyed on the INDE** (1 connections) — `app/engine/funding.py`
+- **Real settlements for one symbol, or [] where the venue charges none.      Spot** (1 connections) — `app/engine/funding.py`
+- **What this hold really paid — signed, in price units on entry notional.      SI** (1 connections) — `app/engine/funding.py`
+- **Re-price the recorded book on real funding. Writes nothing.      The R denomin** (1 connections) — `app/engine/funding.py`
 
 ## Relationships
 
-- [Chart Vendor Core](Chart_Vendor_Core.md) (7 shared connections)
-- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (7 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (6 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (5 shared connections)
-- [Simulator Convention Tests](Simulator_Convention_Tests.md) (5 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (4 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (3 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (3 shared connections)
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (3 shared connections)
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (3 shared connections)
-- [Manual Trading Engine](Manual_Trading_Engine.md) (2 shared connections)
-- [Next Wake Math Tests](Next_Wake_Math_Tests.md) (2 shared connections)
+- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
-- `app/static/shell.js`
-- `app/tests/test_ticket_math.js`
+- `app/engine/funding.py`
 
 ## Audit Trail
 
-- EXTRACTED: 98 (73%)
-- INFERRED: 37 (27%)
+- EXTRACTED: 55 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

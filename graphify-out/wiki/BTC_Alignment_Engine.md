@@ -1,32 +1,39 @@
 # BTC Alignment Engine
 
-> 10 nodes
+> 12 nodes
 
 ## Key Concepts
 
-- **plan_facts()** (7 connections) — `app/prune.py`
-- **current_versions()** (3 connections) — `app/prune.py`
-- **versions_named_in_code()** (3 connections) — `app/prune.py`
-- **_last_ran_at()** (3 connections) — `app/prune.py`
-- **referenced_zone_ids()** (3 connections) — `app/prune.py`
-- **What each derived engine writes right now, read from the engines.** (1 connections) — `app/prune.py`
-- **Every derived-kind version string that appears anywhere in engine     source. A** (1 connections) — `app/prune.py`
-- **Wall-clock time this algo_version last produced a run. engine_runs is     the on** (1 connections) — `app/prune.py`
-- **Zone ids named by a PERMANENT fact.      `zone_id` is `SYMBOL|TF|TYPE|TS` and ca** (1 connections) — `app/prune.py`
-- **Superseded derived generations that nothing reads and nothing names.      Four g** (1 connections) — `app/prune.py`
+- **load()** (22 connections) — `app/static/chart.js`
+- **wire()** (20 connections) — `app/static/chart.js`
+- **paintSymBtn()** (6 connections) — `app/static/chart.js`
+- **populate()** (5 connections) — `app/static/chart.js`
+- **pickSym()** (5 connections) — `app/static/chart.js`
+- **open()** (5 connections) — `app/static/chart.js`
+- **renderSymList()** (4 connections) — `app/static/chart.js`
+- **ensureLayer()** (3 connections) — `app/static/chart.js`
+- **venueName()** (3 connections) — `app/static/chart.js`
+- **openPicker()** (3 connections) — `app/static/chart.js`
+- **closePicker()** (3 connections) — `app/static/chart.js`
+- **loadContext()** (2 connections) — `app/static/chart.js`
 
 ## Relationships
 
-- [Chart Vendor Data Layer](Chart_Vendor_Data_Layer.md) (6 shared connections)
+- [Chart UI Layer](Chart_UI_Layer.md) (27 shared connections)
+- [ni](ni.md) (6 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (4 shared connections)
+- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (2 shared connections)
+- [startTicker](startTicker.md) (1 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
 
 ## Source Files
 
-- `app/prune.py`
+- `app/static/chart.js`
 
 ## Audit Trail
 
-- EXTRACTED: 24 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 74 (91%)
+- INFERRED: 7 (9%)
 - AMBIGUOUS: 0 (0%)
 
 ---

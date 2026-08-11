@@ -17,13 +17,12 @@
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (10 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (11 shared connections)
 - [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (2 shared connections)
 - [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (2 shared connections)
 - [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (2 shared connections)
-- [Simulator Convention Tests](Simulator_Convention_Tests.md) (1 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (1 shared connections)
-- [ranges.py](ranges.py.md) (1 shared connections)
+- [status](status.md) (1 shared connections)
+- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (1 shared connections)
 - [execsim.py](execsim.py.md) (1 shared connections)
 
 ## Source Files

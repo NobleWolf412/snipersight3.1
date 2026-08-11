@@ -1,13 +1,10 @@
 # API Server Endpoints
 
-> 72 nodes
+> 66 nodes
 
 ## Key Concepts
 
 - **server.py** (104 connections) — `app/server.py`
-- **manual_arm()** (3 connections) — `app/server.py`
-- **manual_cancel()** (3 connections) — `app/server.py`
-- **post_settings()** (3 connections) — `app/server.py`
 - **candles()** (2 connections) — `app/server.py`
 - **setup_telemetry()** (2 connections) — `app/server.py`
 - **cycle_summary()** (2 connections) — `app/server.py`
@@ -29,7 +26,10 @@
 - **copilot_health()** (2 connections) — `app/server.py`
 - **spotter_analyze()** (2 connections) — `app/server.py`
 - **manual_live()** (2 connections) — `app/server.py`
-- *... and 47 more nodes in this community*
+- **manual_book()** (2 connections) — `app/server.py`
+- **edge_stats()** (2 connections) — `app/server.py`
+- **reset_baseline()** (2 connections) — `app/server.py`
+- *... and 41 more nodes in this community*
 
 ## Relationships
 
@@ -52,8 +52,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 207 (99%)
-- INFERRED: 3 (1%)
+- EXTRACTED: 198 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

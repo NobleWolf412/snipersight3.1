@@ -18,7 +18,7 @@
 
 ## Relationships
 
-- [he](he.md) (1 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
 
 ## Source Files
 
