@@ -44,11 +44,27 @@ DESCRIPTIVE = (swings, structure, zones, liquidity, regime, ranges,
                # so its presence here costs the other 91 symbols nothing.
                basis)
 
-# MEASURED AND NOT ENABLED. `breakout` emits setup facts so its sample keeps
-# growing and can be re-graded, but neither `execsim` nor `risk` reads
-# BREAKOUT_VERSION, so it trades nothing. Graded 2026-07-30: n=55, -0.076 R,
-# CI [-0.545, +0.426], P(>0) 37.4% — indistinguishable from zero. REVERSAL
-# cleared this bar; this did not, so it does not ship.
+# MEASURED AND NOT ENABLED. `breakout` emits setup facts and neither `execsim`
+# nor `risk` reads BREAKOUT_VERSION, so it trades nothing. That much is true
+# and is the point of this tuple.
+#
+# WHAT IS NOT TRUE, and was asserted here until 2026-08-10: that "the sample
+# keeps growing and can be re-graded". The sample that grows is SETUP facts —
+# 100 of them under breakout-v0.6-draft, 4,531 under trend-v0.3-draft. Closed
+# trades under either: ZERO, checked against the store. `execsim` only
+# simulates the versions in `plan_versions()`, so a record-only engine never
+# produces an exec fact, and `edgestats` grades exec facts. As wired, these two
+# accumulate candidates that cannot become outcomes. Re-grading them needs
+# `abtest.by_strategy`, which accepts an arbitrary setup version and replays it
+# through the real entry/exit/costing — it exists, it is not wired to anything,
+# and nothing runs it on a schedule.
+#
+# The figures once quoted here (breakout n=55, -0.076 R, CI [-0.545, +0.426])
+# came from a harness run no committed script reproduces, and the store cannot
+# produce them. They are left out rather than restated: a number nobody can
+# regenerate is not evidence. The line claiming "REVERSAL cleared this bar" is
+# gone for the same reason — on the current book REVERSAL is n=423, mean
+# -0.024 R, and its interval straddles zero like everything else here.
 #
 # `trend` joins on the same terms, and for a reason that is not about its P&L.
 # Grading the MA against the book on 2026-08-04 found LONG x ABOVE = 0 and

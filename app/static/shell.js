@@ -3710,8 +3710,25 @@ weighed in. Name the facts you used.`;
   /* Operator ruling: "no need to talk about dead anything." Range-fade has no
      engine behind it and breakout-retest was measured and left off — a toggle
      wired to nothing and a toggle nobody should flip are both noise on a
-     settings page. The SERVER still knows both settings; hiding is a UI act. */
-  const HIDDEN_SETTINGS = new Set(['strategy_breakout_retest', 'strategy_range_fade']);
+     settings page. The SERVER still knows both settings; hiding is a UI act.
+
+     THE OTHER TWO ARE WORSE THAN NOISE, and were missed here until 2026-08-10.
+     `setups.enabled_strategies` reads exactly three keys — pullback, reversal,
+     scale_in — and `risk.py` reads the same three, so liquidity-sweep and
+     compression-release are read by NOTHING. They rendered as ordinary working
+     checkboxes. Both are classed BEHAVIOURAL in settings.py, so ticking one
+     called start_baseline and reset the forward trade count the live gate
+     counts toward 100 — at the time this was found the whole forward record
+     was 6 trades. All of the cost of a rule change, none of the effect.
+
+     Hidden rather than reclassified as non-behavioural on purpose: the day one
+     of these IS wired to an engine it becomes genuinely behavioural, and a
+     reclassification made now would be a lie waiting for that day. The suite
+     derives the expected set from what the engine actually reads, so wiring
+     one up fails the test until it is unhidden. */
+  const HIDDEN_SETTINGS = new Set(['strategy_breakout_retest', 'strategy_range_fade',
+                                   'strategy_liquidity_sweep_reversal',
+                                   'strategy_compression_release']);
 
   function buildSettings(){
     $('setFields').innerHTML = setSpec.filter(s => !BUTTON_OWNED.has(s.name) && !HIDDEN_SETTINGS.has(s.name)).map(s => {

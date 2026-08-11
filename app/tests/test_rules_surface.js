@@ -16,6 +16,12 @@ const S = f => fs.readFileSync(path.join(__dirname, '..', 'static', f), 'utf8');
 const HTML = S('shell.html');
 const SHELL = S('shell.js');
 const CSS = S('ss.css');
+/* Engine source, read as text like everything else here. The hide list is only
+   correct RELATIVE to what the engine reads, so pinning it without reading the
+   other side is what let two inert switches ship visible. */
+const E = f => fs.readFileSync(path.join(__dirname, '..', 'engine', f), 'utf8');
+const SETTINGS = E('settings.py');
+const SETUPS = E('setups.py');
 
 let passed = 0;
 function ok(name, fn) {
@@ -41,12 +47,53 @@ ok('the essay and the catalogue are gone', () => {
 });
 
 ok('the dead toggles are hidden, not deleted from the server', () => {
+  /* DERIVED, not listed. This pinned two names and went half-blind: two more
+     inert strategy switches (liquidity-sweep, compression-release) shipped as
+     ordinary working checkboxes and the suite had no opinion, because the
+     property was written down as a pair of strings instead of as a rule.
+
+     The rule is: a strategy switch the ENGINE does not read must not render.
+     Both halves are read out of the source here, so the day someone wires one
+     of these into `setups.enabled_strategies` this test fails until they also
+     unhide it — and the day someone adds a new inert one, it fails then too.
+     Neither direction depends on anyone remembering to edit this list.
+
+     Why it matters more than tidiness: every one of these is BEHAVIOURAL in
+     settings.py, so flipping it calls start_baseline and resets the forward
+     trade count the live gate needs 100 of. An inert switch is not a dead
+     control, it is a live control wired to the wrong thing. */
   assert(/HIDDEN_SETTINGS/.test(SHELL), 'no hide list');
-  for (const dead of ['strategy_breakout_retest', 'strategy_range_fade']) {
-    assert(SHELL.includes(`'${dead}'`), `${dead} is not in the hide list`);
-  }
   assert(/!HIDDEN_SETTINGS\.has\(s\.name\)/.test(SHELL),
     'the builder does not consult the hide list');
+
+  const declared = new Set(
+    [...SETTINGS.matchAll(/"(strategy_[a-z_]+)"\s*:\s*\(/g)].map(m => m[1]));
+  assert(declared.size >= 4,
+    `only ${declared.size} strategy settings found — the SPEC shape changed ` +
+    'and this test is no longer reading it');
+
+  const readBlock = SETUPS.slice(SETUPS.indexOf('def enabled_strategies'));
+  const wired = new Set(
+    [...readBlock.slice(0, 900).matchAll(/\("(strategy_[a-z_]+)",\s*"/g)].map(m => m[1]));
+  assert(wired.size > 0,
+    'enabled_strategies no longer names its settings keys in a readable form — ' +
+    'this test cannot tell a wired switch from an inert one any more');
+
+  const hidden = new Set(
+    [...SHELL.slice(SHELL.indexOf('const HIDDEN_SETTINGS'),
+                    SHELL.indexOf('function buildSettings'))
+       .matchAll(/'(strategy_[a-z_]+)'/g)].map(m => m[1]));
+
+  const inertButVisible = [...declared].filter(k => !wired.has(k) && !hidden.has(k));
+  assert.deepStrictEqual(inertButVisible, [],
+    'these strategy switches are read by no engine yet render as working ' +
+    'checkboxes, and each one resets the forward baseline when flipped: ' +
+    inertButVisible.join(', '));
+
+  const wiredButHidden = [...wired].filter(k => hidden.has(k));
+  assert.deepStrictEqual(wiredButHidden, [],
+    'these switches DO drive the engine but are hidden from the operator, ' +
+    'so a real rule change has no visible control: ' + wiredButHidden.join(', '));
 });
 
 ok('Exchanges keeps its one security line, on the chip', () => {

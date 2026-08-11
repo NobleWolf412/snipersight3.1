@@ -66,6 +66,18 @@ the usual "indistinguishable from zero" verdict:
     TREND_CONTINUATION   n=2816   -0.1500 R   CI [-0.214, -0.086]   P(>0) 0.0%
     win 29.1%   PF 0.82   -422.5 R total        (2026-08-04, calibrated harness)
 
+NOT REPRODUCIBLE FROM THE STORE, noted 2026-08-10. The harness that produced
+those numbers was `abtest`, which replays setups through execsim IN MEMORY and
+writes nothing — so this verdict is very likely sound, and it is also not
+re-derivable: there are zero exec facts under any trend version, and no
+committed script re-runs the grade. The sample has since grown from 2,816 to
+4,531 setups with no way to regrade them on a schedule. The verdict is left
+standing rather than softened, deliberately: it points AWAY from trading this,
+and the honest failure mode of an unverifiable negative is that it keeps a
+strategy switched off. Do not quote the interval as current evidence — quote
+it as the last time anyone measured, and re-run `abtest.by_strategy` before
+acting on it either way.
+
 The interval sits ENTIRELY BELOW zero. Working the payoff back out of those
 numbers, the average win is ~2.0x the average loss, so the bracket geometry is
 doing its job — break-even at 2:1 needs a 33.3% hit rate and this gets 29.1%.

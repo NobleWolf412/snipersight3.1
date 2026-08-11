@@ -51,18 +51,26 @@ SPEC = {
     # does not exist: `ranges.py` measured that almost no RANGE-regime
     # rejection has a detected range at the moment it is rejected.
     "strategy_breakout_retest": ("BEHAVIOURAL", bool, False,
-                                "Trade BREAKOUT RETEST setups. Measured and OFF: "
-                                "n=55, -0.076 R, CI crosses zero. The engine runs "
-                                "and records; nothing consumes it."),
+                                "Trade BREAKOUT RETEST setups. OFF, and this "
+                                "switch does not turn it on: no engine reads it. "
+                                "The strategy records setup facts and produces "
+                                "no closed trade, so it has no current grade."),
     "strategy_range_fade": ("BEHAVIOURAL", bool, False,
                             "Trade RANGE FADE setups. Planned — no engine "
                             "implements it yet; enabling it changes nothing."),
+    # These two read as ordinary working checkboxes until 2026-08-10 and are
+    # read by no engine at all, so flipping one bought a baseline restart — the
+    # forward trade count the live gate needs 100 of, back to zero — for no
+    # change in behaviour. Hidden in the cockpit now, and their descriptions say
+    # what they do, which is nothing.
     "strategy_liquidity_sweep_reversal": (
         "BEHAVIOURAL", bool, False,
-        "Trade 5m LIQUIDITY SWEEP REVERSAL setups. Research-only and locked."),
+        "Trade 5m LIQUIDITY SWEEP REVERSAL setups. Planned — no engine "
+        "implements it yet; enabling it changes nothing."),
     "strategy_compression_release": (
         "BEHAVIOURAL", bool, False,
-        "Trade COMPRESSION RELEASE setups. Research-only and locked."),
+        "Trade COMPRESSION RELEASE setups. Planned — no engine implements it "
+        "yet; enabling it changes nothing."),
     # OPERATIONAL, deliberately: halting stops new entries but changes no rule.
     # Classing it BEHAVIOURAL reset the forward baseline on every halt/resume,
     # which would have made the safety control destroy the evidence it protects.

@@ -163,10 +163,13 @@ BREAKOUT_RETEST = Strategy(
     trigger_rule="BREAK_RETEST_AND_REJECTION_CLOSE",
     higher_timeframe_relationship="ALIGNED_OR_NON_CONFLICTING_TRANSITION",
     entry_policy="MARKET_ON_CONFIRMED_RETEST",
-    gap="Built and MEASURED, deliberately not enabled: n=55, -0.076 R, "
-        "CI [-0.545, +0.426], P(>0) 37.4% — indistinguishable from zero on the "
-        "same harness REVERSAL cleared. It keeps emitting facts so the sample "
-        "grows and it can be re-graded; it trades nothing meanwhile.",
+    gap="Built and deliberately not enabled. It records setup facts and trades "
+        "nothing: execsim only simulates the whitelisted versions, so it has "
+        "produced no closed trade and CANNOT be graded from the store as "
+        "wired — grading it needs abtest.by_strategy, which is unwired. The "
+        "figures once quoted here (n=55, CI crossing zero) came from a harness "
+        "run nothing in the repo reproduces, so they are not restated. No "
+        "strategy here has cleared the bar, including the two that trade.",
 )
 
 LIQUIDITY_SWEEP_REVERSAL = Strategy(
