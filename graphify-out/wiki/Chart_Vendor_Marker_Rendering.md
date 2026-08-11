@@ -33,7 +33,7 @@
 
 ## Relationships
 
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (34 shared connections)
+- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (34 shared connections)
 - [Chart Vendor Series](Chart_Vendor_Series.md) (11 shared connections)
 - [Notification Delivery](Notification_Delivery.md) (6 shared connections)
 - [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (5 shared connections)

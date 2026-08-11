@@ -26,7 +26,7 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (3 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (3 shared connections)
 - [Cycle Detection Engine](Cycle_Detection_Engine.md) (1 shared connections)
 
 ## Source Files

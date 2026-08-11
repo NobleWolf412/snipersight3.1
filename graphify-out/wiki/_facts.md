@@ -33,7 +33,8 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (8 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (4 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (4 shared connections)
 - [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
 - [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
 - [Refresh Repair Tests](Refresh_Repair_Tests.md) (1 shared connections)

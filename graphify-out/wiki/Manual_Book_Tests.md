@@ -1,11 +1,12 @@
 # Manual Book Tests
 
-> 55 nodes
+> 57 nodes
 
 ## Key Concepts
 
 - **.load()** (82 connections) — `app/tests/test_manual.py`
 - **.flat()** (52 connections) — `app/tests/test_manual.py`
+- **.test_unresolved_finds_work_wherever_it_lives()** (5 connections) — `app/tests/test_manual.py`
 - **.test_a_settled_trade_is_priced_with_the_engine_books_arithmetic()** (5 connections) — `app/tests/test_manual.py`
 - **.test_a_settled_trade_with_no_risk_figure_is_counted_never_dropped()** (5 connections) — `app/tests/test_manual.py`
 - **.test_pnl_usd_is_a_key_on_every_row_even_when_it_is_absent()** (5 connections) — `app/tests/test_manual.py`
@@ -28,18 +29,16 @@
 - **.test_cancel_refuses_a_position_that_already_filled()** (4 connections) — `app/tests/test_manual.py`
 - **.test_a_cancelled_intent_stays_invisible_to_every_strategy_query()** (4 connections) — `app/tests/test_manual.py`
 - **.test_spot_cannot_short_and_nothing_is_written()** (3 connections) — `app/tests/test_manual.py`
-- **.test_a_perp_may_short()** (3 connections) — `app/tests/test_manual.py`
-- *... and 30 more nodes in this community*
+- *... and 32 more nodes in this community*
 
 ## Relationships
 
-- [Manual Arm Validation Tests](Manual_Arm_Validation_Tests.md) (43 shared connections)
-- [Manual Settlement Tests](Manual_Settlement_Tests.md) (35 shared connections)
+- [Manual Arm Validation Tests](Manual_Arm_Validation_Tests.md) (44 shared connections)
+- [Manual Settlement Tests](Manual_Settlement_Tests.md) (36 shared connections)
 - [Manual Order Idempotency Tests](Manual_Order_Idempotency_Tests.md) (10 shared connections)
 - [Manual Version Migration Tests](Manual_Version_Migration_Tests.md) (10 shared connections)
 - [Trailing Stop Tests](Trailing_Stop_Tests.md) (5 shared connections)
 - [Scale-Out Settlement Tests](Scale-Out_Settlement_Tests.md) (4 shared connections)
-- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (2 shared connections)
 
 ## Source Files
 
@@ -47,7 +46,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 275 (100%)
+- EXTRACTED: 281 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

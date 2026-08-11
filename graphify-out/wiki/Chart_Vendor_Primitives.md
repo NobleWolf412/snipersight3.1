@@ -1,6 +1,6 @@
 # Chart Vendor Primitives
 
-> 19 nodes
+> 18 nodes
 
 ## Key Concepts
 
@@ -14,7 +14,6 @@
 - **.zi()** (3 connections) — `app/static/lightweight-charts.js`
 - **.ki()** (2 connections) — `app/static/lightweight-charts.js`
 - **.At()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Oi()** (2 connections) — `app/static/lightweight-charts.js`
 - **.constructor()** (2 connections) — `app/static/lightweight-charts.js`
 - **.qh()** (2 connections) — `app/static/lightweight-charts.js`
 - **.Ji()** (2 connections) — `app/static/lightweight-charts.js`
@@ -26,12 +25,14 @@
 
 ## Relationships
 
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (7 shared connections)
+- [Chart Vendor Layout](Chart_Vendor_Layout.md) (5 shared connections)
 - [Chart Vendor API](Chart_Vendor_API.md) (2 shared connections)
 - [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (2 shared connections)
 - [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
+- [execsim.py](execsim.py.md) (1 shared connections)
 - [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (1 shared connections)
-- [Glossary UI](Glossary_UI.md) (1 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
 
 ## Source Files
 
@@ -39,7 +40,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 66 (100%)
+- EXTRACTED: 64 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

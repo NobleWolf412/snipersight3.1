@@ -1,15 +1,16 @@
 # Engine Contract Tests
 
-> 50 nodes
+> 53 nodes
 
 ## Key Concepts
 
-- **insert_candle()** (14 connections) — `app/tests/test_engine_contracts.py`
+- **insert_candle()** (15 connections) — `app/tests/test_engine_contracts.py`
 - **TestAggregator** (14 connections) — `app/tests/test_engine_contracts.py`
 - **test_engine_contracts.py** (10 connections) — `app/tests/test_engine_contracts.py`
 - **._acknowledge()** (10 connections) — `app/tests/test_engine_contracts.py`
 - **EngineStoreCase** (7 connections) — `app/tests/test_engine_contracts.py`
 - **validate.py** (7 connections) — `app/validate.py`
+- **TestImporter** (5 connections) — `app/tests/test_engine_contracts.py`
 - **.test_acknowledged_partial_bucket_builds()** (4 connections) — `app/tests/test_engine_contracts.py`
 - **.test_quarantined_acknowledgment_is_ignored()** (4 connections) — `app/tests/test_engine_contracts.py`
 - **.test_counted_but_unlisted_gap_blocks()** (4 connections) — `app/tests/test_engine_contracts.py`
@@ -22,14 +23,13 @@
 - **main()** (4 connections) — `app/validate.py`
 - **.test_gap_prevents_aggregate()** (3 connections) — `app/tests/test_engine_contracts.py`
 - **.test_pre_listing_window_stays_unbuilt()** (3 connections) — `app/tests/test_engine_contracts.py`
-- **TestImporter** (3 connections) — `app/tests/test_engine_contracts.py`
+- **.test_empty_answer_after_listing_acknowledges_the_quiet_window()** (3 connections) — `app/tests/test_engine_contracts.py`
 - **._series()** (3 connections) — `app/tests/test_engine_contracts.py`
 - **TestStructureBreaks** (3 connections) — `app/tests/test_engine_contracts.py`
 - **TestLiquidityCanonicalization** (3 connections) — `app/tests/test_engine_contracts.py`
 - **bootstrap_mean_ci()** (3 connections) — `app/validate.py`
 - **stats()** (3 connections) — `app/validate.py`
-- **.test_only_complete_closed_bucket_is_emitted()** (2 connections) — `app/tests/test_engine_contracts.py`
-- *... and 25 more nodes in this community*
+- *... and 28 more nodes in this community*
 
 ## Relationships
 
@@ -42,7 +42,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 160 (99%)
+- EXTRACTED: 168 (99%)
 - INFERRED: 2 (1%)
 - AMBIGUOUS: 0 (0%)
 

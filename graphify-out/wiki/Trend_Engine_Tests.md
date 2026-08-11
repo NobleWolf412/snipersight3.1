@@ -33,7 +33,8 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (2 shared connections)
+- [cached_audit](cached_audit.md) (1 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
 
 ## Source Files
 

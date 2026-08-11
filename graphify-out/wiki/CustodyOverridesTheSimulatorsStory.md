@@ -16,7 +16,7 @@
 
 ## Relationships
 
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (4 shared connections)
+- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (4 shared connections)
 - [Cycle Detection Engine](Cycle_Detection_Engine.md) (1 shared connections)
 - [A/B Calibration Tests](A-B_Calibration_Tests.md) (1 shared connections)
 - [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (1 shared connections)

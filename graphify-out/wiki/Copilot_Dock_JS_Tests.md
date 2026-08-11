@@ -1,10 +1,11 @@
 # Copilot Dock JS Tests
 
-> 17 nodes
+> 18 nodes
 
 ## Key Concepts
 
 - **test_copilot_dock.js** (18 connections) — `app/tests/test_copilot_dock.js`
+- **S()** (2 connections) — `app/tests/test_copilot_dock.js`
 - **fs** (1 connections) — `app/tests/test_copilot_dock.js`
 - **path** (1 connections) — `app/tests/test_copilot_dock.js`
 - **assert** (1 connections) — `app/tests/test_copilot_dock.js`
@@ -24,8 +25,8 @@
 
 ## Relationships
 
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
-- [test_one_source_of_truth.js](test_one_source_of_truth.js.md) (1 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (1 shared connections)
 
 ## Source Files
 
@@ -33,8 +34,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 34 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 35 (97%)
+- INFERRED: 1 (3%)
 - AMBIGUOUS: 0 (0%)
 
 ---

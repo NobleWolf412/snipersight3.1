@@ -1,31 +1,37 @@
 # ranges.py
 
-> 9 nodes
+> 7 nodes
 
 ## Key Concepts
 
-- **draft.py** (9 connections) — `app/engine/draft.py`
-- **for_symbol()** (6 connections) — `app/engine/draft.py`
-- **bracket()** (4 connections) — `app/engine/draft.py`
-- **_latest_by_id()** (3 connections) — `app/engine/draft.py`
-- **Decimal** (3 connections)
-- **Structure-anchored DRAFT bracket for the order ticket. Writes nothing.  ## What** (1 connections) — `app/engine/draft.py`
-- **Last recorded state per object. Facts are append-only, so a zone appears     onc** (1 connections) — `app/engine/draft.py`
-- **Draft entry/stop/target from live structure, or None if there is none.      Retu** (1 connections) — `app/engine/draft.py`
-- **Draft for one symbol/timeframe, read straight from the stored facts.** (1 connections) — `app/engine/draft.py`
+- **renderMissions()** (8 connections) — `app/static/shell.js`
+- **loadOverview()** (7 connections) — `app/static/shell.js`
+- **renderRadar()** (7 connections) — `app/static/shell.js`
+- **missionRailSync()** (4 connections) — `app/static/shell.js`
+- **renderDisposition()** (3 connections) — `app/static/shell.js`
+- **renderPositions()** (3 connections) — `app/static/shell.js`
+- **renderFunnel()** (2 connections) — `app/static/shell.js`
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (5 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (7 shared connections)
+- [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (3 shared connections)
+- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (2 shared connections)
+- [Chart UI Layer](Chart_UI_Layer.md) (2 shared connections)
+- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (2 shared connections)
+- [he](he.md) (1 shared connections)
+- [makeRail](makeRail.md) (1 shared connections)
+- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (1 shared connections)
+- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/draft.py`
+- `app/static/shell.js`
 
 ## Audit Trail
 
-- EXTRACTED: 29 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 30 (88%)
+- INFERRED: 4 (12%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -33,8 +33,9 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (18 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (12 shared connections)
 - [Indicator Engines](Indicator_Engines.md) (10 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (6 shared connections)
 - [Volume Engine Tests](Volume_Engine_Tests.md) (1 shared connections)
 - [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (1 shared connections)
 

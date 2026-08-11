@@ -1,52 +1,44 @@
 # status
 
-> 17 nodes
+> 14 nodes
 
 ## Key Concepts
 
-- **c()** (24 connections) — `app/static/lightweight-charts.js`
-- **test_ssdata.js** (7 connections) — `app/tests/test_ssdata.js`
-- **loadHealth()** (4 connections) — `app/static/shell.js`
-- **renderDiagState()** (3 connections) — `app/static/shell.js`
-- **sleep()** (3 connections) — `app/tests/test_ssdata.js`
-- **load()** (3 connections) — `app/tests/test_ssdata.js`
-- **.constructor()** (2 connections) — `app/static/lightweight-charts.js`
-- **.setVisibleLogicalRange()** (2 connections) — `app/static/lightweight-charts.js`
-- **healthTone()** (2 connections) — `app/static/shell.js`
-- **loadTelemetry()** (2 connections) — `app/static/shell.js`
+- **ai** (12 connections) — `app/static/lightweight-charts.js`
+- **li()** (8 connections) — `app/static/lightweight-charts.js`
+- **hi()** (5 connections) — `app/static/lightweight-charts.js`
+- **.qr()** (5 connections) — `app/static/lightweight-charts.js`
+- **.Kr()** (4 connections) — `app/static/lightweight-charts.js`
+- **.Ur()** (3 connections) — `app/static/lightweight-charts.js`
+- **.gt()** (3 connections) — `app/static/lightweight-charts.js`
+- **.$r()** (2 connections) — `app/static/lightweight-charts.js`
+- **.xl()** (2 connections) — `app/static/lightweight-charts.js`
 - **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.S()** (1 connections) — `app/static/lightweight-charts.js`
-- **fs** (1 connections) — `app/tests/test_ssdata.js`
-- **path** (1 connections) — `app/tests/test_ssdata.js`
-- **assert** (1 connections) — `app/tests/test_ssdata.js`
-- **SRC** (1 connections) — `app/tests/test_ssdata.js`
-- **ok()** (1 connections) — `app/tests/test_ssdata.js`
+- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
+- **.yt()** (1 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.gt()** (1 connections) — `app/static/lightweight-charts.js`
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (4 shared connections)
 - [Chart Vendor API](Chart_Vendor_API.md) (3 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (3 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (2 shared connections)
-- [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (2 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (2 shared connections)
-- [Fact Store Conventions](Fact_Store_Conventions.md) (2 shared connections)
-- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (1 shared connections)
-- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (1 shared connections)
-- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (1 shared connections)
-- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (1 shared connections)
-- [makeRail](makeRail.md) (1 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (3 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (2 shared connections)
+- [funding.py](funding.py.md) (2 shared connections)
+- [Fact Store Conventions](Fact_Store_Conventions.md) (1 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
+- [Simulator Convention Tests](Simulator_Convention_Tests.md) (1 shared connections)
+- [.Mt](Mt.md) (1 shared connections)
+- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (1 shared connections)
 
 ## Source Files
 
 - `app/static/lightweight-charts.js`
-- `app/static/shell.js`
-- `app/tests/test_ssdata.js`
 
 ## Audit Trail
 
-- EXTRACTED: 48 (81%)
-- INFERRED: 11 (19%)
+- EXTRACTED: 49 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

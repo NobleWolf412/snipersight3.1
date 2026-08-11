@@ -1,8 +1,8 @@
 # RunRecorder
 
-> God node · 61 connections · `app/engine/runlog.py`
+> God node · 62 connections · `app/engine/runlog.py`
 
-**Community:** [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md)
+**Community:** [QualityStoreCase](QualityStoreCase.md)
 
 ## Connections by Relation
 
@@ -39,7 +39,7 @@
 - risk.py `EXTRACTED`
 - [volume.py](volume.py.md) `EXTRACTED`
 - [execsim.py](execsim.py.md) `EXTRACTED`
-- momentum.py `EXTRACTED`
+- [momentum.py](momentum.py.md) `EXTRACTED`
 - universe.py `EXTRACTED`
 - [ranges.py](ranges.py.md) `EXTRACTED`
 - trend.py `EXTRACTED`
@@ -65,10 +65,11 @@
 ### uses
 - [TestMarketQuality](TestMarketQuality.md) `INFERRED`
 - IntentRejected `INFERRED`
-- QualityStoreCase `INFERRED`
-- RetiredSymbolStalenessTest `INFERRED`
+- [QualityStoreCase](QualityStoreCase.md) `INFERRED`
+- [RetiredSymbolStalenessTest](RetiredSymbolStalenessTest.md) `INFERRED`
 - TestKillSwitchRungs `INFERRED`
 - TestPipelineContracts `INFERRED`
+- TestOnboardingIsNotAFailure `INFERRED`
 - _RateLimiter `INFERRED`
 - TestStrategyRulesRemainFrozen `INFERRED`
 

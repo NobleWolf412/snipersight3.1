@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "app/engine/importer.py": {
-    "mtime": 1786293392.2426713,
-    "ast_hash": "d9832cd0520a200e5d5b0bab09dbe885",
+    "mtime": 1786388114.7678149,
+    "ast_hash": "396110a86a7e0874e880e7b93bc451f2",
     "semantic_hash": ""
   },
   "app/engine/ingest.py": {
@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "app/engine/quality.py": {
-    "mtime": 1786294455.4212084,
-    "ast_hash": "2db936cafeb1c14bc3b856e4ce28a93a",
+    "mtime": 1786388061.312027,
+    "ast_hash": "164301c74fbc60ada15ead7bfbab350d",
     "semantic_hash": ""
   },
   "app/engine/ranges.py": {
@@ -330,8 +330,8 @@
     "semantic_hash": "4fb894cbc705c9123cd8911eca893a17"
   },
   "app/static/copilot.js": {
-    "mtime": 1786286186.6489098,
-    "ast_hash": "e02ec790e2538e8e43b8f80dd4629e87",
+    "mtime": 1786397598.8826706,
+    "ast_hash": "5eb47c76b178e86d416f7cbdb38310e9",
     "semantic_hash": ""
   },
   "app/static/diagnostics.js": {
@@ -460,9 +460,9 @@
     "semantic_hash": "100d3d2d47c3efa0078a106e846fd823"
   },
   "app/tests/test_chart_layers.js": {
-    "mtime": 1786107908.028333,
-    "ast_hash": "9d15f38bc410909b8dfc3465cfe63ee3",
-    "semantic_hash": "9d15f38bc410909b8dfc3465cfe63ee3"
+    "mtime": 1786402783.0406475,
+    "ast_hash": "be86bf8e41df6ee3b9085563f47065ed",
+    "semantic_hash": ""
   },
   "app/tests/test_cockpit_diagnostics.py": {
     "mtime": 1785379683.5024562,
@@ -485,8 +485,8 @@
     "semantic_hash": "08befbcaa24a6148306f1eb6ec02a250"
   },
   "app/tests/test_copilot_dock.js": {
-    "mtime": 1786286190.9948997,
-    "ast_hash": "8d6072f2fdb197d0af71a5af63782898",
+    "mtime": 1786405406.6465998,
+    "ast_hash": "9243e0d192079352c57e4e099d6c8ee6",
     "semantic_hash": ""
   },
   "app/tests/test_core_hardening.py": {
@@ -545,8 +545,8 @@
     "semantic_hash": "ec721f969ca3a690beebe515e9fe251d"
   },
   "app/tests/test_engine_contracts.py": {
-    "mtime": 1786247646.5657225,
-    "ast_hash": "9f731b8406d7886a97276676dd8d574d",
+    "mtime": 1786388146.9448824,
+    "ast_hash": "cc26eccf7b12293ef93f7e9bbcce1576",
     "semantic_hash": ""
   },
   "app/tests/test_entrystats.py": {
@@ -680,8 +680,8 @@
     "semantic_hash": "7eceb938c76e23e18282310753ee0d5f"
   },
   "app/tests/test_pipeline_quality.py": {
-    "mtime": 1786247657.3140452,
-    "ast_hash": "304daa700922a210ec5236b17d5adfa9",
+    "mtime": 1786388134.412653,
+    "ast_hash": "eade0fb27029d2d64c589b54923070e4",
     "semantic_hash": ""
   },
   "app/tests/test_pipeline_roster.py": {
@@ -885,8 +885,8 @@
     "semantic_hash": "a84715a82a14a2ee46b4f11e8916df3d"
   },
   "app/watchdog.py": {
-    "mtime": 1786235401.8189602,
-    "ast_hash": "8ffd94d197c2eb1478d9550e6ed23dbe",
+    "mtime": 1786388085.8989663,
+    "ast_hash": "6d80d479cea7d8f8aa06693bb55baa10",
     "semantic_hash": ""
   },
   "docs/alerts.example.json": {
@@ -1345,8 +1345,8 @@
     "semantic_hash": ""
   },
   ".claude/hooks/consult-codex.ps1": {
-    "mtime": 1786245022.3772058,
-    "ast_hash": "8ddbc45db36e193af4147ff610240fd7",
+    "mtime": 1786330491.0948968,
+    "ast_hash": "2bc8d0669b956506b996fd0819d23b73",
     "semantic_hash": ""
   },
   "app/tests/test_auto_prune.py": {

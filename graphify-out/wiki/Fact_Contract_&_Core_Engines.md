@@ -1,13 +1,15 @@
 # Fact Contract & Core Engines
 
-> 9 nodes
+> 11 nodes
 
 ## Key Concepts
 
 - **Swing Engine & Composite Major Score** (4 connections) — `app/BUILDLOG.md`
 - **Fact Contract (confirmed_at vs market_time)** (3 connections) — `PRODUCT.md`
 - **Append-Only Content-Hashed Fact Store** (2 connections) — `CLAUDE.md`
+- **Behaviour Change = Version Bump** (2 connections) — `CLAUDE.md`
 - **Structure Engine (BOS/CHoCH)** (2 connections) — `app/BUILDLOG.md`
+- **Version Cascade Lockfile (test_version_cascade.py)** (2 connections) — `app/BUILDLOG.md`
 - **Verification Pack 001 — Swing Engine (swing-v0.1)** (2 connections) — `app/verification/pack-001-swings.md`
 - **Hard-Coded Tick Floor Blinded 44 Symbols (S40)** (1 connections) — `app/BUILDLOG.md`
 - **Phantom Promotion Facts (S53)** (1 connections) — `app/BUILDLOG.md`
@@ -29,8 +31,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 11 (65%)
-- INFERRED: 6 (35%)
+- EXTRACTED: 15 (71%)
+- INFERRED: 6 (29%)
 - AMBIGUOUS: 0 (0%)
 
 ---

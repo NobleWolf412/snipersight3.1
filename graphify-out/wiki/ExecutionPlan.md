@@ -2,7 +2,7 @@
 
 > God node · 41 connections · `app/engine/contracts.py`
 
-**Community:** [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md)
+**Community:** [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md)
 
 ## Connections by Relation
 

@@ -33,7 +33,7 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
 - [Facts Window Tests](Facts_Window_Tests.md) (1 shared connections)
 
 ## Source Files

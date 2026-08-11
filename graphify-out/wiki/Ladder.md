@@ -1,4 +1,4 @@
-# Bias Ladder Tests
+# Ladder
 
 > 8 nodes
 

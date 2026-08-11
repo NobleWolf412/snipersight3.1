@@ -34,14 +34,14 @@
 ## Relationships
 
 - [A/B Calibration Tests](A-B_Calibration_Tests.md) (9 shared connections)
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (8 shared connections)
+- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (8 shared connections)
 - [Chart Vendor Series](Chart_Vendor_Series.md) (7 shared connections)
 - [Volatility Engine](Volatility_Engine.md) (4 shared connections)
 - [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (3 shared connections)
 - [Diagnostics Engine](Diagnostics_Engine.md) (2 shared connections)
 - [test_autonomy_contracts.py](test_autonomy_contracts.py.md) (2 shared connections)
 - [cycles.py](cycles.py.md) (1 shared connections)
-- [Bias Ladder Engine](Bias_Ladder_Engine.md) (1 shared connections)
+- [.ja](ja.md) (1 shared connections)
 - [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (1 shared connections)
 - [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
 - [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)

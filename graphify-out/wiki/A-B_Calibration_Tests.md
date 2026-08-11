@@ -33,12 +33,12 @@
 
 ## Relationships
 
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (22 shared connections)
+- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (22 shared connections)
 - [Cycle Detection Engine](Cycle_Detection_Engine.md) (9 shared connections)
 - [Chart Vendor Series](Chart_Vendor_Series.md) (9 shared connections)
 - [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (6 shared connections)
 - [Market Data Importer](Market_Data_Importer.md) (3 shared connections)
-- [ei](ei.md) (2 shared connections)
+- [ni](ni.md) (2 shared connections)
 - [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (2 shared connections)
 - [One Source of Truth JS Tests](One_Source_of_Truth_JS_Tests.md) (2 shared connections)
 - [test_phemex_private.py](test_phemex_private.py.md) (2 shared connections)

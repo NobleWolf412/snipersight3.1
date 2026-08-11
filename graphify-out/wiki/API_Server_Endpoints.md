@@ -34,8 +34,8 @@
 ## Relationships
 
 - [Portfolio & Position Endpoints](Portfolio_%26_Position_Endpoints.md) (14 shared connections)
-- [Server Narrative Phrasing](Server_Narrative_Phrasing.md) (11 shared connections)
-- [Performance & Playbook Endpoints](Performance_%26_Playbook_Endpoints.md) (7 shared connections)
+- [Server Narrative Phrasing](Server_Narrative_Phrasing.md) (12 shared connections)
+- [Performance & Playbook Endpoints](Performance_%26_Playbook_Endpoints.md) (6 shared connections)
 - [Tailnet Access Gate](Tailnet_Access_Gate.md) (4 shared connections)
 - [Fact Query & Scan Endpoints](Fact_Query_%26_Scan_Endpoints.md) (4 shared connections)
 - [Process Restart Endpoint](Process_Restart_Endpoint.md) (4 shared connections)

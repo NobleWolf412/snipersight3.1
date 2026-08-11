@@ -18,7 +18,7 @@
 
 ## Relationships
 
-- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (1 shared connections)
+- [he](he.md) (1 shared connections)
 
 ## Source Files
 

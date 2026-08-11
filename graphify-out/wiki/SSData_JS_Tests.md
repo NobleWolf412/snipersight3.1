@@ -1,11 +1,10 @@
 # SSData JS Tests
 
-> 18 nodes
+> 17 nodes
 
 ## Key Concepts
 
 - **test_cockpit_redesign.js** (17 connections) — `app/tests/test_cockpit_redesign.js`
-- **vm** (2 connections) — `app/tests/test_cockpit_redesign.js`
 - **fs** (1 connections) — `app/tests/test_cockpit_redesign.js`
 - **path** (1 connections) — `app/tests/test_cockpit_redesign.js`
 - **assert** (1 connections) — `app/tests/test_cockpit_redesign.js`
@@ -25,7 +24,7 @@
 
 ## Relationships
 
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (1 shared connections)
+- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
 
 ## Source Files
 
@@ -33,7 +32,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 35 (100%)
+- EXTRACTED: 33 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

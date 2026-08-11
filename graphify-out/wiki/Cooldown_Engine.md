@@ -24,7 +24,7 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (3 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (3 shared connections)
 - [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (2 shared connections)
 
 ## Source Files

@@ -51,3 +51,12 @@ graphify-out/reflections/
 # by 2026-08-09. The current graph is the one anything reads; the old ones are
 # what git history is for.
 graphify-out/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
+
+# A DIFFERENT PROJECT, unpacked here for reference on 2026-08-10 — the Spark
+# "snipersight-trading" app: its own CLAUDE.md, its own Dockerfiles, a React
+# frontend, 1,108 files and 63 MB. It is not a change to this repo and must
+# never become one. Ignored rather than deleted because it is not this
+# session's to throw away, and ignored rather than left bare because another
+# session running `git add -A` would otherwise write all 63 MB into history
+# permanently — and the working tree here is genuinely shared.
+sst/

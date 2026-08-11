@@ -31,7 +31,7 @@
 
 - [BTC Alignment Engine](BTC_Alignment_Engine.md) (6 shared connections)
 - [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
 - [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (1 shared connections)
 - [Shell Disposition & Risk Rendering](Shell_Disposition_%26_Risk_Rendering.md) (1 shared connections)
 - [Chart Vendor Scales](Chart_Vendor_Scales.md) (1 shared connections)

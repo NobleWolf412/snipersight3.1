@@ -17,7 +17,7 @@
 
 ## Relationships
 
-- [test_one_source_of_truth.js](test_one_source_of_truth.js.md) (1 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (1 shared connections)
 
 ## Source Files
 

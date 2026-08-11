@@ -1,47 +1,60 @@
 # Chart Vendor Number Formatting
 
-> 21 nodes
+> 62 nodes
 
 ## Key Concepts
 
-- **notify.py** (16 connections) — `app/notify.py`
-- **deliver_pending()** (9 connections) — `app/notify.py`
-- **config()** (5 connections) — `app/notify.py`
-- **toast()** (4 connections) — `app/notify.py`
-- **enqueue()** (4 connections) — `app/notify.py`
-- **_send_remote()** (4 connections) — `app/notify.py`
-- **toast_enabled()** (4 connections) — `app/notify.py`
-- **heartbeat()** (4 connections) — `app/notify.py`
-- **event()** (4 connections) — `app/notify.py`
-- **_queue()** (3 connections) — `app/notify.py`
-- **_xml_escape()** (2 connections) — `app/notify.py`
-- **_post()** (2 connections) — `app/notify.py`
-- **Alerts: one entry point, several destinations, and a queue between them.  WHY A** (1 connections) — `app/notify.py`
-- **Show a Windows toast. Returns whether the toast pipeline reported success.** (1 connections) — `app/notify.py`
-- **Record that something happened. Returns True if this is the first time.      Che** (1 connections) — `app/notify.py`
-- **Remote destinations, or {} when the operator has not set any up.      Absent fil** (1 connections) — `app/notify.py`
-- **One remote destination. Returns a short outcome string for the record.      Two** (1 connections) — `app/notify.py`
-- **Whether the Windows toast sink runs. OFF unless explicitly turned on.      MEASU** (1 connections) — `app/notify.py`
-- **Send what is queued. Call this from the WATCHDOG tick, never the scanner.      E** (1 connections) — `app/notify.py`
-- **Tell an OUTSIDE service this machine is still alive.      A heartbeat emitted by** (1 connections) — `app/notify.py`
-- **Queue an alert, and optionally send it now.      `deliver=False` is the default** (1 connections) — `app/notify.py`
+- **fs()** (40 connections) — `app/static/lightweight-charts.js`
+- **.St()** (21 connections) — `app/static/lightweight-charts.js`
+- **.W()** (18 connections) — `app/static/lightweight-charts.js`
+- **.bp()** (13 connections) — `app/static/lightweight-charts.js`
+- **.fp()** (11 connections) — `app/static/lightweight-charts.js`
+- **zs** (11 connections) — `app/static/lightweight-charts.js`
+- **es()** (9 connections) — `app/static/lightweight-charts.js`
+- **E()** (8 connections) — `app/static/lightweight-charts.js`
+- **.fp()** (8 connections) — `app/static/lightweight-charts.js`
+- **.fp()** (8 connections) — `app/static/lightweight-charts.js`
+- **.Wm()** (8 connections) — `app/static/lightweight-charts.js`
+- **.Ae()** (7 connections) — `app/static/lightweight-charts.js`
+- **.op()** (7 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (6 connections) — `app/static/lightweight-charts.js`
+- **.Mp()** (6 connections) — `app/static/lightweight-charts.js`
+- **.Hm()** (6 connections) — `app/static/lightweight-charts.js`
+- **.pp()** (6 connections) — `app/static/lightweight-charts.js`
+- **.zm()** (6 connections) — `app/static/lightweight-charts.js`
+- **.sp()** (5 connections) — `app/static/lightweight-charts.js`
+- **.mv()** (5 connections) — `app/static/lightweight-charts.js`
+- **.lv()** (5 connections) — `app/static/lightweight-charts.js`
+- **.uv()** (5 connections) — `app/static/lightweight-charts.js`
+- **.j()** (5 connections) — `app/static/lightweight-charts.js`
+- **.Sp()** (5 connections) — `app/static/lightweight-charts.js`
+- **.Mt()** (4 connections) — `app/static/lightweight-charts.js`
+- *... and 37 more nodes in this community*
 
 ## Relationships
 
-- [Watchdog Supervisor](Watchdog_Supervisor.md) (2 shared connections)
-- [Live Scanner Loop](Live_Scanner_Loop.md) (1 shared connections)
-- [Scanner Alert Isolation Tests](Scanner_Alert_Isolation_Tests.md) (1 shared connections)
-- [Onboarding Announce Tests](Onboarding_Announce_Tests.md) (1 shared connections)
-- [test_autotrader.py](test_autotrader.py.md) (1 shared connections)
+- [Chart Vendor Layout](Chart_Vendor_Layout.md) (20 shared connections)
+- [Chart Vendor Internals](Chart_Vendor_Internals.md) (17 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (12 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (7 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (5 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (5 shared connections)
+- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (5 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (5 shared connections)
+- [.Mt](Mt.md) (4 shared connections)
+- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (4 shared connections)
+- [execsim.py](execsim.py.md) (4 shared connections)
+- [Fact Store Conventions](Fact_Store_Conventions.md) (3 shared connections)
 
 ## Source Files
 
-- `app/notify.py`
+- `app/static/lightweight-charts.js`
+- `app/tests/test_cockpit_redesign.js`
 
 ## Audit Trail
 
-- EXTRACTED: 68 (97%)
-- INFERRED: 2 (3%)
+- EXTRACTED: 310 (99%)
+- INFERRED: 4 (1%)
 - AMBIGUOUS: 0 (0%)
 
 ---

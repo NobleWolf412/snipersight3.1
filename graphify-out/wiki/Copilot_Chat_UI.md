@@ -1,11 +1,11 @@
 # Copilot Chat UI
 
-> 34 nodes
+> 37 nodes
 
 ## Key Concepts
 
-- **copilot.js** (21 connections) — `app/static/copilot.js`
-- **render()** (12 connections) — `app/static/copilot.js`
+- **copilot.js** (24 connections) — `app/static/copilot.js`
+- **render()** (15 connections) — `app/static/copilot.js`
 - **tracer.js** (11 connections) — `app/static/tracer.js`
 - **wire()** (9 connections) — `app/static/copilot.js`
 - **startCapture()** (6 connections) — `app/static/copilot.js`
@@ -15,6 +15,8 @@
 - **shell()** (5 connections) — `app/static/tracer.js`
 - **paint()** (5 connections) — `app/static/tracer.js`
 - **failed()** (5 connections) — `app/static/tracer.js`
+- **elapsed()** (4 connections) — `app/static/copilot.js`
+- **beaconHtml()** (4 connections) — `app/static/copilot.js`
 - **stopCapture()** (4 connections) — `app/static/copilot.js`
 - **analyzeCapture()** (4 connections) — `app/static/copilot.js`
 - **send()** (4 connections) — `app/static/copilot.js`
@@ -24,12 +26,10 @@
 - **summary()** (4 connections) — `app/static/tracer.js`
 - **storageFailed()** (3 connections) — `app/static/copilot.js`
 - **saveMsgs()** (3 connections) — `app/static/copilot.js`
-- **elapsed()** (3 connections) — `app/static/copilot.js`
 - **captureHtml()** (3 connections) — `app/static/copilot.js`
-- **finishCapture()** (3 connections) — `app/static/copilot.js`
-- **discardCapture()** (3 connections) — `app/static/copilot.js`
-- **waitMedia()** (3 connections) — `app/static/copilot.js`
-- *... and 9 more nodes in this community*
+- **clampBeacon()** (3 connections) — `app/static/copilot.js`
+- **wireBeacon()** (3 connections) — `app/static/copilot.js`
+- *... and 12 more nodes in this community*
 
 ## Relationships
 
@@ -42,8 +42,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 142 (89%)
-- INFERRED: 18 (11%)
+- EXTRACTED: 160 (90%)
+- INFERRED: 18 (10%)
 - AMBIGUOUS: 0 (0%)
 
 ---

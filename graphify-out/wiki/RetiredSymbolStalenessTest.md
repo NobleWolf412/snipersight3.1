@@ -1,4 +1,4 @@
-# test_autotrader.py
+# RetiredSymbolStalenessTest
 
 > 11 nodes
 
@@ -18,7 +18,7 @@
 
 ## Relationships
 
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
+- [momentum.py](momentum.py.md) (1 shared connections)
 
 ## Source Files
 

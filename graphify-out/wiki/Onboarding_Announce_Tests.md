@@ -21,7 +21,7 @@
 ## Relationships
 
 - [Live Scanner Loop](Live_Scanner_Loop.md) (1 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
+- [momentum.py](momentum.py.md) (1 shared connections)
 
 ## Source Files
 
