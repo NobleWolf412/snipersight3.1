@@ -165,13 +165,25 @@
     }
     if (e.data !== undefined || e.err) {
       try { fn(e.data, e.err); } catch (err) { console.error('[ssdata]', err); }
-    } else {
+    } else if (marketAllows(path)) {
       get(path).catch(() => { /* the emit in fetchNow already told the subscriber */ });
     }
     return () => {
       e.subs.delete(fn);
       if (!e.subs.size) { e.everyMs = 0; e.nextAt = 0; }   // stop polling for nobody
     };
+  }
+
+  /* Crypto and Stocks are separate books. A subscription owned by the hidden
+     workspace must not keep polling its server authorities in the background.
+     Switching back fetches once immediately, so pausing does not make the
+     restored screen wait for its old cadence. */
+  function marketAllows(path) {
+    if (!window.SSMarkets) return true;
+    const market = window.SSMarkets.current();
+    if (!market) return false;
+    return market === 'stocks' ? path.startsWith('/api/stocks/')
+                               : !path.startsWith('/api/stocks/');
   }
 
   // Force the next read to hit the network — for after a POST changes state.
@@ -195,7 +207,7 @@
     if (document.hidden) return;
     const now = Date.now();
     for (const e of entries.values()) {
-      if (!e.everyMs || !e.subs.size || e.inflight) continue;
+      if (!e.everyMs || !e.subs.size || e.inflight || !marketAllows(e.path)) continue;
       if (e.nextAt && now >= e.nextAt) fetchNow(e.path).catch(() => {});
     }
   }, TICK);
@@ -204,8 +216,15 @@
   // whatever was on screen when it was hidden.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
-    for (const e of entries.values()) if (e.everyMs && e.subs.size) fetchNow(e.path).catch(() => {});
+    for (const e of entries.values()) if (e.everyMs && e.subs.size && marketAllows(e.path))
+      fetchNow(e.path).catch(() => {});
   });
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('ss:market-change', () => {
+      for (const e of entries.values()) if (e.everyMs && e.subs.size && marketAllows(e.path))
+        fetchNow(e.path).catch(() => {});
+    });
+  }
 
   /* THE THREE STATES, answered from one place.
 

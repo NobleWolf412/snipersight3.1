@@ -150,6 +150,14 @@ boundary makes a newly imported bar look developing to the older quality clock.
 That false verdict skipped 12-18 otherwise healthy markets at a time. A network
 request finishing later is not permission to move the input boundary.
 
+**An asset class is a workspace boundary, not a symbol filter.** Crypto and US
+Stocks share the shell, vault and failure grammar, but not their store, scanner,
+universe, book, baseline or recurring reads. The crypto venue resolver derives
+capabilities from crypto symbol spelling and must never receive an equity
+ticker. Stocks remains paper-only and visibly blocked until both Alpaca Paper +
+SIP and Massive reference access are verified; a stored key is configuration,
+not verification, and an Alpaca account pass without SIP is incomplete.
+
 **The scanner-recorded quality report is the operator verdict.** A server,
 browser refresh, offline backfill, or shell observer may calculate a private
 diagnostic, but must not persist it into `quality_runs`; doing so creates a

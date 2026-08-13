@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 from engine import registry, store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
 from engine import momentum, volatility, volume, ma, fvg, volprofile, ranges
-from engine import costs, venues
+from engine import costs, venues, stocks
 from engine import achievements, automation, broker_factory, contracts, execution, learning, market_context, opportunities, positions, venues
 from engine import factorgrade as factorgrade_engine, factorstats as factorstats_engine
 from engine import edgestats
@@ -2830,6 +2830,8 @@ def credentials_status():
     from engine import credentials
     return {"available": credentials.available(), "status": credentials.status(),
             "fields": list(credentials.FIELDS),
+            "target_fields": {target: list(fields) for target, fields
+                              in credentials.TARGET_FIELDS.items()},
             "note": "Stored with Windows DPAPI, encrypted to your user account. "
                     "Never written to the fact store, the log, or git. A stored "
                     "key does not enable live trading — that gate is separate."}
@@ -2857,6 +2859,22 @@ def credentials_store(payload: dict):
     get_logger().info(f"CREDENTIAL {'cleared' if payload.get('clear') else 'stored'}: "
                       f"{venue}/{field or 'all'}")
     return {"ok": True, "status": credentials.status()}
+
+
+@app.get("/api/stocks/status")
+def stocks_status():
+    """Stock-workspace readiness without decrypting or probing credentials."""
+    return stocks.status()
+
+
+@app.post("/api/stocks/connections/test")
+def stocks_connection_test(payload: dict):
+    """Read-only provider verification.  This route can never place an order."""
+    target = str(payload.get("target") or "")
+    try:
+        return stocks.test_connection(target)
+    except stocks.StockProviderError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @app.post("/api/manual/arm")

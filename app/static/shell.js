@@ -269,6 +269,7 @@
                 '4': 'results', '5': 'settings', '6': 'ledger',
                 '7': 'diagnostics'};
   addEventListener('keydown', e => {
+    if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
     // never steal a keystroke from a field, and never from a chord the OS or
     // the browser owns
     if(e.ctrlKey || e.metaKey || e.altKey) return;
@@ -4423,8 +4424,14 @@ weighed in. Name the facts you used.`;
     'phemex-mainnet':'Mainnet order key. LIVE remains build-locked; never grant withdrawal rights.',
     'kraken-perp':   'Needs READ only. Do not grant withdrawal rights.',
   };
+  const CRYPTO_CREDENTIAL_TARGETS = new Set([
+    'coinbase-spot', 'phemex-perp', 'phemex-testnet',
+    'phemex-mainnet', 'kraken-perp',
+  ]);
+  const credFieldsFor = (d, target) =>
+    (d.target_fields && d.target_fields[target]) || d.fields;
   function buildCredRows(d){
-    const venues = Object.keys(d.status);
+    const venues = Object.keys(d.status).filter(v => CRYPTO_CREDENTIAL_TARGETS.has(v));
     $('credFields').innerHTML = venues.map(v => {
       const nice = v.replace(/-/g, ' ');
       const scope = CRED_SCOPES[v] || 'Read-only access is enough; this app ' +
@@ -4435,7 +4442,7 @@ weighed in. Name the facts you used.`;
           <h3 class="t-label" style="font-size:11px">${esc(nice)}</h3>
           <span class="chip" data-credstate="${esc(v)}">—</span>
         </header>
-        ${d.fields.map(f => {
+        ${credFieldsFor(d, v).map(f => {
           const id = `cred-${v}-${f}`.replace(/[^a-zA-Z0-9-]/g, '-');
           return `
           <div class="cred-field" data-credrow="${esc(v)}|${esc(f)}">
@@ -4469,12 +4476,15 @@ weighed in. Name the facts you used.`;
     $('credChip').className = 'chip ' + (d.available ? 'chip-green' : 'chip-red');
 
     // rebuild only when the set of venues/fields itself changes
-    const shape = Object.keys(d.status).sort().join(',') + '::' + d.fields.join(',');
+    const cryptoTargets = Object.keys(d.status)
+      .filter(v => CRYPTO_CREDENTIAL_TARGETS.has(v)).sort();
+    const shape = cryptoTargets.map(v => `${v}:${credFieldsFor(d, v).join(',')}`).join('::');
     if(shape !== credShape){ buildCredRows(d); credShape = shape; }
 
-    for(const v of Object.keys(d.status)){
+    for(const v of cryptoTargets){
       let stored = 0;
-      for(const f of d.fields){
+      const fields = credFieldsFor(d, v);
+      for(const f of fields){
         const set = d.status[v][f];
         if(set) stored++;
         const input = document.querySelector(`[data-cred="${v}|${f}"]`);
@@ -4489,7 +4499,7 @@ weighed in. Name the facts you used.`;
          venue with a key and no secret is not usable and not untouched. */
       const chip = document.querySelector(`[data-credstate="${v}"]`);
       if(chip){
-        const n = d.fields.length;
+        const n = fields.length;
         chip.textContent = stored === 0 ? 'not connected'
           : stored < n ? `partly set — ${stored} of ${n}` : 'connected';
         chip.className = 'chip ' + (stored === 0 ? '' : stored < n ? 'chip-amber' : 'chip-green');
@@ -5469,6 +5479,7 @@ weighed in. Name the facts you used.`;
   };
 
   async function refresh(){
+    if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
     /* The portfolio lands FIRST and alone. The deck's membership is a join
        against it, so running the two concurrently meant a first paint that
        rendered a filled position as a pending card whenever the overview won
@@ -5537,5 +5548,8 @@ weighed in. Name the facts you used.`;
 
   refresh();
   booted = true;
+  addEventListener('ss:market-change', event => {
+    if(event.detail && event.detail.market === 'crypto') refresh();
+  });
   setInterval(refresh, 30000);
 })();

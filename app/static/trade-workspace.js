@@ -137,6 +137,7 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
   });
 
   async function refreshAuthority(){
+    if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
     try{
       const requests = [api('/api/automation/status'), api('/api/positions/managed')];
       if(selectedSetupId) requests.push(api('/api/opportunities/' + encodeURIComponent(selectedSetupId)));
@@ -156,4 +157,7 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
   syncSheet();
   refreshAuthority();
   setInterval(refreshAuthority, 15000);
+  addEventListener('ss:market-change', event => {
+    if(event.detail && event.detail.market === 'crypto') refreshAuthority();
+  });
 })();

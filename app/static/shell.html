@@ -15,7 +15,32 @@
      the shell green on every launch — the accent that means "nothing of
      yours is in the market" — and flipped it to amber a second later.
      See setAccentMode() in shell.js. -->
-<body data-mode="unknown">
+<body data-mode="unknown" data-market="boot">
+
+<!-- Choosing an asset class changes the book, clock, evidence and controls;
+     it is a first-run gate, not a small preference buried in Settings.  The
+     same surface is reused by the permanent market switcher. -->
+<div class="market-gate" id="marketGate" role="dialog" aria-modal="true"
+     aria-labelledby="marketGateTitle" hidden>
+  <div class="market-gate-card">
+    <span class="market-eyebrow">Scout workspace</span>
+    <h1 id="marketGateTitle">Which market are you working?</h1>
+    <p>Each workspace keeps its own scanner, evidence, positions and results.</p>
+    <div class="market-choices">
+      <button type="button" class="market-choice crypto" data-market-choice="crypto">
+        <span class="market-choice-icon">24/7</span>
+        <strong>Crypto</strong>
+        <small>The existing live scanner, setup radar and crypto paper book.</small>
+      </button>
+      <button type="button" class="market-choice stocks" data-market-choice="stocks">
+        <span class="market-choice-icon">NYSE</span>
+        <strong>US Stocks</strong>
+        <small>Sessions, earnings, consolidated tape and a separate stock book.</small>
+      </button>
+    </div>
+    <button type="button" class="btn market-cancel" id="marketCancel" hidden>Keep current workspace</button>
+  </div>
+</div>
 
 <!-- Tab order reached the glossary terms inside the header before any
      action. First stop is now the content.
@@ -28,7 +53,7 @@
      every .surface now carries tabindex="-1" so it can be that target. -->
 <a class="skip-link" href="#s-command">Skip to content</a>
 
-<div class="shell">
+<div class="shell" id="cryptoApp" hidden>
 
   <!-- ══ top bar: identity, venue, mode, health ══ -->
   <header class="topbar">
@@ -40,6 +65,8 @@
         <span class="orb warn"></span><span class="term" data-t="paper">Paper</span>
       </span>
       <span class="top-venue" id="venueNote" title="active execution venue"><span class="term" data-t="perps">Phemex perps</span></span>
+      <button type="button" class="market-pill" data-market-switch
+              aria-label="Switch market workspace">Crypto <span aria-hidden="true">⌄</span></button>
     </div>
 
     <div class="topbar-system" aria-label="System status">
@@ -1489,6 +1516,148 @@
 
 </div>
 
+<!-- Stocks is intentionally a separate workspace.  It shares shell grammar
+     and encrypted credentials, but none of the crypto book, counts or venue
+     assumptions.  Empty states stay explicit until the stock authorities that
+     own them exist. -->
+<div class="stock-app" id="stocksApp" hidden>
+  <header class="stock-topbar">
+    <div class="stock-identity">
+      <img src="/static/assets/snipersight-logo.png" alt="SniperSight">
+      <span class="stock-market-name">US Stocks</span>
+      <button type="button" class="market-pill" data-market-switch
+              aria-label="Switch market workspace">Stocks <span aria-hidden="true">⌄</span></button>
+    </div>
+    <div class="stock-authority" aria-label="Stock workspace status">
+      <span class="chip chip-amber" id="stockModeChip">Paper build</span>
+      <span class="chip" id="stockStateChip">Reading readiness</span>
+    </div>
+    <span class="stock-lock">Live orders disabled</span>
+  </header>
+
+  <nav class="stock-nav" aria-label="Stock workspace">
+    <button type="button" class="on" data-stock-route="overview">Mission</button>
+    <button type="button" data-stock-route="setups">Setups</button>
+    <button type="button" data-stock-route="trade">Trade</button>
+    <button type="button" data-stock-route="performance">Review</button>
+    <button type="button" data-stock-route="system">Connections</button>
+  </nav>
+
+  <main class="stock-stage">
+    <section class="stock-surface on" data-stock-view="overview">
+      <div class="stock-hero">
+        <div>
+          <span class="market-eyebrow">Stock scout</span>
+          <h1>Build the stock book in the right order.</h1>
+          <p id="stockNarrative">Reading the stock foundation…</p>
+        </div>
+        <button type="button" class="btn btn-primary" data-stock-open="system">Connect providers</button>
+      </div>
+
+      <div class="stock-summary">
+        <article><span>Market</span><strong>US equities</strong><small>Separate from the crypto universe</small></article>
+        <article><span>Execution</span><strong>Alpaca paper</strong><small>Orders are not wired in this build</small></article>
+        <article><span>Live tape</span><strong>Consolidated SIP</strong><small>IEX-only data is not treated as the market</small></article>
+        <article><span>Research</span><strong>Massive</strong><small>Listings, delistings and corporate actions</small></article>
+      </div>
+
+      <div class="stock-layout">
+        <section class="panel stock-progress-panel">
+          <div class="panel-head"><h2 class="t-section">Bot progress</h2>
+            <span class="chip" id="stockProgressChip">0 of 4 ready</span></div>
+          <div class="panel-body" id="stockProgress" aria-live="polite">
+            <div class="skeleton" role="status" aria-label="loading"><div class="skel" style="height:170px"></div></div>
+          </div>
+        </section>
+        <section class="panel stock-blocker-panel">
+          <div class="panel-head"><h2 class="t-section">Current blockers</h2></div>
+          <div class="panel-body" id="stockBlockers" aria-live="polite">
+            <p class="stock-muted">Reading stock readiness…</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="stock-surface" data-stock-view="setups">
+      <div class="surface-head"><h1 class="t-page">Stock setups</h1>
+        <p>Only stock-native candidates will appear here.</p></div>
+      <div class="stock-empty">
+        <span class="stock-empty-mark">SETUPS BLOCKED</span>
+        <h2>No stock scanner is running yet.</h2>
+        <p>Provider verification and the point-in-time universe come first. Crypto setups are never copied into this workspace.</p>
+        <button type="button" class="btn btn-primary" data-stock-open="system">Finish connections</button>
+      </div>
+    </section>
+
+    <section class="stock-surface" data-stock-view="trade">
+      <div class="surface-head"><h1 class="t-page">Stock trade</h1>
+        <p>Session-aware planning and paper execution.</p></div>
+      <div class="stock-empty">
+        <span class="stock-empty-mark">NO STOCK PLAN</span>
+        <h2>There is no stock setup to inspect.</h2>
+        <p>This workspace will not borrow a crypto chart, quantity or risk verdict while the stock book is empty.</p>
+      </div>
+    </section>
+
+    <section class="stock-surface" data-stock-view="performance">
+      <div class="surface-head"><h1 class="t-page">Stock review</h1>
+        <p>A separate baseline for a different market.</p></div>
+      <div class="stock-empty">
+        <span class="stock-empty-mark">NO STOCK RECORD</span>
+        <h2>No stock trades have been graded.</h2>
+        <p>Crypto outcomes, samples and strategy grades are intentionally excluded.</p>
+      </div>
+    </section>
+
+    <section class="stock-surface" data-stock-view="system">
+      <div class="surface-head"><h1 class="t-page">Stock connections</h1>
+        <p>Paper execution and market authorities. Keys stay encrypted on this machine.</p></div>
+      <div class="stock-provider-grid">
+        <section class="panel stock-provider" data-stock-provider="alpaca-paper">
+          <div class="panel-head"><div><span class="market-eyebrow">Execution + live tape</span>
+            <h2 class="t-section">Alpaca Paper + SIP</h2></div>
+            <span class="chip" data-stock-provider-state="alpaca-paper">Not configured</span></div>
+          <div class="panel-body">
+            <p>Paper account custody and consolidated US exchange data. A valid account without SIP remains incomplete.</p>
+            <label for="stockAlpacaKey">API key</label>
+            <input id="stockAlpacaKey" type="password" autocomplete="off" data-stock-cred="alpaca-paper|api_key" placeholder="not set">
+            <label for="stockAlpacaSecret">API secret</label>
+            <input id="stockAlpacaSecret" type="password" autocomplete="off" data-stock-cred="alpaca-paper|api_secret" placeholder="not set">
+            <div class="stock-provider-actions">
+              <button type="button" class="btn btn-primary" data-stock-save="alpaca-paper">Save encrypted</button>
+              <button type="button" class="btn" data-stock-test="alpaca-paper">Verify paper + SIP</button>
+            </div>
+            <p class="stock-provider-result" data-stock-result="alpaca-paper" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <section class="panel stock-provider" data-stock-provider="massive-stocks">
+          <div class="panel-head"><div><span class="market-eyebrow">Research authority</span>
+            <h2 class="t-section">Massive Stocks</h2></div>
+            <span class="chip" data-stock-provider-state="massive-stocks">Not configured</span></div>
+          <div class="panel-body">
+            <p>Point-in-time tickers, delistings and corporate actions. This prevents survivorship-biased research.</p>
+            <label for="stockMassiveKey">API key</label>
+            <input id="stockMassiveKey" type="password" autocomplete="off" data-stock-cred="massive-stocks|api_key" placeholder="not set">
+            <div class="stock-provider-actions">
+              <button type="button" class="btn btn-primary" data-stock-save="massive-stocks">Save encrypted</button>
+              <button type="button" class="btn" data-stock-test="massive-stocks">Verify reference data</button>
+            </div>
+            <p class="stock-provider-result" data-stock-result="massive-stocks" aria-live="polite"></p>
+          </div>
+        </section>
+      </div>
+      <div class="stock-safety-note"><strong>Paper first.</strong> These connections cannot enable live stock orders. A separate stock scanner, evidence record and promotion gate must exist before execution is added.</div>
+    </section>
+  </main>
+
+  <footer class="stock-statusbar">
+    <span><span class="orb warn"></span><b id="stockFooterState">Stock foundation</b></span>
+    <span>Isolated stock book · crypto state untouched</span>
+    <span>Live routing not built</span>
+  </footer>
+</div>
+
 <!-- A11 — every one of these was synchronous, so 280KB of JavaScript parsed
      before the first paint whether or not you ever opened the surface that
      needs it: lightweight-charts is 160KB for a Chart you may not visit and
@@ -1501,6 +1670,7 @@
 <script defer src="/static/lightweight-charts.js"></script>
 <!-- must load before any consumer: every module reads through it -->
 <script defer src="/static/ssdata.js?v=20"></script>
+<script defer src="/static/markets.js?v=20"></script>
 <script defer src="/static/ticket-math.js?v=20"></script>
 <script defer src="/static/glossary.js?v=20"></script>
 <!-- Before chart.js and shell.js: both call SSConfirm at their commit points,
@@ -1519,6 +1689,7 @@
      dependency declaration. -->
 <script defer src="/static/wheel.js?v=20"></script>
 <script defer src="/static/shell.js?v=20"></script>
+<script defer src="/static/stocks.js?v=20"></script>
 <script defer src="/static/operations.js?v=20"></script>
 <script defer src="/static/mode-control.js?v=20"></script>
 <script defer src="/static/opportunities.js?v=20"></script>

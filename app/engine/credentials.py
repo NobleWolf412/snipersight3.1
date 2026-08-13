@@ -6,8 +6,9 @@ Design constraints, stated because they are the whole point of this module:
     ciphertext to the current Windows user account. Another account on the same
     machine cannot decrypt it, and the plaintext never touches disk.
   · Nothing here ever RETURNS a secret to a caller that could surface it. The
-    read path exists only for a future signed-request layer; the API exposes
-    `has_secret`, never the value.
+    read path exists only for signed-request adapters. An operator may trigger
+    a read-only provider connection check over HTTP, but the adapter consumes
+    the decrypted value in-process and the API exposes only the verdict.
   · Secrets never enter the fact store, the engine log, or git. The vault file
     lives beside the database in `data/` and is excluded from version control.
   · Claude never enters, reads, or transports the operator's keys. The operator
@@ -41,7 +42,16 @@ VENUES = tuple(v.key for v in _venues.ALL)
 # target remains for read-only account integrations; it is never used by the
 # private order factory.
 PRIVATE_TARGETS = ("phemex-testnet", "phemex-mainnet")
-TARGETS = VENUES + PRIVATE_TARGETS
+# Stocks are a separate market workspace, not new crypto venues. Keeping these
+# targets out of venues.ALL is load-bearing: an equity symbol such as COIN must
+# never reach the crypto venue resolver and inherit perpetual/spot assumptions.
+STOCK_TARGETS = ("alpaca-paper", "massive-stocks")
+TARGETS = VENUES + PRIVATE_TARGETS + STOCK_TARGETS
+TARGET_FIELDS = {
+    **{target: FIELDS for target in VENUES + PRIVATE_TARGETS},
+    "alpaca-paper": ("api_key", "api_secret"),
+    "massive-stocks": ("api_key",),
+}
 
 
 class _Blob(ctypes.Structure):
@@ -104,7 +114,7 @@ def store_secret(venue: str, field: str, value: str) -> None:
     """Encrypt and persist one credential field. The value is never logged."""
     if venue not in TARGETS:
         raise ValueError(f"unknown venue {venue!r}")
-    if field not in FIELDS:
+    if field not in TARGET_FIELDS[venue]:
         raise ValueError(f"unknown field {field!r}")
     if not value or not value.strip():
         raise ValueError("empty value")
@@ -128,7 +138,8 @@ def clear(venue: str, field: str | None = None) -> None:
 def status() -> dict:
     """What EXISTS, never what it is. This is the only shape the API may return."""
     data = _load()
-    return {v: {f: bool(data.get(v, {}).get(f)) for f in FIELDS} for v in TARGETS}
+    return {v: {f: bool(data.get(v, {}).get(f))
+                for f in TARGET_FIELDS[v]} for v in TARGETS}
 
 
 def read_secret(venue: str, field: str) -> str | None:

@@ -69,6 +69,7 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
   }
 
   async function loadPerformanceWorkspace(){
+    if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
     if(!$('performanceTrust')) return;
     try{
       const [portfolio, dimensions, mode] = await Promise.all([
@@ -163,6 +164,7 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
   }
 
   async function loadSystemWorkspace(){
+    if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
     if(!$('automationFacts')) return;
     try{
       const [mode, operations, config, credentials, playbooks] = await Promise.all([
@@ -246,4 +248,10 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
   loadPerformanceWorkspace();
   loadSystemWorkspace();
   setInterval(loadSystemWorkspace, 30000);
+  addEventListener('ss:market-change', event => {
+    if(event.detail && event.detail.market === 'crypto'){
+      loadPerformanceWorkspace();
+      loadSystemWorkspace();
+    }
+  });
 })();

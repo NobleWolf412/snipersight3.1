@@ -133,6 +133,7 @@
   }
 
   async function refresh(){
+    if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
     try{ paint(await api('/api/operations')); }
     catch(err){
       const mode = $('modeChip');
@@ -168,4 +169,7 @@
   refresh();
   setInterval(refresh, 15000);
   addEventListener('focus', refresh);
+  addEventListener('ss:market-change', event => {
+    if(event.detail && event.detail.market === 'crypto') refresh();
+  });
 })();

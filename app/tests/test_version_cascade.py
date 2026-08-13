@@ -28,7 +28,7 @@ from engine import (aggregator, basis, bias, breakout, cooldowns, cycles,
                     execsim, venues, liquidity, ma, manual, momentum, ranges,
                     regime, risk, scalein, setups, structure, swings, importer,
                     volatility, volume, zones, trend)
-from engine import automation, autotrader, contracts, execution, lifecycle
+from engine import automation, autotrader, contracts, execution, lifecycle, stocks
 from engine import apexbridge, phemex_private, positions, quality
 
 
@@ -62,6 +62,7 @@ OPERATIONAL_EXPECTED = {
     "opportunities": "opportunity-v0.5-draft",
     "quality": "quality-v0.1-draft",
     "apexbridge": "apexbridge-v0.1-draft",
+    "stocks": "stocks-foundation-v0.1-draft",
 }
 
 
@@ -78,6 +79,7 @@ def operational_versions():
         "opportunities": opportunities.OPPORTUNITY_VERSION,
         "quality": quality.QUALITY_VERSION,
         "apexbridge": apexbridge.APEXBRIDGE_VERSION,
+        "stocks": stocks.STOCKS_FOUNDATION_VERSION,
     }
 
 # The current, deliberate state of the pipeline. Update WITH the cascade.

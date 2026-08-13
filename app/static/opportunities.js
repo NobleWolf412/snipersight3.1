@@ -171,6 +171,7 @@
   mobile.addEventListener('change', paintDetail);
 
   async function refresh(){
+    if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
     try{
       const wanted = selectedId;
       payload = await api('/api/opportunities?include_history=true');
@@ -197,4 +198,7 @@
   }
   refresh();
   setInterval(refresh, 30000);
+  addEventListener('ss:market-change', event => {
+    if(event.detail && event.detail.market === 'crypto') refresh();
+  });
 })();
