@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "app/backfill.py": {
-    "mtime": 1786155169.760644,
-    "ast_hash": "aeb49f4f12fa4c7334fa063fbf9a6b01",
+    "mtime": 1786592848.175146,
+    "ast_hash": "fee363a3589d97fbc300e8c286ac39f5",
     "semantic_hash": ""
   },
   "app/calibrate.py": {
@@ -25,8 +25,8 @@
     "semantic_hash": ""
   },
   "app/engine/apexbridge.py": {
-    "mtime": 1786155211.2028399,
-    "ast_hash": "bc56c11e0691994bdbd6c8e6b0bb20ff",
+    "mtime": 1786592719.695687,
+    "ast_hash": "fbf2511b98235a21cb893095bb7864eb",
     "semantic_hash": ""
   },
   "app/engine/bias.py": {
@@ -70,8 +70,8 @@
     "semantic_hash": "3bd049df463c4c78543f00b4474d18b7"
   },
   "app/engine/diagnostics.py": {
-    "mtime": 1786203668.4192128,
-    "ast_hash": "16631a565ede33339a2fc5be1d9e6106",
+    "mtime": 1786594264.5375552,
+    "ast_hash": "fcbc90c1c6f7bbf2489d70d6b22c8fc2",
     "semantic_hash": ""
   },
   "app/engine/divstats.py": {
@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "app/engine/quality.py": {
-    "mtime": 1786388061.312027,
-    "ast_hash": "164301c74fbc60ada15ead7bfbab350d",
+    "mtime": 1786593553.1426718,
+    "ast_hash": "645852e6653a8d57dd4ee62798606a4f",
     "semantic_hash": ""
   },
   "app/engine/ranges.py": {
@@ -245,9 +245,9 @@
     "semantic_hash": ""
   },
   "app/engine/telemetry.py": {
-    "mtime": 1785012554.7783668,
-    "ast_hash": "b28e8adb05374f1da42e060030520d10",
-    "semantic_hash": "b28e8adb05374f1da42e060030520d10"
+    "mtime": 1786594264.5390458,
+    "ast_hash": "843c1fda348cee12df9888a8ad2f099f",
+    "semantic_hash": ""
   },
   "app/engine/trend.py": {
     "mtime": 1786416349.8159146,
@@ -315,8 +315,8 @@
     "semantic_hash": "6c01759a9f1c493b111a4f844e2cacf8"
   },
   "app/server.py": {
-    "mtime": 1786506512.9110527,
-    "ast_hash": "ab517905878b88adaeffe9f85bfcca35",
+    "mtime": 1786594264.5410495,
+    "ast_hash": "54d967cbe2271e555e6fdf36f14b016b",
     "semantic_hash": ""
   },
   "app/static/chart.js": {
@@ -360,8 +360,8 @@
     "semantic_hash": "bb318371ce8811435f42f4a6ba8d64a7"
   },
   "app/static/shell.js": {
-    "mtime": 1786586546.5729227,
-    "ast_hash": "2de965f5ac027a3bb0247ec7d9382030",
+    "mtime": 1786594264.5442884,
+    "ast_hash": "a815f90b9c72f4e6e020c44538b8a2e0",
     "semantic_hash": ""
   },
   "app/static/ssdata.js": {
@@ -390,8 +390,8 @@
     "semantic_hash": "3359a0d0b7830e97bf3736d963b1680c"
   },
   "app/static/wizard.js": {
-    "mtime": 1786577305.6668334,
-    "ast_hash": "bebdb3e9da7f7df8ec20315a8f85b994",
+    "mtime": 1786592675.6595304,
+    "ast_hash": "6abb6a04ef0db99d81c61fc544647c9e",
     "semantic_hash": ""
   },
   "app/tests/__init__.py": {
@@ -465,9 +465,9 @@
     "semantic_hash": ""
   },
   "app/tests/test_cockpit_diagnostics.py": {
-    "mtime": 1785379683.5024562,
-    "ast_hash": "bf16afe1274160bbd5ec61183135585d",
-    "semantic_hash": "bf16afe1274160bbd5ec61183135585d"
+    "mtime": 1786592766.501404,
+    "ast_hash": "8d857ded2d5ec813714063a5e3400ad6",
+    "semantic_hash": ""
   },
   "app/tests/test_cold_start.py": {
     "mtime": 1786155241.652478,
@@ -490,8 +490,8 @@
     "semantic_hash": ""
   },
   "app/tests/test_core_hardening.py": {
-    "mtime": 1786202480.8867478,
-    "ast_hash": "21992ad382e1d52334324ca266120f93",
+    "mtime": 1786594309.439701,
+    "ast_hash": "793bfbfe22048b30a5935062426e5865",
     "semantic_hash": ""
   },
   "app/tests/test_credentials.py": {
@@ -540,9 +540,9 @@
     "semantic_hash": "9ec3d1e26f1d696543dbf53ecca87f87"
   },
   "app/tests/test_empty_state_honesty.js": {
-    "mtime": 1786072560.5970304,
-    "ast_hash": "ec721f969ca3a690beebe515e9fe251d",
-    "semantic_hash": "ec721f969ca3a690beebe515e9fe251d"
+    "mtime": 1786594295.8256545,
+    "ast_hash": "103252e95e05e32e859c7fec8a2363e6",
+    "semantic_hash": ""
   },
   "app/tests/test_engine_contracts.py": {
     "mtime": 1786589331.1849082,
@@ -600,9 +600,9 @@
     "semantic_hash": "f34329369ae112bac69942f1330c7612"
   },
   "app/tests/test_loading_states.js": {
-    "mtime": 1785806524.796415,
-    "ast_hash": "d33a01d48d1e7a866d8ae6325881056c",
-    "semantic_hash": "d33a01d48d1e7a866d8ae6325881056c"
+    "mtime": 1786592707.1476765,
+    "ast_hash": "2d26cc5f5e52c2d6e135e718a1ddc4ae",
+    "semantic_hash": ""
   },
   "app/tests/test_ma.py": {
     "mtime": 1785407116.8165736,
@@ -680,8 +680,8 @@
     "semantic_hash": "7eceb938c76e23e18282310753ee0d5f"
   },
   "app/tests/test_pipeline_quality.py": {
-    "mtime": 1786388134.412653,
-    "ast_hash": "eade0fb27029d2d64c589b54923070e4",
+    "mtime": 1786593549.4791343,
+    "ast_hash": "10df971ad7a0bd09eabfa3266e56a379",
     "semantic_hash": ""
   },
   "app/tests/test_pipeline_roster.py": {
@@ -695,9 +695,9 @@
     "semantic_hash": ""
   },
   "app/tests/test_quality_one_verdict.py": {
-    "mtime": 1785849930.5218468,
-    "ast_hash": "80b1260d1f29138fe53f6bdea72bb5ad",
-    "semantic_hash": "80b1260d1f29138fe53f6bdea72bb5ad"
+    "mtime": 1786592848.1781468,
+    "ast_hash": "8a2ae47fe367ca0bd0a366849b33ed38",
+    "semantic_hash": ""
   },
   "app/tests/test_ranges.py": {
     "mtime": 1785405079.940387,
@@ -815,8 +815,8 @@
     "semantic_hash": "77de747bd913d04ec328184174713abd"
   },
   "app/tests/test_version_cascade.py": {
-    "mtime": 1786589352.3462002,
-    "ast_hash": "a104bac7409e9644dbd8794cfe68bef4",
+    "mtime": 1786592766.502402,
+    "ast_hash": "abb51b3c3e59a850c6e4b8d3aef5de70",
     "semantic_hash": ""
   },
   "app/tests/test_volatility.py": {
@@ -930,8 +930,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786590116.376515,
-    "ast_hash": "7c2d3b42eec15ad7d19a56454fbe30c6",
+    "mtime": 1786594552.7121923,
+    "ast_hash": "94c21d40c6a21493a2677d31277bd83f",
     "semantic_hash": ""
   },
   "PRODUCT.md": {
@@ -955,8 +955,8 @@
     "semantic_hash": "be37c9ee0010389733bb2e7543aac7db"
   },
   "app/static/shell.html": {
-    "mtime": 1786586279.3339405,
-    "ast_hash": "0d70cfabf2abbf8278632f668dbb405f",
+    "mtime": 1786592848.1771455,
+    "ast_hash": "4ee01a4636c45b0bc5fb1454aee7592b",
     "semantic_hash": ""
   },
   "app/verification/major-inspection-btc-1d.md": {
