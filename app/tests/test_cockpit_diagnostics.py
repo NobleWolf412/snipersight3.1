@@ -29,12 +29,20 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
     def test_verdict_funnel_and_telemetry_are_all_present(self):
         """The operator asked for telemetry and rejection reasons in ONE place."""
         for anchor in ('id="dVerdict"', 'id="dFunnel"', 'id="dIssues"',
+                       'id="dNotes"',
                        'id="dTelemetry"'):
             self.assertIn(anchor, self.html, anchor)
 
-    def test_reaudit_is_reachable(self):
+    def test_refresh_is_read_only_and_reachable(self):
         self.assertIn('id="btnAudit"', self.html)
-        self.assertIn("btnAudit", self.js)
+        self.assertIn('id="btnAudit" style="margin-left:auto">Refresh', self.html)
+        start = self.js.index("$('btnAudit').addEventListener")
+        end = self.js.index("$('btnCopyDiag').addEventListener", start)
+        handler = self.js[start:end]
+        self.assertIn("loadHealth()", handler)
+        self.assertNotIn("/api/action", handler,
+                         "a Diagnostics refresh must not create a second "
+                         "pipeline verdict in the API process")
 
     def test_blocker_count_is_surfaced_in_the_nav(self):
         self.assertIn('id="nDiag"', self.html)

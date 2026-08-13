@@ -1249,7 +1249,7 @@
         </div>
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Pipeline</h2>
-            <button class="btn" id="btnAudit" style="margin-left:auto">Re-audit</button></div>
+            <button class="btn" id="btnAudit" style="margin-left:auto">Refresh</button></div>
           <div class="panel-body">
             <div class="t-metric" id="dVerdict" style="margin-bottom:var(--sm)">—</div>
             <div class="t-mono" id="dCounts" style="color:var(--fg-3)">—</div>
@@ -1296,6 +1296,14 @@
           <div class="panel-head"><h2 class="t-section">Open <span class="term" data-t="blocker">Issues</span></h2></div>
           <div id="dIssues"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:36px"></div>
+          <div class="skel" style="height:36px"></div>
+          <div class="skel" style="height:36px"></div>
+        </div></div>
+          <div class="panel-head" style="border-top:1px solid var(--line);margin-top:var(--md)">
+            <h2 class="t-section">Data notes</h2>
+          </div>
+          <p class="t-sub">Evidence caveats the bot recorded and accepted; no action is required.</p>
+          <div id="dNotes"><div class="skeleton" role="status" aria-label="loading">
           <div class="skel" style="height:36px"></div>
           <div class="skel" style="height:36px"></div>
         </div></div>

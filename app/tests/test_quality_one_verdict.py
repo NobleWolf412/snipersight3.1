@@ -27,7 +27,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from engine import quality, store
+from engine import apexbridge, quality, store
 
 
 class OneVerdictCase(unittest.TestCase):
@@ -162,6 +162,34 @@ class OneVerdictCase(unittest.TestCase):
             r = server.pipeline_health()
         self.assertEqual(r["status"], "BLOCKED")
         self.assertFalse(r["evaluation_allowed"])
+
+    def test_bridge_refresh_cannot_persist_a_competing_verdict(self):
+        self._record(status="DEGRADED", allowed=True,
+                     at=int(time.time()) - 20)
+        before = self.con.execute(
+            "SELECT COUNT(*) FROM quality_runs").fetchone()[0]
+        with mock.patch.object(
+                quality, "audit",
+                side_effect=AssertionError("observer recomputed health")):
+            result = apexbridge.action(self.con, "audit")
+        after = self.con.execute(
+            "SELECT COUNT(*) FROM quality_runs").fetchone()[0]
+        self.assertTrue(result["ok"])
+        self.assertIn("scanner audit", result["detail"])
+        self.assertEqual(after, before)
+
+    def test_forced_cache_refresh_is_not_durable_authority(self):
+        before = self.con.execute(
+            "SELECT COUNT(*) FROM quality_runs").fetchone()[0]
+        self.assertIsNotNone(quality.cached_audit(self.con, force=True))
+        after = self.con.execute(
+            "SELECT COUNT(*) FROM quality_runs").fetchone()[0]
+        self.assertEqual(after, before)
+
+    def test_offline_backfill_cannot_publish_a_scanner_verdict(self):
+        backfill = (Path(__file__).resolve().parents[1] / "backfill.py").read_text(
+            encoding="utf-8")
+        self.assertNotIn("quality.audit(con, now=now, persist=True)", backfill)
 
 
 if __name__ == "__main__":

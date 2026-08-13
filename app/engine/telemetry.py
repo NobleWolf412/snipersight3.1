@@ -15,7 +15,7 @@ NON_FAILURES = {"WINNER", "OPEN_POSITION", "WAITING_FOR_FILL", "AWAITING_RISK"}
 NORMAL_OUTCOMES = {
     "WINNER", "STOP_LOSS", "LOSING_EXIT", "TIMEOUT_EXIT",
     "ENTRY_NOT_FILLED", "COSTS_ERASED_EDGE", "OPEN_POSITION",
-    "WAITING_FOR_FILL", "AWAITING_RISK",
+    "WAITING_FOR_FILL", "AWAITING_RISK", "RISK_REJECTED",
 }
 
 
@@ -86,7 +86,7 @@ def build_record(setup: dict, risk: dict | None = None,
     return {
         **setup,
         **lifecycle,
-        "classification": "EXPECTED_ATTRITION" if lifecycle["failure_code"] in NORMAL_OUTCOMES else "DECISION",
+        "classification": "EXPECTED_ATTRITION" if lifecycle["failure_code"] in NORMAL_OUTCOMES else "DEFECT",
         "stop_distance": round(stop_distance, 10),
         "reward_distance": round(reward_distance, 10),
         "computed_rr": round(reward_distance / stop_distance, 2) if stop_distance else None,

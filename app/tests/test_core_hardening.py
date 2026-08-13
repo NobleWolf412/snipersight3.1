@@ -456,6 +456,29 @@ class TestSetupTelemetry(unittest.TestCase):
         self.assertEqual(row["failure_code"], "RISK_REJECTED")
         self.assertEqual(row["failure_owner"], "PORTFOLIO")
 
+    def test_expected_risk_rejection_is_not_a_system_defect(self):
+        row = telemetry.build_record(
+            self.setup,
+            {"decision": "REJECTED",
+             "reasons": ["NOT_IN_POINT_IN_TIME_UNIVERSE"]})
+        self.assertEqual(row["classification"], "EXPECTED_ATTRITION")
+        self.assertEqual(row["defect_count"], 0)
+
+    def test_known_parameterised_risk_limit_has_catalog_evidence(self):
+        row = telemetry.build_record(
+            self.setup,
+            {"decision": "REDUCED",
+             "reasons": ["PARTICIPATION_CAP(0.5%_of_24h)"]})
+        self.assertEqual(row["defect_count"], 0)
+        self.assertNotIn("rule_catalog_entry", row["missing_evidence"])
+
+    def test_known_data_gate_rejection_has_catalog_evidence(self):
+        row = telemetry.build_record(
+            self.setup,
+            {"decision": "REJECTED", "reasons": ["DATA_HEALTH_BLOCKED"]})
+        self.assertEqual(row["defect_count"], 0)
+        self.assertNotIn("rule_catalog_entry", row["missing_evidence"])
+
     def test_unfilled_limit_is_execution_failure(self):
         row = telemetry.build_record(
             self.setup, {"decision": "APPROVED"}, {"event": "MISSED"})

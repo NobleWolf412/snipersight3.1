@@ -114,7 +114,7 @@ def explain_risk(setup: dict, risk_fact: dict | None) -> list[dict]:
 
     catalog = {
         "DAILY_LOSS_HALT": ("RISK.001", "daily realized loss is below the halt threshold", "day not halted", "halted", "PORTFOLIO_CONTROL"),
-        "NOT_IN_POINT_IN_TIME_UNIVERSE": ("RISK.002", "symbol is admitted at the setup confirmation time", True, inputs.get("universe_eligible"), "DATA_CONTRACT"),
+        "NOT_IN_POINT_IN_TIME_UNIVERSE": ("RISK.002", "symbol is admitted at the setup confirmation time", True, inputs.get("universe_eligible"), "ELIGIBILITY"),
         "INVALID_STOP_DISTANCE": ("RISK.003", "abs(entry - stop) > 0", "> 0", inputs.get("stop_distance"), "INPUT_VALIDATION"),
         "SHORT_UNSUPPORTED_COINBASE_SPOT": ("RISK.004", "direction != SHORT or venue permits shorts", "supported direction", inputs.get("direction"), "VENUE_CONTRACT"),
         "PARENT_CLOSED": ("RISK.005", "scale-in parent remains open", "open parent setup", inputs.get("parent_setup_id"), "STATE_DEPENDENCY"),
@@ -122,6 +122,9 @@ def explain_risk(setup: dict, risk_fact: dict | None) -> list[dict]:
         "BELOW_MIN_NOTIONAL": ("RISK.009", "units * entry >= minimum notional", f">= {risk_engine.MIN_NOTIONAL_USD}", inputs.get("notional_usd"), "INPUT_VALIDATION"),
         "SCALE_IN_FORBIDDEN": ("RISK.010", "scale-in adds are sized above 0R", "adds permitted (>0R)", "0R — pyramiding forbidden by contract", "PORTFOLIO_CONTROL"),
         "ZERO_RISK_SIZE": ("RISK.011", "an approved position carries positive risk", "> 0", inputs.get("intended_risk_usd"), "INPUT_VALIDATION"),
+        "DATA_HEALTH_BLOCKED": ("RISK.012", "the scanner-recorded data audit allows evaluation", "not BLOCKED", "BLOCKED", "DATA_GATE"),
+        "OPERATOR_HALT": ("RISK.013", "the operator halt is clear", False, True, "PORTFOLIO_CONTROL"),
+        "PARTICIPATION_TOO_THIN": ("RISK.014", "venue participation supports at least the minimum reduced size", "sufficient liquidity", "too thin", "LIQUIDITY_CONTROL"),
         "WITHIN_LIMITS": ("RISK.000", "all risk authority rules pass", "all rules pass", decision, "DECISION"),
         "UNSPECIFIED": ("RISK.UNKNOWN", None, "machine-readable reason", None, "MISSING_EVIDENCE"),
     }
@@ -132,6 +135,18 @@ def explain_risk(setup: dict, risk_fact: dict | None) -> list[dict]:
             meta = ("RISK.006", "open base positions < max concurrent positions", f"< {risk_engine.MAX_CONCURRENT}", raw_reason, "PORTFOLIO_CONTROL")
         elif base == "SPOT_CASH_CAP":
             meta = ("RISK.008", "implied leverage <= venue leverage cap", f"<= {risk_engine.MAX_LEVERAGE}x", inputs.get("implied_leverage"), "VENUE_CONTRACT")
+        elif base == "PARTICIPATION_CAP":
+            meta = ("RISK.015", "position size stays inside the venue participation cap", "<= 0.5% of 24h volume", raw_reason, "LIQUIDITY_CONTROL")
+        elif base == "LEVERAGE_CAP":
+            meta = ("RISK.016", "position size stays inside the venue leverage cap", "within venue leverage", raw_reason, "VENUE_CONTRACT")
+        elif base == "STOP_BEYOND_LIQUIDATION":
+            meta = ("RISK.017", "the protective stop is reached before liquidation", "stop before liquidation", raw_reason, "VENUE_CONTRACT")
+        elif base == "DRAWDOWN_HALT":
+            meta = ("RISK.018", "portfolio drawdown remains inside the configured halt", "inside drawdown limit", raw_reason, "PORTFOLIO_CONTROL")
+        elif base == "STRATEGY_DISABLED":
+            meta = ("RISK.019", "the setup playbook is enabled", "enabled", raw_reason, "CONFIG_CONTROL")
+        elif base == "COOLDOWN":
+            meta = ("RISK.020", "the symbol and direction are outside their re-entry cooldown", "cooldown clear", raw_reason, "REENTRY_CONTROL")
         else:
             meta = catalog.get(base, ("RISK.UNMAPPED", None, "registered reason code", raw_reason, "MISSING_EVIDENCE"))
         rule_id, expression, expected, actual, category = meta
@@ -169,10 +184,12 @@ def explain_lifecycle(setup: dict, risk_fact: dict | None, order: dict | None,
     normal_outcomes = {
         "WINNER", "STOP_LOSS", "LOSING_EXIT", "TIMEOUT_EXIT",
         "ENTRY_NOT_FILLED", "COSTS_ERASED_EDGE", "OPEN_POSITION",
-        "WAITING_FOR_FILL", "AWAITING_RISK",
+        "WAITING_FOR_FILL", "AWAITING_RISK", "RISK_REJECTED",
     }
+    category = ("RISK_DECISION" if code == "RISK_REJECTED" else
+                "TRADING_OUTCOME" if code in normal_outcomes else "SYSTEM_DEFECT")
     diagnostics.append(Diagnostic(
-        category="TRADING_OUTCOME" if code in normal_outcomes else "SYSTEM_DEFECT",
+        category=category,
         severity="INFO" if code in {"WINNER", "OPEN_POSITION", "WAITING_FOR_FILL", "AWAITING_RISK"} else "OUTCOME",
         rule_id=f"LIFECYCLE.{code}",
         engine="telemetry",

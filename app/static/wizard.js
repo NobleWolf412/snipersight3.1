@@ -234,7 +234,7 @@
     if (p.pending) return {
       title: T, result: 'unknown', value: 'first audit still running',
       means: M + ' It has not produced a verdict yet.',
-      doing: 'Wait for it to finish, then press Re-audit on Diagnostics.',
+      doing: 'Wait for the scanner to finish, then press Refresh on Diagnostics.',
       cta: { href: '#diagnostics', label: 'Diagnostics' }
     };
     const blockers = (p.blockers || []).length, warns = (p.warnings || []).length;
@@ -255,7 +255,7 @@
       means: M + ' A blocker means a fact broke its contract, so every ' +
              'performance figure downstream of it is suspect until it is fixed.',
       doing: 'Open Diagnostics → Open Issues for the exact codes, then press ' +
-             'Re-audit once they are addressed.',
+             'Refresh once they are addressed.',
       cta: { href: '#diagnostics', label: 'Diagnostics' }
     };
   }

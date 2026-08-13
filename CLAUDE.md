@@ -150,6 +150,19 @@ boundary makes a newly imported bar look developing to the older quality clock.
 That false verdict skipped 12-18 otherwise healthy markets at a time. A network
 request finishing later is not permission to move the input boundary.
 
+**The scanner-recorded quality report is the operator verdict.** A server,
+browser refresh, offline backfill, or shell observer may calculate a private
+diagnostic, but must not persist it into `quality_runs`; doing so creates a
+second authority and then `last_persisted()` falsely labels it as the verdict
+the scanner acted on. Diagnostics refreshes the recorded GET only.
+
+**An import retry chain is one gap acknowledgement, not one per poll.** Thin
+markets retry an expanding empty tail from the same `range_start`; sum only the
+maximum `n_gaps` for that start or the anonymous budget can hide later real
+holes. Still union every explicit timestamp from every retry: the final poll
+may receive a candle and report zero gaps without erasing the empty buckets
+earlier polls proved.
+
 **Do not POST to write endpoints to test them.** `/api/manual/arm`,
 `/api/positions/close` and `/api/positions/adopt` write to the operator's actual
 book. Use the suites, or a scratch database.

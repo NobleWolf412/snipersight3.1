@@ -46,7 +46,7 @@ ok('every skeleton names itself to assistive tech', () => {
 ok('skeleton blocks reserve real heights', () => {
   // the entire point is dimension: a skeleton with no height is the old
   // text placeholder wearing a different class
-  for (const id of ['deck', 'dIssues', 'dTelemetry', 'perfSymbol', 'perfStrategy']) {
+  for (const id of ['deck', 'dIssues', 'dNotes', 'dTelemetry', 'perfSymbol', 'perfStrategy']) {
     const i = HTML.indexOf(`id="${id}"`);
     assert(i > 0, `${id} missing`);
     const block = HTML.slice(i, i + 600);

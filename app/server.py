@@ -3656,7 +3656,8 @@ def pipeline_health(symbol: str | None = None):
             if report is not None:
                 report = {**report, "source": "local", "age_s": 0}
         if report is None:
-            return {"status": "PENDING", "evaluation_allowed": True,
+            return {"version": quality.QUALITY_VERSION,
+                    "status": "PENDING", "evaluation_allowed": True,
                     "pending": True, "stages": [], "blockers": [], "warnings": [],
                     "source": "none", "detail": "first audit running"}
         return report
@@ -3822,8 +3823,8 @@ def apex_state():
 
 @app.post("/api/action", status_code=202)
 def apex_action(payload: dict, response: Response):
-    """ApexShell action verbs. Allow-listed and non-destructive: `audit` re-runs
-    the quality audit, `brief` writes a war-room dossier for a human to dispatch.
+    """ApexShell action verbs. Allow-listed and non-destructive: `audit` refreshes
+    the scanner-recorded verdict, `brief` writes a war-room dossier for a human.
     Fixing is deliberately NOT a button — see engine/apexbridge.py."""
     if payload.get("paneId") not in (apexbridge.PANE_ID, None):
         raise HTTPException(404, "unknown pane")

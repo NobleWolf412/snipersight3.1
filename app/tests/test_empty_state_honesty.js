@@ -71,10 +71,11 @@ ok('Results: the empty window says so in words, not just dashes', () => {
   assert(/window empty/.test(b), 'no explanatory band');
 });
 
-ok('Telemetry: zero records is grey "no data", not green "clean"', () => {
+ok('Telemetry: zero records is grey "no data", not green "complete"', () => {
   const seg = SRC.slice(SRC.indexOf('telChip') - 900, SRC.indexOf('telChip') + 900);
   assert(seg.includes("'no data'"), 'empty record set still reads as a verdict');
-  assert(/clean · /.test(seg), 'a clean verdict carries no denominator');
+  assert(/evidence complete · /.test(seg),
+         'an evidence-complete verdict carries no denominator');
   // the grey branch must NOT be chip-green
   const greyIdx = seg.indexOf("'no data'");
   const after = seg.slice(greyIdx, greyIdx + 200);
@@ -148,8 +149,18 @@ ok('Pipeline: severity rungs are translated, not dropped', () => {
   for (const rung of ['SERVE_FLAG', 'QUARANTINE', 'AUTO_DISABLE', 'HALT']) {
     assert(b.includes(rung), 'no plain-English translation for ' + rung);
   }
-  assert(/flagged/.test(b) && /held back/.test(b) && /switched off/.test(b),
+  assert(/flagged/.test(b) && /quarantined/.test(b) && /switched off/.test(b),
          'rung names are shown raw rather than translated');
+});
+
+ok('Pipeline: expected venue caveats do not bury actionable issues', () => {
+  const b = body('loadHealth');
+  assert(/c\.rung === 'SERVE_FLAG'/.test(b),
+         'the mildest evidence notes are not classified from server authority');
+  assert(/dIssues'\)\.innerHTML = renderIssueGroups\(actionable/.test(b),
+         'Open Issues still receives every informational venue note');
+  assert(/dNotes'\)\.innerHTML = renderIssueGroups\(notes/.test(b),
+         'Data notes is present but not populated from the audit');
 });
 
 ok('Deck: a fresh window is distinguished from a quiet market', () => {

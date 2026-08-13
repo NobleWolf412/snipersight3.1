@@ -20,6 +20,11 @@ from pathlib import Path
 WAR_ROOM = Path(__file__).resolve().parents[2] / "war-room"
 PANE_ID = "snipersight"
 MAX_LOG = 40
+APEXBRIDGE_VERSION = "apexbridge-v0.1-draft"
+# v0.1: observer refreshes read the scanner-recorded quality verdict. The
+# bridge must never persist an API-process audit and relabel it as scanner
+# evidence; that recreates the split-brain verdict this surface was built to
+# eliminate.
 
 # monotonic log ring shared with the pane (ApexShell forwards only unseen seqs)
 _log: list[dict] = []
@@ -38,34 +43,16 @@ def _severity(status: str) -> str:
     return {"PASS": "good", "DEGRADED": "warning"}.get(status, "critical")
 
 
-_cache: dict = {"at": 0.0, "report": None, "refreshing": False}
-CACHE_TTL = 300
-
-
-def _refresh_async():
-    """Recompute the verdict off the request path."""
-    from . import quality, store
-    try:
-        con = store.connect()
-        try:
-            _cache["report"], _cache["at"] = quality.audit(con), time.time()
-        finally:
-            con.close()
-    except Exception as exc:
-        log_line(f"background audit failed: {exc}")
-    finally:
-        _cache["refreshing"] = False
-
-
 def _report(con):
-    """NEVER audit inside the request. A cold full audit was measured at 72s
-    while contending with the scanner's writes, and ApexShell's http source
-    times out at 6s (sourceHttp.js) — auditing synchronously would show the
-    pane as OFFLINE on every cache miss. Serve the last known verdict and
-    refresh in the background; the RE-AUDIT button forces a fresh one."""
-    import threading
+    """Return only the verdict the scanner recorded and acted on.
+
+    A cold full audit was measured at 72s while contending with scanner writes,
+    and an audit in this API process is a second authority even when it is
+    fast. The observer therefore reads the durable scanner report or renders
+    pending; it never derives a competing answer.
+    """
     from . import quality
-    return quality.cached_audit(con)   # one shared verdict for every surface
+    return quality.last_persisted(con)   # one shared verdict for every surface
 
 
 def state(con) -> dict:
@@ -74,7 +61,8 @@ def state(con) -> dict:
 
     report = _report(con)
     if report is None:          # first poll after start — say so, never stall
-        return {"data": {"status": "warning", "verdict": "AUDIT PENDING",
+        return {"version": APEXBRIDGE_VERSION,
+                "data": {"status": "warning", "verdict": "AUDIT PENDING",
                          "actionable": "—", "blockers": "—", "warnings": "—",
                          "scanner": "—", "equity": "—", "setups": "—",
                          "issues": [{"name": "first audit running", "value": "wait"}]},
@@ -137,6 +125,7 @@ def state(con) -> dict:
             break
 
     return {
+        "version": APEXBRIDGE_VERSION,
         "data": {
             "status": _severity(report["status"]),
             "verdict": f"{report['status']} · "
@@ -213,14 +202,16 @@ def action(con, action_id: str) -> dict:
     from . import quality
 
     if action_id == "audit":
-        _busy = True
-        try:
-            report = quality.audit(con, persist=True)
-            _cache["report"], _cache["at"] = report, time.time()   # button = fresh
-            log_line(f"audit: {report['status']} · {len(report['blockers'])} blockers")
-            return {"ok": True, "detail": report["status"]}
-        finally:
-            _busy = False
+        # Compatibility for older clients whose button still sends
+        # actionId=audit. It is a refresh, not authority to recompute health.
+        report = quality.last_persisted(con)
+        if report is None:
+            return {"ok": False, "detail": "scanner audit pending",
+                    "version": APEXBRIDGE_VERSION}
+        log_line(f"refresh: scanner {report['status']} - {report['age_s']}s old")
+        return {"ok": True,
+                "detail": f"{report['status']} - scanner audit {report['age_s']}s old",
+                "version": APEXBRIDGE_VERSION}
 
     if action_id == "brief":
         _busy = True
@@ -232,9 +223,11 @@ def action(con, action_id: str) -> dict:
             path = WAR_ROOM / name
             path.write_text(_brief_text(con, report, data), encoding="utf-8")
             log_line(f"brief written: war-room/{name} — hand it to a seat")
-            return {"ok": True, "detail": str(path)}
+            return {"ok": True, "detail": str(path),
+                    "version": APEXBRIDGE_VERSION}
         finally:
             _busy = False
 
     log_line(f"unknown action '{action_id}' refused")
-    return {"ok": False, "detail": f"unknown action: {action_id}"}
+    return {"ok": False, "detail": f"unknown action: {action_id}",
+            "version": APEXBRIDGE_VERSION}

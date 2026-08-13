@@ -49,7 +49,9 @@ def main():
                                   if k not in ("symbol", "tf"))
                 print(f"{name:9s} {r['symbol']:8s} {r['tf']:3s} {counts}")
     risk.run(con)
-    report = quality.audit(con, now=now, persist=True)
+    # This command is an offline repair/analysis tool, not the live scanner.
+    # Its local report must not replace the durable verdict shown to operators.
+    report = quality.audit(con, now=now)
     print(f"quality   {report['status']} blockers={len(report['blockers'])} "
           f"warnings={len(report['warnings'])} evaluation_allowed={report['evaluation_allowed']}")
     con.close()

@@ -12,6 +12,12 @@ from decimal import Decimal
 
 from . import aggregator, importer, venues
 
+QUALITY_VERSION = "quality-v0.1-draft"
+# v0.1: the persisted verdict distinguishes current missing producer lineage
+# from historical/operational facts, and repeated imports of the same empty
+# window no longer multiply the anonymous known-gap budget.  Both change what
+# Diagnostics calls an issue, so the read model carries a version from birth.
+
 STAGES = ("DATA", "AGGREGATION", "FACTS", "SETUP", "RISK", "EXECUTION", "ACCOUNTING")
 ORDER = {"PASS": 0, "DEGRADED": 1, "BLOCKED": 2}
 
@@ -51,7 +57,7 @@ CODE_RUNG = {
     "NO_COMPLETE_BUCKETS":     "SERVE_FLAG",
     # FACTS
     "CAUSALITY_VIOLATION":     "HALT",
-    "UNATTRIBUTED_LEGACY_FACTS": "SERVE_FLAG",
+    "UNATTRIBUTED_CURRENT_FACTS": "HALT",
     # SETUP
     "INVALID_BRACKET":         "AUTO_DISABLE",
     "INCOMPLETE_LINEAGE":      "SERVE_FLAG",
@@ -116,27 +122,51 @@ def _known_gap_buckets(con, sym: str, tf: str) -> tuple[set[int], int]:
     logged, never fabricated). Coinbase legitimately omits a bucket when zero
     trades occurred in it — an acknowledged void is data, not corruption.
 
-    Returns (explicitly listed timestamps, total acknowledged count). The list is
-    truncated at import (gaps[:200]) while n_gaps is exact, so a thin listing
-    like EUL-USD 15m with 830 real voids must be judged on the COUNT — otherwise
-    truncation alone re-wedges the fail-closed gate (regression seen 2026-07-26).
+    Returns (explicitly listed timestamps, acknowledged count after duplicate
+    retry chains are collapsed). The list is truncated at import (gaps[:200])
+    while n_gaps is exact, so a thin listing like EUL-USD 15m with 830 real
+    voids must be judged on the COUNT — otherwise truncation alone re-wedges
+    the fail-closed gate (regression seen 2026-07-26).
     """
     listed: set[int] = set()
-    total = 0
+    # A quiet tail is retried every cycle from the same last stored candle.
+    # Summing every import_log row counted the same missing buckets again and
+    # again: LSETH-USD accumulated 17, then 18, then 19... for one expanding
+    # empty window.  That inflated anonymous budget could excuse a genuinely
+    # unexplained hole later. One range_start is one retry chain: retain its
+    # largest count, while preserving every explicitly listed timestamp.
+    # A new stored candle advances range_start, so genuinely disjoint import
+    # spans still add normally.
+    retry_chains: dict[int, int] = {}
     # range_start >= PRE_2000: the quarantined cold-start rows (importer.py)
     # hold ~2M fabricated gap entries each. This reader ingested their counts
     # into its budget until 2026-08-09 — harmless only because those symbols'
     # real voids dwarfed nothing, but a budget built on fabricated numbers is
     # the exact defect the quarantine exists to contain.
-    for g, n in con.execute(
-            "SELECT gaps, n_gaps FROM import_log WHERE symbol=? AND tf=? "
+    for start, g, n in con.execute(
+            "SELECT range_start, gaps, n_gaps FROM import_log "
+            "WHERE symbol=? AND tf=? "
             "AND range_start>=?", (sym, tf, importer.PRE_2000)):
-        total += int(n or 0)
+        # A later response can finally contain a candle and report zero gaps
+        # for its shortened tail, but earlier recorded empty buckets remain
+        # real. Selecting only the final row erased 202 legitimate LSETH-USD
+        # acknowledgements on the first live verification of this fix.
         try:
             listed.update(int(t) for t in json.loads(g))
         except Exception:
-            continue
-    return listed, total
+            pass
+        key = int(start)
+        retry_chains[key] = max(retry_chains.get(key, 0), int(n or 0))
+    return listed, sum(retry_chains.values())
+
+
+# These are operator/system events, not deterministic engine outputs.  They
+# may be written outside RunRecorder by design and therefore have no producer
+# run to attach.  Calling them unattributed made a current alert look like a
+# broken engine fact and made the warning impossible to clear.
+LINEAGE_OPTIONAL_KINDS = frozenset({
+    "alert", "manual_intent", "manual_exec", "manual_override", "retention",
+})
 
 
 class DataQualityError(RuntimeError):
@@ -267,7 +297,8 @@ def cached_audit(con, force: bool = False):
     writes. Any HTTP handler that calls audit() directly therefore hangs its
     caller — which is exactly how the redesigned shell's health chip and the
     ApexShell pane came to disagree and stall. Serve the last known report and
-    refresh off the request path; `force` runs it synchronously for a button.
+    refresh off the request path; `force` runs a local, non-authoritative audit
+    synchronously for diagnostic callers.
     Returns None only before the very first audit completes — callers must
     render that as "pending", never as a confident zero.
     """
@@ -275,7 +306,10 @@ def cached_audit(con, force: bool = False):
     key = _db_key(con)
     slot = _slot(key)
     if force:
-        slot["report"] = audit(con, persist=True)
+        # A cache refresh is not scanner authority. Persisting here allowed an
+        # API-process diagnostic to become the newest durable report and then
+        # be mislabeled as the verdict the scanner acted on.
+        slot["report"] = audit(con)
         slot["at"] = time.time()
         return slot["report"]
 
@@ -552,13 +586,34 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
     if n:
         _issue(checks, "FACTS", "BLOCKED", "CAUSALITY_VIOLATION",
                f"{n} facts were confirmed before their market time", symbol)
-    unattributed = con.execute(
-        "SELECT COUNT(*) FROM facts WHERE producer_run_id IS NULL" + where,
-        args).fetchone()[0]
-    if unattributed:
-        _issue(checks, "FACTS", "DEGRADED", "UNATTRIBUTED_LEGACY_FACTS",
-               f"{unattributed} facts predate producer-run attribution; rebuild the baseline",
-               symbol)
+    # Producer lineage is a CURRENT-generation invariant.  The old global
+    # count guaranteed a permanent warning because this append-only store
+    # deliberately retains pre-lineage generations; resetting a research
+    # baseline cannot and should not rewrite them.  It also counted alerts and
+    # operator events that are legitimately written outside RunRecorder.
+    # Audit only automated facts in the active forward window.  A missing run
+    # there is not a historical note: the current evidence cannot be replayed,
+    # so fail closed and name the actual defect.
+    baseline = con.execute(
+        "SELECT started_at FROM research_baselines WHERE active=1 "
+        "ORDER BY id DESC LIMIT 1").fetchone()
+    if baseline:
+        excluded = sorted(LINEAGE_OPTIONAL_KINDS)
+        placeholders = ",".join("?" * len(excluded))
+        lineage_where = (
+            " WHERE producer_run_id IS NULL AND confirmed_at>=? "
+            f"AND kind NOT IN ({placeholders})")
+        lineage_args: list = [int(baseline[0]), *excluded]
+        if symbol:
+            lineage_where += " AND symbol=?"
+            lineage_args.append(symbol)
+        unattributed = con.execute(
+            "SELECT COUNT(*) FROM facts" + lineage_where,
+            lineage_args).fetchone()[0]
+        if unattributed:
+            _issue(checks, "FACTS", "BLOCKED", "UNATTRIBUTED_CURRENT_FACTS",
+                   f"{unattributed} current automated facts have no producer run",
+                   symbol)
 
     sv_clause, sv_args = _ver_clause("setup")
     setup_rows = con.execute(
@@ -675,7 +730,8 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
     rung_counts = {r: 0 for r in RUNGS}
     for c in checks:
         rung_counts[c["rung"]] = rung_counts.get(c["rung"], 0) + 1
-    result = {"observed_at": now, "status": status, "worst_rung": worst_rung,
+    result = {"version": QUALITY_VERSION,
+              "observed_at": now, "status": status, "worst_rung": worst_rung,
               "rung_counts": rung_counts,
               "evaluation_allowed": status != "BLOCKED",
               "strategy_rules_changed": False, "stages": stages,

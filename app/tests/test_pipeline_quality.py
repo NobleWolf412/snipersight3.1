@@ -6,7 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
-from engine import aggregator, quality, setups, store
+from engine import aggregator, importer, quality, setups, store
 from engine.runlog import RunRecorder
 
 
@@ -50,6 +50,51 @@ class TestMarketQuality(QualityStoreCase):
         self.con.commit()
         with self.assertRaises(quality.DataQualityError):
             quality.assert_market_ready(self.con, "BTC-USD", now=100_000)
+
+    def test_retried_empty_tail_does_not_multiply_known_gap_budget(self):
+        """A quiet market retries from the same last candle every cycle.
+
+        The 1-gap and later 2-gap log rows describe one expanding window, not
+        three venue acknowledgements. Summing them let the duplicate budget
+        excuse all three holes in this series; the third must remain visible.
+        """
+        base = importer.PRE_2000
+        self.candle("1H", base)
+        self.candle("1H", base + 4 * 3600)
+        for end, n_gaps in ((base + 2 * 3600, 1),
+                            (base + 3 * 3600, 2)):
+            self.con.execute(
+                "INSERT INTO import_log (symbol,tf,range_start,range_end,"
+                "n_candles,n_gaps,gaps,source,run_at,n_bad) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                ("BTC-USD", "1H", base, end, 0, n_gaps, "[]",
+                 "coinbase", end, 0))
+        self.con.commit()
+        checks = quality.audit_market_inputs(
+            self.con, "BTC-USD", now=base + 6 * 3600)
+        self.assertIn("SEQUENCE_GAPS", {c["code"] for c in checks})
+
+    def test_final_candle_does_not_erase_prior_gap_acknowledgements(self):
+        base = importer.PRE_2000
+        self.candle("1H", base)
+        self.candle("1H", base + 3 * 3600)
+        rows = [
+            (base + 3 * 3600, 0, 2,
+             json.dumps([base + 3600, base + 2 * 3600])),
+            (base + 4 * 3600, 1, 0, "[]"),
+        ]
+        for end, n_candles, n_gaps, gaps in rows:
+            self.con.execute(
+                "INSERT INTO import_log (symbol,tf,range_start,range_end,"
+                "n_candles,n_gaps,gaps,source,run_at,n_bad) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                ("BTC-USD", "1H", base, end, n_candles, n_gaps, gaps,
+                 "coinbase", end, 0))
+        self.con.commit()
+        checks = quality.audit_market_inputs(
+            self.con, "BTC-USD", now=base + 5 * 3600)
+        self.assertNotIn("SEQUENCE_GAPS", {c["code"] for c in checks})
+        self.assertIn("KNOWN_VENUE_GAPS", {c["code"] for c in checks})
 
     def test_aggregate_mismatch_is_blocking(self):
         self.complete_market()
@@ -224,6 +269,35 @@ class TestPipelineContracts(QualityStoreCase):
         producer = self.con.execute(
             "SELECT producer_run_id FROM facts WHERE kind='test'").fetchone()[0]
         self.assertEqual(producer, row[0])
+
+    def test_lineage_ignores_history_and_intentional_operational_facts(self):
+        store.start_baseline(self.con, started_at=100, label="test")
+        store.insert_fact(
+            self.con, symbol="BTC-USD", tf="1H", kind="test",
+            market_time=40, confirmed_at=50, algo_version="old-v1",
+            payload={"event": "PRE_BASELINE"})
+        store.insert_fact(
+            self.con, symbol="SYSTEM", tf="ALL", kind="alert",
+            market_time=200, confirmed_at=200, algo_version="alert-v1",
+            payload={"event": "OPERATOR_NOTE"})
+        self.con.commit()
+        report = quality.audit(self.con, now=300)
+        self.assertNotIn(
+            "UNATTRIBUTED_CURRENT_FACTS",
+            {c["code"] for c in report["blockers"] + report["warnings"]})
+
+    def test_current_automated_fact_without_producer_run_blocks(self):
+        store.start_baseline(self.con, started_at=100, label="test")
+        store.insert_fact(
+            self.con, symbol="BTC-USD", tf="1H", kind="test",
+            market_time=150, confirmed_at=200, algo_version="test-v1",
+            payload={"event": "CURRENT_WITHOUT_RUN"})
+        self.con.commit()
+        report = quality.audit(self.con, now=300)
+        findings = [c for c in report["blockers"]
+                    if c["code"] == "UNATTRIBUTED_CURRENT_FACTS"]
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["rung"], "HALT")
 
 
 class TestKillSwitchRungs(QualityStoreCase):

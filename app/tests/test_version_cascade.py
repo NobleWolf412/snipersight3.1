@@ -29,7 +29,7 @@ from engine import (aggregator, basis, bias, breakout, cooldowns, cycles,
                     regime, risk, scalein, setups, structure, swings, importer,
                     volatility, volume, zones, trend)
 from engine import automation, autotrader, contracts, execution, lifecycle
-from engine import phemex_private, positions
+from engine import apexbridge, phemex_private, positions, quality
 
 
 # Operational authorities do not write research facts, so they do not belong
@@ -60,6 +60,8 @@ OPERATIONAL_EXPECTED = {
     # opportunity-v0.5: risk reasons are trader-readable, unavailable grades
     # are not rejection reasons, and top-down stays independent of risk state.
     "opportunities": "opportunity-v0.5-draft",
+    "quality": "quality-v0.1-draft",
+    "apexbridge": "apexbridge-v0.1-draft",
 }
 
 
@@ -74,6 +76,8 @@ def operational_versions():
         "phemex_private": phemex_private.PHEMEX_PRIVATE_VERSION,
         "lifecycle": lifecycle.LIFECYCLE_VERSION,
         "opportunities": opportunities.OPPORTUNITY_VERSION,
+        "quality": quality.QUALITY_VERSION,
+        "apexbridge": apexbridge.APEXBRIDGE_VERSION,
     }
 
 # The current, deliberate state of the pipeline. Update WITH the cascade.

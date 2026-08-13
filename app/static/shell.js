@@ -3551,6 +3551,7 @@ weighed in. Name the facts you used.`;
         'about a minute on this store. Nothing below has been checked.';
       $('nDiag').textContent = '';
       $('dIssues').innerHTML = '<div class="empty">waiting for the first audit pass</div>';
+      $('dNotes').innerHTML = '<div class="empty">waiting for the first audit pass</div>';
       return;
     }
 
@@ -3592,7 +3593,7 @@ weighed in. Name the facts you used.`;
        stays amber and the warning count stays on screen. */
     const RUNG = {
       SERVE: 'served clean', SERVE_FLAG: 'flagged',
-      QUARANTINE: 'held back', AUTO_DISABLE: 'switched off', HALT: 'halted',
+      QUARANTINE: 'quarantined', AUTO_DISABLE: 'switched off', HALT: 'halted',
     };
     const rc = h.rung_counts || {};
     const counted = Object.keys(rc).length
@@ -3615,33 +3616,45 @@ weighed in. Name the facts you used.`;
        paint thousands of nodes. The cap says how many it is not showing rather
        than silently truncating. */
     const ISSUE_SAMPLE = 40;
-    const groups = {};
-    for(const c of [...(h.blockers || []), ...(h.warnings || [])]){
-      const k = c.code + '|' + c.status;
-      (groups[k] = groups[k] || []).push(c);
-    }
-    const rows = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
-    $('dIssues').innerHTML = rows.length ? rows.map(([k, items]) => {
-      const [code, status] = k.split('|');
-      const blocked = status === 'BLOCKED';
-      const n = items.length;
-      const shown = items.slice(0, ISSUE_SAMPLE);
-      const where = c => [c.symbol, c.tf].filter(Boolean).join(' ') || c.stage || '—';
-      const detail = shown.map(c => `<div class="issue-item">
-          <span class="t-mono issue-where">${esc(where(c))}</span>
-          <span class="issue-detail">${esc(c.details || c.code || '')}</span></div>`).join('');
-      return `<details class="issue">
-        <summary class="issue-head">
-          <span class="chip ${blocked ? 'chip-red' : 'chip-amber'}">${blocked ? 'blocker' : 'warning'}</span>
-          <span class="t-mono" style="color:var(--fg-2)">${code.replaceAll('_', ' ').toLowerCase()}</span>
-          <b class="t-mono issue-count">×${n}</b>
-        </summary>
-        <div class="issue-body">${detail}${
-          n > shown.length
-            ? `<div class="issue-item issue-more">…and ${n - shown.length} more not listed</div>`
-            : ''}</div>
-      </details>`;
-    }).join('') : '<div class="empty">no open issues</div>';
+    const renderIssueGroups = (findings, emptyCopy, note = false) => {
+      const groups = {};
+      for(const c of findings){
+        const k = c.code + '|' + c.status;
+        (groups[k] = groups[k] || []).push(c);
+      }
+      const rows = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+      if(!rows.length) return `<div class="empty">${emptyCopy}</div>`;
+      return rows.map(([k, items]) => {
+        const [code, status] = k.split('|');
+        const blocked = status === 'BLOCKED';
+        const n = items.length;
+        const shown = items.slice(0, ISSUE_SAMPLE);
+        const where = c => [c.symbol, c.tf].filter(Boolean).join(' ') || c.stage || '—';
+        const detail = shown.map(c => `<div class="issue-item">
+            <span class="t-mono issue-where">${esc(where(c))}</span>
+            <span class="issue-detail">${esc(c.details || c.code || '')}</span></div>`).join('');
+        const label = blocked ? 'blocker' : note ? 'note' : 'warning';
+        return `<details class="issue">
+          <summary class="issue-head">
+            <span class="chip ${blocked ? 'chip-red' : 'chip-amber'}">${label}</span>
+            <span class="t-mono" style="color:var(--fg-2)">${code.replaceAll('_', ' ').toLowerCase()}</span>
+            <b class="t-mono issue-count">×${n}</b>
+          </summary>
+          <div class="issue-body">${detail}${
+            n > shown.length
+              ? `<div class="issue-item issue-more">…and ${n - shown.length} more not listed</div>`
+              : ''}</div>
+        </details>`;
+      }).join('');
+    };
+    const findings = [...(h.blockers || []), ...(h.warnings || [])];
+    /* SERVE_FLAG means the engine used the data and recorded the caveat. It is
+       evidence worth preserving, but presenting 85 expected venue voids as
+       open work buried the two stale series that actually needed attention. */
+    const notes = findings.filter(c => c.status !== 'BLOCKED' && c.rung === 'SERVE_FLAG');
+    const actionable = findings.filter(c => !notes.includes(c));
+    $('dIssues').innerHTML = renderIssueGroups(actionable, 'no open issues');
+    $('dNotes').innerHTML = renderIssueGroups(notes, 'no data notes', true);
   }
 
   /* ---------- SCANNER SETUP: show the real sizing rules, not prose ---------- */
@@ -4760,7 +4773,7 @@ weighed in. Name the facts you used.`;
       $('telChip').textContent = defects + ' defects';
       $('telChip').className = 'chip chip-red';
     } else {
-      $('telChip').textContent = 'clean · ' + n + ' checked';
+      $('telChip').textContent = 'evidence complete · ' + n + ' checked';
       $('telChip').className = 'chip chip-green';
     }
     // a real table for the same reason the perf panels are — see perfRows()
@@ -4981,10 +4994,12 @@ weighed in. Name the facts you used.`;
 
   $('btnAudit').addEventListener('click', async e => {
     const b = e.currentTarget, was = b.textContent;
-    b.disabled = true; b.textContent = 'Auditing…';
+    b.disabled = true; b.textContent = 'Refreshing…';
     try{
-      await fetch('/api/action', {method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({paneId:'snipersight', actionId:'audit'})});
+      /* This surface is an observer. The scanner owns and records the health
+         verdict; a browser-triggered audit used to create a second verdict and
+         then mislabel it as scanner evidence. Refresh only the recorded GET. */
+      window.SSData?.invalidate('/api/pipeline-health');
       await loadHealth();
     }catch(err){ markDegraded(String(err)); }
     b.disabled = false; b.textContent = was;
