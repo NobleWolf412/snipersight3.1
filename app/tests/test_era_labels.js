@@ -44,6 +44,39 @@ ok('both surfaces carry an era band', () => {
   assert(/class="era-band"/.test(EDGE), 'the edge panel renders no era band');
 });
 
+ok('the simulator tile does not call its count trades', () => {
+  /* THE BAND WAS NOT ENOUGH, and that is the lesson this pins.
+
+     This panel already carried a correct era band saying the figures were
+     simulator closes across every baseline. The tile beside it was still
+     labelled "Closed trades", and on 2026-08-11 the operator read the number
+     in it — in the hundreds — and concluded that many trades had been placed
+     on their account. Their funded record at that moment was ONE trade. The
+     misreading survived being checked by an assistant, which quoted the same
+     figure back as if it were the operator's record.
+
+     A label is read; the caption under it is not, and a band above it is not.
+     So the noun in the LABEL is the load-bearing part: it may not be a word
+     that can be mistaken for money the operator committed. The era band stays
+     — it is still true and still useful — but it is no longer the only thing
+     standing between a research number and a wrong conclusion. */
+  const i = EDGE.indexOf('class="ev-grid"');
+  assert(i > 0, 'the edge tile grid was renamed — this test reads nothing');
+  /* Wide enough to clear the comment that explains the rename and still reach
+     the tile. The "trades" check is safe over this span: the expectancy tile
+     reads `t-label"><span class="term"...>Average result per trade`, and the
+     pattern requires the word with no tag between it and the label, so that
+     legitimate use of the word cannot trip it. */
+  const firstTile = EDGE.slice(i, i + 1600);
+  assert(!/t-label">[^<]*\btrades?\b/i.test(firstTile),
+    'the simulator-count tile calls its number "trades" again. It counts ' +
+    'replays of setups against history — no order, no money, no decision — ' +
+    'and the operator has already once read it as their own record');
+  assert(/not trades you placed/i.test(firstTile),
+    'the tile no longer says what its number is NOT, which is the only part ' +
+    'that survived being misread last time');
+});
+
 ok('the band is a headline, not a footnote', () => {
   // it must precede the tiles it qualifies — a caveat under the number is not one
   const band = HTML.indexOf('id="resultsEra"');

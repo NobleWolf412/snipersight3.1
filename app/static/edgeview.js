@@ -192,7 +192,7 @@
 
   function render(d) {
     if (!(d.sufficient ?? (d.book || {}).sufficient)) {
-      panel(`<div class="empty">Not enough closed trades to say anything honest yet.
+      panel(`<div class="empty">Not enough practice replays to say anything honest yet.
         <br><span class="t-note" style="color:var(--fg-3)">${esc(d.refusal || 'sample too small')}</span></div>`);
       return;
     }
@@ -276,9 +276,24 @@
     panel(`
       ${eraBand}
       <div class="ev-grid">
-        <div class="tile"><span class="t-label">Closed trades</span>
+        <!-- "Practice replays", not "Closed trades", and the tile carries its
+             own scope rather than leaning on the band above it.
+
+             The band already said these were simulator closes across every
+             baseline. It was not enough: the operator read this tile, saw a
+             number in the hundreds beside the word TRADES, and reasonably
+             concluded hundreds of trades had been placed on their account. On
+             2026-08-11 that misreading survived being checked by an assistant,
+             which quoted the same figure back at them as if it were their
+             record. Their actual funded record at that moment was ONE trade.
+
+             A label is read; a caption underneath it is not. So the noun in
+             the label is the thing that must not be borrowable — the engine
+             replays every validated setup against history to learn from it,
+             and none of that is money, an order, or a decision anyone made. -->
+        <div class="tile"><span class="t-label">Practice replays</span>
           <span class="t-metric">${b.n ?? '—'}</span>
-          <span class="t-sub">${esc(denom)}</span></div>
+          <span class="t-sub">not trades you placed · ${esc(denom)}</span></div>
         <div class="tile"><span class="t-label"><span class="term" data-t="expectancy">Average result per trade</span></span>
           <span class="t-metric" style="color:${sign(exp)}">${num(exp)} R</span>
           <span class="t-sub">1 R = what you planned to risk on that trade</span></div>
