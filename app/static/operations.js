@@ -22,6 +22,7 @@
   };
 
   function paint(data){
+    window.SSOperationsData = data;
     const mode = data.automation || {};
     const name = mode.mode || 'UNKNOWN';
     const modeChip = $('modeChip');
@@ -53,6 +54,24 @@
     const scanner = data.scanner || {};
     const health = data.data || {};
     const opportunities = data.opportunities || {};
+    const counts = opportunities.counts || {};
+    const ready = Number(counts.READY || 0);
+    const forming = Number(counts.FORMING || 0);
+    if($('mSetups')) $('mSetups').textContent = ready;
+    if($('mSetupsSub')) $('mSetupsSub').textContent = forming
+      ? `${forming} still forming` : '';
+    if($('nCommand')) $('nCommand').textContent = ready || '';
+    const disposition = $('disposition');
+    if(disposition){
+      const stage = scanner.stage
+        ? String(scanner.stage).replaceAll('_',' ').replaceAll(':',' / ')
+        : scanner.state || 'UNKNOWN';
+      disposition.textContent = mode.halted
+        ? 'New entries are halted. Existing protection remains active.'
+        : `Bot progress - ${stage}`;
+      disposition.className = 'disposition' + (mode.halted ? ' warn'
+        : ['OFFLINE','STALE'].includes(scanner.state) ? ' bad' : '');
+    }
     const narrative = $('commandNarrative');
     if(narrative){
       narrative.textContent = mode.halted
@@ -75,6 +94,42 @@
       auto.title = mode.reasons && mode.reasons.length
         ? mode.reasons.map(r => r.summary).join(' ') : MODE_NOTE[name];
     }
+  }
+
+  function bindOverviewTabs(){
+    const tabs = [...document.querySelectorAll('[data-overview-tab]')];
+    const panels = [...document.querySelectorAll('[data-overview-panel]')];
+    if(tabs.length < 2 || panels.length < 2) return;
+
+    const activate = (key, moveFocus) => {
+      let activePanel = null;
+      for(const tab of tabs){
+        const active = tab.dataset.overviewTab === key;
+        tab.classList.toggle('on', active);
+        tab.setAttribute('aria-selected', String(active));
+        tab.tabIndex = active ? 0 : -1;
+        if(active && moveFocus) tab.focus();
+      }
+      for(const panel of panels){
+        const active = panel.dataset.overviewPanel === key;
+        panel.hidden = !active;
+        if(active) activePanel = panel;
+      }
+      /* A wheel first measured under `hidden` has no usable width. The shell
+         owns carousel geometry, so tell it exactly which panel was revealed. */
+      dispatchEvent(new CustomEvent('ss:overview-tab', {detail: {panel: activePanel}}));
+    };
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => activate(tab.dataset.overviewTab, false));
+      tab.addEventListener('keydown', event => {
+        if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+          : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+        activate(tabs[next].dataset.overviewTab, true);
+      });
+    });
   }
 
   async function refresh(){
@@ -109,6 +164,7 @@
       console.warn('operations read model unavailable', err);
     }
   }
+  bindOverviewTabs();
   refresh();
   setInterval(refresh, 15000);
   addEventListener('focus', refresh);

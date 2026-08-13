@@ -138,7 +138,7 @@
       <div class="panel panel-accent bracket command-hero" style="margin-bottom:var(--lg)">
         <div class="panel-head">
           <div class="command-heading">
-            <span class="command-kicker">Current directive</span>
+            <span class="command-kicker">Bot overview</span>
             <h2 class="t-section">Autonomous scan</h2>
             <p id="commandNarrative">Reading execution, market, and risk state...</p>
           </div>
@@ -198,6 +198,21 @@
           <div><span>Scanner</span><b id="commandScanner">Checking...</b></div>
           <div><span>Market data</span><b id="commandData">Checking...</b></div>
           <div><span>Exposure</span><b id="commandExposure">Checking...</b></div>
+        </div>
+        <!-- Risk is part of the bot's current operating picture, not a third
+             destination competing with its directive and work queue. The
+             existing read-model mounts stay intact; only their hierarchy has
+             changed. -->
+        <div class="command-guardrails" id="budgetPanel">
+          <div class="command-guardrail-head">
+            <div>
+              <span class="command-kicker">Capital guardrails</span>
+              <strong>Limits enforced on the next trade</strong>
+            </div>
+            <span class="chip" id="budgetChip">—</span>
+          </div>
+          <div class="budget-grid" id="budget"></div>
+          <p class="budget-aside" id="budgetAside" hidden></p>
         </div>
       </div>
 
@@ -263,120 +278,68 @@
            before a ready plan expires, distance to the zone (in ATR) for a
            forming one. This app records no confidence percentage, so no card
            shows one. -->
-      <div class="panel floating mb-panel" style="margin-bottom:var(--lg)">
+      <div class="panel floating mb-panel overview-intel" style="margin-bottom:var(--lg)">
         <div class="panel-head">
-          <div class="mission-heading">
-            <span class="command-kicker">Active book + near triggers</span>
-            <h2 class="t-section">Mission Briefs</h2>
+          <div class="overview-tabs" role="tablist" aria-label="Trade watch">
+            <button class="overview-tab on" id="overviewMissionsTab" type="button"
+                    role="tab" aria-selected="true" aria-controls="overviewMissions"
+                    data-overview-tab="missions">
+              <span>Mission briefs</span>
+              <span class="overview-tab-meta">
+                <span class="mission-position t-mono" id="mbPosition" aria-hidden="true">— / —</span>
+                <span class="chip chip-amber" id="radarCount" hidden>—</span>
+              </span>
+            </button>
+            <button class="overview-tab" id="overviewOverwatchTab" type="button"
+                    role="tab" aria-selected="false" aria-controls="overviewOverwatch"
+                    tabindex="-1" data-overview-tab="overwatch">
+              <span>Overwatch</span>
+              <span class="overview-tab-meta"><span class="chip" id="nearCount">—</span></span>
+            </button>
           </div>
-          <span class="mission-position t-mono" id="mbPosition" aria-hidden="true">— / —</span>
-          <span class="chip chip-amber" id="radarCount" hidden>—</span>
           <a class="btn mission-radar-link" href="#opportunities">View all setups</a>
         </div>
-        <div class="mb-shell">
-          <button class="mb-nav mb-prev" id="mbPrev" aria-label="previous mission" hidden>
-            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.5 2 5 8l5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <!-- The track is the scroll container; scroll-snap does the paging,
-               so a phone gets native swipe physics for free and the buttons
-               are additive chrome for a mouse. -->
-          <div class="mb-track wheel-rail" id="mbTrack" role="group" tabindex="0"
-               aria-label="mission briefs — use left and right arrow keys">
-            <div id="deck" class="mb-seg"><div class="skeleton" role="status" aria-label="loading">
-              <div class="skel" style="height:300px"></div>
+
+        <section class="overview-tabpanel" id="overviewMissions" role="tabpanel"
+                 aria-labelledby="overviewMissionsTab" data-overview-panel="missions">
+          <div class="mb-shell">
+            <button class="mb-nav mb-prev" id="mbPrev" aria-label="previous mission" hidden>
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.5 2 5 8l5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="mb-track wheel-rail" id="mbTrack" role="group" tabindex="0"
+                 aria-label="mission briefs — use left and right arrow keys">
+              <div id="deck" class="mb-seg"><div class="skeleton" role="status" aria-label="loading">
+                <div class="skel" style="height:300px"></div>
+              </div></div>
+              <div id="radar" class="mb-seg"></div>
+            </div>
+            <button class="mb-nav mb-next" id="mbNext" aria-label="next mission" hidden>
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5.5 2 11 8l-5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <p class="sr-only" id="mbStatus" aria-live="polite"></p>
+          </div>
+          <p class="mb-lede" id="missionLede"></p>
+        </section>
+
+        <section class="overview-tabpanel" id="overviewOverwatch" role="tabpanel"
+                 aria-labelledby="overviewOverwatchTab" data-overview-panel="overwatch" hidden>
+          <div id="nearPanel">
+            <p class="t-body mw-lede" id="nearLede"></p>
+            <div id="near"><div class="skeleton" role="status" aria-label="loading">
+              <div class="skel" style="height:260px"></div>
             </div></div>
-            <div id="radar" class="mb-seg"></div>
           </div>
-          <button class="mb-nav mb-next" id="mbNext" aria-label="next mission" hidden>
-            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5.5 2 11 8l-5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <!-- Which brief is in front, announced only once the wheel settles.
-               A live region narrating every card that passes under a flick is
-               a screen reader shouting. -->
-          <p class="sr-only" id="mbStatus" aria-live="polite"></p>
-        </div>
-        <!-- Refused and expired setups are evidence, not missions. They keep
-             their own quiet strip under the rail — same demotion the old deck
-             made with its "Looked at, not taken" divider, same honesty:
-             nothing is hidden, nothing dead sits in the slot where advice
-             goes. -->
-        <!-- The one sentence that says whether the quiet is correct. It used
-             to live 2000px down the page inside Market Weather, which meant
-             the answer to "why is this empty?" was nowhere near the empty
-             thing. weather.js fills it. -->
-        <p class="mb-lede" id="missionLede"></p>
-
+        </section>
       </div>
 
-      <!-- Risk limits follow the active book: protection and remaining room
-           are supporting context, not the first thing a user must decode. -->
-      <div class="panel overview-risk" id="budgetPanel" style="margin-bottom:var(--lg)">
-        <div class="panel-head">
-          <div>
-            <span class="command-kicker">Capital guardrails</span>
-            <h2 class="t-section">Rules of engagement</h2>
-          </div>
-          <span class="chip" id="budgetChip" style="margin-left:auto">—</span>
-        </div>
-        <div class="budget-grid" id="budget"></div>
-        <p class="budget-aside" id="budgetAside" hidden></p>
-      </div>
-
-      <!-- ─── MARKET WATCH ───
-           Three lists that were scattered across two panels and two buried
-           disclosures, now one panel with three toggles, none of them hidden:
-
-             At a level  — price standing near structure the engine watches.
-             Out of reach — the same, further out than the engine's own bound.
-                            It was titled "Beyond the 1 ATR the engine looks",
-                            which is a sentence, not a tab. The bound itself
-                            is still stated in the group's own line, where
-                            there is room to say it properly.
-             Not taken   — setups the risk authority refused, or that expired.
-                            These used to sit under Mission Briefs, which put
-                            dead trades in the panel that answers "what should
-                            I do right now". They are evidence, and evidence
-                            belongs with the other things being watched.
-
-           Market Weather's per-symbol grid merged in here too: each card
-           carries what condition that market is in AND how near price is,
-           because they were two tables of the same symbols a screen apart.
-           Nothing on a card is re-derived — regime and bias are quoted from
-           /api/weather, the distance and reach from /api/near-levels, which
-           stays the only authority on whether the engine is even looking. -->
-      <div class="panel floating" id="nearPanel" style="margin-bottom:var(--lg);display:none">
-        <div class="panel-head">
-          <h2 class="t-section">Overwatch</h2>
-          <span class="chip" id="nearCount" style="margin-left:auto">—</span>
-        </div>
-        <!-- ONE RANKED DECK, no tabs. There were four — Manual setups, Out of
-             reach, All markets, Refused — and they were never a partition:
-             "All markets" iterated the whole weather universe while "Manual
-             setups" iterated the zone sweep, so the same symbol appeared on
-             both wearing two different badges. "Out of reach" was pure
-             redundancy, every card on it the bottom rank, 21 times out of 21.
-
-             Now: one card per market, ranked by how close price is to a zone
-             the engine watches and then by whether a playbook trades that
-             market's condition. The engine's bound is the grey bottom of the
-             ordering rather than a tab. The refused setups answer a different
-             question — "why did nothing fire" — and live with the rest of
-             that answer on Diagnostics. -->
-        <p class="t-body mw-lede" id="nearLede"></p>
-        <div id="near"></div>
-      </div>
-
-      <!-- Market Watch used to stand here as its own "At a level" panel. It is
-           now the second tier INSIDE Mission Briefs, merged with Market
-           Weather's per-symbol read — see the comment at #nearPanel above.
-           The honesty it was built for is unchanged and travelled with it:
-           every card still says how the engine regards that zone, because the
-           ticket draws a bracket on every chart including ones the engine has
-           never considered, and a card that could not say so read as an
-           engine plan. -->
+      <!-- Overwatch is the second tab above, not a second page section. Its
+           single ranked carousel combines the server's market condition with
+           its nearest watched zone. Every card still says whether the engine
+           is actually considering that zone; descriptive structure must not
+           be mistaken for an engine trade plan. -->
       <!-- Market Weather's mount. Everything it used to DRAW here has found a
            better address: the per-symbol grid is one card per market in Market
-           Watch above, the lead sentence is #missionLede beside the rail it
+           Overwatch above, the lead sentence is #missionLede beside the rail it
            explains, and the Bitcoin backdrop is on Chart beside the decision it
            bears on. What is left is the loud fallback — if /api/weather fails,
            it says so HERE, on the surface whose emptiness it would otherwise be
@@ -398,7 +361,7 @@
       </div>
       <div class="op-toolbar panel" aria-label="Opportunity filters">
         <div class="seg" id="opFilters" role="group" aria-label="Filter setup state">
-          <button class="on" data-op-filter="ACTIVE" aria-pressed="true">Active <span data-op-count="ACTIVE">—</span></button>
+          <button class="on" data-op-filter="ACTIVE" aria-pressed="true">Live <span data-op-count="ACTIVE">—</span></button>
           <button data-op-filter="READY" aria-pressed="false">Ready <span data-op-count="READY">—</span></button>
           <button data-op-filter="FORMING" aria-pressed="false">Forming <span data-op-count="FORMING">—</span></button>
           <button data-op-filter="WATCHING" aria-pressed="false">Watching <span data-op-count="WATCHING">—</span></button>
@@ -808,9 +771,10 @@
              not broken; it was pointed at a panel four views away.
              workspaces.js toggles `hidden` on every [data-performance-view]
              in the surface, so this needs no wiring of its own. -->
-        <label data-performance-view="strategies" hidden><b>Breakdown</b><select id="performanceBreakdown">
-          <option value="ALL">All dimensions</option><option value="strategy">Strategy</option>
-          <option value="regime">Regime</option><option value="horizon">Horizon</option>
+        <label data-performance-view="strategies" hidden><b>View by</b><select id="performanceBreakdown">
+          <option value="strategy">Strategy</option>
+          <option value="symbol">Symbol</option><option value="regime">Regime</option>
+          <option value="horizon">Horizon</option>
           <option value="direction">Direction</option><option value="order_type">Order type</option>
         </select></label>
       </div>
@@ -827,17 +791,16 @@
       <div class="era-band" id="resultsEra" data-performance-view="overview"><span class="skeleton" role="status" aria-label="loading">
         <span class="skel skel-line" style="width:88%"></span>
         <span class="skel skel-line" style="width:64%"></span></span></div>
-      <!-- THE STAT WHEEL. The same carousel the Mission Briefs ride, carrying
+      <!-- RETIRED STAT WHEEL. Kept hidden as a compatibility mount while the
            the eight numbers that answer "is this actually working?" — each one
            drawn rather than just printed, so the shape of the answer is
            readable before the digits are.
 
-           The tiles below are NOT removed. They are the same numbers in a flat
-           grid, and they stay because a wheel is a poor way to compare eight
-           figures at once: the cards are for reading one stat properly, the
-           grid is for seeing them together. Both render from renderScoreboard
+           The flat tiles below are now the only visible presentation because
+           a wheel is a poor way to compare eight figures at once. Both still
+           render from renderScoreboard during the compatibility period
            and the portfolio — one authority, two presentations. -->
-      <div class="panel floating" data-performance-view="overview" style="margin-bottom:var(--sm)">
+      <div class="panel floating" hidden>
         <div class="mb-shell">
           <button class="mb-nav mb-prev" id="statPrev" aria-label="previous stat" hidden>
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10.5 2 5 8l5.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -992,7 +955,10 @@
            anyone evaluating a bot asks of it. Only sized trades appear here;
            the engine's research simulations never touch this list. -->
 
-      <div class="grid cols-2" data-performance-view="strategies" hidden style="margin-bottom:var(--lg)">
+      <!-- Retired compatibility mounts. The server-owned dimension selector
+           above now includes Symbol and Strategy, so exposing this older pair
+           would show the same funded trade twice in two different table styles. -->
+      <div class="grid cols-2" hidden>
         <div class="panel floating">
           <div class="panel floating-head"><h2 class="t-section">By Symbol</h2></div>
           <div id="perfSymbol"><div class="skeleton" role="status" aria-label="loading">

@@ -142,6 +142,10 @@ def sweep(con, *, timeframes: tuple[str, ...] = TIMEFRAMES) -> dict:
     counts["found"] = len(rows)
     counts["in_engine_range"] = sum(
         1 for r in rows if r["engine_reach"] in (AT_ZONE, IN_RANGE))
+    counts["markets_in_engine_range"] = len({
+        r["symbol"] for r in rows
+        if r["engine_reach"] in (AT_ZONE, IN_RANGE)
+    })
     return {
         # Sent so the client never hard-codes either bound. The meter on the
         # Approaching panel was scaled against the wrong one of these two

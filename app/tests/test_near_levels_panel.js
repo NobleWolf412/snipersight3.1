@@ -14,7 +14,7 @@
      · a market that could not be read is announced, because a missing row and
        "price is nowhere near a level there" look identical on screen;
      · the panel says what it excluded — the shadow half is 11 of 30 symbols;
-     · an empty list hides the panel rather than rendering an empty promise.
+     · an empty list says Overwatch is clear rather than leaving a blank tab.
 
    Source text rather than a rendered DOM, per the suite's convention: these
    are contracts about which branch exists at all, and a renderer test can only
@@ -54,9 +54,26 @@ ok('the panel and its mount exist in the shell', () => {
   assert(/id="nearLede"/.test(HTML), 'the lede that states scope is missing');
 });
 
-ok('an empty list hides the panel instead of promising an empty one', () => {
-  assert(/if\(!rows\.length\)\{[^}]*display\s*=\s*'none'/.test(RENDER),
-    'renderNear must hide the panel when there is nothing near a level');
+ok('an empty list gives the Overwatch tab a clear state', () => {
+  assert(/if\(!rows\.length\)\{[\s\S]*?Overwatch is clear\./.test(RENDER),
+    'renderNear must explain that the watch is clear');
+  assert(/if\(errored\)[\s\S]*?cannot call this clear/.test(RENDER),
+    'an unreadable sweep must outrank the healthy clear state');
+  assert(!/if\(!rows\.length\)\{[^}]*display\s*=\s*'none'/.test(RENDER),
+    'the selected Overwatch tab must not become a blank panel');
+});
+
+ok('a failed request replaces loading with a local unavailable state', () => {
+  const load = body('loadNearLevels');
+  assert(/catch\(err\)/.test(load));
+  assert(/Do not treat this as all clear/.test(load));
+  assert(/throw err/.test(load), 'the global health layer must still see the failure');
+});
+
+ok('the tab count uses unique markets, matching one card per market', () => {
+  assert(/c\.markets_in_engine_range/.test(RENDER));
+  assert(!/nearCount'\)\.textContent\s*=\s*`\$\{c\.in_engine_range/.test(RENDER));
+  assert(/markets_in_engine_range/.test(PY));
 });
 
 ok('the reach label is read off the payload, never recomputed here', () => {

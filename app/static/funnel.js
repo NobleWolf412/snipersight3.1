@@ -173,13 +173,11 @@
              'it is a rule of thumb the engine applies, not a proven improvement.',
       cta: RESULTS_SURF },
     NOT_IN_POINT_IN_TIME_UNIVERSE: {
-      plain: 'the token was not on the traded watchlist when the setup confirmed',
-      means: 'The watchlist is the ~19 symbols the scanner admits by volume and ' +
-             'history ("Tradeable now" on Command). Membership is judged at the ' +
-             'moment the setup confirmed, not now — a token that qualifies today ' +
-             'does not retroactively qualify. Kraken (PF_) pairs are on purpose: ' +
-             'they are shadow venue — watched and measured to build evidence, ' +
-             'never given money. Their setups appear here so the record exists.',
+      plain: "the market did not meet the bot's trading requirements at that time",
+      means: 'The bot funds only markets that pass its selection rules when the ' +
+             'setup forms. A market may be outside the selected group or fail ' +
+             'liquidity or history requirements. PF_ markets are research-only: ' +
+             'their setups are recorded, but no money is assigned to them.',
       cta: SETUP_SURFACE },
     INVALID_STOP_DISTANCE: {
       plain: 'the stop sat on top of the entry, so no size could be computed',
@@ -226,14 +224,14 @@
       means: 'Correct sizing produced an order too small to place.',
       cta: SETUP_SURFACE },
     WITHIN_LIMITS: {
-      plain: 'every risk rule passed',
-      means: 'The risk authority approved this one in full.',
+      plain: 'every account safety check passed',
+      means: 'The bot allowed the full position size.',
       cta: null },
 
     /* --- lifecycle outcomes (engine/telemetry.py) --- */
     RISK_REJECTED: {
-      plain: 'the risk authority refused to size it',
-      means: 'The setup was valid but a portfolio rule blocked it. Open the ' +
+      plain: 'the account safety checks blocked it',
+      means: 'The setup was valid but an account rule blocked it. Open the ' +
              'trace on any one of them to see which rule.',
       cta: SETUP_SURFACE },
     ENTRY_NOT_FILLED: {
@@ -270,8 +268,8 @@
       means: 'Not a failure. The entry window is still open.',
       cta: COMMAND_SURF },
     AWAITING_RISK: {
-      plain: 'the risk authority has not ruled on it yet',
-      means: 'The setup validated but no sizing decision has been recorded. ' +
+      plain: 'the account safety checks have not finished yet',
+      means: 'The setup validated but no position-size decision has been recorded. ' +
              'On a live scanner this clears within a cycle.',
       cta: DIAG_SURFACE },
     WINNER: {
@@ -309,8 +307,8 @@
       blurb: 'zones price actually reached' },
     { key: 'validated',     label: 'Validated', term: 'setup',
       blurb: 'became a real trade idea' },
-    { key: 'risk_approved', label: 'Risk approved', term: 'riskPerTrade',
-      blurb: 'the risk authority agreed to size' },
+    { key: 'risk_approved', label: 'Safety approved', term: 'riskPerTrade',
+      blurb: 'account checks allowed a position size' },
     { key: 'order_placed',  label: 'Order placed',
       blurb: 'an entry order was simulated' },
     { key: 'filled',        label: 'Filled',
@@ -325,7 +323,7 @@
   // filled in by the caller.
   const DROP_COPY = {
     validated:     (n, p) => `${n} of ${p} candidates never became a setup`,
-    risk_approved: (n, p) => `${n} of ${p} setups were refused by the risk authority`,
+    risk_approved: (n, p) => `${n} of ${p} setups were skipped by account safety checks`,
     order_placed:  (n, p) => `${n} of ${p} approved setups never became an order`,
     filled:        (n, p) => `${n} of ${p} orders never filled`,
     closed:        (n, p) => `${n} of ${p} filled trades have not finished yet`,

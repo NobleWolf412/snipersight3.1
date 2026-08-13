@@ -151,6 +151,19 @@ class Sweep(unittest.TestCase):
         self.assertEqual(Decimal(row["distance_atr"]), Decimal(1))
         self.assertEqual(row["engine_reach"], nearlevels.IN_RANGE)
 
+    def test_in_reach_market_count_deduplicates_timeframes(self):
+        """Overwatch draws one card per market, so its tab count must use the
+        same identity even when two timeframes are simultaneously in reach."""
+        self._candles("BTCUSDT", "4H", step=14_400)
+        self._zone("BTCUSDT", "4H", 96, 100)
+        self._candles("BTCUSDT", "1D")
+        self._zone("BTCUSDT", "1D", 96, 100)
+        self.con.commit()
+        counts = nearlevels.sweep(
+            self.con, timeframes=("4H", "1D"))["counts"]
+        self.assertEqual(counts["in_engine_range"], 2)
+        self.assertEqual(counts["markets_in_engine_range"], 1)
+
     def test_rows_come_back_nearest_first(self):
         self._candles("BTCUSDT", "1D")
         self._zone("BTCUSDT", "1D", 90, 92)          # 8 price units -> 2.00 ATR

@@ -9,6 +9,7 @@ const HTML = fs.readFileSync(path.join(STATIC, 'shell.html'), 'utf8');
 const CSS = fs.readFileSync(path.join(STATIC, 'ss.css'), 'utf8');
 const OPPORTUNITIES = fs.readFileSync(path.join(STATIC, 'opportunities.js'), 'utf8');
 const OP_UI = fs.readFileSync(path.join(STATIC, 'opportunity-ui.js'), 'utf8');
+const OPERATIONS_UI = fs.readFileSync(path.join(STATIC, 'operations.js'), 'utf8');
 const WORKSPACES = fs.readFileSync(path.join(STATIC, 'workspaces.js'), 'utf8');
 const TRADE = fs.readFileSync(path.join(STATIC, 'trade-workspace.js'), 'utf8');
 const COCKPIT = fs.readFileSync(path.join(STATIC, 'cockpit-workspaces.js'), 'utf8');
@@ -54,18 +55,18 @@ ok('every custom property this stylesheet uses is one it defines', () => {
     '. Every declaration mentioning one of these is silently dropped');
 });
 
-ok('the Breakdown control only appears where it changes something', () => {
+ok('the View by control only appears where it changes something', () => {
   /* It filters #performanceDimensions and nothing else, and that panel is on
      the Strategies view. Sitting in the always-visible scope strip, it did
      nothing at all on Overview — which is the tab this surface opens on — so
      the operator's read was that the dropdown was broken. It was pointed four
      views away. workspaces.js hides every [data-performance-view] that is not
      the active one, so scoping it is an attribute, not new wiring. */
-  const label = HTML.match(/<label[^>]*>\s*(?:<!--[\s\S]*?-->\s*)?<b>Breakdown<\/b>/) ||
-                HTML.match(/<label[^>]*data-performance-view[^>]*>\s*<b>Breakdown<\/b>/);
-  assert(label, 'the Breakdown control is gone, or no longer wraps a <label>');
+  const label = HTML.match(/<label[^>]*>\s*(?:<!--[\s\S]*?-->\s*)?<b>View by<\/b>/) ||
+                HTML.match(/<label[^>]*data-performance-view[^>]*>\s*<b>View by<\/b>/);
+  assert(label, 'the View by control is gone, or no longer wraps a <label>');
   assert(/data-performance-view="strategies"/.test(label[0]),
-    'the Breakdown dropdown is back in the always-on scope strip. It only ' +
+    'the View by dropdown is back in the always-on scope strip. It only ' +
     'drives the Strategies dimension tables — everywhere else it is a live ' +
     'control that changes nothing, which reads as a broken one');
   assert(WORKSPACES.includes('panel.hidden = panel.dataset[`${name}View`] !== view'),
@@ -79,6 +80,12 @@ ok('opportunities compare compact cards before opening one detail', () => {
   assert(OP_UI.includes('op-card-compact'));
   assert(OP_UI.includes('Review setup'));
   assert(OP_UI.includes('Open in Trade'));
+  assert(OP_UI.includes("row.state === 'READY' && row.eligible"),
+    'Open in Trade must be driven by server entry eligibility');
+  assert(OP_UI.includes('Inspect chart'),
+    'forming setups need an inspection action, not a trade action');
+  assert(OP_UI.includes('Manage position') && OP_UI.includes('View working order'),
+    'active lifecycle states need an exact-setup management action');
   assert(!OPPORTUNITIES.includes('armSetup'), 'Setup Radar must not directly commit capital');
 });
 
@@ -87,6 +94,25 @@ ok('trade synchronizes evidence, chart, and ticket as three explicit areas', () 
   assert(CSS.includes('grid-template-areas:"evidence chart ticket"'));
   assert(HTML.includes('/static/trade-workspace.js'));
   assert(OPPORTUNITIES.includes("new CustomEvent('ss:opportunity-selected'"));
+  assert(OPPORTUNITIES.indexOf('SSChart.prepare') < OPPORTUNITIES.indexOf("location.hash = 'trade'"),
+    'the next chart context must be prepared before the Trade route paints');
+  assert(OPPORTUNITIES.includes('setup_id: row.setup.setup_id, inspect_only: inspectOnly'),
+    'chart inspection must preserve exact setup identity');
+  const prepare = CHART.slice(CHART.indexOf('function prepare'), CHART.indexOf('async function open'));
+  assert(prepare.includes('clearChart('),
+    'preparing a route must synchronously mask the old chart and ticket');
+  assert(prepare.includes('previousSetupId !== preferredSetupId') &&
+    prepare.includes('previousInspectOnly !== preferredInspectOnly'),
+    'same-market setup and inspection changes must mask the old ticket too');
+});
+
+ok('overview setup count and bot phase use the operational read model', () => {
+  assert(OPERATIONS_UI.includes("$('mSetups').textContent = ready"));
+  assert(!/\$\('mSetups'\)\.textContent = split\.ordered\.length/.test(
+    fs.readFileSync(path.join(STATIC, 'shell.js'), 'utf8')),
+    'legacy deck selector still overwrites the server READY count');
+  assert(SERVER.includes('"stage": hb.get("phase")'),
+    'operations still reads a heartbeat key the scanner never writes');
 });
 
 ok('performance exposes five focused views and owns factor evidence', () => {
@@ -97,6 +123,8 @@ ok('performance exposes five focused views and owns factor evidence', () => {
   assert.strictEqual((HTML.match(/id="factorEvidenceRoot"/g) || []).length, 1,
     'Factor evidence must have one mount and one screen owner');
   assert(HTML.includes('id="performanceLedger"'));
+  assert(/<div class="panel floating" hidden>\s*<div class="mb-shell">/.test(HTML),
+    'the duplicate statistic carousel is visible again');
   assert(WORKSPACES.includes('ledgerHost.append'), 'manual books must join the Journal view');
 });
 
@@ -127,31 +155,50 @@ ok('390px command layer keeps every safety fact and HALT visible', () => {
   assert(/\.topbar-actions\{display:flex!important/.test(CSS));
 });
 
-ok('opportunity disclosure includes full economics, calibration, trace and non-modal focus', () => {
+ok('opportunity disclosure keeps economics and hides unavailable grading', () => {
   for(const field of ['fee_r', 'funding_r', 'slippage_r', 'total_cost_r', 'notional_usd'])
     assert(OP_UI.includes(field), field + ' is absent');
   for(const field of ['expected_edge_r', 'sample_size', 'grade.components'])
     assert(OP_UI.includes(field), field + ' FactorGrade field is absent');
+  assert(OP_UI.includes("String(grade.grade).toUpperCase() !== 'UNGRADED'"),
+    'unavailable setup grades are visible again');
+  assert(!OP_UI.includes("grade.grade || 'UNGRADED'"));
+  assert(!OP_UI.includes('INSUFFICIENT_EVIDENCE'));
+  assert(OP_UI.includes('Why it was skipped'));
   assert(OP_UI.includes('data-op-trace='));
   assert(!OPPORTUNITIES.includes("setAttribute('aria-modal'"));
   assert(!OPPORTUNITIES.includes("event.key !== 'Tab'"));
   assert(OPPORTUNITIES.includes("event.key === 'Escape'"));
   assert(OPPORTUNITIES.includes("['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End']"));
   assert(HTML.includes('data-op-count="ACTIVE"'));
+  assert(HTML.includes('data-op-filter="ACTIVE" aria-pressed="true">Live'),
+    'the active-order bucket must not imply it includes forming setups');
+  assert(OPPORTUNITIES.includes("const ACTIVE = new Set(['POSITION_OPEN','ORDER_WORKING'])"),
+    'Live, Ready, Forming, Watching, and History must be disjoint buckets');
+  assert(OPPORTUNITIES.includes("['ACTIVE','READY','FORMING','WATCHING','HISTORY']"),
+    'the first non-empty bucket should open instead of an empty Live view');
 });
 
-ok('entry presentation never manufactures a limit price and FactorGrade uses uplift', () => {
+ok('entry presentation is plain, exact, and only shows real grades', () => {
   const context = {window:{}, Number, String, Object, Date};
   vm.runInNewContext(OP_UI, context);
   const ui = context.window.SSOpportunityUI;
-  assert.strictEqual(ui.entryRecommendation({order_kind:'NONE', limit_price:'99'}), 'NO ORDER');
-  assert.strictEqual(ui.entryRecommendation({order_kind:'MARKET', limit_price:'99'}), 'MARKET - confirmed trigger');
-  assert.strictEqual(ui.entryRecommendation({order_kind:'LIMIT'}), 'LIMIT - price not reported');
+  assert.strictEqual(ui.entryRecommendation({order_kind:'NONE', limit_price:'99'}, 'FORMING'),
+    'Watching — entry not confirmed');
+  assert.strictEqual(ui.entryRecommendation({order_kind:'NONE'}, 'BLOCKED'), 'Skipped');
+  assert.strictEqual(ui.entryRecommendation({order_kind:'MARKET', limit_price:'99'}),
+    'Market entry on confirmed trigger');
+  assert.strictEqual(ui.entryRecommendation({order_kind:'LIMIT'}),
+    'Limit order — price unavailable');
   assert(ui.entryRecommendation({order_kind:'LIMIT',limit_price:'42'}).includes('42'));
   const exact = '0.123456789012345678901';
   assert.strictEqual(ui.px(exact), exact);
   assert(ui.entryRecommendation({order_kind:'LIMIT',limit_price:exact}).includes(exact));
-  const body = ui.evidenceBody({setup:{}, evidence:{components:[{factor:'x',uplift_r:0.2,shrunk_uplift_r:0.1}]}});
+  const hidden = ui.evidenceBody({setup:{}, evidence:{grade:'UNGRADED',
+    confidence:'INSUFFICIENT_EVIDENCE', components:[]}});
+  assert(!hidden.includes('UNGRADED')); assert(!hidden.includes('INSUFFICIENT'));
+  const body = ui.evidenceBody({setup:{}, evidence:{grade:'A', score:82,
+    confidence:'HIGH', components:[{factor:'x',uplift_r:0.2,shrunk_uplift_r:0.1}]}});
   assert(body.includes('0.2R')); assert(!body.includes('0.1R'));
 });
 
@@ -197,7 +244,18 @@ ok('performance reads its scoreboard and dimensions from server contracts', () =
   assert(HTML.includes('id="performanceTrust"'));
   assert(HTML.includes('id="journalSearch"'));
   assert(HTML.includes('id="performanceBreakdown"'));
+  assert(!HTML.includes('All dimensions'),
+    'one trade must not be repeated through every breakdown by default');
+  assert(HTML.includes('<b>View by</b><select id="performanceBreakdown">'));
+  assert(HTML.includes('<option value="symbol">Symbol</option>'));
   assert(COCKPIT.includes("data-performance-dimension"));
+  assert(COCKPIT.includes('panel.hidden = panel.dataset.performanceDimension !== select.value'));
+  assert(COCKPIT.includes("['strategy','symbol','regime','horizon','direction','order_type']"));
+  assert(/<div class="grid cols-2" hidden>/.test(HTML),
+    'the legacy By Symbol / By Strategy pair is visible below the dimension selector');
+  assert(COCKPIT.includes('data-label="Avg R"') && COCKPIT.includes('data-label="P&amp;L"'),
+    'mobile performance cells need visible labels without a table header');
+  assert(/@media\(max-width:640px\)[\s\S]*?\.dimension-table thead\{display:none\}/.test(CSS));
   assert(HTML.includes('id="journalSource"'));
   for(const id of ['performancePopulation','performanceWindow']) assert(HTML.includes(`id="${id}"`));
   assert(SERVER.includes('"confidence_interval_r": confidence'));

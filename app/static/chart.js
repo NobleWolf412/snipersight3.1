@@ -25,6 +25,7 @@ window.SSChart = (() => {
   // Set by Setup Radar.  The card, overlays and ticket must describe the same
   // server-owned record even when a newer setup for the symbol arrives.
   let preferredSetupId = null;
+  let preferredInspectOnly = false;
   let preferredSetupMissing = false;
   /* `base` is whatever this chart started from, and it is now one of exactly
      three things: an ACTIVE TRADE, a plan the ENGINE is still waiting on, or
@@ -2163,8 +2164,10 @@ window.SSChart = (() => {
         `<em>Why the engine took it</em>${setup.why || '—'}`;
     }else if(preferredSetupMissing){
       base = null;
-      $('tkWhy').innerHTML = '<div class="tk-verdict bad"><b>SELECTED SETUP UNAVAILABLE</b>' +
-        '<br>The requested setup is no longer validated on this chart. SniperSight did not substitute another setup or draft a new plan.</div>';
+      $('tkWhy').innerHTML = preferredInspectOnly
+        ? '<div class="tk-verdict"><b>TRIGGER NOT CONFIRMED</b><br>This exact setup is available for chart inspection only. No order plan or substitute setup was loaded.</div>'
+        : '<div class="tk-verdict bad"><b>SELECTED SETUP UNAVAILABLE</b>' +
+          '<br>The requested setup is no longer validated on this chart. SniperSight did not substitute another setup or draft a new plan.</div>';
     }else if(draftPlan){
       /* No engine setup, but price IS at a level the engine recognises. Draft
          a bracket from it — entry at the zone edge, stop beyond its far edge,
@@ -3184,13 +3187,28 @@ window.SSChart = (() => {
      a trade lost 1.11R and not show you the bars it lost them on; "where did
      price actually go" was a question the surface raised and could not answer.
      Held rather than drawn here, because load() clears the chart. */
-  async function open(s, t, opts){
+  function prepare(s, t, opts){
+    const previousSetupId = preferredSetupId;
+    const previousInspectOnly = preferredInspectOnly;
     pendingTrade = (opts && opts.trade) || null;
     preferredSetupId = opts && opts.setup_id ? opts.setup_id : null;
+    preferredInspectOnly = !!(opts && opts.inspect_only);
     sym = s; if(t) tf = t;
     boot();
     document.querySelectorAll('#cTfs button').forEach(b =>
       b.classList.toggle('on', b.dataset.tf === tf));
+    paintSymBtn();
+    window.SSChartCtx = {symbol: sym, tf};
+    if(preferredSetupId) window.SSChartCtx.setup_id = preferredSetupId;
+    // Run before the router exposes Trade: new evidence must never sit beside
+    // the previous market while onShow() awaits equity or candles.
+    if(painted !== sym + '|' + tf || previousSetupId !== preferredSetupId ||
+        previousInspectOnly !== preferredInspectOnly)
+      clearChart('Loading ' + sym + ' / ' + tf + '...');
+  }
+
+  async function open(s, t, opts){
+    prepare(s, t, opts);
     /* `sym` is assigned above, so a populate already running for onShow()
        will load THIS symbol — awaiting it is the whole job. Starting a second
        one here is what produced the two racing loads. */
@@ -3200,7 +3218,7 @@ window.SSChart = (() => {
   }
 
   wire();
-  return {open, onShow, onHide,
+  return {open, prepare, onShow, onHide,
     /* Introspection, for the suites and for answering "why can I not see that
        swing on my phone" without guessing. A cap nobody can observe is
        indistinguishable from a bug. */

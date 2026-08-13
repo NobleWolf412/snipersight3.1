@@ -130,8 +130,18 @@ def grade(con, *, include_research: bool = False, resamples: int = 10000) -> dic
 def _render(res: dict) -> str:
     L = []
     cal = res.get("calibration") or {}
+    conflicts = res.get("entry_model_conflicts") or {}
     L.append(f"STRATEGY GRADE - {res.get('version')}")
     L.append("")
+    if conflicts:
+        L.append("NO VERDICT. A setup generation records more than one entry "
+                 "model:")
+        for version, detail in sorted(conflicts.items()):
+            L.append(f"  {version}: {detail}")
+        L.append("")
+        L.append("One generation cannot be replayed as two different order "
+                 "types. Split or repair that evidence before grading it.")
+        return "\n".join(L)
     if not res.get("trustworthy"):
         L.append("NO VERDICT. The harness could not reproduce the book it "
                  "already has:")
@@ -143,6 +153,14 @@ def _render(res: dict) -> str:
         return "\n".join(L)
 
     L.append(f"calibration OK - {cal.get('detail') or cal.get('status')}")
+    degradations = res.get("replay_degradations") or []
+    if degradations:
+        L.append(f"WARNING: {len(degradations)} replay fill(s) used a degraded "
+                 "entry estimate:")
+        for item in degradations[:5]:
+            L.append(f"  {item['symbol']} {item['tf']} - {item['note']}")
+        if len(degradations) > 5:
+            L.append(f"  ...and {len(degradations) - 5} more")
     L.append(f"bar: {res['bar']}")
     L.append(f"playbooks graded in this run: {res.get('strategies_tested')}")
     L.append("")

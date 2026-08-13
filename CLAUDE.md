@@ -143,6 +143,13 @@ A duplicate-order guard that existed on disk was absent from the live endpoint,
 and testing against it wrote a real duplicate order onto the operator's paper
 book.
 
+**A live cycle fixes its eligible source candles at one clock snapshot.** The
+importer must not advance past the opening time later engines and quality use.
+The scan lasts several minutes; letting only import cross the next candle
+boundary makes a newly imported bar look developing to the older quality clock.
+That false verdict skipped 12-18 otherwise healthy markets at a time. A network
+request finishing later is not permission to move the input boundary.
+
 **Do not POST to write endpoints to test them.** `/api/manual/arm`,
 `/api/positions/close` and `/api/positions/adopt` write to the operator's actual
 book. Use the suites, or a scratch database.

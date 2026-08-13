@@ -4,12 +4,13 @@ import server
 
 
 def _trade(r, *, strategy="PULLBACK", regime="BULL_TREND",
-           horizon=None, direction="LONG", order_type=None, pnl=None):
+           horizon=None, direction="LONG", order_type=None, pnl=None,
+           symbol="BTCUSDT"):
     return {
         "r_multiple": r,
         "pnl_usd": pnl if pnl is not None else Decimal(str(r)) * Decimal("25"),
         "strategy": strategy, "regime": regime, "horizon": horizon,
-        "direction": direction, "order_type": order_type,
+        "direction": direction, "order_type": order_type, "symbol": symbol,
     }
 
 
@@ -52,6 +53,7 @@ def test_dimensions_never_replace_missing_metadata_with_a_guess():
     order_types = {row["key"] for row in out["dimensions"]["order_type"]}
     assert horizons == {"NOT_REPORTED", "swing"}
     assert order_types == {"NOT_REPORTED", "LIMIT"}
+    assert {row["key"] for row in out["dimensions"]["symbol"]} == {"BTCUSDT"}
     assert all(row["population"] == "FUNDED_PAPER_TRADES"
                for group in out["dimensions"].values() for row in group)
 

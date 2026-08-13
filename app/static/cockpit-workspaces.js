@@ -62,9 +62,9 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
     return `<section class="panel" data-performance-dimension="${esc(name)}"><div class="panel-head"><h2 class="t-section">By ${esc(label(name).toLowerCase())}</h2></div>
       <div class="dimension-scroll"><table class="dimension-table"><thead><tr><th>Group</th><th>Trades</th>
         <th>Win</th><th>Avg R</th><th>Total R</th><th>P&amp;L</th></tr></thead><tbody>${
-        rows.length ? rows.map(row => `<tr><td>${esc(label(row.key))}</td><td>${esc(row.n)}</td>
-          <td>${esc(row.win_pct)}%</td><td>${Number(row.average_r).toFixed(2)}R</td>
-          <td>${Number(row.sum_r).toFixed(2)}R</td><td>${esc(money(row.pnl_usd))}</td></tr>`).join('')
+        rows.length ? rows.map(row => `<tr><td>${esc(label(row.key))}</td><td data-label="Trades">${esc(row.n)}</td>
+          <td data-label="Win">${esc(row.win_pct)}%</td><td data-label="Avg R">${Number(row.average_r).toFixed(2)}R</td>
+          <td data-label="Total R">${Number(row.sum_r).toFixed(2)}R</td><td data-label="P&amp;L">${esc(money(row.pnl_usd))}</td></tr>`).join('')
           : '<tr><td colspan="6">No funded trades in this dimension.</td></tr>'}</tbody></table></div></section>`;
   }
 
@@ -82,11 +82,11 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
         `since ${summary.started_at ? new Date(summary.started_at * 1000).toISOString().slice(0,10) : 'date not reported'} · ` +
         `${summary.confidence_interval_r && summary.confidence_interval_r.status === 'MEASURED'
           ? `95% mean-R interval [${summary.confidence_interval_r.lo}, ${summary.confidence_interval_r.hi}]R`
-          : `confidence interval unavailable: insufficient evidence (${summary.trades}/${summary.confidence_interval_r && summary.confidence_interval_r.minimum_trades || 10})`}</small>`;
+          : `Too few completed trades to judge this yet (${summary.trades} of ${summary.confidence_interval_r && summary.confidence_interval_r.minimum_trades || 10} needed)`}</small>`;
       const groups = dimensions.dimensions || {};
       $('performanceDimensions').innerHTML = `<p class="population-note">Funded paper trades · active baseline. ` +
         `Unknown metadata remains “not reported.”</p><div class="dimension-grid">${
-          ['strategy','regime','horizon','direction','order_type'].map(key =>
+          ['strategy','symbol','regime','horizon','direction','order_type'].map(key =>
             dimensionTable(key, groups[key] || [])).join('')}</div>`;
       const p = mode.promotion || {}, op = mode.operational || {};
       Object.assign(performanceScopes, performanceScopeMapping({summary,dimensions}));
@@ -147,7 +147,7 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
     const select = $('performanceBreakdown'), root = $('performanceDimensions');
     if(!select || !root) return;
     const apply = () => root.querySelectorAll('[data-performance-dimension]').forEach(panel => {
-      panel.hidden = select.value !== 'ALL' && panel.dataset.performanceDimension !== select.value;
+      panel.hidden = panel.dataset.performanceDimension !== select.value;
     });
     select.addEventListener('change', apply);
     new MutationObserver(apply).observe(root, {childList:true});

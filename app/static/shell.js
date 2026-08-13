@@ -573,11 +573,10 @@
     const active = SSState.deck();
     /* Actionable only. A nav badge reading 3 that leads to "nothing to take" is
        a false alarm, and it was firing on every refused setup in the window. */
-    const split = lastSplit = deckSplit(active);
-    $('mSetups').textContent = split.ordered.length;
-    $('mSetupsSub').textContent = split.passed.length
-      ? `${split.passed.length} examined, not taken` : '';
-    $('nCommand').textContent = split.ordered.length || '';
+    lastSplit = deckSplit(active);
+    // The legacy deck remains research context, but the READY count and nav
+    // badge are painted by operations.js from the OpportunityCandidate read
+    // model. They must not be overwritten by this older selector.
     renderDisposition();
 
     /* Scanner state, said as what it means for a trade rather than as a
@@ -889,6 +888,20 @@
   function renderDisposition(){
     const el = $('disposition');
     if(!el) return;
+    const operational = window.SSOperationsData;
+    if(operational){
+      const mode = operational.automation || {};
+      const scanner = operational.scanner || {};
+      const stage = scanner.stage
+        ? String(scanner.stage).replaceAll('_',' ').replaceAll(':',' / ')
+        : scanner.state || 'UNKNOWN';
+      el.textContent = mode.halted
+        ? 'New entries are halted. Existing protection remains active.'
+        : `Bot progress - ${stage}`;
+      el.className = 'disposition' + (mode.halted ? ' warn'
+        : ['OFFLINE','STALE'].includes(scanner.state) ? ' bad' : '');
+      return;
+    }
     if(!lastOverview) return;              // still loading: keep the skeleton
     /* Wait for the split rather than guessing at it. This read
        deckSplit(lastDeckArgs ? lastDeckArgs[0] : []), and lastDeckArgs is set
@@ -1209,7 +1222,7 @@
       if(cnt) cnt.textContent = n + (n === 1 ? ' setup' : ' setups');
       const lede = $('refusedLede');
       if(lede) lede.textContent = n
-        ? 'Setups the risk authority refused, or that expired before price ' +
+        ? 'Setups the account safety checks skipped, or that expired before price ' +
           'came back. Each card carries the reason it was not taken.'
         : '';
     }
@@ -1680,6 +1693,13 @@
     railResizeT = setTimeout(() => {
       missionRailSync(); mineRailSync(); mountRails();
     }, 120);
+  });
+
+  addEventListener('ss:overview-tab', event => {
+    requestAnimationFrame(() => {
+      missionRailSync();
+      mountRails(event.detail && event.detail.panel);
+    });
   });
 
   /* The COIN behind a venue's symbol. `PF_UNIUSD` (Kraken perp), `UNIUSDT`
@@ -2285,7 +2305,28 @@
   function renderNear(d, weather){
     const panel = $('nearPanel'), box = $('near');
     const rows = (d && d.rows) || [];
-    if(!rows.length){ panel.style.display = 'none'; box.innerHTML = ''; return; }
+    if(!rows.length){
+      panel.style.display = '';
+      const counts = (d && d.counts) || {};
+      const warnings = (d && d.warnings) || [];
+      const errored = Number(counts.errored || warnings.length || 0);
+      if(errored){
+        $('nearCount').textContent = 'DATA GAP';
+        $('nearLede').textContent =
+          `${errored} market check${errored === 1 ? '' : 's'} could not be read. ` +
+          'Overwatch cannot call this clear.';
+        box.innerHTML = '<div class="empty mw-empty warn">Market structure is unavailable for part of this sweep. The bot will retry.</div>';
+      }else if(!Number(counts.symbols || 0)){
+        $('nearCount').textContent = 'NO MARKETS';
+        $('nearLede').textContent = 'No eligible market was available for this Overwatch sweep.';
+        box.innerHTML = '<div class="empty mw-empty">There is no market universe to watch yet.</div>';
+      }else{
+        $('nearCount').textContent = '0 markets close';
+        $('nearLede').textContent = 'No watched market is close enough to a live zone yet.';
+        box.innerHTML = '<div class="empty mw-empty">Overwatch is clear. The bot will keep checking.</div>';
+      }
+      return;
+    }
     panel.style.display = '';
     const c = d.counts || {};
     const prox = d.prox_atr, max = d.max_distance_atr;
@@ -2326,14 +2367,14 @@
               say: sayFn(hit ? hit.r : {tf: ''}, prox)};
     }).sort((a, b) => b.rp.rank - a.rp.rank || a.dist - b.dist);
 
-    $('nearCount').textContent = `${c.in_engine_range || 0} in reach`;
+    $('nearCount').textContent = `${c.markets_in_engine_range || 0} markets close`;
     /* Says what was swept and what was left out — a list that cannot name its
        exclusions reads as a complete one — then states the ranking rule,
        because a sorted deck whose basis is unstated is a ranking nobody can
        check. */
     $('nearLede').textContent =
       `${c.symbols} markets swept, ${rows.length} standing within ${max} ATR of a zone. ` +
-      `${c.shadow_excluded} shadow markets are excluded — the risk authority never sizes them. ` +
+      `${c.shadow_excluded} research-only markets are excluded — the bot never funds them. ` +
       `Ranked on both halves of the badge together — how close price is to a zone ` +
       `the engine watches, and whether a playbook trades this market's condition. ` +
       `A market sitting in its zone with no playbook ranks level with one nearby ` +
@@ -2424,12 +2465,21 @@
        merged card would show a regime from one instant beside a distance
        from another. maxAge is generous for the same reason: this rail wants
        the payload on screen, not a fresher one. */
-    const [levels, weather] = await Promise.all([
-      api('/api/near-levels'),
-      window.SSData ? window.SSData.get('/api/weather', 60000).catch(() => null)
-                    : Promise.resolve(null),
-    ]);
-    renderNear(levels, weather);
+    try{
+      const [levels, weather] = await Promise.all([
+        api('/api/near-levels'),
+        window.SSData ? window.SSData.get('/api/weather', 60000).catch(() => null)
+                      : Promise.resolve(null),
+      ]);
+      renderNear(levels, weather);
+    }catch(err){
+      $('nearPanel').style.display = '';
+      $('nearCount').textContent = 'UNAVAILABLE';
+      $('nearLede').textContent =
+        'Overwatch could not load its market sweep. Do not treat this as all clear.';
+      $('near').innerHTML = '<div class="empty mw-empty warn">Market watch is unavailable. The bot will retry.</div>';
+      throw err;
+    }
   }
 
   /* Open trades, drawn on the surface that asks what to do next.

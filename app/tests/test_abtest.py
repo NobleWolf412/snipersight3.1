@@ -15,10 +15,12 @@ bar to cross on, which maker limit to rest, which risk denominator to divide by.
 comparing sum_r to sum_r never can.
 """
 import json
+import sqlite3
 import sys
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP))
@@ -197,6 +199,81 @@ class Summary(unittest.TestCase):
         self.assertEqual(s["n"], 0)
         self.assertIn("note", s)
 
+    def test_degraded_fill_warning_survives_the_summary(self):
+        s = abtest.summarise([
+            {"filled": True, "r": Decimal("0.5"), "same_bar": False,
+             "bars_held": 2, "outcome": "TIMEOUT", "partials": [],
+             "warnings": ["cross slippage NOT applied"]}])
+        self.assertEqual(s["warnings"], ["cross slippage NOT applied"])
+
+    def test_standalone_report_surfaces_each_degraded_replay_cell(self):
+        result = {"filled": True, "r": Decimal("0.5"), "same_bar": False,
+                  "bars_held": 2, "outcome": "TIMEOUT", "partials": [],
+                  "warnings": ["cross slippage NOT applied"]}
+        with patch.object(abtest, "calibrate",
+                          return_value={"trustworthy": False}), \
+             patch.object(abtest, "run_variant", return_value=[result]):
+            report = abtest.report(object(), symbols=["TESTUSDT"], tfs=("1H",))
+        self.assertEqual(len(report["replay_degradations"]), len(abtest.CELLS))
+        self.assertTrue(all(
+            item["note"] == "cross slippage NOT applied"
+            for item in report["replay_degradations"]))
+
+    def test_calibration_surfaces_degraded_replay_fills(self):
+        sid = "TESTUSDT|1H|PULLBACK|setup-v0.19-draft"
+        fact = {"payload": json.dumps({
+            "setup_id": sid, "strategy": "PULLBACK", "outcome": "TP",
+            "r_multiple": "0.5"})}
+        replay = {"setup_id": sid, "symbol": "TESTUSDT", "tf": "1H",
+                  "filled": True, "r": Decimal("0.5"), "same_bar": False,
+                  "bars_held": 2, "outcome": "TP", "partials": [],
+                  "warnings": ["cross slippage NOT applied"]}
+        with patch.object(abtest.store, "get_facts", return_value=[fact]), \
+             patch.object(abtest, "run_variant", return_value=[replay]):
+            cal = abtest.calibrate(object(), ["TESTUSDT"], ("1H",))
+        self.assertEqual(cal["status"], "OK")
+        self.assertEqual(cal["replay_degradations"],
+                         ["cross slippage NOT applied"])
+
+
+class EntryModelAuthority(unittest.TestCase):
+    def setUp(self):
+        self.con = sqlite3.connect(":memory:")
+        self.con.row_factory = sqlite3.Row
+        self.con.executescript(store.SCHEMA)
+
+    def tearDown(self):
+        self.con.close()
+
+    def _setup(self, sid, model="ABSENT", state="VALIDATED"):
+        payload = {"setup_id": sid, "state": state, "strategy": "TEST",
+                   "direction": "LONG", "entry": "100", "sl": "90",
+                   "tp": "120"}
+        if model != "ABSENT":
+            payload["entry_model"] = model
+        store.insert_fact(self.con, symbol="TESTUSDT", tf="1H", kind="setup",
+                          market_time=0, confirmed_at=3600,
+                          algo_version="setup-test", payload=payload)
+
+    def test_missing_model_means_the_recorded_direct_limit_path(self):
+        self._setup("direct")
+        self.assertIsNone(abtest.recorded_entry_model(
+            self.con, ["TESTUSDT"], ["1H"], "setup-test"))
+
+    def test_forming_rows_without_a_model_do_not_conflict_with_final_plans(self):
+        self._setup("forming", state="FORMING")
+        self._setup("final", "MAKER_THEN_MARKET")
+        self.assertEqual(abtest.recorded_entry_model(
+            self.con, ["TESTUSDT"], ["1H"], "setup-test"),
+            "MAKER_THEN_MARKET")
+
+    def test_mixed_models_refuse_instead_of_selecting_one(self):
+        self._setup("direct")
+        self._setup("maker", "MAKER_THEN_MARKET")
+        with self.assertRaisesRegex(ValueError, "multiple entry models"):
+            abtest.recorded_entry_model(
+                self.con, ["TESTUSDT"], ["1H"], "setup-test")
+
 
 class OneFillModel(unittest.TestCase):
     """The whole fill model is the engine's, not just the crossing price."""
@@ -328,9 +405,12 @@ class CalibrationAgainstTheLiveStore(unittest.TestCase):
                     if (p.get("strategy") == "SCALE_IN"
                             and p["outcome"] != "MISSED"):
                         recorded[p["setup_id"]] = p
+        symbols = tradeable_symbols(self.con)
+        model = abtest.recorded_entry_model(
+            self.con, symbols, TFS, SCALE_VERSION)
         replayed = {r["setup_id"]: r for r in abtest.run_variant(
-            self.con, tradeable_symbols(self.con), TFS, SCALE_VERSION,
-            managed=False, entry_model="MAKER_THEN_MARKET") if r.get("filled")}
+            self.con, symbols, TFS, SCALE_VERSION,
+            managed=False, entry_model=model) if r.get("filled")}
         self.assertEqual(len(recorded), cal["scale_in_set_aside"])
         for sid, p in recorded.items():
             got = replayed.get(sid)

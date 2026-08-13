@@ -156,6 +156,30 @@ class RefusalPaths(unittest.TestCase):
         bad = sorted({c for c in text if ord(c) > 127})
         self.assertEqual(bad, [], f"non-ASCII in rendered output: {bad}")
 
+    def test_mixed_entry_models_refuse_loudly(self):
+        text = strategygrade._render({
+            "version": "abtest-v0.3", "trustworthy": False,
+            "calibration": {"status": "OK", "detail": "reproduced"},
+            "entry_model_conflicts": {
+                "setup-vX": "setup-vX records multiple entry models: "
+                            "DIRECT_LIMIT, MAKER_THEN_MARKET"},
+            "strategies": {"PULLBACK": {"expectancy_r": 9.99}},
+        })
+        self.assertIn("NO VERDICT", text)
+        self.assertIn("more than one entry model", text)
+        self.assertNotIn("PULLBACK", text)
+
+    def test_degraded_replay_fill_is_visible_before_the_grade(self):
+        text = strategygrade._render({
+            "version": "abtest-v0.3", "trustworthy": True,
+            "calibration": {"status": "OK", "detail": "reproduced"},
+            "replay_degradations": [{"symbol": "TESTUSDT", "tf": "1H",
+                                      "note": "cross slippage NOT applied"}],
+            "bar": "x", "strategies_tested": 0, "strategies": {},
+        })
+        self.assertIn("WARNING: 1 replay fill", text)
+        self.assertIn("slippage NOT applied", text)
+
     def test_the_correction_caveat_blames_only_what_it_should(self):
         """An INDISTINGUISHABLE row must not be annotated as having been killed
         by the correction — its interval covered zero on its own, and saying

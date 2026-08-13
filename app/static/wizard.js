@@ -321,16 +321,16 @@
   }
 
   function stepRisk(b) {
-    const T = 'Is the risk authority refusing trades, and why?';
-    const M = 'The risk authority is the last word on whether a valid setup gets ' +
-              'sized. It can refuse a perfectly good setup on portfolio grounds.';
+    const T = "Are the bot's safety checks skipping trades, and why?";
+    const M = 'These checks decide whether a valid setup can be given a safe ' +
+              'position size. They can skip a good setup because of account limits.';
     if (!b.telemetry.ok) return undetermined(T, b.telemetry, M);
     const t = b.telemetry.d;
     const rejected = (t.failure_points || {}).RISK_REJECTED || 0;
     if (!rejected) return {
       title: T, result: 'pass',
       value: `0 setups refused · ${fmt((t.funnel || {}).risk_approved || 0)} approved`,
-      means: M + ' It has refused nothing in this window.'
+      means: M + ' They have skipped nothing in this window.'
     };
     // The COUNT comes from failure_points, which is computed over the whole
     // window. records[] is a recent slice, so it is used only to name which
@@ -349,11 +349,10 @@
     const meta = top ? explain(top) : null;
     return {
       title: T, result: 'warn',
-      value: `${fmt(rejected)} setups stopped at the risk gate · reasons seen: ${
-        seen.length ? seen.join(', ') : 'none recorded'}`,
+      value: `${fmt(rejected)} setups skipped by safety checks · reasons seen: ${
+        seen.length ? seen.map(plain).join(', ') : 'none recorded'}`,
       means: M + (top ? ` The reasons recorded include ${plain(top)}.` :
-             ' No machine-readable reason was recorded on the recent refusals, ' +
-             'which is itself a defect worth chasing.'),
+             ' No reason was recorded on the recent skipped setups, which needs investigation.'),
       doing: meta && meta.means ? meta.means
         : 'Open a trace on any refused setup from the funnel to see the exact rule.',
       cta: meta && meta.cta ? meta.cta : { href: '#settings', label: 'Settings' }
@@ -374,14 +373,14 @@
       ? new Date(p.baseline.started_at * 1000).toISOString().slice(0, 10) : 'an unknown date';
     if (total) return {
       title: T, result: 'pass',
-      value: `${fmt(total)} decisions since ${started} · ${fmt(d.APPROVED || 0)} approved, ` +
-             `${fmt(d.REDUCED || 0)} reduced, ${fmt(d.REJECTED || 0)} rejected`,
+      value: `${fmt(total)} decisions since ${started} · ${fmt(d.APPROVED || 0)} allowed, ` +
+             `${fmt(d.REDUCED || 0)} allowed smaller, ${fmt(d.REJECTED || 0)} skipped`,
       means: M + ' It has decisions in it, so the numbers on Results mean something.'
     };
     return {
       title: T, result: 'fail',
       value: `0 decisions since ${started}`,
-      means: M + ' It is empty. The risk authority has not ruled on a single ' +
+      means: M + ' It is empty. The account safety checks have not decided a single ' +
              'setup, so every figure on Results is a placeholder rather than a ' +
              'result. Nothing about the strategy can be concluded yet.',
       doing: 'This is normal immediately after a baseline reset or a rule change. ' +

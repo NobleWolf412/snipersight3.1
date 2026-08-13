@@ -29,7 +29,7 @@ def test_top_down_is_a_real_four_state_decision_not_allow_everywhere():
     assert conflict_candidate.entry_recommendation.order_kind == OrderKind.NONE
     blocked = opportunities.candidate(setup(), risk_fact={
         "decision": "REJECTED", "reasons": ["DAILY_LOSS_HALT"]})
-    assert blocked.setup.top_down.state == TopDownState.BLOCKED
+    assert blocked.setup.top_down.state == TopDownState.ALIGNED
 
 
 def test_ready_pullback_recommends_limit_and_never_uses_legacy_rank_for_grade():
@@ -39,6 +39,8 @@ def test_ready_pullback_recommends_limit_and_never_uses_legacy_rank_for_grade():
     assert item.entry_recommendation.limit_price == Decimal("50000.10")
     assert item.evidence.grade == "UNGRADED"
     assert item.evidence.sizing_allowed is False
+    assert item.strongest_counterargument == (
+        "No safety issue is currently blocking this setup.")
 
 
 def test_legacy_setup_identity_is_hydrated_by_the_server_not_the_browser():
@@ -63,6 +65,57 @@ def test_blocked_candidate_recommends_no_trade():
     assert item.eligible is False
 
 
+def test_rejected_risk_outranks_shadow_fill_and_explains_the_real_reason():
+    item = opportunities.candidate(
+        setup(),
+        risk_fact={"decision": "REJECTED",
+                   "reasons": ["NOT_IN_POINT_IN_TIME_UNIVERSE"]},
+        order={"event": "FILLED"})
+    assert item.state == OpportunityState.BLOCKED
+    assert item.eligible is False
+    assert item.entry_recommendation.order_kind == OrderKind.NONE
+    assert item.strongest_counterargument == (
+        "Trade skipped — BTCUSDT did not meet the bot's market-selection rules "
+        "when the setup confirmed.")
+    assert item.reasons[-1].code == "NOT_IN_POINT_IN_TIME_UNIVERSE"
+    assert item.reasons[-1].summary == item.strongest_counterargument
+
+
+def test_shadow_market_rejection_says_research_only_in_plain_language():
+    item = opportunities.candidate(
+        setup(symbol="PF_DOGEUSD"),
+        risk_fact={"decision": "REJECTED",
+                   "reasons": ["NOT_IN_POINT_IN_TIME_UNIVERSE"]})
+    assert item.strongest_counterargument == (
+        "Trade skipped — this is a research-only market, so the bot records "
+        "setups but does not fund them.")
+
+
+def test_every_current_risk_refusal_has_trader_readable_copy():
+    reasons = [
+        "OPERATOR_HALT", "DATA_HEALTH_BLOCKED", "DRAWDOWN_HALT(8.0%)",
+        "STRATEGY_DISABLED(PULLBACK)", "COOLDOWN(STOP,12h)",
+        "DAILY_LOSS_HALT", "NOT_IN_POINT_IN_TIME_UNIVERSE",
+        "INVALID_STOP_DISTANCE", "SHORT_UNSUPPORTED_COINBASE_SPOT",
+        "SCALE_IN_FORBIDDEN(0R)", "PARENT_CLOSED", "CONCURRENT_LIMIT(2)",
+        "EXPOSURE_LIMIT", "STOP_BEYOND_LIQUIDATION(99@10x)",
+        "BELOW_MIN_NOTIONAL", "PARTICIPATION_TOO_THIN", "ZERO_RISK_SIZE",
+    ]
+    for reason in reasons:
+        item = opportunities.candidate(
+            setup(), risk_fact={"decision": "REJECTED", "reasons": [reason]})
+        assert item.strongest_counterargument.startswith("Trade skipped —")
+        assert reason.replace("_", " ").lower() not in \
+            item.strongest_counterargument.lower()
+
+
+def test_forming_setup_is_progress_not_an_entry_recommendation():
+    item = opportunities.candidate(setup(state="FORMING"))
+    assert item.state == OpportunityState.FORMING
+    assert item.eligible is False
+    assert item.entry_recommendation.order_kind == OrderKind.NONE
+
+
 def test_expired_candidate_is_never_actionable_even_if_setup_still_says_validated():
     item = opportunities.candidate(setup(expires_at_ts=200), now=201)
     assert item.state == OpportunityState.EXPIRED
@@ -74,12 +127,14 @@ def test_unreadable_expiry_fails_closed():
     item = opportunities.candidate(setup(expires_at_ts="not-a-timestamp"), now=201)
     assert item.state == OpportunityState.BLOCKED
     assert item.entry_recommendation.order_kind == OrderKind.NONE
+    assert "expiry is unreadable" in item.strongest_counterargument
 
 
 def test_missing_expiry_fails_closed_in_operational_read_model():
     item = opportunities.candidate(setup(expires_at_ts=None), now=150)
     assert item.state == OpportunityState.BLOCKED
     assert item.eligible is False
+    assert "no expiry" in item.strongest_counterargument
 
 
 def test_empty_summary_treats_no_trade_as_a_successful_state():
@@ -92,3 +147,9 @@ def test_summary_uses_plain_singular_and_plural_copy():
     two = one * 2
     assert opportunities.summary(one)["narrative"] == "Managing 1 open position."
     assert opportunities.summary(two)["narrative"] == "Managing 2 open positions."
+
+
+def test_summary_separates_ready_entries_from_forming_progress():
+    result = opportunities.summary([{"state": "FORMING"}])
+    assert result["actionable"] == 0
+    assert result["narrative"] == "1 setup is forming; no entry is ready."

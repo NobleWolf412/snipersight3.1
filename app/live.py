@@ -389,7 +389,7 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
                 # ~2M fabricated gaps per cycle — see ingest.history_floor.
                 start = (last + gran) if last else ingest.history_floor(tf, now)
                 if start < closed_until:
-                    r = importer.backfill(con, sym, tf, start, now)
+                    r = importer.backfill(con, sym, tf, start, now, as_of=now)
                     new_candles += r["candles"]
                     if r["gaps"]:
                         log.warning(f"live import {sym} {tf}: {r['gaps']} gaps")
@@ -418,7 +418,7 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
                 closed_until = now - now % gran
                 start = (last + gran) if last else ingest.history_floor(tf, now)
                 if start < closed_until:
-                    r = importer.backfill(con, rkey, tf, start, now)
+                    r = importer.backfill(con, rkey, tf, start, now, as_of=now)
                     new_candles += r["candles"]
                     if r["gaps"]:
                         log.warning(f"reference import {rkey} {tf}: "
@@ -454,7 +454,8 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
                         # symbol that already has candles, so `last` is real.
                         start = (last + gran) if last else None
                         if start and start < closed_until:
-                            importer.backfill(con, m_sym, tf, start, now)
+                            importer.backfill(con, m_sym, tf, start, now,
+                                              as_of=now)
                     for tf in ("4H", "1W"):
                         aggregator.aggregate(con, m_sym, tf)
                 manual.run(con, m_sym, m_tf, importer.TF_SECONDS[m_tf])

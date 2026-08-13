@@ -214,6 +214,28 @@ class TestAggregator(EngineStoreCase):
 
 
 class TestImporter(EngineStoreCase):
+    def test_pinned_snapshot_cannot_advance_when_import_crosses_a_boundary(self):
+        """importer-v0.6. A scan beginning one second before the next hour
+        must not import that hour's bar merely because the request finishes two
+        seconds later. Quality judges the whole cycle against the opening clock;
+        admitting the later bar makes a closed candle look DEVELOPING and skips
+        otherwise healthy markets."""
+        rows = [
+            [0, Decimal("9"), Decimal("11"), Decimal("10"), Decimal("10"),
+             Decimal("1")],
+            [3600, Decimal("19"), Decimal("21"), Decimal("20"), Decimal("20"),
+             Decimal("1")],
+        ]
+        with patch("engine.importer._fetch", return_value=rows), \
+             patch("engine.importer.time.time", return_value=7201), \
+             patch("engine.importer.time.sleep"):
+            importer.backfill(self.con, "BTC-USD", "1H", 0, 7201,
+                              as_of=7199)
+        opens = [r["open_ts"] for r in
+                 store.get_candles(self.con, "BTC-USD", "1H")]
+        self.assertEqual(opens, [0],
+                         "the importer advanced beyond the cycle's clock")
+
     def test_empty_answer_after_listing_acknowledges_the_quiet_window(self):
         """importer-v0.5. A steady-state cycle imports exactly the newest
         bucket; on a thin market a quiet bucket arrives as its own EMPTY

@@ -19,7 +19,14 @@ from datetime import datetime, timezone
 from . import binance, kraken, phemex, venues
 
 API = "https://api.exchange.coinbase.com"
-IMPORTER_VERSION = "importer-v0.5-draft"
+IMPORTER_VERSION = "importer-v0.6-draft"
+# v0.6: a caller may pin `as_of` to the scan's opening clock snapshot. The live
+# loop takes several minutes and used to pass its old `now` as the requested end
+# while this function silently replaced the safety boundary with a newer wall
+# clock. Crossing a 5m boundary mid-scan therefore imported a newly-closed bar
+# that the rest of that cycle still judged against the old clock; quality called
+# it DEVELOPING_CANDLES and skipped 12-18 markets at a time. One snapshot now
+# owns both import eligibility and the later quality verdict.
 # v0.5: a successful EMPTY response about a post-listing window now
 # acknowledges its buckets as venue-quiet (gap-honesty extended to the
 # steady-state single-bucket import, whose quiet buckets nothing ever
@@ -29,8 +36,8 @@ IMPORTER_VERSION = "importer-v0.5-draft"
 # v0.4: reference keys ('BICOUSDT@binance-spot') route to the Binance data
 # mirror, labelled with the source their own tail names, and the venue-unknown
 # fallback to Coinbase is LOUD — it used to fetch and honestly-label garbage
-# in silence. (This constant is still outside the version lockfile; joining it
-# is the same open decision flagged for fvg/volprofile on 2026-08-09.)
+# in silence. The importer joined the version lockfile with v0.6 after its
+# as-of rule proved capable of changing which markets reached every engine.
 # v0.3: venue-routed fetch and a truthful `source` column. It was hard-coded
 # "coinbase", which would have labelled Phemex perp candles as spot data — and
 # the quality audit's known-venue-gap allowances are keyed on source, so the
@@ -168,8 +175,14 @@ def _fetch_rows(symbol: str, tf: str, gran: int, start_ts: int, end_ts: int):
         time.sleep(REQUEST_PAUSE_S)
 
 
-def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int) -> dict:
-    """Import [start_ts, end_ts) for a native timeframe. Returns import summary."""
+def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int, *,
+             as_of: int | None = None) -> dict:
+    """Import [start_ts, end_ts) as knowable at ``as_of``.
+
+    Offline callers default to the current clock. A live cycle passes the one
+    snapshot its downstream engines and quality use, so a boundary crossed
+    while network requests are in flight cannot move only this stage.
+    """
     native = native_tfs(symbol)
     if tf not in native:
         raise ValueError(f"{tf} is not a native timeframe for {symbol}; use the aggregator")
@@ -186,8 +199,8 @@ def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int) -> dict:
         except ValueError:
             src = "coinbase"
     start_ts -= start_ts % gran
-    now = int(time.time())
-    end_ts = min(end_ts, now - now % gran)  # never import the developing candle (§5)
+    cutoff = int(time.time()) if as_of is None else int(as_of)
+    end_ts = min(end_ts, cutoff - cutoff % gran)  # never import developing (§5)
 
     from .runlog import get_logger
     seen: dict[int, tuple] = {}

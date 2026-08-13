@@ -17,7 +17,13 @@ from .contracts import (DecisionReason, EntryRecommendation, FactorGrade,
                         TopDownDecision, TopDownState, TradeSetup, to_wire)
 
 
-OPPORTUNITY_VERSION = "opportunity-v0.3-draft"
+OPPORTUNITY_VERSION = "opportunity-v0.5-draft"
+# v0.5: cockpit copy translates risk codes into trader-readable decisions,
+# unavailable setup-specific grades no longer masquerade as a reason to pass,
+# and portfolio/expiry blocks no longer falsify the independent top-down state.
+# v0.4: risk rejection outranks counterfactual simulator outcomes, and entry
+# eligibility is reserved for a READY setup instead of including progress or
+# already-active lifecycle states.
 # v0.3: real custody overlays the paper lifecycle. The read model derived
 # ORDER_WORKING / POSITION_OPEN / CLOSED from simulator facts only, so with a
 # real testnet position open and no matching paper exec fact, /api/operations
@@ -34,14 +40,14 @@ def _decimal(value, default="0") -> Decimal:
         return Decimal(default)
 
 
-def top_down(payload: dict, *, hard_blocked: bool = False) -> TopDownDecision:
+def top_down(payload: dict) -> TopDownDecision:
     block = payload.get("bias") or {}
     composite = str(block.get("composite") or "UNKNOWN")
     alignment = str(block.get("alignment") or "UNKNOWN")
     resolved = str(block.get("resolved") or "ALLOW")
     rungs = block.get("rungs") if isinstance(block.get("rungs"), dict) else {}
     reasons = []
-    if hard_blocked or resolved == "BLOCK":
+    if resolved == "BLOCK":
         state = TopDownState.BLOCKED
         reasons.append(DecisionReason(
             "TOP_DOWN_BLOCK", "The higher-timeframe policy blocks this entry.",
@@ -69,6 +75,12 @@ def top_down(payload: dict, *, hard_blocked: bool = False) -> TopDownDecision:
 def lifecycle(setup_state: str, risk_fact: dict | None = None,
               order: dict | None = None, execution: dict | None = None) -> OpportunityState:
     state = (setup_state or "").upper()
+    # Risk is the authority for whether a shadow order was ever allowed to
+    # become exposure. execsim deliberately records counterfactual fills even
+    # when risk rejects them; those facts remain evidence, not custody.
+    decision = str((risk_fact or {}).get("decision") or "").upper()
+    if decision == "REJECTED":
+        return OpportunityState.BLOCKED
     if execution and execution.get("outcome") not in (None, "PENDING"):
         return OpportunityState.CLOSED
     event = str((order or {}).get("event") or "").upper()
@@ -80,9 +92,6 @@ def lifecycle(setup_state: str, risk_fact: dict | None = None,
         return OpportunityState.CANCELLED
     if event == "MISSED":
         return OpportunityState.EXPIRED
-    decision = str((risk_fact or {}).get("decision") or "").upper()
-    if decision == "REJECTED":
-        return OpportunityState.BLOCKED
     if state == "VALIDATED":
         return OpportunityState.READY
     if state in ("FORMING", "CONFIRMING"):
@@ -101,12 +110,21 @@ def recommend_entry(payload: dict, state: OpportunityState,
     strategy = str(payload.get("strategy") or "").upper()
     entry = _decimal(payload.get("entry")) if payload.get("entry") is not None else None
     expires = payload.get("expires_at_ts") or payload.get("expires_at")
-    if blocked or state in {OpportunityState.BLOCKED, OpportunityState.REJECTED,
-                            OpportunityState.EXPIRED, OpportunityState.CANCELLED,
-                            OpportunityState.CLOSED}:
+    if blocked or state != OpportunityState.READY:
+        summary = {
+            OpportunityState.FORMING: "The entry trigger has not confirmed yet.",
+            OpportunityState.WATCHING: "The bot is watching this setup; there is no entry yet.",
+            OpportunityState.BLOCKED: "This setup was skipped. No order will be placed.",
+            OpportunityState.REJECTED: "This setup was skipped. No order will be placed.",
+            OpportunityState.EXPIRED: "The entry window expired without a trade.",
+            OpportunityState.CANCELLED: "The setup was cancelled before entry.",
+            OpportunityState.ORDER_WORKING: "The entry order is already working.",
+            OpportunityState.POSITION_OPEN: "The position is already open.",
+            OpportunityState.CLOSED: "This trade has finished.",
+        }.get(state, "No new order is allowed in the current state.")
         return EntryRecommendation(
             OrderKind.NONE, None, False, expires,
-            (DecisionReason("NO_TRADE", "No order is permitted in the current state.",
+            (DecisionReason("NO_TRADE", summary,
                             "WARNING"),), OPPORTUNITY_VERSION)
 
     if strategy in {"BREAKOUT_RETEST", "LIQUIDITY_SWEEP_REVERSAL",
@@ -139,11 +157,8 @@ def _quality(payload: dict, state: OpportunityState) -> tuple[Decimal, dict[str,
     parts = {
         "reward_to_risk": (rr / Decimal(3) * Decimal(40)).quantize(Decimal("0.01")),
         "structure_quality": (strength / Decimal(5) * Decimal(30)).quantize(Decimal("0.01")),
-        "factor_coverage": (coverage * Decimal(20)).quantize(Decimal("0.01")),
+        "setup_signal_coverage": (coverage * Decimal(20)).quantize(Decimal("0.01")),
         "trigger_urgency": (urgency * Decimal(10)).quantize(Decimal("0.01")),
-        # Evidence edge deliberately contributes zero until a calibrated,
-        # setup-specific FactorGrade exists. No legacy rank laundering.
-        "evidence_edge": Decimal("0.00"),
     }
     return sum(parts.values(), Decimal(0)).quantize(Decimal("0.01")), parts
 
@@ -156,15 +171,77 @@ def _ungraded(payload: dict) -> FactorGrade:
         score=None, grade="UNGRADED", confidence="INSUFFICIENT_EVIDENCE",
         coverage=coverage.quantize(Decimal("0.0001")), expected_edge_r=None,
         sample_size=0, components=(),
-        warnings=("No setup-specific, out-of-sample factor calibration is available; "
-                  "quality may rank this card but cannot increase its size.",),
+        warnings=("No setup-specific performance grade is available yet.",),
         sizing_allowed=False, version=OPPORTUNITY_VERSION)
+
+
+def _risk_reason_summary(code: str, symbol: str, decision: str = "REJECTED") -> str:
+    """Translate an audit code without hiding it from the decision record."""
+    raw = str(code or "")
+    base, _, argument = raw.partition("(")
+    argument = argument[:-1] if argument.endswith(")") else argument
+    rejected = str(decision).upper() == "REJECTED"
+    if base == "NOT_IN_POINT_IN_TIME_UNIVERSE":
+        if symbol.startswith("PF_"):
+            return ("Trade skipped — this is a research-only market, so the bot "
+                    "records setups but does not fund them.")
+        return (f"Trade skipped — {symbol or 'this market'} did not meet the bot's "
+                "market-selection rules when the setup confirmed.")
+    if base == "OPERATOR_HALT":
+        return "Trade skipped — new entries were manually halted."
+    if base == "DATA_HEALTH_BLOCKED":
+        return "Trade skipped — the latest market-data safety check did not pass."
+    if base == "DRAWDOWN_HALT":
+        suffix = f" ({argument})" if argument else ""
+        return f"Trade skipped — the account hit its drawdown safety limit{suffix}."
+    if base == "STRATEGY_DISABLED":
+        strategy = argument or "this"
+        return f"Trade skipped — the {strategy} strategy was switched off."
+    if base == "COOLDOWN":
+        return (f"Trade skipped — {symbol or 'this market'} was still resting after "
+                "a recent trade.")
+    if base == "DAILY_LOSS_HALT":
+        return "Trade skipped — the daily loss limit had already been reached."
+    if base == "INVALID_STOP_DISTANCE":
+        return "Trade skipped — the stop was too close to the entry to size safely."
+    if base == "SHORT_UNSUPPORTED_COINBASE_SPOT":
+        return "Trade skipped — this spot market does not support short positions."
+    if base == "SCALE_IN_FORBIDDEN":
+        return "Trade skipped — adding to an open position is disabled."
+    if base == "PARENT_CLOSED":
+        return "Trade skipped — the original position had already closed."
+    if base == "CONCURRENT_LIMIT":
+        return "Trade skipped — all available position slots were already in use."
+    if base == "EXPOSURE_LIMIT":
+        return ("Trade skipped — it did not fit within the remaining account risk budget."
+                if rejected else
+                "Position size was reduced to fit the remaining account risk budget.")
+    if base == "LEVERAGE_CAP":
+        suffix = f" ({argument})" if argument else ""
+        return f"Position size was reduced to stay within the leverage limit{suffix}."
+    if base == "STOP_BEYOND_LIQUIDATION":
+        return "Trade skipped — the exchange could liquidate it before the stop was reached."
+    if base == "BELOW_MIN_NOTIONAL":
+        return "Trade skipped — the safe position size was below the exchange minimum."
+    if base == "PARTICIPATION_CAP":
+        return "Position size was reduced because the market was too thin for the full size."
+    if base == "PARTICIPATION_TOO_THIN":
+        return "Trade skipped — the market was too thin for a safely sized order."
+    if base == "ZERO_RISK_SIZE":
+        return "Trade skipped — the safety calculation produced no valid position size."
+    if base == "WITHIN_LIMITS":
+        return "All account safety checks passed."
+    return ("Trade skipped — a safety rule blocked it. Open the decision trace for details."
+            if rejected else
+            "A safety check adjusted this trade. Open the decision trace for details.")
 
 
 def candidate(payload: dict, *, risk_fact: dict | None = None,
               order: dict | None = None, execution: dict | None = None,
               now: int | None = None) -> OpportunityCandidate:
     state = lifecycle(payload.get("state", "WATCHING"), risk_fact, order, execution)
+    risk_rejected = str((risk_fact or {}).get("decision") or "").upper() == "REJECTED"
+    expiry_issue = None
     expires_at = payload.get("expires_at_ts") or payload.get("expires_at")
     if now is not None and state in {
             OpportunityState.READY, OpportunityState.FORMING,
@@ -174,13 +251,17 @@ def candidate(payload: dict, *, risk_fact: dict | None = None,
                 # Every executable playbook owns an expiry. A legacy or damaged
                 # setup without one can remain visible but cannot become risk.
                 state = OpportunityState.BLOCKED
+                expiry_issue = "missing"
             elif int(expires_at) <= int(now):
                 state = OpportunityState.EXPIRED
         except (TypeError, ValueError):
             # An unreadable expiry is unsafe for an entry decision.
             state = OpportunityState.BLOCKED
+            expiry_issue = "unreadable"
     hard_blocked = state in {OpportunityState.BLOCKED, OpportunityState.REJECTED}
-    td = top_down(payload, hard_blocked=hard_blocked)
+    # Portfolio, expiry and execution state must not rewrite the market read.
+    # A setup can be top-down aligned and still be skipped for account reasons.
+    td = top_down(payload)
     alignment_blocked = td.state in {TopDownState.CONFLICT, TopDownState.BLOCKED}
     conditional_hold = td.state == TopDownState.CONDITIONAL
     if alignment_blocked and state in {OpportunityState.READY, OpportunityState.FORMING}:
@@ -216,24 +297,45 @@ def candidate(payload: dict, *, risk_fact: dict | None = None,
                          "The structure-defined stop is the invalidation."),
         top_down=td, version=OPPORTUNITY_VERSION)
     reasons = list(td.reasons)
+    risk_reasons = []
     if risk_fact and risk_fact.get("reasons"):
-        reasons.extend(DecisionReason(str(code), str(code),
+        risk_reasons = [DecisionReason(
+            str(code), _risk_reason_summary(
+                code, symbol, str((risk_fact or {}).get("decision") or "")),
                                       "CRITICAL" if hard_blocked else "INFO")
-                       for code in risk_fact["reasons"])
-    eligible = state in {OpportunityState.READY, OpportunityState.FORMING,
-                         OpportunityState.ORDER_WORKING,
-                         OpportunityState.POSITION_OPEN} and not hard_blocked and \
+                        for code in risk_fact["reasons"]]
+        reasons.extend(risk_reasons)
+    eligible = state == OpportunityState.READY and not hard_blocked and \
                not alignment_blocked and not conditional_hold
     evidence = _ungraded(payload)
     primary = str(payload.get("why") or reasons[0].summary)
-    if hard_blocked:
-        counterargument = "The risk authority rejected this setup."
+    if risk_rejected:
+        counterargument = (risk_reasons[0].summary if risk_reasons else
+                           "Trade skipped — an account safety check blocked it.")
+    elif expiry_issue == "missing":
+        counterargument = ("The setup has no expiry, so the entry window cannot "
+                           "be verified.")
+    elif expiry_issue == "unreadable":
+        counterargument = ("The setup expiry is unreadable, so the entry window "
+                           "cannot be verified.")
+    elif state == OpportunityState.EXPIRED:
+        counterargument = "The entry window expired before a trade could be taken."
+    elif state == OpportunityState.CANCELLED:
+        counterargument = "The setup was cancelled before an entry was taken."
+    elif state == OpportunityState.ORDER_WORKING:
+        counterargument = "The entry order is already working; no second order is needed."
+    elif state == OpportunityState.POSITION_OPEN:
+        counterargument = "The position is already open and is being managed."
+    elif state == OpportunityState.CLOSED:
+        counterargument = "This trade has finished; review its result in the journal."
+    elif hard_blocked:
+        counterargument = "A hard safety rule blocks this setup."
     elif td.state == TopDownState.CONFLICT:
         counterargument = "Higher-timeframe structure conflicts with this direction."
-    elif evidence.warnings:
-        counterargument = evidence.warnings[0]
+    elif state in {OpportunityState.FORMING, OpportunityState.WATCHING}:
+        counterargument = "The entry trigger has not confirmed yet."
     else:
-        counterargument = "No material contraindication is recorded."
+        counterargument = "No safety issue is currently blocking this setup."
     economics = {
         "risk_usd": (risk_fact or {}).get("risk_usd"),
         "notional_usd": (risk_fact or {}).get("notional_usd"),
@@ -355,7 +457,9 @@ def list_candidates(con, *, include_history: bool = True, now: int | None = None
             _cstate, _cts = custody[sid]
             if (_cstate != OpportunityState.CLOSED or
                     int(_cts or 0) >= int(payload.get("confirmed_at") or 0)):
-                item = dataclasses.replace(item, state=_cstate)
+                item = dataclasses.replace(
+                    item, state=_cstate, eligible=False,
+                    entry_recommendation=recommend_entry(payload, _cstate))
         if not include_history and item.state in {
                 OpportunityState.CLOSED, OpportunityState.EXPIRED,
                 OpportunityState.CANCELLED, OpportunityState.REJECTED}:
@@ -368,7 +472,7 @@ def summary(rows: list[dict]) -> dict:
     counts = {state.value: 0 for state in OpportunityState}
     for row in rows:
         counts[row["state"]] = counts.get(row["state"], 0) + 1
-    actionable = counts["READY"] + counts["FORMING"]
+    actionable = counts["READY"]
     if counts["POSITION_OPEN"]:
         count = counts["POSITION_OPEN"]
         narrative = f"Managing {count} open position{'s' if count != 1 else ''}."
@@ -377,9 +481,14 @@ def summary(rows: list[dict]) -> dict:
         narrative = (f"{count} order{'s are' if count != 1 else ' is'} working; "
                      "protection remains monitored.")
     elif actionable:
-        narrative = (f"{counts['READY']} ready and {counts['FORMING']} forming "
-                     f"setup{'s' if actionable != 1 else ''} "
-                     f"{'deserve' if actionable != 1 else 'deserves'} review.")
+        forming = counts["FORMING"]
+        narrative = (f"{actionable} setup{'s are' if actionable != 1 else ' is'} ready"
+                     + (f"; {forming} {'are' if forming != 1 else 'is'} still forming."
+                        if forming else "."))
+    elif counts["FORMING"]:
+        forming = counts["FORMING"]
+        narrative = (f"{forming} setup{'s are' if forming != 1 else ' is'} forming; "
+                     "no entry is ready.")
     else:
         narrative = "No setup currently meets entry rules. Scanning continues."
     return {"counts": counts, "actionable": actionable,

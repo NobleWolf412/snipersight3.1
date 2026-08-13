@@ -46,7 +46,7 @@ window.GLOSSARY = {
      treat a marked pool as context, not a target"). The audit that added this
      scanned data-t attributes present in the DOM rather than GLOSSARY itself,
      so it reported a defined term as missing. See the duplicate-key test. */
-  sized:      "Turned into an actual position with a dollar amount at risk. A setup can be found, scored and recorded without ever being sized — sizing is the moment the risk authority approves it and decides how much. Shadow and warming symbols are scanned and scored but never sized.",
+  sized:      "Turned into an actual position with a dollar amount at risk. A setup can be found, scored and recorded without receiving money. Sizing is when the account safety checks approve it and decide how much. Research-only and warming markets are scanned and scored but never funded.",
   halt:       "A limit that stops NEW entries when the day or the account goes badly enough. Open positions still run to their own stop or target — a halt is not a liquidation. The daily one triggers on losses in a single day; the drawdown one on the fall from your account's high-water mark.",
   htfAgrees:  "The higher timeframe is pointing the same way as the trade. A 4H short with '1D agrees' means the daily structure is also falling, so the trade runs with the larger trend rather than against it. When they disagree, the smaller timeframe is fighting the bigger one — which is the trade most likely to be stopped out by ordinary noise.",
   warming:    "A symbol that is still downloading history. It needs 200 daily candles before the engines can map its structure honestly, so until then it is scanned and recorded but never sized. Warming is the system waiting on data, not the system finding nothing.",
@@ -81,7 +81,7 @@ window.GLOSSARY = {
      several hundred. That is not a fault, but an operator who meets the two
      numbers without these labels concludes the app is broken — so both surfaces
      name their era in the same words, and both point at the other. */
-  forwardWindow:"The stretch of trading since the current baseline opened. Results reports ONLY this window, so it reads empty until the risk authority rules on its first setup — however many trades came before. Changing a rule starts a new one.",
+  forwardWindow:"The stretch of trading since the current baseline opened. Results reports ONLY this window, so it reads empty until the account safety checks decide the first setup — however many trades came before. Changing a rule starts a new one.",
   recordedBook: "Every trade the simulator has ever closed, across all baselines and every engine version. Diagnostics measures the edge against this, because a confidence interval needs far more trades than one forward window usually holds.",
   fact:       "One recorded observation, stamped with when it happened, when the system could first know it, and which algorithm version produced it. Facts are never edited — only added.",
   algoVersion:"Which version of an engine produced a result. Changing a rule creates a NEW version rather than editing the old one, so past results stay reproducible.",

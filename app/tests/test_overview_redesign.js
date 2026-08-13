@@ -19,13 +19,15 @@ function ok(name, fn) {
 
 console.log('overview redesign');
 
-ok('the command brief leads with narrative, instruments, and system pulse', () => {
+ok('bot overview contains its directive, instruments, pulse, and guardrails', () => {
   const brief = HTML.indexOf('class="panel panel-accent bracket command-hero"');
-  const missions = HTML.indexOf('class="panel floating mb-panel"');
+  const missions = HTML.indexOf('class="panel floating mb-panel overview-intel"');
   const risk = HTML.indexOf('id="budgetPanel"');
   assert(brief > 0, 'command brief is missing');
+  assert(risk > brief && risk < missions, 'guardrails must be inside the bot overview');
   assert(missions > brief, 'mission carousel must follow the brief');
-  assert(risk > missions, 'risk mechanics must support, not precede, the active book');
+  assert(HTML.includes('>Bot overview</span>'));
+  assert(!HTML.includes('>Rules of engagement</h2>'));
   for (const id of ['commandNarrative', 'commandMode', 'commandScanner',
     'commandData', 'commandExposure']) assert(HTML.includes(`id="${id}"`), id + ' is missing');
 });
@@ -45,6 +47,22 @@ ok('the carousel exposes position and a route to the comparison surface', () => 
   assert(/position\.textContent = st\.cards\.length/.test(SHELL));
 });
 
+ok('mission briefs and Overwatch are accessible tabs with separate carousels', () => {
+  assert(HTML.includes('class="overview-tabs" role="tablist"'));
+  assert(/id="overviewMissionsTab"[\s\S]*?role="tab"[\s\S]*?aria-controls="overviewMissions"/.test(HTML));
+  assert(/id="overviewOverwatchTab"[\s\S]*?role="tab"[\s\S]*?aria-controls="overviewOverwatch"/.test(HTML));
+  assert(/id="overviewMissions" role="tabpanel"[\s\S]*?id="mbTrack"/.test(HTML));
+  assert(/id="overviewOverwatch" role="tabpanel"[\s\S]*?id="near"/.test(HTML));
+  assert(SHELL.includes("addEventListener('ss:overview-tab'"), 'revealed wheels are not re-synced');
+});
+
+ok('overview tabs support click and keyboard selection without losing wheel state', () => {
+  assert(OPS.includes("document.querySelectorAll('[data-overview-tab]')"));
+  assert(OPS.includes("['ArrowLeft', 'ArrowRight', 'Home', 'End']"));
+  assert(OPS.includes("panel.hidden = !active"));
+  assert(OPS.includes("new CustomEvent('ss:overview-tab'"));
+});
+
 ok('active trade cards are semantic and have one dominant management action', () => {
   assert(SHELL.includes("document.createElement('article')"));
   assert(SHELL.includes('>Manage position</button>'));
@@ -55,6 +73,7 @@ ok('active trade cards are semantic and have one dominant management action', ()
 ok('the command brief and pulse collapse for mobile', () => {
   assert(/@media\(max-width:900px\)[\s\S]*?\.command-pulse\{grid-template-columns:1fr\}/.test(CSS));
   assert(/@media\(max-width:640px\)[\s\S]*?\.command-hero>\.panel-head \.btn\{[^}]*min-height:44px/.test(CSS));
+  assert(/@media\(max-width:640px\)[\s\S]*?\.overview-tab\{[^}]*flex:1[^}]*min-width:0/.test(CSS));
 });
 
 ok('the top bar has four explicit jobs instead of a loose chip row', () => {

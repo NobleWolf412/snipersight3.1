@@ -49,12 +49,17 @@ from . import costs, execsim, store
 from .importer import TF_SECONDS
 from .swings import compute_atr
 
+# v0.3: a missing `entry_model` is now read as the direct-limit model execsim
+# actually ran, not silently replaced with MAKER_THEN_MARKET. Scale-in facts
+# deliberately predate an explicit model field; substituting one changed a
+# recorded +0.34R result to -0.04R in replay. Versions containing more than one
+# model now refuse grading loudly rather than choosing a default.
 # v0.2: `by_strategy` decides on a CLUSTER bootstrap over symbols instead of
 # the IID one, and replays each version under the entry model its own facts
 # recorded. The verdict this harness reports therefore changed meaning, and a
 # stored result labelled v0.1 was produced by a different question — which is
 # the whole reason a research harness carries a version at all.
-ABTEST_VERSION = "abtest-v0.2"
+ABTEST_VERSION = "abtest-v0.3"
 
 # A cluster is a symbol, and eight is the floor for saying anything about the
 # spread between them. Below that the resample keeps drawing the same two or
@@ -328,6 +333,28 @@ def _bisect_fill(candle_times, available_at):
     return lo
 
 
+def recorded_entry_model(con, symbols, tfs, setup_version):
+    """Return the one entry model a setup generation recorded.
+
+    ``None`` is meaningful: it is execsim's direct-limit path, not permission
+    for a research caller to substitute the current setup engine's model. Read
+    the same VALIDATED, entry-bearing population ``run_variant`` replays;
+    FORMING and terminal lifecycle rows are not orders and may predate fields
+    that only a final plan needs.
+    """
+    models = set()
+    for symbol in symbols:
+        for tf in tfs:
+            models.update(
+                s.get("entry_model")
+                for s in _load_setups(con, symbol, tf, setup_version).values())
+    if len(models) > 1:
+        readable = sorted("DIRECT_LIMIT" if m is None else m for m in models)
+        raise ValueError(
+            f"{setup_version} records multiple entry models: {', '.join(readable)}")
+    return next(iter(models)) if models else None
+
+
 def run_variant(con, symbols, tfs, setup_version, *, managed, entry_model,
                 profile_override=None, partials=None, trail=None,
                 timestop=None):
@@ -418,8 +445,10 @@ def run_variant(con, symbols, tfs, setup_version, *, managed, entry_model,
                                 timestop=timestop)
                 if out is None:
                     continue
+                if fill["note"]:
+                    out["warnings"] = [fill["note"]]
                 results.append({"setup_id": sid, "symbol": symbol, "tf": tf,
-                                "filled": True, **out})
+                                 "filled": True, **out})
     return results
 
 
@@ -505,11 +534,10 @@ def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000) -> dict:
     the one strategy sitting on the line.
 
     ENTRY MODEL IS READ, NOT ASSUMED. Each setup version is replayed under the
-    `entry_model` its own facts recorded. Every current playbook records
-    MAKER_THEN_MARKET, so this changes no number today — it stops the docstring
-    promise of "any version" from being a lie the first time a playbook records
-    something else, which is the kind of thing that surfaces as a wrong verdict
-    rather than an error.
+    `entry_model` its own facts recorded. Missing is a recorded answer too:
+    execsim routes it through the direct-limit path, as the scale-in book did.
+    A generation that records more than one answer is refused rather than
+    squeezed through a model that describes neither.
 
     Read only through a TRUSTWORTHY calibration: the caller is responsible for
     checking `calibrate()` first, and this returns its verdict alongside so a
@@ -519,27 +547,30 @@ def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000) -> dict:
     from .setups import SETUP_VERSION
     versions = versions or (SETUP_VERSION, scalein.SCALE_VERSION)
 
-    strategies, models = {}, {}
+    strategies = {}
     for symbol in symbols:
         for tf in tfs:
             for version in versions:
                 for r in store.get_facts(con, symbol, tf, "setup", version):
                     p = json.loads(r["payload"])
                     strategies[(version, p["setup_id"])] = p.get("strategy")
-                    if p.get("entry_model"):
-                        models.setdefault(version, set()).add(p["entry_model"])
 
     groups: dict[str, list[dict]] = {}
     missed: dict[str, int] = {}
+    model_conflicts = {}
+    replay_degradations = []
     for version in versions:
-        seen = models.get(version) or set()
-        # One recorded model or none: fall back to the incumbent contract, and
-        # say so in the payload rather than deciding quietly. A version whose
-        # facts disagree with themselves is not gradeable under one model, so
-        # it is left to the caller as a named condition.
-        model = seen.pop() if len(seen) == 1 else "MAKER_THEN_MARKET"
+        try:
+            model = recorded_entry_model(con, symbols, tfs, version)
+        except ValueError as exc:
+            model_conflicts[version] = str(exc)
+            continue
         for r in run_variant(con, symbols, tfs, version, managed=False,
                              entry_model=model):
+            for note in r.get("warnings") or ():
+                replay_degradations.append({
+                    "version": version, "setup_id": r["setup_id"],
+                    "symbol": r["symbol"], "tf": r["tf"], "note": note})
             name = strategies.get((version, r["setup_id"])) or "UNATTRIBUTED"
             if not r.get("filled"):
                 missed[name] = missed.get(name, 0) + 1
@@ -581,16 +612,22 @@ def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000) -> dict:
         }
     cal = calibrate(con, symbols, tfs)
     return {"version": ABTEST_VERSION,
-            "calibration": cal, "trustworthy": cal.get("trustworthy", False),
+            "calibration": cal,
+            "trustworthy": (cal.get("trustworthy", False)
+                            and not model_conflicts),
+            "entry_model_conflicts": model_conflicts,
+            "replay_degradations": replay_degradations,
             "strategies": out}
 
 
 def summarise(results) -> dict:
     filled = [r for r in results if r.get("filled")]
     rs = [float(r["r"]) for r in filled]
+    warnings = [note for r in results for note in (r.get("warnings") or ())]
     if not rs:
         return {"n": 0, "missed": sum(1 for r in results if not r.get("filled")),
-                "note": "no filled trades — nothing to report"}
+                "note": "no filled trades — nothing to report",
+                "warnings": warnings}
     wins = [r for r in rs if r > 0]
     losses = [r for r in rs if r < 0]
     same_bar_losers = [r for r in filled
@@ -610,6 +647,7 @@ def summarise(results) -> dict:
         "median_bars_held": sorted(r["bars_held"] for r in filled)[len(filled) // 2],
         "partial_rate_pct": round(
             100 * sum(1 for r in filled if r.get("partials")) / len(filled), 1),
+        "warnings": warnings,
     }
 
 
@@ -754,6 +792,7 @@ def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01) -> dict:
         "unmatched_recorded": len(only_recorded),
         "unmatched_replayed": len(only_replayed),
         "scale_in_set_aside": set_aside,
+        "replay_degradations": rep.get("warnings") or [],
         "examples": diverged[:5] or (only_recorded + only_replayed)[:5],
         "per_trade_tolerance_r": per_trade_r,
         # Reported for continuity with what this pass used to return, and
@@ -788,8 +827,12 @@ def report(con, symbols=None, tfs=("5m", "15m", "1H", "4H", "1D", "1W")) -> dict
         cells[key] = {"label": label, "setup_version": version,
                       "managed_exit": managed, "entry_model": entry_model,
                       **summarise(res)}
+    replay_degradations = [
+        {"cell": key, "note": note}
+        for key, cell in cells.items() for note in cell.get("warnings") or ()]
     return {"version": ABTEST_VERSION, "calibration": cal,
             "trustworthy": cal.get("trustworthy", False), "cells": cells,
+            "replay_degradations": replay_degradations,
             "verdict": _verdict(cells, cal)}
 
 

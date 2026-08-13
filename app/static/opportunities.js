@@ -14,6 +14,7 @@
       '"':'&quot;',"'":'&#39;'}[c]));
   const label = window.SSOpportunityUI.label;
   const HISTORY = new Set(['BLOCKED','REJECTED','EXPIRED','CANCELLED','CLOSED']);
+  const ACTIVE = new Set(['POSITION_OPEN','ORDER_WORKING']);
   const ORDER = ['POSITION_OPEN','ORDER_WORKING','READY','FORMING','WATCHING',
     'BLOCKED','REJECTED','EXPIRED','CANCELLED','CLOSED'];
   let payload = {items: [], summary: {narrative: 'No setup data yet.'}};
@@ -21,12 +22,26 @@
   let selectedId = null;
   let selectionMissing = false;
   let returnFocusId = null;
+  let initializedFilter = false;
   const mobile = matchMedia('(max-width:900px)');
 
+  function inFilter(key, row){
+    if(key === 'ACTIVE') return ACTIVE.has(row.state);
+    if(key === 'HISTORY') return HISTORY.has(row.state);
+    return row.state === key;
+  }
+
   function visible(row){
-    if(activeFilter === 'ACTIVE') return !HISTORY.has(row.state);
-    if(activeFilter === 'HISTORY') return HISTORY.has(row.state);
-    return row.state === activeFilter;
+    return inFilter(activeFilter, row);
+  }
+
+  function setFilter(key){
+    activeFilter = key;
+    filters.querySelectorAll('button').forEach(candidate => {
+      const on = candidate.dataset.opFilter === key;
+      candidate.classList.toggle('on', on);
+      candidate.setAttribute('aria-pressed', String(on));
+    });
   }
 
   function selected(){
@@ -47,9 +62,7 @@
 
   function paintCounts(){
     const all = payload.items || [];
-    const count = key => key === 'ACTIVE' ? all.filter(row => !HISTORY.has(row.state)).length
-      : key === 'HISTORY' ? all.filter(row => HISTORY.has(row.state)).length
-      : all.filter(row => row.state === key).length;
+    const count = key => all.filter(row => inFilter(key, row)).length;
     filters.querySelectorAll('[data-op-count]').forEach(node => {
       node.textContent = count(node.dataset.opCount);
     });
@@ -103,26 +116,26 @@
     });
   }
 
-  function openTrade(row){
+  function openTrade(row, {inspectOnly=false} = {}){
     if(!row) return;
     window.SSSelectedOpportunity = row;
     dispatchEvent(new CustomEvent('ss:opportunity-selected', {detail: row}));
-    location.hash = 'trade';
-    requestAnimationFrame(() => {
-      if(window.SSChart) SSChart.open(row.setup.symbol, row.setup.timeframe,
-        {setup_id: row.setup.setup_id});
-    });
+    const chartOptions = {setup_id: row.setup.setup_id, inspect_only: inspectOnly};
+    // Prepare synchronously before routing. The router calls SSChart.onShow()
+    // immediately; without this step it repaints the previous symbol while the
+    // selected setup and evidence already describe the next one.
+    if(window.SSChart && SSChart.prepare)
+      SSChart.prepare(row.setup.symbol, row.setup.timeframe, chartOptions);
+    if(location.hash === '#trade'){
+      if(window.SSChart) SSChart.open(row.setup.symbol, row.setup.timeframe, chartOptions);
+    }else location.hash = 'trade';
   }
 
   filters.addEventListener('click', event => {
     const button = event.target.closest('[data-op-filter]');
     if(!button) return;
-    activeFilter = button.dataset.opFilter;
-    filters.querySelectorAll('button').forEach(candidate => {
-      const on = candidate === button;
-      candidate.classList.toggle('on', on);
-      candidate.setAttribute('aria-pressed', String(on));
-    });
+    initializedFilter = true;
+    setFilter(button.dataset.opFilter);
     paint();
   });
 
@@ -149,6 +162,8 @@
     if(trace && window.SSTracer){ SSTracer.open(trace.dataset.opTrace); return; }
     const button = event.target.closest('.op-open-trade');
     if(button) openTrade(selected());
+    const inspect = event.target.closest('.op-inspect-chart');
+    if(inspect) openTrade(selected(), {inspectOnly:true});
   });
   detail.addEventListener('keydown', event => {
     if(event.key === 'Escape'){ event.preventDefault(); closeDetail(); return; }
@@ -159,6 +174,11 @@
     try{
       const wanted = selectedId;
       payload = await api('/api/opportunities?include_history=true');
+      if(!initializedFilter){
+        const priority = ['ACTIVE','READY','FORMING','WATCHING','HISTORY'];
+        setFilter(priority.find(key => payload.items.some(row => inFilter(key, row))) || 'ACTIVE');
+        initializedFilter = true;
+      }
       selectionMissing = !!wanted && !payload.items.some(item => item.setup.setup_id === wanted);
       if(wanted && !selectionMissing){
         window.SSSelectedOpportunity = selected();

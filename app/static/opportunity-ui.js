@@ -13,12 +13,23 @@
   const when = value => value ? new Date(Number(value) * 1000)
     .toISOString().replace('T',' ').slice(0,16) + 'Z' : 'Not specified';
   const setup = row => row && row.setup || {};
-  function entryRecommendation(entry){
+  const hasGrade = grade => grade && grade.score != null &&
+    grade.grade && String(grade.grade).toUpperCase() !== 'UNGRADED';
+  const cautionLabel = state => ['BLOCKED','REJECTED','EXPIRED','CANCELLED'].includes(state)
+    ? 'Why it was skipped' : ['ORDER_WORKING','POSITION_OPEN'].includes(state)
+      ? 'Current status' : state === 'CLOSED' ? 'Outcome' : 'What could stop it';
+  function entryRecommendation(entry, state){
     const kind = String(entry && entry.order_kind || 'NONE').toUpperCase();
     if(kind === 'LIMIT') return entry.limit_price == null
-      ? 'LIMIT - price not reported' : `LIMIT - ${px(entry.limit_price)}`;
-    if(kind === 'MARKET') return 'MARKET - confirmed trigger';
-    return 'NO ORDER';
+      ? 'Limit order — price unavailable' : `Limit order at ${px(entry.limit_price)}`;
+    if(kind === 'MARKET') return 'Market entry on confirmed trigger';
+    const copy = {
+      FORMING: 'Watching — entry not confirmed', WATCHING: 'Watching — no entry yet',
+      BLOCKED: 'Skipped', REJECTED: 'Skipped', EXPIRED: 'Entry window expired',
+      CANCELLED: 'Cancelled', ORDER_WORKING: 'Order working',
+      POSITION_OPEN: 'Position open', CLOSED: 'Trade finished'
+    };
+    return copy[String(state || '').toUpperCase()] || 'No trade';
   }
 
   function evidenceBody(row){
@@ -27,46 +38,43 @@
       .map(([tf, value]) => `<li><span>${esc(tf)}</span><b>${esc(label(value))}</b></li>`).join('');
     const components = Object.entries(row.ranking_components || {})
       .map(([key, value]) => `<li><span>${esc(label(key))}</span><b>${esc(value)}</b></li>`).join('');
-    const warnings = (grade.warnings || [])
-      .map(w => `<li>${esc(w)}</li>`).join('');
-    const gradeComponents = (grade.components || []).map(component => {
+    const gradeComponents = hasGrade(grade) ? (grade.components || []).map(component => {
       const name = component.factor || component.name || component.key || 'component';
       const contribution = component.uplift_r;
       return `<li><span>${esc(label(name))}</span><b>${contribution == null ? 'Not recorded' : esc(contribution + 'R')}</b></li>`;
-    }).join('');
-    return `<dl class="factor-grade-facts">
-        <div><dt>FactorGrade</dt><dd>${esc(grade.grade || 'UNGRADED')}</dd></div>
-        <div><dt>Score</dt><dd>${grade.score == null ? 'Not calibrated' : esc(grade.score)}</dd></div>
-        <div><dt>Confidence</dt><dd>${esc(label(grade.confidence || 'INSUFFICIENT_EVIDENCE'))}</dd></div>
+    }).join('') : '';
+    const gradeFacts = hasGrade(grade) ? `<dl class="factor-grade-facts">
+        <div><dt>Performance grade</dt><dd>${esc(grade.grade)}</dd></div>
+        <div><dt>Score</dt><dd>${esc(grade.score)}</dd></div>
+        <div><dt>Confidence</dt><dd>${esc(label(grade.confidence))}</dd></div>
         <div><dt>Coverage</dt><dd>${grade.coverage == null ? 'Not recorded' : esc(grade.coverage)}</dd></div>
         <div><dt>Expected edge</dt><dd>${grade.expected_edge_r == null ? 'Not established' : esc(grade.expected_edge_r + 'R')}</dd></div>
         <div><dt>Sample</dt><dd>${esc(grade.sample_size || 0)}</dd></div>
-      </dl>
-      <div class="op-evidence-grid"><div><h3>Top-down ladder</h3><ul>${rungs || '<li>No rungs recorded</li>'}</ul></div>
-      <div><h3>Ranking components</h3><ul>${components || '<li>No components recorded</li>'}</ul></div></div>
-      ${gradeComponents ? `<div><h3>Factor contributions</h3><ul>${gradeComponents}</ul></div>` : ''}
-      ${warnings ? `<h3>Warnings</h3><ul class="op-warning-list">${warnings}</ul>` : ''}`;
+      </dl>` : '';
+    return `${gradeFacts}<div class="op-evidence-grid"><div><h3>Higher-timeframe view</h3><ul>${rungs || '<li>No higher-timeframe readings recorded</li>'}</ul></div>
+      <div><h3>Setup score</h3><ul>${components || '<li>No score components recorded</li>'}</ul></div></div>
+      ${gradeComponents ? `<div><h3>Proven factor contributions</h3><ul>${gradeComponents}</ul></div>` : ''}`;
   }
 
   function card(row, selected){
     const s = setup(row), entry = row.entry_recommendation || {};
     const grade = row.evidence || {}, econ = row.economics || {};
     const symbol = s.symbol || 'Unknown pair';
-    const confidence = label(grade.confidence || 'INSUFFICIENT_EVIDENCE');
+    const gradeScore = hasGrade(grade) ? `<span><b>${esc(grade.grade)}</b><small>${esc(label(grade.confidence))}</small></span>` : '';
     return `<article class="op-card op-card-compact${selected ? ' selected' : ''}"
         data-state="${esc(row.state)}" data-opportunity-id="${esc(s.setup_id)}">
       <header>
         <div><span class="op-state">${esc(label(row.state))}</span>
           <h3>${esc(symbol)} <small>${esc(s.direction)}</small></h3></div>
-        <div class="op-score-pair" aria-label="Quality ${esc(row.quality_score)}, evidence ${esc(confidence)}">
+        <div class="op-score-pair" aria-label="Setup quality ${esc(row.quality_score)}">
           <span><b>${esc(row.quality_score)}</b><small>Quality</small></span>
-          <span><b>${esc(grade.grade || 'UNGRADED')}</b><small>${esc(confidence)}</small></span>
+          ${gradeScore}
         </div>
       </header>
       <div class="op-meta"><span>${esc(s.horizon)}</span><span>${esc(s.timeframe)}</span>
         <span>${esc(label(s.strategy))}</span><span>${esc(label(s.regime))}</span></div>
       <dl class="op-compact-levels">
-        <div><dt>Entry</dt><dd>${esc(entryRecommendation(entry))}</dd></div>
+        <div><dt>Entry</dt><dd>${esc(entryRecommendation(entry, row.state))}</dd></div>
         <div><dt>Reward/risk</dt><dd>${esc(s.rr)}R</dd></div>
         <div><dt>Risk</dt><dd>${esc(money(econ.risk_usd))}</dd></div>
         <div><dt>Expires</dt><dd>${esc(when(s.expires_at))}</dd></div>
@@ -83,9 +91,22 @@
     const grade = row.evidence || {}, econ = row.economics || {};
     const td = s.top_down || {};
     const targets = (s.targets || []).map(px).join(' / ') || '—';
-    const action = options && options.action === false ? '' :
-      `<button class="btn btn-primary op-open-trade" data-id="${esc(s.setup_id)}"
-        data-symbol="${esc(s.symbol)}" data-tf="${esc(s.timeframe)}">Open in Trade</button>`;
+    const actionsEnabled = !(options && options.action === false);
+    const canTrade = row.state === 'READY' && row.eligible &&
+      String(entry.order_kind || 'NONE').toUpperCase() !== 'NONE';
+    const canInspect = ['FORMING','WATCHING'].includes(row.state);
+    const manageLabel = row.state === 'POSITION_OPEN' ? 'Manage position'
+      : row.state === 'ORDER_WORKING' ? 'View working order' : null;
+    const action = !actionsEnabled ? '' : canTrade
+      ? `<button class="btn btn-primary op-open-trade" data-id="${esc(s.setup_id)}"
+          data-symbol="${esc(s.symbol)}" data-tf="${esc(s.timeframe)}">Open in Trade</button>`
+      : manageLabel
+        ? `<button class="btn btn-primary op-open-trade" data-id="${esc(s.setup_id)}"
+            data-symbol="${esc(s.symbol)}" data-tf="${esc(s.timeframe)}">${manageLabel}</button>`
+      : canInspect
+        ? `<button class="btn op-inspect-chart" data-id="${esc(s.setup_id)}"
+            data-symbol="${esc(s.symbol)}" data-tf="${esc(s.timeframe)}">Inspect chart</button>`
+        : '';
     return `<div class="op-detail-head">
         <div><span class="op-state">${esc(label(row.state))}</span>
           <h2>${esc(s.symbol || 'Unknown pair')} <small>${esc(s.direction)}</small></h2></div>
@@ -94,10 +115,10 @@
       <div class="op-detail-tags"><span>${esc(s.venue)}</span><span>${esc(s.horizon)}</span>
         <span>${esc(s.timeframe)}</span><span>${esc(label(s.strategy))}</span></div>
       <div class="op-decision-line"><span>${esc(label(s.regime))}</span>
-        <span>Top-down ${esc(label(td.state))}</span>
-        <span>Evidence ${esc(label(grade.confidence))}</span></div>
+        <span>Higher timeframes: ${esc(label(td.state))}</span>
+        ${hasGrade(grade) ? `<span>Performance grade: ${esc(grade.grade)}</span>` : ''}</div>
       <div class="op-recommendation"><span class="op-kicker">Recommendation</span>
-        <strong>${esc(entryRecommendation(entry))}</strong>
+        <strong>${esc(entryRecommendation(entry, row.state))}</strong>
         <small>${esc((entry.reasons && entry.reasons[0] && entry.reasons[0].summary) || 'No entry reason recorded.')}</small></div>
       <dl class="op-detail-levels">
         <div><dt>Stop</dt><dd>${px(s.stop)}</dd></div><div><dt>Targets</dt><dd>${targets}</dd></div>
@@ -111,9 +132,9 @@
         <div><dt>Expires</dt><dd>${esc(when(s.expires_at))}</dd></div>
       </dl>
       <section class="op-callout"><span class="op-kicker">Why it exists</span><p>${esc(row.primary_explanation)}</p></section>
-      <section class="op-callout caution"><span class="op-kicker">Reason to pass</span><p>${esc(row.strongest_counterargument)}</p></section>
+      <section class="op-callout caution"><span class="op-kicker">${cautionLabel(row.state)}</span><p>${esc(row.strongest_counterargument)}</p></section>
       <section class="op-callout"><span class="op-kicker">Invalidation</span><p>${esc(s.invalidation)}</p></section>
-      <details class="op-detail-evidence"><summary>Evidence and scoring</summary>
+      <details class="op-detail-evidence"><summary>How the bot scored it</summary>
         ${evidenceBody(row)}
       </details>
       <div class="op-detail-actions">
@@ -132,15 +153,15 @@
         <div class="op-detail-tags"><span>${esc(s.horizon)}</span><span>${esc(s.timeframe)}</span>
           <span>${esc(label(s.strategy))}</span></div></div>
       <div class="trade-verdict"><span class="op-kicker">Recommendation</span>
-        <strong>${esc(entryRecommendation(entry))}</strong></div>
+        <strong>${esc(entryRecommendation(entry, row.state))}</strong></div>
       <dl class="trade-evidence-stats"><div><dt>Regime</dt><dd>${esc(label(s.regime))}</dd></div>
-        <div><dt>Top-down</dt><dd>${esc(label(td.state))}</dd></div>
-        <div><dt>Quality</dt><dd>${esc(row.quality_score)}/100</dd></div>
-        <div><dt>Evidence</dt><dd>${esc(grade.grade || 'UNGRADED')} · ${esc(label(grade.confidence))}</dd></div></dl>
+        <div><dt>Higher timeframes</dt><dd>${esc(label(td.state))}</dd></div>
+        <div><dt>Setup quality</dt><dd>${esc(row.quality_score)}/100</dd></div>
+        ${hasGrade(grade) ? `<div><dt>Performance grade</dt><dd>${esc(grade.grade)} · ${esc(label(grade.confidence))}</dd></div>` : ''}</dl>
       <section class="trade-brief"><span class="op-kicker">Why it exists</span><p>${esc(row.primary_explanation)}</p></section>
-      <section class="trade-brief caution"><span class="op-kicker">Reason to pass</span><p>${esc(row.strongest_counterargument)}</p></section>
+      <section class="trade-brief caution"><span class="op-kicker">${cautionLabel(row.state)}</span><p>${esc(row.strongest_counterargument)}</p></section>
       <section class="trade-brief"><span class="op-kicker">Invalidation</span><p>${esc(s.invalidation)}</p></section>
-      <details class="trade-evidence-more"><summary>Show full evidence</summary>
+      <details class="trade-evidence-more"><summary>How the bot scored it</summary>
         ${evidenceBody(row)}</details>`;
   }
 

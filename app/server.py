@@ -854,7 +854,7 @@ def _performance_dimensions(journal: list[dict], baseline: dict) -> dict:
     return {"window": "ACTIVE_BASELINE", "population": "FUNDED_PAPER_TRADES",
             "baseline": baseline, "dimensions": {
                 field: rows(field) for field in
-                ("strategy", "regime", "horizon", "direction", "order_type")}}
+                ("strategy", "symbol", "regime", "horizon", "direction", "order_type")}}
 
 
 def _envelope_config(con, eq: float) -> dict:
@@ -2679,7 +2679,7 @@ def operations_read_model():
             scanner_age = max(0, int(time.time() - float(hb["ts"])))
             scanner = {"state": "SCANNING" if scanner_age < SCANNER_STALE_S
                        else "STALE", "age_s": scanner_age,
-                       "stage": hb.get("stage")}
+                       "stage": hb.get("phase")}
         except (OSError, ValueError, KeyError, TypeError):
             scanner = {"state": "OFFLINE", "age_s": None, "stage": None}
 

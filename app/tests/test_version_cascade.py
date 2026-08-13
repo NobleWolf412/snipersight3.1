@@ -26,7 +26,7 @@ import unittest
 
 from engine import (aggregator, basis, bias, breakout, cooldowns, cycles,
                     execsim, venues, liquidity, ma, manual, momentum, ranges,
-                    regime, risk, scalein, setups, structure, swings,
+                    regime, risk, scalein, setups, structure, swings, importer,
                     volatility, volume, zones, trend)
 from engine import automation, autotrader, contracts, execution, lifecycle
 from engine import phemex_private, positions
@@ -57,10 +57,9 @@ OPERATIONAL_EXPECTED = {
     # plan implies rather than a hardcoded 1x bucket.
     "phemex_private": "phemex-private-v0.4-draft",
     "lifecycle": "lifecycle-v0.1-draft",
-    # opportunity-v0.3: real custody overlays the paper lifecycle in the
-    # read model. This entry is ALSO the fix for an audit finding: the
-    # version was stamped on every cockpit-facing record and locked nowhere.
-    "opportunities": "opportunity-v0.3-draft",
+    # opportunity-v0.5: risk reasons are trader-readable, unavailable grades
+    # are not rejection reasons, and top-down stays independent of risk state.
+    "opportunities": "opportunity-v0.5-draft",
 }
 
 
@@ -79,6 +78,10 @@ def operational_versions():
 
 # The current, deliberate state of the pipeline. Update WITH the cascade.
 LOCKED = {
+    # Writes candles rather than facts, but still changes every fact stream
+    # downstream. v0.6 pins one cycle clock across import and quality so crossing
+    # a candle boundary cannot falsely skip markets as DEVELOPING_CANDLES.
+    "importer": importer.IMPORTER_VERSION,
     # Not a fact producer — it writes CANDLES — and locked anyway, for the
     # strongest reason in this file: it sits UPSTREAM of every engine below,
     # so a rule change here changes their output while every version constant
@@ -140,6 +143,7 @@ RETIRED_MANUAL = tuple(v for v in manual.MANUAL_VERSIONS
                        if v != manual.MANUAL_VERSION)
 
 EXPECTED = {
+    "importer": "importer-v0.6-draft",
     # agg-v0.2 cascade, 2026-08-09 — wider than S53, and the first to start
     # from CANDLES rather than facts. The aggregator now builds a 4H/1W bucket
     # from the source candles that exist when every missing one is a bucket
