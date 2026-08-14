@@ -19,7 +19,7 @@
 
 ## Relationships
 
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (2 shared connections)
+- [Chart Vendor Internals](Chart_Vendor_Internals.md) (2 shared connections)
 
 ## Source Files
 

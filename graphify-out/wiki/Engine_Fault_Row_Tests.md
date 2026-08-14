@@ -1,39 +1,32 @@
 # Engine Fault Row Tests
 
-> 13 nodes
+> 4 nodes
 
 ## Key Concepts
 
-- **deckRowInner()** (11 connections) — `app/static/shell.js`
-- **ringSvg()** (9 connections) — `app/static/shell.js`
-- **ladderHtml()** (6 connections) — `app/static/shell.js`
-- **mineCardInner()** (6 connections) — `app/static/shell.js`
-- **missionCardInner()** (4 connections) — `app/static/shell.js`
-- **ladderRing()** (4 connections) — `app/static/shell.js`
-- **htfChip()** (2 connections) — `app/static/shell.js`
-- **expiresIn()** (2 connections) — `app/static/shell.js`
-- **foundAgo()** (2 connections) — `app/static/shell.js`
-- **foundTitle()** (2 connections) — `app/static/shell.js`
-- **reasonText()** (2 connections) — `app/static/shell.js`
-- **heldBadge()** (2 connections) — `app/static/shell.js`
-- **windowLeft()** (2 connections) — `app/static/shell.js`
+- **test_abtest.py** (11 connections) — `app/tests/test_abtest.py`
+- **Determinism** (2 connections) — `app/tests/test_abtest.py`
+- **.test_same_inputs_produce_identical_results()** (2 connections) — `app/tests/test_abtest.py`
+- **2x2 replay harness — the properties that make its verdict believable.  The har** (1 connections) — `app/tests/test_abtest.py`
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (17 shared connections)
-- [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (4 shared connections)
-- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (1 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
+- [CalibrationAgainstTheLiveStore](CalibrationAgainstTheLiveStore.md) (3 shared connections)
+- [T](T.md) (2 shared connections)
+- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (1 shared connections)
+- [EntryModelAuthority](EntryModelAuthority.md) (1 shared connections)
+- [Next Wake Math Tests](Next_Wake_Math_Tests.md) (1 shared connections)
+- [Chart Vendor Hit Testing](Chart_Vendor_Hit_Testing.md) (1 shared connections)
+- [.ol](ol.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/shell.js`
+- `app/tests/test_abtest.py`
 
 ## Audit Trail
 
-- EXTRACTED: 52 (96%)
-- INFERRED: 2 (4%)
+- EXTRACTED: 16 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

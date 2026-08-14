@@ -4,7 +4,7 @@
 
 ## Key Concepts
 
-- **AutomationMode** (40 connections) — `app/engine/contracts.py`
+- **AutomationMode** (38 connections) — `app/engine/contracts.py`
 - **automation.py** (18 connections) — `app/engine/automation.py`
 - **transition()** (9 connections) — `app/engine/automation.py`
 - **ModeConflict** (7 connections) — `app/engine/automation.py`
@@ -34,14 +34,14 @@
 ## Relationships
 
 - [A/B Calibration Tests](A-B_Calibration_Tests.md) (9 shared connections)
-- [Chart Vendor Series](Chart_Vendor_Series.md) (9 shared connections)
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (7 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (8 shared connections)
+- [Chart Vendor Series](Chart_Vendor_Series.md) (7 shared connections)
 - [Volatility Engine](Volatility_Engine.md) (4 shared connections)
 - [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (3 shared connections)
-- [Diagnostics Engine](Diagnostics_Engine.md) (2 shared connections)
 - [test_autonomy_contracts.py](test_autonomy_contracts.py.md) (2 shared connections)
 - [cycles.py](cycles.py.md) (1 shared connections)
 - [.ja](ja.md) (1 shared connections)
+- [ProtectedBroker](ProtectedBroker.md) (1 shared connections)
 - [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
 - [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
 - [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (1 shared connections)
@@ -54,8 +54,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 112 (76%)
-- INFERRED: 36 (24%)
+- EXTRACTED: 111 (76%)
+- INFERRED: 35 (24%)
 - AMBIGUOUS: 0 (0%)
 
 ---

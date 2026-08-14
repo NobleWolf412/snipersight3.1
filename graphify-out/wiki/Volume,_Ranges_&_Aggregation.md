@@ -27,7 +27,7 @@
 - [Toast Isolation Tests](Toast_Isolation_Tests.md) (4 shared connections)
 - [Cooldown Engine](Cooldown_Engine.md) (2 shared connections)
 - [Venue Policy & Contract](Venue_Policy_%26_Contract.md) (2 shared connections)
-- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (1 shared connections)
+- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
 - [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
 
 ## Source Files

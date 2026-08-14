@@ -1,37 +1,54 @@
 # he
 
-> 16 nodes
+> 23 nodes
 
 ## Key Concepts
 
-- **funding.py** (10 connections) — `app/engine/funding.py`
-- **Decimal** (6 connections)
-- **phemex_history()** (6 connections) — `app/engine/funding.py`
-- **history()** (6 connections) — `app/engine/funding.py`
-- **kraken_history()** (5 connections) — `app/engine/funding.py`
-- **report()** (5 connections) — `app/engine/funding.py`
-- **charge()** (4 connections) — `app/engine/funding.py`
-- **_now()** (3 connections) — `app/engine/funding.py`
-- **_get()** (3 connections) — `app/engine/funding.py`
-- **What funding ACTUALLY cost, against the constant the simulator charges. READ-ON** (1 connections) — `app/engine/funding.py`
-- **Wall clock, in one place so a test can pin it.** (1 connections) — `app/engine/funding.py`
-- **(settlement unix seconds, rate) hourly, oldest first.      `relativeFundingRat** (1 connections) — `app/engine/funding.py`
-- **(settlement unix seconds, rate) 8-hourly, oldest first.      Keyed on the INDE** (1 connections) — `app/engine/funding.py`
-- **Real settlements for one symbol, or [] where the venue charges none.      Spot** (1 connections) — `app/engine/funding.py`
-- **What this hold really paid — signed, in price units on entry notional.      SI** (1 connections) — `app/engine/funding.py`
-- **Re-price the recorded book on real funding. Writes nothing.      The R denomin** (1 connections) — `app/engine/funding.py`
+- **mi** (11 connections) — `app/static/lightweight-charts.js`
+- **ci()** (9 connections) — `app/static/lightweight-charts.js`
+- **pi()** (6 connections) — `app/static/lightweight-charts.js`
+- **wi()** (6 connections) — `app/static/lightweight-charts.js`
+- **._h()** (6 connections) — `app/static/lightweight-charts.js`
+- **fi()** (5 connections) — `app/static/lightweight-charts.js`
+- **di()** (4 connections) — `app/static/lightweight-charts.js`
+- **.gt()** (3 connections) — `app/static/lightweight-charts.js`
+- **.br()** (2 connections) — `app/static/lightweight-charts.js`
+- **.dh()** (2 connections) — `app/static/lightweight-charts.js`
+- **.Ih()** (2 connections) — `app/static/lightweight-charts.js`
+- **.Bh()** (2 connections) — `app/static/lightweight-charts.js`
+- **.Fh()** (2 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.J()** (1 connections) — `app/static/lightweight-charts.js`
+- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.Eh()** (1 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.$t()** (1 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
 
 ## Relationships
 
-- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (1 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (6 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (4 shared connections)
+- [NextWakeMath](NextWakeMath.md) (2 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (2 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (2 shared connections)
+- [Fact Store Conventions](Fact_Store_Conventions.md) (1 shared connections)
+- [te](te.md) (1 shared connections)
+- [execsim.py](execsim.py.md) (1 shared connections)
+- [Bias Ladder Engine](Bias_Ladder_Engine.md) (1 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (1 shared connections)
+- [BTC Alignment Engine](BTC_Alignment_Engine.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/funding.py`
+- `app/static/lightweight-charts.js`
 
 ## Audit Trail
 
-- EXTRACTED: 55 (100%)
+- EXTRACTED: 70 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

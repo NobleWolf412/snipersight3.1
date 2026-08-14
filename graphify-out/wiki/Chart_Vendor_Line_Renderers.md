@@ -1,47 +1,41 @@
 # Chart Vendor Line Renderers
 
-> 18 nodes
+> 14 nodes
 
 ## Key Concepts
 
-- **.key()** (12 connections) — `app/static/lightweight-charts.js`
-- **cockpit-workspaces.js** (9 connections) — `app/static/cockpit-workspaces.js`
-- **loadPerformanceWorkspace()** (6 connections) — `app/static/cockpit-workspaces.js`
-- **opportunity-ui.js** (6 connections) — `app/static/opportunity-ui.js`
-- **evidenceBody()** (5 connections) — `app/static/opportunity-ui.js`
-- **entryRecommendation()** (4 connections) — `app/static/opportunity-ui.js`
-- **detail()** (4 connections) — `app/static/opportunity-ui.js`
-- **facts()** (3 connections) — `app/static/cockpit-workspaces.js`
-- **loadSystemWorkspace()** (3 connections) — `app/static/cockpit-workspaces.js`
-- **card()** (3 connections) — `app/static/opportunity-ui.js`
-- **tradeEvidence()** (3 connections) — `app/static/opportunity-ui.js`
-- **performanceScopeMapping()** (2 connections) — `app/static/cockpit-workspaces.js`
-- **showPerformanceScope()** (2 connections) — `app/static/cockpit-workspaces.js`
-- **dimensionTable()** (2 connections) — `app/static/cockpit-workspaces.js`
-- **renderReconciliation()** (2 connections) — `app/static/cockpit-workspaces.js`
-- **wireJournalSearch()** (1 connections) — `app/static/cockpit-workspaces.js`
-- **wirePerformanceBreakdown()** (1 connections) — `app/static/cockpit-workspaces.js`
-- **missing()** (1 connections) — `app/static/opportunity-ui.js`
+- **deckRowInner()** (11 connections) — `app/static/shell.js`
+- **ringSvg()** (9 connections) — `app/static/shell.js`
+- **mineCardInner()** (6 connections) — `app/static/shell.js`
+- **missionCardInner()** (4 connections) — `app/static/shell.js`
+- **ladderRing()** (4 connections) — `app/static/shell.js`
+- **ladderHtml()** (4 connections) — `app/static/shell.js`
+- **htfChip()** (2 connections) — `app/static/shell.js`
+- **expiresIn()** (2 connections) — `app/static/shell.js`
+- **foundAgo()** (2 connections) — `app/static/shell.js`
+- **foundTitle()** (2 connections) — `app/static/shell.js`
+- **reasonText()** (2 connections) — `app/static/shell.js`
+- **heldBadge()** (2 connections) — `app/static/shell.js`
+- **storyOf()** (2 connections) — `app/static/shell.js`
+- **windowLeft()** (2 connections) — `app/static/shell.js`
 
 ## Relationships
 
-- [Chart UI Layer](Chart_UI_Layer.md) (3 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (14 shared connections)
 - [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (3 shared connections)
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (2 shared connections)
-- [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (1 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
-- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (1 shared connections)
+- [renderProgression](renderProgression.md) (2 shared connections)
+- [market_context.py](market_context.py.md) (1 shared connections)
+- [renderNear](renderNear.md) (1 shared connections)
+- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/cockpit-workspaces.js`
-- `app/static/lightweight-charts.js`
-- `app/static/opportunity-ui.js`
+- `app/static/shell.js`
 
 ## Audit Trail
 
-- EXTRACTED: 53 (77%)
-- INFERRED: 16 (23%)
+- EXTRACTED: 54 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

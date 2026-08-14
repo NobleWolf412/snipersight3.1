@@ -2,7 +2,7 @@
 
 > God node · 50 connections · `app/engine/contracts.py`
 
-**Community:** [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md)
+**Community:** [ProtectedBroker](ProtectedBroker.md)
 
 ## Connections by Relation
 

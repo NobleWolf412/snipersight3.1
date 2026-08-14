@@ -1,26 +1,23 @@
 # renderLedger
 
-> 5 nodes
+> 2 nodes
 
 ## Key Concepts
 
-- **ei** (5 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.J()** (1 connections) — `app/static/lightweight-charts.js`
-- **.He()** (1 connections) — `app/static/lightweight-charts.js`
-- **.K()** (1 connections) — `app/static/lightweight-charts.js`
+- **workspaces.js** (1 connections) — `app/static/workspaces.js`
+- **bind()** (1 connections) — `app/static/workspaces.js`
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/static/workspaces.js`
 
 ## Audit Trail
 
-- EXTRACTED: 9 (100%)
+- EXTRACTED: 2 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

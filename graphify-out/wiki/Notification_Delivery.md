@@ -32,9 +32,10 @@
 
 ## Relationships
 
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (9 shared connections)
-- [A/B Calibration Tests](A-B_Calibration_Tests.md) (3 shared connections)
+- [ProtectedBroker](ProtectedBroker.md) (6 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (5 shared connections)
 - [Market Data Importer](Market_Data_Importer.md) (2 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (1 shared connections)
 
 ## Source Files
 

@@ -1,6 +1,6 @@
 # on
 
-> 6 nodes
+> 7 nodes
 
 ## Key Concepts
 
@@ -10,10 +10,11 @@
 - **renderEvidence()** (3 connections) — `app/static/trade-workspace.js`
 - **tradeWorkspaceProjection()** (2 connections) — `app/static/trade-workspace.js`
 - **refreshAuthority()** (2 connections) — `app/static/trade-workspace.js`
+- **syncSheet()** (1 connections) — `app/static/trade-workspace.js`
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -21,7 +22,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 19 (100%)
+- EXTRACTED: 20 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

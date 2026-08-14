@@ -4,7 +4,7 @@
 
 ## Key Concepts
 
-- **live.py** (17 connections) — `app/live.py`
+- **live.py** (18 connections) — `app/live.py`
 - **main()** (9 connections) — `app/live.py`
 - **refresh_universe()** (4 connections) — `app/live.py`
 - **cycle()** (4 connections) — `app/live.py`
@@ -27,10 +27,11 @@
 - [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
 - [momentum.py](momentum.py.md) (1 shared connections)
 - [Boundary Wake Grid Tests](Boundary_Wake_Grid_Tests.md) (1 shared connections)
+- [test_live_clock.py](test_live_clock.py.md) (1 shared connections)
 - [Notification Tests](Notification_Tests.md) (1 shared connections)
 - [Onboarding Announce Tests](Onboarding_Announce_Tests.md) (1 shared connections)
 - [Pipeline Gate Tests](Pipeline_Gate_Tests.md) (1 shared connections)
-- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (1 shared connections)
+- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
 - [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (1 shared connections)
 
 ## Source Files
@@ -39,7 +40,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 58 (97%)
+- EXTRACTED: 59 (97%)
 - INFERRED: 2 (3%)
 - AMBIGUOUS: 0 (0%)
 

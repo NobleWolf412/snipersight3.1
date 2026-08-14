@@ -1,8 +1,8 @@
 # f()
 
-> God node · 89 connections · `app/static/lightweight-charts.js`
+> God node · 86 connections · `app/static/lightweight-charts.js`
 
-**Community:** [Chart Vendor Panes](Chart_Vendor_Panes.md)
+**Community:** [Chart Vendor Internals](Chart_Vendor_Internals.md)
 
 ## Connections by Relation
 
@@ -32,18 +32,16 @@
 - lightweight-charts.js `EXTRACTED`
 
 ### indirect_call
-- deck() `INFERRED`
-- buildCredRows() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`
 - read() `INFERRED`
-- S() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`
 - read() `INFERRED`
 - E() `INFERRED`
+- S() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`

@@ -1,36 +1,32 @@
 # Chart Bootstrap Glue
 
-> 11 nodes
+> 10 nodes
 
 ## Key Concepts
 
-- **J** (13 connections) — `app/static/lightweight-charts.js`
-- **.Di()** (8 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Kt()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Vi()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Ai()** (3 connections) — `app/static/lightweight-charts.js`
-- **.zi()** (3 connections) — `app/static/lightweight-charts.js`
-- **.ki()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Oi()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
+- **volprofile.py** (11 connections) — `app/engine/volprofile.py`
+- **walk_states()** (6 connections) — `app/engine/volprofile.py`
+- **bin_step()** (5 connections) — `app/engine/volprofile.py`
+- **run()** (5 connections) — `app/engine/volprofile.py`
+- **Decimal** (3 connections)
+- **classify()** (3 connections) — `app/engine/volprofile.py`
+- **Volume profile — is price sitting where volume lived? algo volprofile-v0.1-draft** (1 connections) — `app/engine/volprofile.py`
+- **The series' permanent bin width: VP_BIN_PCT of its first close,     quantized sc** (1 connections) — `app/engine/volprofile.py`
+- **Schmitt-triggered node state for one close's bin ratio.** (1 connections) — `app/engine/volprofile.py`
+- **(bar_index, state, from, ratio, bin bounds) per transition. Pure.      Rolling a** (1 connections) — `app/engine/volprofile.py`
 
 ## Relationships
 
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (5 shared connections)
-- [ni](ni.md) (3 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
-- [.ol](ol.md) (1 shared connections)
+- [Indicator Engines](Indicator_Engines.md) (6 shared connections)
+- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (3 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/engine/volprofile.py`
 
 ## Audit Trail
 
-- EXTRACTED: 43 (100%)
+- EXTRACTED: 37 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

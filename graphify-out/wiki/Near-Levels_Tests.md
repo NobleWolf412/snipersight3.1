@@ -1,17 +1,18 @@
 # Near-Levels Tests
 
-> 29 nodes
+> 31 nodes
 
 ## Key Concepts
 
-- **Sweep** (11 connections) — `app/tests/test_nearlevels.py`
+- **Sweep** (12 connections) — `app/tests/test_nearlevels.py`
 - **ReachIsTheEnginesOwnBound** (7 connections) — `app/tests/test_nearlevels.py`
-- **._candles()** (6 connections) — `app/tests/test_nearlevels.py`
-- **._zone()** (6 connections) — `app/tests/test_nearlevels.py`
+- **._candles()** (7 connections) — `app/tests/test_nearlevels.py`
+- **._zone()** (7 connections) — `app/tests/test_nearlevels.py`
 - **test_nearlevels.py** (4 connections) — `app/tests/test_nearlevels.py`
 - **.test_it_writes_nothing()** (4 connections) — `app/tests/test_nearlevels.py`
 - **.test_shadow_symbols_are_excluded_and_counted()** (4 connections) — `app/tests/test_nearlevels.py`
 - **.test_the_distance_is_the_one_the_chart_will_draw()** (4 connections) — `app/tests/test_nearlevels.py`
+- **.test_in_reach_market_count_deduplicates_timeframes()** (4 connections) — `app/tests/test_nearlevels.py`
 - **.test_a_market_that_cannot_be_read_is_named_never_dropped_silently()** (4 connections) — `app/tests/test_nearlevels.py`
 - **.test_rows_come_back_nearest_first()** (3 connections) — `app/tests/test_nearlevels.py`
 - **.test_the_engines_exact_bound_is_still_in_range()** (2 connections) — `app/tests/test_nearlevels.py`
@@ -28,8 +29,7 @@
 - **At `dist <= 0` setups.py BREAKS out of the forming loop and hands the         z** (1 connections) — `app/tests/test_nearlevels.py`
 - **The trap this panel is for. 15m and 1H are outside FORMING_TFS, so a         ro** (1 connections) — `app/tests/test_nearlevels.py`
 - **A 1H row 2 ATR out is out of range for the distance reason first.         Repor** (1 connections) — `app/tests/test_nearlevels.py`
-- **Read-only (§1). A panel that mutated the store while rendering would         ma** (1 connections) — `app/tests/test_nearlevels.py`
-- *... and 4 more nodes in this community*
+- *... and 6 more nodes in this community*
 
 ## Relationships
 
@@ -41,7 +41,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 77 (100%)
+- EXTRACTED: 85 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

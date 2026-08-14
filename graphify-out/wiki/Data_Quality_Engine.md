@@ -1,6 +1,6 @@
 # Data Quality Engine
 
-> 26 nodes
+> 25 nodes
 
 ## Key Concepts
 
@@ -21,7 +21,6 @@
 - **_stage_rung()** (2 connections) — `app/engine/quality.py`
 - **_slot()** (2 connections) — `app/engine/quality.py`
 - **last_persisted()** (2 connections) — `app/engine/quality.py`
-- **RuntimeError** (1 connections)
 - **Fail-closed A-to-Z pipeline quality and reconciliation audits.  The checks in** (1 connections) — `app/engine/quality.py`
 - **Active engine chain. Generation-specific checks (SETUP/RISK/EXECUTION)     eval** (1 connections) — `app/engine/quality.py`
 - **Gaps the importer acknowledged at import time (gap-honesty rule: gaps are     l** (1 connections) — `app/engine/quality.py`
@@ -29,11 +28,11 @@
 - **Identify the store behind a connection, so a verdict cannot cross stores.** (1 connections) — `app/engine/quality.py`
 - **Path of the production store, resolved the same way store.connect does.** (1 connections) — `app/engine/quality.py`
 - **The most recent audit THE SCANNER RECORDED, or None before the first.      ONE** (1 connections) — `app/engine/quality.py`
-- *... and 1 more nodes in this community*
+- **The one verdict every surface reads, for THIS store.      A full audit was mea** (1 connections) — `app/engine/quality.py`
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [.Mt](Mt.md) (1 shared connections)
 
 ## Source Files
 
@@ -41,7 +40,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 84 (100%)
+- EXTRACTED: 83 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

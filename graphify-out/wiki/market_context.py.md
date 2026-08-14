@@ -1,32 +1,30 @@
 # market_context.py
 
-> 10 nodes
+> 6 nodes
 
 ## Key Concepts
 
-- **opportunities.js** (9 connections) — `app/static/opportunities.js`
-- **paint()** (7 connections) — `app/static/opportunities.js`
-- **selected()** (4 connections) — `app/static/opportunities.js`
-- **paintDetail()** (4 connections) — `app/static/opportunities.js`
-- **refresh()** (4 connections) — `app/static/opportunities.js`
-- **choose()** (3 connections) — `app/static/opportunities.js`
-- **visible()** (2 connections) — `app/static/opportunities.js`
-- **paintCounts()** (2 connections) — `app/static/opportunities.js`
-- **closeDetail()** (2 connections) — `app/static/opportunities.js`
-- **openTrade()** (1 connections) — `app/static/opportunities.js`
+- **renderLedger()** (6 connections) — `app/static/shell.js`
+- **loadLedger()** (3 connections) — `app/static/shell.js`
+- **ledgerRow()** (3 connections) — `app/static/shell.js`
+- **renderLedgerMine()** (3 connections) — `app/static/shell.js`
+- **renderLedgerExits()** (3 connections) — `app/static/shell.js`
+- **bookCard()** (2 connections) — `app/static/shell.js`
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (6 shared connections)
+- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (1 shared connections)
+- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/opportunities.js`
+- `app/static/shell.js`
 
 ## Audit Trail
 
-- EXTRACTED: 36 (95%)
-- INFERRED: 2 (5%)
+- EXTRACTED: 20 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

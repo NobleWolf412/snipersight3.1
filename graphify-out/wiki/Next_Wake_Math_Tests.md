@@ -1,32 +1,28 @@
 # Next Wake Math Tests
 
-> 11 nodes
+> 6 nodes
 
 ## Key Concepts
 
-- **Child** (10 connections) — `app/watchdog.py`
-- **.tick()** (7 connections) — `app/watchdog.py`
-- **.start()** (6 connections) — `app/watchdog.py`
-- **._rotate_err()** (4 connections) — `app/watchdog.py`
-- **._child_env()** (3 connections) — `app/watchdog.py`
-- **._last_error()** (3 connections) — `app/watchdog.py`
-- **.__init__()** (1 connections) — `app/watchdog.py`
-- **Start the child with its stderr captured to a file.          It used to inherit** (1 connections) — `app/watchdog.py`
-- **The scanner does not spawn desktop notifications.          Every toast spawns a** (1 connections) — `app/watchdog.py`
-- **Keep the capture file bounded. It reached 48 MB in hours once, and a         dia** (1 connections) — `app/watchdog.py`
-- **The tail of the child's stderr, so the exit explains itself.** (1 connections) — `app/watchdog.py`
+- **OneFillModel** (4 connections) — `app/tests/test_abtest.py`
+- **.test_a_crossed_order_is_priced_on_the_bar_it_crossed_on()** (3 connections) — `app/tests/test_abtest.py`
+- **.test_a_missing_atr_on_the_cross_degrades_audibly()** (3 connections) — `app/tests/test_abtest.py`
+- **The whole fill model is the engine's, not just the crossing price.** (1 connections) — `app/tests/test_abtest.py`
+- **The passive limit rests below every low so it can never fill; the         engin** (1 connections) — `app/tests/test_abtest.py`
+- **`cross_fill` returns a `slipped` flag and abtest discarded it         (`entry_p** (1 connections) — `app/tests/test_abtest.py`
 
 ## Relationships
 
-- [Watchdog Supervisor](Watchdog_Supervisor.md) (10 shared connections)
+- [CalibrationAgainstTheLiveStore](CalibrationAgainstTheLiveStore.md) (2 shared connections)
+- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/watchdog.py`
+- `app/tests/test_abtest.py`
 
 ## Audit Trail
 
-- EXTRACTED: 38 (100%)
+- EXTRACTED: 13 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

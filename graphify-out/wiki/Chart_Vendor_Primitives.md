@@ -1,14 +1,14 @@
 # Chart Vendor Primitives
 
-> 33 nodes
+> 35 nodes
 
 ## Key Concepts
 
+- **RefusalPaths** (7 connections) — `app/tests/test_strategy_grade.py`
 - **test_strategy_grade.py** (6 connections) — `app/tests/test_strategy_grade.py`
 - **ClusterBootstrap** (6 connections) — `app/tests/test_strategy_grade.py`
 - **Multiplicity** (6 connections) — `app/tests/test_strategy_grade.py`
 - **_rows()** (5 connections) — `app/tests/test_strategy_grade.py`
-- **RefusalPaths** (5 connections) — `app/tests/test_strategy_grade.py`
 - **GradeIsNotAPromotion** (4 connections) — `app/tests/test_strategy_grade.py`
 - **.test_correlated_symbols_widen_the_interval()** (3 connections) — `app/tests/test_strategy_grade.py`
 - **.test_it_is_deterministic()** (3 connections) — `app/tests/test_strategy_grade.py`
@@ -22,14 +22,14 @@
 - **.test_holm_scales_with_how_many_were_tested()** (1 connections) — `app/tests/test_strategy_grade.py`
 - **.test_holm_is_never_more_lenient_than_the_raw_value()** (1 connections) — `app/tests/test_strategy_grade.py`
 - **.test_empty_input_is_not_an_error()** (1 connections) — `app/tests/test_strategy_grade.py`
+- **.test_mixed_entry_models_refuse_loudly()** (1 connections) — `app/tests/test_strategy_grade.py`
+- **.test_degraded_replay_fill_is_visible_before_the_grade()** (1 connections) — `app/tests/test_strategy_grade.py`
 - **.test_it_writes_nothing_and_enables_nothing()** (1 connections) — `app/tests/test_strategy_grade.py`
 - **The guards that stop a strategy grade from being a confident wrong number.  A gr** (1 connections) — `app/tests/test_strategy_grade.py`
 - **Resampling symbols, not trades.** (1 connections) — `app/tests/test_strategy_grade.py`
 - **THE WHOLE POINT. Forty alts turning with BTC is one market move, not         for** (1 connections) — `app/tests/test_strategy_grade.py`
 - **Same data, same interval, byte for byte (the repo forbids a result         that** (1 connections) — `app/tests/test_strategy_grade.py`
-- **Four hundred trades on three symbols is three observations. The         honest a** (1 connections) — `app/tests/test_strategy_grade.py`
-- **The mirror: the trade floor still applies. Both must clear.** (1 connections) — `app/tests/test_strategy_grade.py`
-- *... and 8 more nodes in this community*
+- *... and 10 more nodes in this community*
 
 ## Relationships
 
@@ -41,7 +41,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 72 (100%)
+- EXTRACTED: 76 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

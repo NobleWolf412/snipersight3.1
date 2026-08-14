@@ -1,6 +1,6 @@
 # Chart Vendor Crosshair
 
-> 33 nodes
+> 31 nodes
 
 ## Key Concepts
 
@@ -29,14 +29,17 @@
 - **.Kf()** (4 connections) — `app/static/lightweight-charts.js`
 - **.Hf()** (4 connections) — `app/static/lightweight-charts.js`
 - **.Gf()** (4 connections) — `app/static/lightweight-charts.js`
-- *... and 8 more nodes in this community*
+- *... and 6 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (9 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (6 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (5 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (7 shared connections)
+- [Bias Ladder Engine](Bias_Ladder_Engine.md) (4 shared connections)
+- [Chart Vendor Internals](Chart_Vendor_Internals.md) (4 shared connections)
+- [te](te.md) (2 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (2 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
+- [Manifest & Cost Tests](Manifest_%26_Cost_Tests.md) (1 shared connections)
 
 ## Source Files
 
@@ -44,7 +47,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 216 (100%)
+- EXTRACTED: 212 (100%)
 - INFERRED: 1 (0%)
 - AMBIGUOUS: 0 (0%)
 

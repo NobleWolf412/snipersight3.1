@@ -11,12 +11,12 @@
 - **operations_read_model()** (5 connections) — `app/server.py`
 - **achievement_progress()** (5 connections) — `app/server.py`
 - **_performance_dimensions()** (4 connections) — `app/server.py`
-- **close_position()** (4 connections) — `app/server.py`
-- **adopt_position()** (4 connections) — `app/server.py`
 - **_journal_performance_summary()** (3 connections) — `app/server.py`
 - **_envelope_config()** (3 connections) — `app/server.py`
 - **automation_status()** (3 connections) — `app/server.py`
 - **automation_mode()** (3 connections) — `app/server.py`
+- **close_position()** (3 connections) — `app/server.py`
+- **adopt_position()** (3 connections) — `app/server.py`
 - **copilot_chat()** (3 connections) — `app/server.py`
 - **One server-owned scoreboard for the current funded forward book.** (1 connections) — `app/server.py`
 - **Comparable funded-book cuts; unknown metadata stays explicitly unknown.** (1 connections) — `app/server.py`
@@ -35,7 +35,6 @@
 
 - [API Server Endpoints](API_Server_Endpoints.md) (14 shared connections)
 - [status](status.md) (2 shared connections)
-- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
 - [Performance & Playbook Endpoints](Performance_%26_Playbook_Endpoints.md) (1 shared connections)
 
 ## Source Files
@@ -44,8 +43,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 81 (98%)
-- INFERRED: 2 (2%)
+- EXTRACTED: 81 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

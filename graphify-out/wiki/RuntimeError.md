@@ -1,23 +1,18 @@
-# renderLedger
+# RuntimeError
 
-> 2 nodes
+> 1 nodes
 
 ## Key Concepts
 
-- **workspaces.js** (1 connections) — `app/static/workspaces.js`
-- **bind()** (1 connections) — `app/static/workspaces.js`
+- **RuntimeError** (0 connections)
 
 ## Relationships
 
 - No strong cross-community connections detected
 
-## Source Files
-
-- `app/static/workspaces.js`
-
 ## Audit Trail
 
-- EXTRACTED: 2 (100%)
+- EXTRACTED: 0 (0%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

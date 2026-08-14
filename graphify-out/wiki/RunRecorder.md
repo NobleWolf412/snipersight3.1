@@ -1,6 +1,6 @@
 # RunRecorder
 
-> God node · 62 connections · `app/engine/runlog.py`
+> God node · 54 connections · `app/engine/runlog.py`
 
 **Community:** [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md)
 
@@ -41,7 +41,7 @@
 - [volume.py](volume.py.md) `EXTRACTED`
 - [execsim.py](execsim.py.md) `EXTRACTED`
 - [momentum.py](momentum.py.md) `EXTRACTED`
-- [ranges.py](ranges.py.md) `EXTRACTED`
+- ranges.py `EXTRACTED`
 - trend.py `EXTRACTED`
 - volatility.py `EXTRACTED`
 - breakout.py `EXTRACTED`
@@ -63,15 +63,8 @@
 - Context manager: times an engine run and records it on exit. `EXTRACTED`
 
 ### uses
-- [TestMarketQuality](TestMarketQuality.md) `INFERRED`
 - IntentRejected `INFERRED`
-- [QualityStoreCase](QualityStoreCase.md) `INFERRED`
-- [RetiredSymbolStalenessTest](RetiredSymbolStalenessTest.md) `INFERRED`
-- TestKillSwitchRungs `INFERRED`
-- TestPipelineContracts `INFERRED`
-- TestOnboardingIsNotAFailure `INFERRED`
 - _RateLimiter `INFERRED`
-- TestStrategyRulesRemainFrozen `INFERRED`
 
 ---
 

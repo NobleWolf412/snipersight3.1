@@ -17,7 +17,7 @@
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
 
 ## Source Files
 

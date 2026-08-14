@@ -1,40 +1,34 @@
 # TestMarketQuality
 
-> 40 nodes
+> 21 nodes
 
 ## Key Concepts
 
-- **TestMarketQuality** (12 connections) — `app/tests/test_pipeline_quality.py`
-- **QualityStoreCase** (10 connections) — `app/tests/test_pipeline_quality.py`
-- **test_pipeline_quality.py** (8 connections) — `app/tests/test_pipeline_quality.py`
-- **TestKillSwitchRungs** (8 connections) — `app/tests/test_pipeline_quality.py`
+- **TestMarketQuality** (13 connections) — `app/tests/test_pipeline_quality.py`
+- **.candle()** (8 connections) — `app/tests/test_pipeline_quality.py`
 - **._partial_market()** (7 connections) — `app/tests/test_pipeline_quality.py`
-- **TestPipelineContracts** (7 connections) — `app/tests/test_pipeline_quality.py`
-- **.candle()** (6 connections) — `app/tests/test_pipeline_quality.py`
-- **TestOnboardingIsNotAFailure** (6 connections) — `app/tests/test_pipeline_quality.py`
 - **.complete_market()** (4 connections) — `app/tests/test_pipeline_quality.py`
+- **.test_retried_empty_tail_does_not_multiply_known_gap_budget()** (3 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_acknowledged_partial_bar_reconciles()** (3 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_corrupted_partial_bar_is_blocking()** (3 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_unemitted_partial_bucket_flags_without_blocking()** (3 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_unknown_timeframe_is_quarantine_not_halt()** (3 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_unacknowledged_partial_stays_outside_the_mirror()** (3 connections) — `app/tests/test_pipeline_quality.py`
-- **.candle_at()** (3 connections) — `app/tests/test_pipeline_quality.py`
-- **.test_freshly_imported_history_is_lag_not_missing()** (3 connections) — `app/tests/test_pipeline_quality.py`
-- **TestStrategyRulesRemainFrozen** (3 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_complete_aggregates_reconcile()** (2 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_gap_blocks_downstream_engines()** (2 connections) — `app/tests/test_pipeline_quality.py`
+- **.test_final_candle_does_not_erase_prior_gap_acknowledgements()** (2 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_aggregate_mismatch_is_blocking()** (2 connections) — `app/tests/test_pipeline_quality.py`
-- **.test_long_unaggregated_history_still_blocks()** (2 connections) — `app/tests/test_pipeline_quality.py`
-- **.test_run_recorder_carries_lineage_envelope()** (2 connections) — `app/tests/test_pipeline_quality.py`
-- **.test_stale_series_routes_to_quarantine_not_halt()** (2 connections) — `app/tests/test_pipeline_quality.py`
-- **.setUp()** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **.tearDown()** (1 connections) — `app/tests/test_pipeline_quality.py`
-- *... and 15 more nodes in this community*
+- **A quiet market retries from the same last candle every cycle.          The 1-gap** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **Three of four hours traded; 02:00 the venue served nothing for.          range** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **agg-v0.2's mirror: a partial bar the aggregator was entitled to         build i** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **A partial bar that does not reconcile to its present source candles         is** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **A qualifying partial bucket the aggregator has not built yet is a         DEGRA** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **Pin for the 2026-08-08 restart loop. An unrecognised tf may indict         the** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **No acknowledgment -> the aggregator refuses the bucket and the         mirror n** (1 connections) — `app/tests/test_pipeline_quality.py`
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (8 shared connections)
-- [T](T.md) (1 shared connections)
+- [test_pipeline_quality.py](test_pipeline_quality.py.md) (5 shared connections)
 
 ## Source Files
 
@@ -42,8 +36,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 114 (94%)
-- INFERRED: 7 (6%)
+- EXTRACTED: 65 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

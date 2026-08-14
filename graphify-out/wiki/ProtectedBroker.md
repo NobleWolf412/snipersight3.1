@@ -1,27 +1,31 @@
 # ProtectedBroker
 
-> 4 nodes
+> 7 nodes
 
 ## Key Concepts
 
-- **ProtectedBroker** (5 connections) — `app/tests/test_position_api.py`
-- **test_position_api.py** (3 connections) — `app/tests/test_position_api.py`
-- **.confirm_attached_protection()** (2 connections) — `app/tests/test_position_api.py`
-- **test_position_custody_api_requires_explicit_acknowledgements()** (2 connections) — `app/tests/test_position_api.py`
+- **achievements.py** (7 connections) — `app/engine/achievements.py`
+- **calculate()** (6 connections) — `app/engine/achievements.py`
+- **_progress()** (3 connections) — `app/engine/achievements.py`
+- **Decimal** (3 connections)
+- **AchievementProgress** (3 connections) — `app/engine/contracts.py`
+- **Discipline-only progression for the Tactical Cockpit.  Progress is derived from** (1 connections) — `app/engine/achievements.py`
+- **Return safe progression using server-owned evidence and gate state.** (1 connections) — `app/engine/achievements.py`
 
 ## Relationships
 
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (3 shared connections)
-- [API Server Endpoints](API_Server_Endpoints.md) (1 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (2 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (2 shared connections)
 
 ## Source Files
 
-- `app/tests/test_position_api.py`
+- `app/engine/achievements.py`
+- `app/engine/contracts.py`
 
 ## Audit Trail
 
-- EXTRACTED: 9 (75%)
-- INFERRED: 3 (25%)
+- EXTRACTED: 24 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

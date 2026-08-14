@@ -18,7 +18,7 @@
 
 ## Relationships
 
-- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
+- [Bias Ladder Engine](Bias_Ladder_Engine.md) (1 shared connections)
 
 ## Source Files
 

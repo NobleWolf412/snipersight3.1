@@ -1,31 +1,32 @@
 # .ol
 
-> 4 nodes
+> 11 nodes
 
 ## Key Concepts
 
-- **.ol()** (10 connections) — `app/static/lightweight-charts.js`
-- **.Ei()** (6 connections) — `app/static/lightweight-charts.js`
-- **.al()** (4 connections) — `app/static/lightweight-charts.js`
-- **.vl()** (2 connections) — `app/static/lightweight-charts.js`
+- **VerdictLogic** (9 connections) — `app/tests/test_abtest.py`
+- **._cells()** (7 connections) — `app/tests/test_abtest.py`
+- **.test_antagonism_is_detected_when_the_combination_underperforms()** (3 connections) — `app/tests/test_abtest.py`
+- **.test_failed_calibration_forbids_any_conclusion()** (3 connections) — `app/tests/test_abtest.py`
+- **.test_genuine_synergy_is_not_called_antagonistic()** (2 connections) — `app/tests/test_abtest.py`
+- **.test_exit_only_improvement_says_drop_the_entry_change()** (2 connections) — `app/tests/test_abtest.py`
+- **.test_neither_helping_is_stated_plainly()** (2 connections) — `app/tests/test_abtest.py`
+- **.test_underpowered_cells_are_named()** (2 connections) — `app/tests/test_abtest.py`
+- **The verdict must be able to say 'do not ship this'.** (1 connections) — `app/tests/test_abtest.py`
+- **The real 2026-07-30 result: both changes beat the baseline alone and         to** (1 connections) — `app/tests/test_abtest.py`
+- **A harness that cannot reproduce a known book must not describe an         unkno** (1 connections) — `app/tests/test_abtest.py`
 
 ## Relationships
 
-- [execsim.py](execsim.py.md) (6 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (3 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
-- [Glossary UI](Glossary_UI.md) (1 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (1 shared connections)
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (1 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
+- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/tests/test_abtest.py`
 
 ## Audit Trail
 
-- EXTRACTED: 22 (100%)
+- EXTRACTED: 33 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

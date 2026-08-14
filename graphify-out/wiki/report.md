@@ -1,48 +1,31 @@
 # report
 
-> 17 nodes
+> 8 nodes
 
 ## Key Concepts
 
-- **k()** (13 connections) — `app/static/lightweight-charts.js`
-- **L** (5 connections) — `app/static/lightweight-charts.js`
-- **loadSettings()** (5 connections) — `app/static/shell.js`
-- **glossary.js** (4 connections) — `app/static/glossary.js`
-- **perfRows()** (4 connections) — `app/static/shell.js`
-- **capTriggers()** (3 connections) — `app/static/glossary.js`
-- **notTakenBlock()** (3 connections) — `app/static/shell.js`
-- **loadPerformance()** (3 connections) — `app/static/shell.js`
-- **patchSettingsState()** (3 connections) — `app/static/shell.js`
-- **diagReport()** (3 connections) — `app/static/shell.js`
-- **ensure()** (2 connections) — `app/static/glossary.js`
-- **show()** (2 connections) — `app/static/glossary.js`
-- **markFocusable()** (2 connections) — `app/static/glossary.js`
-- **.X()** (2 connections) — `app/static/lightweight-charts.js`
-- **syncSettingInputs()** (2 connections) — `app/static/shell.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Z()** (1 connections) — `app/static/lightweight-charts.js`
+- **Ladder** (6 connections) — `app/tests/test_bias.py`
+- **.test_rungs_are_the_whole_chain_not_one_step()** (2 connections) — `app/tests/test_bias.py`
+- **.test_an_unknown_timeframe_has_no_rungs_rather_than_raising()** (2 connections) — `app/tests/test_bias.py`
+- **.test_setups_re_exports_the_one_ladder()** (2 connections) — `app/tests/test_bias.py`
+- **.test_the_top_rung_has_nothing_above_it()** (1 connections) — `app/tests/test_bias.py`
+- **MIXED cannot exist with a single rung, and MIXED is the state a         trader** (1 connections) — `app/tests/test_bias.py`
+- **A timeframe outside the ladder reads UNKNOWN, which ALLOWs. It must         not** (1 connections) — `app/tests/test_bias.py`
+- **Two copies of one ladder is the same disease as two copies of one         fill** (1 connections) — `app/tests/test_bias.py`
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (7 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (4 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (2 shared connections)
-- [Diagnostics & Edge View UI](Diagnostics_%26_Edge_View_UI.md) (1 shared connections)
-- [Shared Data Cache (ssdata.js)](Shared_Data_Cache_%28ssdata.js%29.md) (1 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (1 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
+- [.ja](ja.md) (1 shared connections)
+- [Bias Alignment Tests](Bias_Alignment_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/glossary.js`
-- `app/static/lightweight-charts.js`
-- `app/static/shell.js`
+- `app/tests/test_bias.py`
 
 ## Audit Trail
 
-- EXTRACTED: 45 (78%)
-- INFERRED: 13 (22%)
+- EXTRACTED: 16 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

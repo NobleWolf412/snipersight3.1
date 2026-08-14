@@ -1,42 +1,38 @@
 # Shell Navigation & Near Levels
 
-> 13 nodes
+> 12 nodes
 
 ## Key Concepts
 
-- **execsim.py** (19 connections) — `app/engine/execsim.py`
-- **run()** (8 connections) — `app/engine/execsim.py`
-- **plan_versions()** (6 connections) — `app/engine/execsim.py`
-- **settle()** (4 connections) — `app/engine/execsim.py`
-- **simulate_entry()** (4 connections) — `app/engine/execsim.py`
-- **walk_exit()** (3 connections) — `app/engine/execsim.py`
-- **cross_fill()** (3 connections) — `app/engine/execsim.py`
-- **Execution simulator — paper-trades every VALIDATED setup. algo exec-v0.1-draft.** (1 connections) — `app/engine/execsim.py`
-- **Walk forward from the fill bar to a terminal outcome.      Returns (outcome, e** (1 connections) — `app/engine/execsim.py`
-- **The price a crossing market order actually gets, and the ONE definition.** (1 connections) — `app/engine/execsim.py`
-- **Price one closed leg: slippage, fees, funding, and the R they leave.      THE** (1 connections) — `app/engine/execsim.py`
-- **Turn a PLAN into the fill it actually got: which bar, what price, whose     fee** (1 connections) — `app/engine/execsim.py`
-- **THE definition of what this book trades — the setup generations the     simulat** (1 connections) — `app/engine/execsim.py`
+- **loadPortfolio()** (13 connections) — `app/static/shell.js`
+- **renderMine()** (6 connections) — `app/static/shell.js`
+- **renderRiskBudget()** (5 connections) — `app/static/shell.js`
+- **setAccentMode()** (4 connections) — `app/static/shell.js`
+- **mineRailSync()** (3 connections) — `app/static/shell.js`
+- **renderMineAside()** (3 connections) — `app/static/shell.js`
+- **bindingConstraint()** (2 connections) — `app/static/shell.js`
+- **renderJournal()** (2 connections) — `app/static/shell.js`
+- **renderTodayTile()** (2 connections) — `app/static/shell.js`
+- **setSub()** (2 connections) — `app/static/shell.js`
+- **drawCurve()** (2 connections) — `app/static/shell.js`
+- **loadRisk()** (2 connections) — `app/static/shell.js`
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (8 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (4 shared connections)
-- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
-- [Edge Statistics Engine](Edge_Statistics_Engine.md) (1 shared connections)
-- [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (1 shared connections)
-- [he](he.md) (1 shared connections)
-- [_facts](_facts.md) (1 shared connections)
-- [Live Scanner Loop](Live_Scanner_Loop.md) (1 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (12 shared connections)
+- [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (3 shared connections)
+- [renderProgression](renderProgression.md) (2 shared connections)
+- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (2 shared connections)
+- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/execsim.py`
+- `app/static/shell.js`
 
 ## Audit Trail
 
-- EXTRACTED: 52 (98%)
-- INFERRED: 1 (2%)
+- EXTRACTED: 46 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

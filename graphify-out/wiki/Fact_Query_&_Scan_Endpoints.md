@@ -1,32 +1,39 @@
 # Fact Query & Scan Endpoints
 
-> 9 nodes
+> 17 nodes
 
 ## Key Concepts
 
-- **Response** (4 connections)
-- **analyse_symbol()** (4 connections) — `app/server.py`
-- **facts()** (3 connections) — `app/server.py`
-- **scan_now()** (3 connections) — `app/server.py`
-- **apex_action()** (3 connections) — `app/server.py`
-- **Generic as_of-cursored fact query — the same contract for every engine.      `** (1 connections) — `app/server.py`
-- **Run the engine chain over ONE symbol, on demand.      48 of the symbols in the** (1 connections) — `app/server.py`
-- **Run one real scan cycle on demand — the same code path the live loop     runs,** (1 connections) — `app/server.py`
-- **ApexShell action verbs. Allow-listed and non-destructive: `audit` re-runs     t** (1 connections) — `app/server.py`
+- **_Response** (6 connections) — `app/tests/test_stocks_foundation.py`
+- **StockProviderConnectionTest** (6 connections) — `app/tests/test_stocks_foundation.py`
+- **test_stocks_foundation.py** (4 connections) — `app/tests/test_stocks_foundation.py`
+- **StockFoundationStatusTest** (3 connections) — `app/tests/test_stocks_foundation.py`
+- **.test_alpaca_verifies_paper_account_and_sip_without_writes()** (2 connections) — `app/tests/test_stocks_foundation.py`
+- **StockCredentialShapeTest** (2 connections) — `app/tests/test_stocks_foundation.py`
+- **.__init__()** (1 connections) — `app/tests/test_stocks_foundation.py`
+- **.__enter__()** (1 connections) — `app/tests/test_stocks_foundation.py`
+- **.__exit__()** (1 connections) — `app/tests/test_stocks_foundation.py`
+- **.read()** (1 connections) — `app/tests/test_stocks_foundation.py`
+- **.test_missing_connections_are_loud_and_isolated()** (1 connections) — `app/tests/test_stocks_foundation.py`
+- **.test_stored_is_configured_not_falsely_verified()** (1 connections) — `app/tests/test_stocks_foundation.py`
+- **._secrets()** (1 connections) — `app/tests/test_stocks_foundation.py`
+- **.test_alpaca_account_can_pass_while_sip_remains_blocked()** (1 connections) — `app/tests/test_stocks_foundation.py`
+- **.test_massive_uses_bearer_header_not_query_string_secret()** (1 connections) — `app/tests/test_stocks_foundation.py`
+- **.test_unknown_provider_is_refused_before_network()** (1 connections) — `app/tests/test_stocks_foundation.py`
+- **.test_stock_targets_accept_only_the_fields_the_provider_uses()** (1 connections) — `app/tests/test_stocks_foundation.py`
 
 ## Relationships
 
-- [API Server Endpoints](API_Server_Endpoints.md) (4 shared connections)
-- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
-- `app/server.py`
+- `app/tests/test_stocks_foundation.py`
 
 ## Audit Trail
 
-- EXTRACTED: 20 (95%)
-- INFERRED: 1 (5%)
+- EXTRACTED: 34 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

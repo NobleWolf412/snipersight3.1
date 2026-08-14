@@ -16,10 +16,11 @@
 
 ## Relationships
 
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (3 shared connections)
-- [Chart Vendor Series](Chart_Vendor_Series.md) (3 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (4 shared connections)
 - [Cycle Detection Engine](Cycle_Detection_Engine.md) (1 shared connections)
 - [A/B Calibration Tests](A-B_Calibration_Tests.md) (1 shared connections)
+- [ProtectedBroker](ProtectedBroker.md) (1 shared connections)
+- [Chart Vendor Series](Chart_Vendor_Series.md) (1 shared connections)
 
 ## Source Files
 

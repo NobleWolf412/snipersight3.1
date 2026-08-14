@@ -4,7 +4,7 @@
 
 ## Key Concepts
 
-- **RunRecorder** (62 connections) — `app/engine/runlog.py`
+- **RunRecorder** (54 connections) — `app/engine/runlog.py`
 - **compute_atr()** (40 connections) — `app/engine/swings.py`
 - **runlog.py** (31 connections) — `app/engine/runlog.py`
 - **setups.py** (29 connections) — `app/engine/setups.py`
@@ -33,18 +33,18 @@
 
 ## Relationships
 
-- [Indicator Engines](Indicator_Engines.md) (26 shared connections)
-- [Swings, Zones & Draft Bracket](Swings%2C_Zones_%26_Draft_Bracket.md) (10 shared connections)
+- [Indicator Engines](Indicator_Engines.md) (29 shared connections)
+- [volume.py](volume.py.md) (18 shared connections)
+- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (12 shared connections)
 - [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (9 shared connections)
-- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (8 shared connections)
 - [_facts](_facts.md) (8 shared connections)
-- [volume.py](volume.py.md) (8 shared connections)
-- [TestMarketQuality](TestMarketQuality.md) (8 shared connections)
-- [Bias Ladder Engine](Bias_Ladder_Engine.md) (6 shared connections)
-- [BTC Alignment Engine](BTC_Alignment_Engine.md) (6 shared connections)
+- [.ja](ja.md) (7 shared connections)
 - [cached_audit](cached_audit.md) (5 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (4 shared connections)
+- [A/B Test Engine](A-B_Test_Engine.md) (4 shared connections)
 - [Cooldown Engine](Cooldown_Engine.md) (3 shared connections)
+- [cycles.py](cycles.py.md) (3 shared connections)
+- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (3 shared connections)
+- [Copilot Pack Builder](Copilot_Pack_Builder.md) (2 shared connections)
 
 ## Source Files
 
@@ -62,8 +62,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 454 (97%)
-- INFERRED: 16 (3%)
+- EXTRACTED: 454 (98%)
+- INFERRED: 8 (2%)
 - AMBIGUOUS: 0 (0%)
 
 ---

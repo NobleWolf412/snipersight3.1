@@ -1,47 +1,28 @@
 # Chart Vendor Hit Testing
 
-> 15 nodes
+> 6 nodes
 
 ## Key Concepts
 
-- **ne()** (12 connections) — `app/static/lightweight-charts.js`
-- **qt** (9 connections) — `app/static/lightweight-charts.js`
-- **ie()** (7 connections) — `app/static/lightweight-charts.js`
-- **.Js()** (6 connections) — `app/static/lightweight-charts.js`
-- **.Ks()** (5 connections) — `app/static/lightweight-charts.js`
-- **A()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Ks()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Ks()** (4 connections) — `app/static/lightweight-charts.js`
-- **.qs()** (3 connections) — `app/static/lightweight-charts.js`
-- **.qs()** (3 connections) — `app/static/lightweight-charts.js`
-- **.qs()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Fe()** (1 connections) — `app/static/lightweight-charts.js`
-- **.We()** (1 connections) — `app/static/lightweight-charts.js`
-- **.ar()** (1 connections) — `app/static/lightweight-charts.js`
-- **.X()** (1 connections) — `app/static/lightweight-charts.js`
+- **Summary** (6 connections) — `app/tests/test_abtest.py`
+- **.test_missed_orders_are_counted_but_never_scored_as_zero()** (1 connections) — `app/tests/test_abtest.py`
+- **.test_empty_book_refuses_rather_than_reporting_zero()** (1 connections) — `app/tests/test_abtest.py`
+- **.test_degraded_fill_warning_survives_the_summary()** (1 connections) — `app/tests/test_abtest.py`
+- **.test_standalone_report_surfaces_each_degraded_replay_cell()** (1 connections) — `app/tests/test_abtest.py`
+- **.test_calibration_surfaces_degraded_replay_fills()** (1 connections) — `app/tests/test_abtest.py`
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (5 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (4 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (3 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (2 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (2 shared connections)
-- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (2 shared connections)
-- [.Mt](Mt.md) (2 shared connections)
-- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (1 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
-- [Chart Vendor Price Scale Formatting](Chart_Vendor_Price_Scale_Formatting.md) (1 shared connections)
-- [execsim.py](execsim.py.md) (1 shared connections)
+- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/tests/test_abtest.py`
 
 ## Audit Trail
 
-- EXTRACTED: 56 (88%)
-- INFERRED: 8 (12%)
+- EXTRACTED: 11 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

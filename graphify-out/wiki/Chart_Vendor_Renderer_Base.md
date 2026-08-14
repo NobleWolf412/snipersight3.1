@@ -33,9 +33,9 @@
 
 ## Relationships
 
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (7 shared connections)
-- [Chart Vendor Series](Chart_Vendor_Series.md) (4 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (9 shared connections)
 - [A/B Calibration Tests](A-B_Calibration_Tests.md) (3 shared connections)
+- [ProtectedBroker](ProtectedBroker.md) (2 shared connections)
 - [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (2 shared connections)
 - [Cycle Detection Engine](Cycle_Detection_Engine.md) (1 shared connections)
 

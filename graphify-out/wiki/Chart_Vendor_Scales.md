@@ -1,6 +1,6 @@
 # Chart Vendor Scales
 
-> 40 nodes
+> 38 nodes
 
 ## Key Concepts
 
@@ -19,7 +19,6 @@
 - **.test_an_unreferenced_superseded_zone_goes()** (4 connections) — `app/tests/test_prune_facts.py`
 - **.test_orders_and_risk_decisions_also_hold_a_reference()** (4 connections) — `app/tests/test_prune_facts.py`
 - **.test_permanent_kinds_are_never_eligible()** (4 connections) — `app/tests/test_prune_facts.py`
-- **test_prune_facts.py** (3 connections) — `app/tests/test_prune_facts.py`
 - **.ran()** (3 connections) — `app/tests/test_prune_facts.py`
 - **.test_planning_alone_deletes_nothing()** (3 connections) — `app/tests/test_prune_facts.py`
 - **.test_the_prune_records_itself_as_a_fact()** (3 connections) — `app/tests/test_prune_facts.py`
@@ -29,7 +28,8 @@
 - **.test_current_versions_are_read_from_the_engines_not_sorted()** (2 connections) — `app/tests/test_prune_facts.py`
 - **.test_this_suite_cannot_reach_the_live_store()** (2 connections) — `app/tests/test_prune_facts.py`
 - **.setUp()** (1 connections) — `app/tests/test_prune_facts.py`
-- *... and 15 more nodes in this community*
+- **.tearDown()** (1 connections) — `app/tests/test_prune_facts.py`
+- *... and 13 more nodes in this community*
 
 ## Relationships
 
@@ -41,7 +41,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 159 (100%)
+- EXTRACTED: 155 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

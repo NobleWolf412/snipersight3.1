@@ -1,27 +1,23 @@
 # ni
 
-> 9 nodes
+> 7 nodes
 
 ## Key Concepts
 
-- **Ri** (12 connections) — `app/static/lightweight-charts.js`
-- **.At()** (2 connections) — `app/static/lightweight-charts.js`
+- **ni** (5 connections) — `app/static/lightweight-charts.js`
+- **ti** (4 connections) — `app/static/lightweight-charts.js`
 - **.constructor()** (2 connections) — `app/static/lightweight-charts.js`
-- **.qh()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Yh()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Ji()** (2 connections) — `app/static/lightweight-charts.js`
-- **.W()** (1 connections) — `app/static/lightweight-charts.js`
-- **.Uh()** (1 connections) — `app/static/lightweight-charts.js`
+- **.gt()** (2 connections) — `app/static/lightweight-charts.js`
+- **.kr()** (2 connections) — `app/static/lightweight-charts.js`
+- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
 - **.bt()** (1 connections) — `app/static/lightweight-charts.js`
 
 ## Relationships
 
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (3 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (2 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
-- [status](status.md) (1 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (2 shared connections)
 - [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (1 shared connections)
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (1 shared connections)
+- [Simulator Convention Tests](Simulator_Convention_Tests.md) (1 shared connections)
+- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
 
 ## Source Files
 
@@ -29,7 +25,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 25 (100%)
+- EXTRACTED: 17 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

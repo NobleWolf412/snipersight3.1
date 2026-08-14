@@ -1,34 +1,45 @@
 # BTC Alignment Engine
 
-> 12 nodes
+> 13 nodes
 
 ## Key Concepts
 
-- **volatility.py** (15 connections) — `app/engine/volatility.py`
-- **run()** (9 connections) — `app/engine/volatility.py`
-- **Decimal** (6 connections)
-- **keltner()** (6 connections) — `app/engine/volatility.py`
-- **bollinger()** (5 connections) — `app/engine/volatility.py`
-- **atr_regime()** (4 connections) — `app/engine/volatility.py`
-- **atr_percentiles()** (4 connections) — `app/engine/volatility.py`
-- **Volatility engine — ATR percentile, Bollinger width, and the squeeze. algo vola** (1 connections) — `app/engine/volatility.py`
-- **(middle, upper, lower) per bar index; None inside the warmup.      POPULATION** (1 connections) — `app/engine/volatility.py`
-- **(middle, upper, lower) per bar index, EMA-centred and ATR-scaled.      ATR is** (1 connections) — `app/engine/volatility.py`
-- **Schmitt-triggered percentile bucket. Enter at 20/80, leave at 30/70.** (1 connections) — `app/engine/volatility.py`
-- **Rank of each ATR within the trailing `window` values, as a percentage.      MI** (1 connections) — `app/engine/volatility.py`
+- **.Yr()** (15 connections) — `app/static/lightweight-charts.js`
+- **.Fi()** (9 connections) — `app/static/lightweight-charts.js`
+- **.format()** (6 connections) — `app/static/lightweight-charts.js`
+- **.Qi()** (6 connections) — `app/static/lightweight-charts.js`
+- **.ma()** (6 connections) — `app/static/lightweight-charts.js`
+- **.so()** (6 connections) — `app/static/lightweight-charts.js`
+- **.ql()** (6 connections) — `app/static/lightweight-charts.js`
+- **.Fh()** (6 connections) — `app/static/lightweight-charts.js`
+- **.s_()** (5 connections) — `app/static/lightweight-charts.js`
+- **.l_()** (5 connections) — `app/static/lightweight-charts.js`
+- **.n_()** (5 connections) — `app/static/lightweight-charts.js`
+- **.Yl()** (4 connections) — `app/static/lightweight-charts.js`
+- **.format()** (2 connections) — `app/static/lightweight-charts.js`
 
 ## Relationships
 
-- [Indicator Engines](Indicator_Engines.md) (8 shared connections)
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (6 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (13 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (5 shared connections)
+- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (4 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (3 shared connections)
+- [Fact Store Conventions](Fact_Store_Conventions.md) (2 shared connections)
+- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (2 shared connections)
+- [Chart Vendor Layout](Chart_Vendor_Layout.md) (2 shared connections)
+- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
+- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (1 shared connections)
+- [te](te.md) (1 shared connections)
+- [he](he.md) (1 shared connections)
+- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/volatility.py`
+- `app/static/lightweight-charts.js`
 
 ## Audit Trail
 
-- EXTRACTED: 54 (100%)
+- EXTRACTED: 81 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

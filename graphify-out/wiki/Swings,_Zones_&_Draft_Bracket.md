@@ -1,40 +1,42 @@
 # Swings, Zones & Draft Bracket
 
-> 14 nodes
+> 19 nodes
 
 ## Key Concepts
 
-- **ranges.py** (15 connections) — `app/engine/ranges.py`
-- **break_tolerance()** (10 connections) — `app/engine/ranges.py`
-- **run()** (10 connections) — `app/engine/ranges.py`
-- **alternate()** (7 connections) — `app/engine/swings.py`
-- **Decimal** (5 connections)
-- **contained()** (5 connections) — `app/engine/ranges.py`
-- **is_flat()** (4 connections) — `app/engine/ranges.py`
-- **boundaries()** (3 connections) — `app/engine/ranges.py`
-- **Range engine — horizontal ranges, their boundaries, and their lifecycle. algo r** (1 connections) — `app/engine/ranges.py`
-- **The house break tolerance: max(1 tick, 0.05*ATR).      structure.py, zones.py** (1 connections) — `app/engine/ranges.py`
-- **(top, bottom, n_top, n_bottom) — the EXTREME of each cluster, not its mean.** (1 connections) — `app/engine/ranges.py`
-- **Do the pivots CLUSTER at two levels rather than march in one direction?      S** (1 connections) — `app/engine/ranges.py`
-- **Did every bar of the formation window close inside the band?      Closes only** (1 connections) — `app/engine/ranges.py`
-- **Collapse to a strictly alternating HIGH/LOW pivot sequence, keeping the     mor** (1 connections) — `app/engine/swings.py`
+- **stockstore.py** (6 connections) — `app/engine/stockstore.py`
+- **Connection** (4 connections)
+- **_require_scope()** (4 connections) — `app/engine/stockstore.py`
+- **StockTrainingWorkflowTest** (4 connections) — `app/tests/test_stock_training.py`
+- **connect()** (3 connections) — `app/engine/stockstore.py`
+- **insert_fact()** (3 connections) — `app/engine/stockstore.py`
+- **insert_candle()** (3 connections) — `app/engine/stockstore.py`
+- **insert_paper_event()** (3 connections) — `app/engine/stockstore.py`
+- **test_stock_training.py** (3 connections) — `app/tests/test_stock_training.py`
+- **StockCalendarTest** (3 connections) — `app/tests/test_stock_training.py`
+- **Path** (2 connections)
+- **StockStoreIsolationTest** (2 connections) — `app/tests/test_stock_training.py`
+- **.test_store_is_append_only_and_rejects_unlabelled_scope()** (2 connections) — `app/tests/test_stock_training.py`
+- **Isolated append-only US-equity research store.  This schema is deliberately inco** (1 connections) — `app/engine/stockstore.py`
+- **.test_explicit_early_close_is_not_assumed_to_be_a_normal_session()** (1 connections) — `app/tests/test_stock_training.py`
+- **.test_closed_session_is_not_tradable()** (1 connections) — `app/tests/test_stock_training.py`
+- **.test_report_is_loudly_synthetic_and_never_gradeable()** (1 connections) — `app/tests/test_stock_training.py`
+- **.test_scanner_explains_acceptance_and_stock_native_rejections()** (1 connections) — `app/tests/test_stock_training.py`
+- **.test_simulator_uses_server_owned_decimal_strings()** (1 connections) — `app/tests/test_stock_training.py`
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (10 shared connections)
-- [Indicator Engines](Indicator_Engines.md) (5 shared connections)
-- [volume.py](volume.py.md) (3 shared connections)
-- [Volume Engine Tests](Volume_Engine_Tests.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
-- `app/engine/ranges.py`
-- `app/engine/swings.py`
+- `app/engine/stockstore.py`
+- `app/tests/test_stock_training.py`
 
 ## Audit Trail
 
-- EXTRACTED: 64 (98%)
-- INFERRED: 1 (2%)
+- EXTRACTED: 46 (96%)
+- INFERRED: 2 (4%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -4,8 +4,7 @@
 
 ## Key Concepts
 
-- **test_cockpit_redesign.js** (17 connections) — `app/tests/test_cockpit_redesign.js`
-- **vm** (2 connections) — `app/tests/test_cockpit_redesign.js`
+- **test_cockpit_redesign.js** (18 connections) — `app/tests/test_cockpit_redesign.js`
 - **fs** (1 connections) — `app/tests/test_cockpit_redesign.js`
 - **path** (1 connections) — `app/tests/test_cockpit_redesign.js`
 - **assert** (1 connections) — `app/tests/test_cockpit_redesign.js`
@@ -14,6 +13,7 @@
 - **CSS** (1 connections) — `app/tests/test_cockpit_redesign.js`
 - **OPPORTUNITIES** (1 connections) — `app/tests/test_cockpit_redesign.js`
 - **OP_UI** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **OPERATIONS_UI** (1 connections) — `app/tests/test_cockpit_redesign.js`
 - **WORKSPACES** (1 connections) — `app/tests/test_cockpit_redesign.js`
 - **TRADE** (1 connections) — `app/tests/test_cockpit_redesign.js`
 - **COCKPIT** (1 connections) — `app/tests/test_cockpit_redesign.js`
@@ -25,7 +25,7 @@
 
 ## Relationships
 
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (1 shared connections)
+- [Chart Vendor Layout](Chart_Vendor_Layout.md) (1 shared connections)
 
 ## Source Files
 

@@ -4,10 +4,10 @@
 
 ## Key Concepts
 
-- **diagnostics.py** (8 connections) — `app/engine/diagnostics.py`
+- **diagnostics.py** (7 connections) — `app/engine/diagnostics.py`
 - **explain_risk()** (6 connections) — `app/engine/diagnostics.py`
-- **Diagnostic** (5 connections) — `app/engine/diagnostics.py`
 - **explain_lifecycle()** (5 connections) — `app/engine/diagnostics.py`
+- **Diagnostic** (4 connections) — `app/engine/diagnostics.py`
 - **_risk_context()** (4 connections) — `app/engine/diagnostics.py`
 - **.to_dict()** (3 connections) — `app/engine/diagnostics.py`
 - **_value()** (2 connections) — `app/engine/diagnostics.py`
@@ -20,7 +20,7 @@
 
 ## Relationships
 
-- [Cycle Detection Engine](Cycle_Detection_Engine.md) (2 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -28,8 +28,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 39 (98%)
-- INFERRED: 1 (2%)
+- EXTRACTED: 38 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

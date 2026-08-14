@@ -315,8 +315,8 @@
     "semantic_hash": "6c01759a9f1c493b111a4f844e2cacf8"
   },
   "app/server.py": {
-    "mtime": 1786621673.9232223,
-    "ast_hash": "ae3c8fa0bc5b222662a6d935eb55c3da",
+    "mtime": 1786650637.2005541,
+    "ast_hash": "299d6a5e2ed9f48e4cdd8da928bbb27f",
     "semantic_hash": ""
   },
   "app/static/chart.js": {
@@ -815,8 +815,8 @@
     "semantic_hash": "77de747bd913d04ec328184174713abd"
   },
   "app/tests/test_version_cascade.py": {
-    "mtime": 1786621673.9242203,
-    "ast_hash": "a6ca0a1c0308771b51b733a1635c26ec",
+    "mtime": 1786650638.4724534,
+    "ast_hash": "3222f68698a87953a2b8442c97440b46",
     "semantic_hash": ""
   },
   "app/tests/test_volatility.py": {
@@ -930,8 +930,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786622332.2882009,
-    "ast_hash": "9d0bf8e5395b6d74f7a627beeea68eec",
+    "mtime": 1786650844.9179018,
+    "ast_hash": "75d9a692e69e7e04efa335e7ca72da67",
     "semantic_hash": ""
   },
   "PRODUCT.md": {
@@ -955,8 +955,8 @@
     "semantic_hash": "be37c9ee0010389733bb2e7543aac7db"
   },
   "app/static/shell.html": {
-    "mtime": 1786622121.3770325,
-    "ast_hash": "d7b994657dd3351296ce52e6116824d8",
+    "mtime": 1786650661.776305,
+    "ast_hash": "e151e2509ed038ab7e557bddb4a0cc6a",
     "semantic_hash": ""
   },
   "app/verification/major-inspection-btc-1d.md": {
@@ -1415,8 +1415,8 @@
     "semantic_hash": ""
   },
   "app/engine/stocks.py": {
-    "mtime": 1786621673.92122,
-    "ast_hash": "4824d87a39c2d166480d91b285fea0e5",
+    "mtime": 1786650635.9247687,
+    "ast_hash": "2fc95f8d9e4fb20c0541560034a1e689",
     "semantic_hash": ""
   },
   "app/static/markets.js": {
@@ -1425,13 +1425,13 @@
     "semantic_hash": ""
   },
   "app/static/stocks.js": {
-    "mtime": 1786621781.9892194,
-    "ast_hash": "38f66643dd24f82bd8aeab8aa13810b3",
+    "mtime": 1786650713.0823536,
+    "ast_hash": "11b8be5ae03d32890ea01feac418828f",
     "semantic_hash": ""
   },
   "app/tests/test_market_workspaces.js": {
-    "mtime": 1786622313.437097,
-    "ast_hash": "3c73032fda3ab9dfaed6800fd324be93",
+    "mtime": 1786650798.5596611,
+    "ast_hash": "4fd90c20b311b6ceb48f08e6693fdf5c",
     "semantic_hash": ""
   },
   "app/tests/test_stocks_foundation.py": {
@@ -1440,8 +1440,38 @@
     "semantic_hash": ""
   },
   "docs/ADR-001-MARKET-WORKSPACES.md": {
-    "mtime": 1786622427.4295385,
-    "ast_hash": "1e13fa5a3cbb2d0e338452000cba9da2",
+    "mtime": 1786650846.0915983,
+    "ast_hash": "36ab6330299c84ecd9c6e311d1bb5ab9",
+    "semantic_hash": ""
+  },
+  "app/engine/stockcalendar.py": {
+    "mtime": 1786650616.4593835,
+    "ast_hash": "2785508ad1d671ab5b928690126d7324",
+    "semantic_hash": ""
+  },
+  "app/engine/stockdemo.py": {
+    "mtime": 1786650619.1269808,
+    "ast_hash": "4b8929c5f4628080ffce97e052fbec6a",
+    "semantic_hash": ""
+  },
+  "app/engine/stockstore.py": {
+    "mtime": 1786650815.481239,
+    "ast_hash": "f685e1e3c77854ed925d8b8768fff781",
+    "semantic_hash": ""
+  },
+  "app/fixtures/stocks/training_v1.json": {
+    "mtime": 1786650615.158683,
+    "ast_hash": "53768f8140dc8cbf8dac5c2d032fd76a",
+    "semantic_hash": ""
+  },
+  "app/tests/test_stock_training.py": {
+    "mtime": 1786650821.0356488,
+    "ast_hash": "163fdf8c913d7b0822d906b1366a9f47",
+    "semantic_hash": ""
+  },
+  ".codex-remote-attachments/019ff320-27ef-71a2-a3c1-8d174dfec6a6/cf392fd2-c25e-44b9-8810-86ead53f8392/1-Photo-1.jpg": {
+    "mtime": 1786625073.4992888,
+    "ast_hash": "ceda0c5fbcf209bb60d210dc561fd2fc",
     "semantic_hash": ""
   }
 }

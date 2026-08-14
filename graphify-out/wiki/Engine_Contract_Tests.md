@@ -1,6 +1,6 @@
 # Engine Contract Tests
 
-> 53 nodes
+> 55 nodes
 
 ## Key Concepts
 
@@ -10,7 +10,7 @@
 - **._acknowledge()** (10 connections) — `app/tests/test_engine_contracts.py`
 - **EngineStoreCase** (7 connections) — `app/tests/test_engine_contracts.py`
 - **validate.py** (7 connections) — `app/validate.py`
-- **TestImporter** (5 connections) — `app/tests/test_engine_contracts.py`
+- **TestImporter** (6 connections) — `app/tests/test_engine_contracts.py`
 - **.test_acknowledged_partial_bucket_builds()** (4 connections) — `app/tests/test_engine_contracts.py`
 - **.test_quarantined_acknowledgment_is_ignored()** (4 connections) — `app/tests/test_engine_contracts.py`
 - **.test_counted_but_unlisted_gap_blocks()** (4 connections) — `app/tests/test_engine_contracts.py`
@@ -29,7 +29,7 @@
 - **TestLiquidityCanonicalization** (3 connections) — `app/tests/test_engine_contracts.py`
 - **bootstrap_mean_ci()** (3 connections) — `app/validate.py`
 - **stats()** (3 connections) — `app/validate.py`
-- *... and 28 more nodes in this community*
+- *... and 30 more nodes in this community*
 
 ## Relationships
 
@@ -42,7 +42,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 168 (99%)
+- EXTRACTED: 172 (99%)
 - INFERRED: 2 (1%)
 - AMBIGUOUS: 0 (0%)
 
