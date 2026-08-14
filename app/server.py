@@ -2867,6 +2867,13 @@ def stocks_status():
     return stocks.status()
 
 
+@app.get("/api/stocks/training")
+def stocks_training():
+    """Deterministic fixture workflow; no credentials, network, or writes."""
+    from engine import stockdemo
+    return stockdemo.report()
+
+
 @app.post("/api/stocks/connections/test")
 def stocks_connection_test(payload: dict):
     """Read-only provider verification.  This route can never place an order."""

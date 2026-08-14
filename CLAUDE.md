@@ -154,9 +154,12 @@ request finishing later is not permission to move the input boundary.
 Stocks share the shell, vault and failure grammar, but not their store, scanner,
 universe, book, baseline or recurring reads. The crypto venue resolver derives
 capabilities from crypto symbol spelling and must never receive an equity
-ticker. Stocks remains paper-only and visibly blocked until both Alpaca Paper +
-SIP and Massive reference access are verified; a stored key is configuration,
-not verification, and an Alpaca account pass without SIP is incomplete.
+ticker. Real-market Stocks remains paper-only and visibly blocked until both
+Alpaca Paper + SIP and Massive reference access are verified; a stored key is
+configuration, not verification, and an Alpaca account pass without SIP is
+incomplete. A credentials-free stock training workflow may use bundled data
+only when every asset, candle, fact, fill and result is scoped `FIXTURE`, shown
+as synthetic, and excluded from strategy grades and every provider/live route.
 
 **The scanner-recorded quality report is the operator verdict.** A server,
 browser refresh, offline backfill, or shell observer may calculate a private

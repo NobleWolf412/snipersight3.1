@@ -26,14 +26,19 @@ failure conventions. They do not share scanners, stores, universes, positions,
 performance baselines, setup counts or execution readiness. Background reads
 pause for the inactive workspace.
 
-The first Stocks generation is a non-trading foundation:
+The Stocks foundation has two deliberately separate readiness tracks:
 
 - Alpaca Paper is the eventual paper-execution/account authority.
 - Alpaca consolidated SIP is required for current stock market data; IEX-only
   data is not accepted as the full US market.
 - Massive is the point-in-time universe and corporate-action authority.
 - Provider checks are read-only and live stock routing is absent.
-- The future stock store is `data/stocks.db`, separate from the crypto store.
+- The stock store schema targets `data/stocks.db`, separate from the crypto
+  store, and requires asset identity, session, source and evidence scope.
+- A deterministic, bundled training tape exercises session classification,
+  stock-native setup/rejection evidence and a local paper replay without keys.
+- Training output is always `FIXTURE`, visibly synthetic, grade-ineligible and
+  structurally unable to enter a provider or live-order path.
 
 ## Options Considered
 

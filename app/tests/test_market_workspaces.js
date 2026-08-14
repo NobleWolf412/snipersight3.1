@@ -57,20 +57,30 @@ ok('all recurring crypto authorities stop while Stocks is selected', () => {
     'the shared scheduler has no stock namespace boundary');
 });
 
-ok('stocks has its own focused jobs and never claims a scanner exists', () => {
+ok('stocks has a synthetic workflow but never claims a real scanner exists', () => {
   for(const view of ['overview', 'setups', 'trade', 'performance', 'system'])
     assert(HTML.includes(`data-stock-view="${view}"`), `${view} stock view missing`);
-  assert(HTML.includes('No stock scanner is running yet.'));
+  assert(HTML.includes('Synthetic prices · no broker · excluded from grades'));
+  assert(HTML.includes('What still blocks real stock scanning?'));
   assert(HTML.includes('Live orders disabled'));
-  assert(HTML.includes('Crypto outcomes, samples and strategy grades are intentionally excluded.'));
+  assert(HTML.includes('This sample never contributes to win rate, expectancy, or P&amp;L'));
 });
 
 ok('stock UI reads server authority and only performs credential or verification writes', () => {
   assert(STOCKS.includes("SSData.get('/api/stocks/status'"));
+  assert(STOCKS.includes("SSData.get('/api/stocks/training'"));
   assert(STOCKS.includes("fetch('/api/credentials'"));
   assert(STOCKS.includes("fetch('/api/stocks/connections/test'"));
   for(const cryptoPath of ['/api/overview', '/api/operations', '/api/manual/arm', '/api/scan'])
     assert(!STOCKS.includes(cryptoPath), `stock workspace reaches crypto path ${cryptoPath}`);
+});
+
+ok('training evidence is labelled and UI does not derive the plan or result', () => {
+  for(const label of ['Training fixtures', 'Simulation only', 'Not gradeable'])
+    assert(HTML.includes(label), `${label} boundary missing`);
+  assert(STOCKS.includes('selected.plan'));
+  assert(STOCKS.includes('training.simulation'));
+  assert(!/parseFloat|Number\(plan\.|Decimal/.test(STOCKS));
 });
 
 ok('provider forms request only the credentials each stock authority needs', () => {

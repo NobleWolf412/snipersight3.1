@@ -19,10 +19,10 @@ import urllib.request
 from pathlib import Path
 from typing import Callable
 
-from . import credentials
+from . import credentials, stockcalendar, stockdemo, stockstore
 
 
-STOCKS_FOUNDATION_VERSION = "stocks-foundation-v0.1-draft"
+STOCKS_FOUNDATION_VERSION = "stocks-foundation-v0.2-draft"
 ALPACA_TARGET = "alpaca-paper"
 MASSIVE_TARGET = "massive-stocks"
 ALPACA_PAPER_API = "https://paper-api.alpaca.markets"
@@ -156,6 +156,20 @@ def status() -> dict:
         "mode": "PAPER",
         "live_enabled": False,
         "scanner_enabled": False,
+        "training": {
+            "state": "READY",
+            "label": "Synthetic training workspace",
+            "scanner_enabled": True,
+            "paper_simulator_enabled": True,
+            "live_orders_enabled": False,
+            "grade_eligible": False,
+            "evidence_scope": "FIXTURE",
+            "versions": {
+                "demo": stockdemo.STOCK_DEMO_VERSION,
+                "calendar": stockcalendar.STOCK_CALENDAR_VERSION,
+                "store": stockstore.STOCK_STORE_VERSION,
+            },
+        },
         "data_store": {
             "isolated": True,
             "exists": STOCK_DB_PATH.exists(),

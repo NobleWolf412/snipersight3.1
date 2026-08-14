@@ -1,0 +1,70 @@
+{
+  "fixture_version": "stock-fixture-v0.1",
+  "label": "US stocks training tape",
+  "as_of": "2026-08-12T13:45:00Z",
+  "session": {
+    "date": "2026-08-12",
+    "premarket_open": "2026-08-12T04:00:00-04:00",
+    "regular_open": "2026-08-12T09:30:00-04:00",
+    "regular_close": "2026-08-12T16:00:00-04:00",
+    "after_hours_close": "2026-08-12T20:00:00-04:00",
+    "authority": "BUNDLED_FIXTURE"
+  },
+  "risk_budget_usd": "100.00",
+  "scenarios": [
+    {
+      "scenario_id": "gap-pullback-ready",
+      "symbol": "AAPL",
+      "display_symbol": "AAPL · SAMPLE",
+      "name": "Gap pullback example",
+      "previous_close": "200.00",
+      "relative_volume": "2.10",
+      "earnings_at": null,
+      "halted": false,
+      "shortable": true,
+      "bars": [
+        {"open_ts": 1786541400, "closed_at": 1786541700, "open": "205.00", "high": "206.00", "low": "204.50", "close": "205.20", "volume": "420000"},
+        {"open_ts": 1786541700, "closed_at": 1786542000, "open": "205.20", "high": "205.60", "low": "204.00", "close": "204.40", "volume": "350000"},
+        {"open_ts": 1786542000, "closed_at": 1786542300, "open": "204.40", "high": "205.80", "low": "204.30", "close": "205.50", "volume": "390000"}
+      ],
+      "future_bars": [
+        {"open_ts": 1786542300, "closed_at": 1786542600, "open": "205.50", "high": "206.50", "low": "205.40", "close": "206.20", "volume": "310000"},
+        {"open_ts": 1786542600, "closed_at": 1786542900, "open": "206.20", "high": "209.20", "low": "206.00", "close": "209.00", "volume": "510000"}
+      ]
+    },
+    {
+      "scenario_id": "earnings-rejection",
+      "symbol": "TSLA",
+      "display_symbol": "TSLA · SAMPLE",
+      "name": "Earnings-risk example",
+      "previous_close": "300.00",
+      "relative_volume": "2.40",
+      "earnings_at": "2026-08-13T20:00:00Z",
+      "halted": false,
+      "shortable": true,
+      "bars": [
+        {"open_ts": 1786541400, "closed_at": 1786541700, "open": "308.00", "high": "310.00", "low": "307.00", "close": "309.00", "volume": "810000"},
+        {"open_ts": 1786541700, "closed_at": 1786542000, "open": "309.00", "high": "309.50", "low": "306.50", "close": "307.20", "volume": "740000"},
+        {"open_ts": 1786542000, "closed_at": 1786542300, "open": "307.20", "high": "309.20", "low": "307.00", "close": "308.80", "volume": "690000"}
+      ],
+      "future_bars": []
+    },
+    {
+      "scenario_id": "halt-rejection",
+      "symbol": "GME",
+      "display_symbol": "GME · SAMPLE",
+      "name": "Trading-halt example",
+      "previous_close": "24.00",
+      "relative_volume": "4.80",
+      "earnings_at": null,
+      "halted": true,
+      "shortable": false,
+      "bars": [
+        {"open_ts": 1786541400, "closed_at": 1786541700, "open": "25.00", "high": "27.00", "low": "24.80", "close": "26.40", "volume": "1900000"},
+        {"open_ts": 1786541700, "closed_at": 1786542000, "open": "26.40", "high": "26.80", "low": "25.10", "close": "25.40", "volume": "1300000"},
+        {"open_ts": 1786542000, "closed_at": 1786542300, "open": "25.40", "high": "26.20", "low": "25.20", "close": "26.00", "volume": "980000"}
+      ],
+      "future_bars": []
+    }
+  ]
+}
