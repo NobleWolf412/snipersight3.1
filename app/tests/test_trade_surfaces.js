@@ -591,61 +591,55 @@ ok('no control character survives where a regex escape was meant', () => {
    Diagnostics surface. Diagnostics is a nav tab now and one rule is left —
    body:not(.dev) #consolePanel — so pressing it from any other surface changed
    nothing visible, which reads as a broken control. */
-console.log('backend console toggle');
-// Slice, not a multi-line regex literal: a JS regex cannot span lines, and the
-// two previous attempts in this file died on exactly that.
-const setDevBody = (() => {
-  const i = JS.indexOf('function setDev(on, jump)');
-  if(i < 0) return '';
-  // To the end of the function, not a fixed byte count: the body grew past a
-  // 1800-char window when the toggle gained a second thing to gate, and the
-  // assertions below started passing vacuously on a truncated slice.
-  // Bound by the next declaration, not a byte count: the body grew past
-  // an 1800-char window when the toggle gained a second thing to gate,
-  // and these assertions started passing vacuously on a truncated slice.
-  const end = JS.indexOf('function ', i + 10);
-  return end < 0 ? JS.slice(i) : JS.slice(i, end);
-})();
-ok('it is named for the one thing it reveals', () => {
-  // The label tracks the scope. One panel -> "Backend console"; that plus the
-  // raw internals in a trace -> the category, not one of its members.
-  assert.ok(/Developer detail/.test(HTML), 'the markup ships the honest label');
-  assert.ok(!/>Developer mode</.test(HTML), 'the vague original is gone');
-  assert.ok(JS.includes('Developer detail · on'), 'and it says when it is on');
-});
-ok('turning it on goes to the panel it just revealed', () => {
-  assert.ok(setDevBody, 'setDev(on, jump) not found');
-  assert.ok(setDevBody.includes("pendingJump = 'consolePanel'"), 'reuses the one jump path');
-  assert.ok(setDevBody.includes("go('diagnostics')"));
-});
-ok('it never hijacks the route at boot, or on the way off', () => {
-  assert.ok(setDevBody.includes('if(on && jump && !reading)'),
-            'all three conditions, not any one of them');
-  assert.ok(JS.includes('setDev(readDev());'), 'boot passes no jump');
-  assert.ok(JS.includes("setDev(!document.body.classList.contains('dev'), true)"),
-            'only the click asks to jump');
-});
-ok('the id and the storage key are unchanged', () => {
-  // Renaming either would break references and silently reset the preference
-  // for everyone who already has one. The label is the part that was wrong.
-  assert.ok(/id="devToggle"/.test(HTML));
-  assert.ok(JS.includes("DEV_KEY = 'ss.devMode'"));
+console.log('backend console and developer detail — REMOVED 2026-08-13');
+
+/* THE TOGGLE AND THE PANEL ARE GONE, and these two pins replace the six that
+   described them. Operator ruling: a raw engine-log tail is a developer
+   chasing a fact, not a trading surface, and it cost a multi-kilobyte poll
+   every two seconds for a panel most sessions never revealed.
+
+   What is pinned here is the part that was easy to get wrong on the way out,
+   not the absence itself. */
+
+ok('removing the console did not take the Check-now button with it', () => {
+  /* `_scan` rode along at the bottom of the log-tail payload, so the button's
+     disabled state, its label, and the repaint when a scan finished all came
+     from polling up to 400 lines of engine log. Deleting the panel without
+     re-homing that would have left a dead button and a finished scan that
+     repainted nothing — a silent break, because a button that never enables
+     looks exactly like a bot with nothing to do. */
+  assert.ok(!/id="consolePanel"/.test(HTML), 'the console panel came back');
+  assert.ok(!/id="devToggle"/.test(HTML), 'the developer-detail toggle came back');
+  assert.ok(JS.includes("fetch('/api/scan/state'"),
+            'nothing polls the scan state — Check-now can no longer tell ' +
+            'whether a scan is running');
+  assert.ok(JS.includes("b.disabled = !!s.running"),
+            'the button no longer follows the scan state the server owns');
+  assert.ok(JS.includes('scanResult(s.detail'),
+            'a finished scan no longer reports its result');
 });
 
-
-ok('it gates the raw internals in a trace, not just the console', () => {
+ok('the raw trace internals stayed hidden when their switch was deleted', () => {
+  /* Deleting a switch has to preserve the state it sat in. This one sat OFF:
+     `body.dev` was never set for a session that did not go looking. Dropping
+     the `body:not(.dev)` prefix without replacing the rule would have shown
+     every trader a composite database key and a cost_manifest_hash. */
   const DXCSS = S('diagnostics-ui.css');
-  for(const sel of ['.dx-copyid', '.dx-tfacts', '.dx-verdict-owner'])
-    assert.ok(DXCSS.includes('body:not(.dev) ' + sel),
-              sel + ' must be developer-gated');
-  assert.ok(CSS.includes('body:not(.dev) #consolePanel'), 'and still the console');
+  // The whole hiding rule, read as one string rather than three regexes — the
+  // selector list is what matters and a regex per name was three ways to get
+  // an escape wrong for no extra coverage.
+  const rule = DXCSS.slice(DXCSS.indexOf('.dx-copyid'),
+                           DXCSS.indexOf('display:none', DXCSS.indexOf('.dx-copyid')) + 12);
+  for(const sel of ['.dx-copyid', '.dx-tfacts', '.dx-verdict-owner']){
+    assert.ok(rule.includes(sel),
+              sel + ' lost its rule — it is now visible to every reader');
+    assert.ok(!DXCSS.includes('body:not(.dev) ' + sel),
+              sel + ' still keys off a class nothing sets, so it shows always');
+  }
+  assert.ok(/display:\s*none/.test(rule), 'the raw internals are no longer hidden');
+  assert.ok(!CSS.includes('#consolePanel'), 'console CSS survived the panel');
 });
-ok('it does not route you away from a trace you are reading', () => {
-  // The drawer is one of the things this toggle changes; pressing it there
-  // asks for more of what is on screen, not for a different screen.
-  assert.ok(setDevBody.includes("document.querySelector('.dx-drawer')"));
-  assert.ok(setDevBody.includes('if(on && jump && !reading)'));
-});
+
 ok('every stage keeps its facts — map passes the INDEX', () => {
   // `all.map(stageHtml)` fed the array index into `compact`, so eight of nine
   // stages silently lost their fact chips. Only the first, at index 0, kept

@@ -202,16 +202,30 @@ function load() {
            'an entry with a live subscriber was evicted from under it');
   });
 
-  await ok('the console poll does NOT go through the cache', async () => {
+  await ok('the scan-state poll does NOT go through the cache', async () => {
+    /* This pinned `/api/console?offset=` until 2026-08-13, when the backend
+       console left the cockpit as developer detail. The console was a CURSORED
+       stream and caching it minted an entry per call that could never be hit —
+       an unbounded map growing twice a second.
+
+       The poll that replaced it must stay uncached for a different reason, and
+       the reason is worth stating because it is the one that survives: this is
+       a CONTROL'S OWN LIVENESS. `/api/scan/state` says whether Check-now may be
+       pressed, and a cached answer is a button that lies about whether a scan
+       is already running. Two different faults, one rule. */
     const shell = fs.readFileSync(
       path.join(__dirname, '..', 'static', 'shell.js'), 'utf8');
-    const i = shell.indexOf('/api/console?offset=');
-    assert(i > 0, 'the console poll was renamed');
+    // Anchored on the CALL, not the path: the path also appears in the comment
+    // above explaining why this poll exists, and slicing around that window
+    // read the prose instead of the code.
+    const i = shell.indexOf("fetch('/api/scan/state'");
+    assert(i > 0, 'the scan-state poll was renamed');
     const around = shell.slice(i - 400, i + 200);
-    assert(!/api\('\/api\/console/.test(around) && !/SSData\.get\('\/api\/console/.test(around),
-      'the cursored console poll is routed through the cache again — every ' +
-      'call mints an entry that can never be hit');
-    assert(/cache: *'no-store'/.test(around), 'the direct console fetch lost no-store');
+    assert(!/api\('\/api\/scan\/state/.test(around)
+           && !/SSData\.get\('\/api\/scan\/state/.test(around),
+      'the scan-state poll is routed through the cache — the Check-now button ' +
+      'would report a scan that already finished, or refuse one that has not started');
+    assert(/cache: *'no-store'/.test(around), 'the scan-state fetch lost no-store');
   });
 
   /* ── How old is what I am looking at? ──────────────────────────────────

@@ -3766,9 +3766,28 @@ _scan_lock = threading.Lock()   # uvicorn runs sync endpoints on a threadpool,
                                 # so check-then-set on _scan is NOT atomic
 
 
+@app.get("/api/scan/state")
+def scan_state():
+    """Is a manual scan running, and what did the last one do.
+
+    Split out of `/api/console` on 2026-08-13 when the backend console left the
+    cockpit. `_scan` had been riding along on the log tail, so the Check-now
+    button's entire enabled/disabled life depended on polling up to 400 lines
+    of engine log every two seconds to read three fields at the bottom of it.
+    The console was the bloat; the scan state is not, and it needed its own
+    door rather than dying with the room it happened to be standing in.
+    """
+    return dict(_scan)
+
+
 @app.get("/api/console")
 def console(offset: int = -1, limit: int = Query(400, ge=1, le=2000)):
     """Tail the shared engine log.
+
+    NO LONGER READ BY THE COCKPIT. The console panel was removed on 2026-08-13
+    as developer-facing detail; this endpoint stays because the log tail is
+    genuinely useful when something is wrong and a supervisor or an operator on
+    a terminal can still curl it. It is not dead code, it is off the hot path.
 
     Both the scanner process and this server write here, so a byte offset is
     the only cursor that sees BOTH — an in-process ring buffer would show the

@@ -1377,18 +1377,12 @@
         </div>
       </details>
 
-      <!-- Relocated from Command. This is a developer trace, and it belongs on
-           the surface that asks whether the machine is telling the truth — not
-           on the one that asks what to do next. shell.js only polls it while
-           this surface is on screen. -->
-      <div class="panel" id="consolePanel" style="margin-top:var(--lg)">
-        <div class="panel-head">
-          <h2 class="t-section">Backend Console</h2>
-          <span class="chip" id="consoleState" style="margin-left:auto">idle</span>
-          <button class="btn" id="btnFollow" title="follow new output">Following</button>
-        </div>
-        <pre id="console" class="t-mono">connecting…</pre>
-      </div>
+      <!-- The Backend Console stood here until 2026-08-13. It tailed the raw
+           engine log — `zone zone-v0.11-draft XRPUSDT 15m in=981 new=14 2187ms`
+           — which is a developer chasing a fact, not a trader deciding
+           anything, and it cost a poll of several kilobytes every two seconds
+           for a panel behind a toggle most sessions never turned on.
+           `/api/console` still serves the tail for anyone on a terminal. -->
     </section>
 
     <!-- ─── LEDGER ───
@@ -1504,14 +1498,6 @@
     <span class="sb-item"><span class="orb" id="sbOrb"></span><b id="sbLive">connecting…</b></span>
     <span class="sb-item" id="sbWatch"></span>
     <span id="executionStatus" style="margin-left:auto">Loading execution mode…</span>
-    <!-- The label tracks the scope, which is the whole point of having
-         renamed it once already. When this gated a single panel it said
-         "Backend console"; it now also restores the raw internals in the trace
-         drawer — the composite id, the per-stage fact chips, the attribution
-         line — so it is named for the category rather than one of its members.
-         shell.js gives it state, tooltip, and the jump on the way on. -->
-    <button class="sb-dev" id="devToggle" type="button" aria-pressed="false"
-            title="show raw internals: the backend console, and the fact-level detail in a trace">Developer detail</button>
   </footer>
 
 </div>

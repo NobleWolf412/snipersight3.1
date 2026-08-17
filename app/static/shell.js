@@ -6,6 +6,13 @@
 (() => {
   const $ = id => document.getElementById(id);
   const fmt = n => Number(n).toLocaleString();
+  /* HTML-escape, used by ~120 template literals across this file. It lived
+     inside the backend-console block until 2026-08-13 and was deleted with it
+     — legal JavaScript that throws only when a line runs, so every suite
+     stayed green and the linter's no-undef was the only thing that saw it.
+     Hoisted here, beside the other shared helpers, so the next block deletion
+     cannot take it along. */
+  const esc = s => String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 
   /* A PREFERENCE THAT FAILS TO PERSIST SAYS SO — ONCE.
 
@@ -51,8 +58,8 @@
   };
 
   /* ---------- navigation ---------- */
-  // guards the console poll below, which cannot run until its own state exists
-  let consoleReady = false;
+  // guards the scan-state poll below, which cannot run until its state exists
+  let scanReady = false;
   /* `setup` was renamed to `rules` because a SETUP is a trade candidate
      everywhere else in this app. Old hashes are still honoured — a bookmark, a
      link in the wizard's prose, or anything the operator saved must not land on
@@ -120,9 +127,9 @@
     // The chart cannot size itself while its surface is display:none, so it is
     // told when it becomes visible rather than measuring a 0x0 box at load.
     if(window.SSChart) surface === 'chart' ? SSChart.onShow() : SSChart.onHide();
-    // The console polls slowly while it is off screen; arriving on it should
-    // not mean waiting out that slow tick for the first paint.
-    if(surface === 'diagnostics' && consoleReady) pollConsole();
+    // Arriving on Overview is where the Check-now button lives, so refresh its
+    // enabled state rather than making the operator wait out the slow tick.
+    if(surface === 'command' && scanReady) pollScanState();
     /* ...and the same courtesy for the rest. The 30s tick now only refreshes
        the surface you are looking at, so ARRIVING somewhere is the moment its
        data has to be fetched — otherwise Settings would show whatever was
@@ -4820,51 +4827,38 @@ weighed in. Name the facts you used.`;
   }
 
   /* ---------- actions ---------- */
-  /* ---------- backend console: tail the log both processes write ---------- */
-  let logOffset = -1, follow = true, scanning = false;
-  const consoleEl = $('console');
+  /* ---------- is a scan running ----------
 
-  function paint(lines){
-    if(!lines.length) return;
-    const html = lines.map(ln => {
-      const m = ln.match(/^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\s+(\w+)?\s*(.*)$/);
-      if(!m) return `<span class="l-info">${esc(ln)}</span>`;
-      const [, ts, lvl, rest] = m;
-      const cls = /ERROR/.test(lvl) ? 'l-err' : /WARNING/.test(lvl) ? 'l-warn'
-                : /MANUAL SCAN|SETUP FIRED/.test(rest) ? 'l-mark' : 'l-info';
-      return `<span class="l-time">${ts.slice(11)}</span> <span class="${cls}">${esc(rest)}</span>`;
-    }).join('\n');
-    consoleEl.insertAdjacentHTML('beforeend', (consoleEl.dataset.seeded ? '\n' : '') + html);
-    consoleEl.dataset.seeded = '1';
-    // keep the buffer bounded so a long session cannot eat the tab's memory
-    const kids = consoleEl.childNodes;
-    while(kids.length > 4000) consoleEl.removeChild(kids[0]);
-    if(follow) consoleEl.scrollTop = consoleEl.scrollHeight;
-  }
-  const esc = s => s.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+     THIS USED TO BE THE BACKEND CONSOLE, and the console is gone (2026-08-13,
+     operator ruling: raw log tail is developer detail, not a trading surface).
+
+     What could not go with it is what was riding along underneath. `_scan` —
+     whether a manual scan is in flight, and what the last one did — was a
+     field at the bottom of the log-tail payload, so the Check-now button's
+     entire enabled/disabled life, its label, and the repaint when a scan
+     finished all depended on fetching up to 400 lines of engine log every two
+     seconds to read three fields. Deleting the console would have quietly
+     broken the button and left a finished scan repainting nothing.
+
+     So the state got its own door, `/api/scan/state`, and this poll now costs
+     about eighty bytes instead of several kilobytes. */
+  let scanning = false;
 
   let polling = false;
-  async function pollConsole(){
-    // Two overlapping polls would both fetch from the same logOffset and paint
-    // the same lines twice — the click handler's poll races the interval.
+  async function pollScanState(){
+    // One in flight at a time: the click handler's immediate poll races the
+    // interval, and two answers about one boolean is one answer too many.
     if(polling) return;
     polling = true;
     try{
-      /* NOT through SSData, deliberately. This is a cursored stream: the offset
-         is different on every call, so every poll would mint a cache entry that
-         can never be hit again — an unbounded map, growing twice a second, for
-         responses nothing will ever re-read. A cache keyed by URL is the wrong
-         shape for a cursor, and `polling` above already does the only
-         de-duplication this call needs. */
-      const r = await fetch('/api/console?offset=' + logOffset, {cache: 'no-store'});
-      if(!r.ok) throw new Error('/api/console → ' + r.status);
-      const d = await r.json();
-      if(!consoleEl.dataset.seeded) consoleEl.textContent = '';
-      logOffset = d.offset;
-      paint(d.lines || []);
-      const s = d.scan || {}, b = $('btnScan');
-      $('consoleState').textContent = s.running ? 'scanning…' : (s.detail || 'idle');
-      $('consoleState').className = 'chip ' + (s.running ? 'chip-accent' : '');
+      /* NOT through SSData. The cache exists to stop two surfaces asking the
+         same question twice in one window; this is a control's own liveness
+         and a stale answer here is a button that lies about whether it can be
+         pressed. */
+      const r = await fetch('/api/scan/state', {cache: 'no-store'});
+      if(!r.ok) throw new Error('/api/scan/state → ' + r.status);
+      const s = await r.json(), b = $('btnScan');
+      if(!b) return;
       // The backend owns the truth about whether a scan is running, so a page
       // reload mid-scan shows the same button state as the tab that started it.
       b.disabled = !!s.running;
@@ -4891,7 +4885,7 @@ weighed in. Name the facts you used.`;
         refresh();                                   // just finished — repaint deck
       }
       scanning = !!s.running;
-    }catch(err){ /* console is best-effort; the health chip owns API state */ }
+    }catch(err){ /* best-effort; the health chip owns API state */ }
     finally{ polling = false; }
   }
   /* Decision Provenance — the second application, loaded on demand.
@@ -4906,39 +4900,26 @@ weighed in. Name the facts you used.`;
     if(prov.open && f && !f.src) f.src = f.dataset.src;
   });
 
-  $('btnFollow').addEventListener('click', e => {
-    follow = !follow;
-    e.currentTarget.textContent = follow ? 'Following' : 'Paused';
-    e.currentTarget.style.color = follow ? '' : 'var(--fg-4)';
-  });
+  /* The console version of this ran at 2s while Diagnostics was open, because
+     someone might be reading the log. Nobody is reading the log any more, so
+     the only reason left to be quick is a scan actually running — the button
+     has to go grey when it starts and come back when it stops.
 
-  /* This poll ran every 2s forever — 30 of the ~57 requests a minute this page
-     made at idle, most of them for a console that was not on screen. It cannot
-     simply stop when the console is hidden, because it also owns Run Scan's
-     state on COMMAND and the repaint when a scan finishes. So it adapts:
-
-       · console on screen  — 2s, someone is reading the log
        · a scan is running  — 2s, wherever the operator is standing
        · otherwise          — 15s, just keeping the button honest
        · tab in background  — not at all
 
-     Idle on Command now costs 4 requests a minute instead of 30, and every
-     behaviour that depended on the fast tick still has it when it matters. */
+     Idle now costs 4 requests a minute, each about eighty bytes, against 30
+     requests of several kilobytes before the console left. */
   const FAST = 2000, SLOW = 15000;
-  function consoleInterval(){
-    if(document.hidden) return SLOW;
-    if(scanning) return FAST;
-    return $('s-diagnostics').classList.contains('on') ? FAST : SLOW;
-  }
   (function tick(){
-    const wait = consoleInterval();
     setTimeout(async () => {
-      if(!document.hidden) await pollConsole();
+      if(!document.hidden) await pollScanState();
       tick();
-    }, wait);
+    }, document.hidden || !scanning ? SLOW : FAST);
   })();
-  consoleReady = true;
-  pollConsole();
+  scanReady = true;
+  pollScanState();
 
   /* ---------- run a real scan ---------- */
   /* Every action reports a RESULT and a TIME. A control that changes nothing
@@ -5000,12 +4981,10 @@ weighed in. Name the facts you used.`;
   $('btnScan').addEventListener('click', async e => {
     const b = e.currentTarget;
     b.disabled = true; b.textContent = 'Checking…';
-    follow = true;
     try{
       const r = await fetch('/api/scan', {method:'POST'});
       const d = await r.json().catch(() => ({}));
       if(r.status === 409){
-        $('consoleState').textContent = 'already scanning';
         scanResult('a scan was already running', true);
         toast('Already checking — the scanner was mid-pass', 'warn');
       }
@@ -5015,7 +4994,7 @@ weighed in. Name the facts you used.`;
         toast('Check failed — ' + (d.detail || r.status), 'bad');
       }
       else { scanResult('checking…'); toast('Checking every watched symbol now'); }
-      await pollConsole();
+      await pollScanState();
     }catch(err){
       markDegraded(String(err));
       scanResult('could not start a scan', true);
@@ -5072,76 +5051,6 @@ weighed in. Name the facts you used.`;
     }
     setTimeout(() => { b.textContent = was; }, 2000);
   });
-
-  /* ---------- developer detail ----------
-     What this gates: the live server log at the foot of Diagnostics, AND the
-     raw internals inside a setup trace — the composite id behind `copy id`,
-     the per-stage fact chips, and the failure-attribution line. The CSS lives
-     with each of them (ss.css, diagnostics-ui.css) and keys off `body.dev`;
-     this function only owns the class, the label and the preference.
-
-     It began as one panel. It used to gate that whole surface — Diagnostics sat in the
-     rail between Rules and Learn, so the first thing a new reader clicked
-     showed them `ohlc invariant failure` and a log tail — but the surface is a
-     public tab now and only the console stayed behind the switch. The name and
-     the comment kept the old scope for a while after the behaviour shrank,
-     which is how an operator came to press it and find nothing changed.
-
-     The id (`devToggle`) and the storage key (`ss.devMode`) are deliberately
-     NOT renamed: the id is referenced elsewhere and the key holds a preference
-     that would silently reset for everyone who has one.
-
-     The preference survives a reload, and turning it off while standing on
-     Diagnostics moves you somewhere that still exists rather than leaving a
-     blank stage. */
-  const DEV_KEY = 'ss.devMode';
-  const readDev = () => { try{ return localStorage.getItem(DEV_KEY) === '1'; }
-                          catch(e){ return false; } };
-  function setDev(on, jump){
-    // On BODY: the console panel sits on the stage, outside .shell, so a
-    // .shell-scoped class could never reach it and the gate was decorative.
-    document.body.classList.toggle('dev', on);
-    const b = $('devToggle');
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    /* "Developer mode" is a promise this control stopped keeping. It once
-       gated the whole Diagnostics surface; Diagnostics is a nav tab now and
-       the single rule left is `body:not(.dev) #consolePanel{display:none}`.
-       One panel is not a mode, and a label that overstates its scope leaves
-       the operator hunting for changes that were never going to happen. */
-    b.textContent = on ? 'Developer detail · on' : 'Developer detail';
-    b.title = on
-      ? 'raw internals are showing: backend console, and fact-level detail in a trace'
-      : 'show raw internals: the backend console, and the fact-level detail in a trace';
-    try{ localStorage.setItem(DEV_KEY, on ? '1' : '0'); }
-    catch(e){ storageFailed('the developer-detail setting', e); }
-    /* Turning it ON goes to the thing that was just turned on. This button
-       lives in the status bar, on every surface; the panel it reveals is the
-       last one on Diagnostics. Pressing it from anywhere else changed nothing
-       visible, which is indistinguishable from a control that does not work.
-       Reuses the existing pendingJump path rather than scrolling here, so
-       there stays one implementation of "go there and show me".
-
-       Only on the way ON, and never at boot — a preference restored on load
-       must not hijack the route the operator actually asked for. */
-    /* ...but not out from under an open trace drawer. That drawer is one of
-       the things this toggle now changes, so someone pressing it while reading
-       one is asking to see MORE OF WHAT IS IN FRONT OF THEM — routing them to
-       Diagnostics would throw away the thing they were looking at to show them
-       a different thing they were not. */
-    const reading = document.querySelector('.dx-drawer');
-    if(on && jump && !reading){
-      pendingJump = 'consolePanel';
-      go('diagnostics');
-    }
-    /* This used to bounce #diagnostics to Command, from the era when the
-       WHOLE surface was dev-gated. The surface is a public nav tab now and
-       this only gates the console panel — but setDev runs at boot, so the
-       leftover bounce was silently eating every #diagnostics deep link and
-       reload for anyone with dev mode off (beta pass, 4 Aug 2026). */
-  }
-  setDev(readDev());
-  $('devToggle').addEventListener('click',
-    () => setDev(!document.body.classList.contains('dev'), true));
 
   /* ---------- refresh loop ---------- */
   /* WHICH SURFACE EACH LOADER IS FOR.

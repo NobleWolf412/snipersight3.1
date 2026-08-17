@@ -784,7 +784,16 @@ body.dx-funnel-live #dFunnel { display: none; }
 
    Hidden by DEFAULT and restored by the toggle, which is the way round that
    matches who opens this: "Reasons" on an open trade is a trader's click.
-   Nothing is removed — the drawer keeps every rung of the ladder either way. */
-body:not(.dev) .dx-copyid,
-body:not(.dev) .dx-tfacts,
-body:not(.dev) .dx-verdict-owner{display:none}
+   Nothing is removed — the drawer keeps every rung of the ladder either way.
+
+   THE TOGGLE IS GONE (2026-08-13) and these stay hidden, which is the half of
+   the decision that is easy to get backwards. Deleting a switch has to
+   preserve the state it sat in, and it sat OFF: `body.dev` was never set for a
+   session that did not go looking, so unhiding these now would show every
+   trader a composite database key and a cost_manifest_hash they had never
+   seen. The rungs of the ladder are still emitted and still rendered — only
+   these three raw members remain out of sight, permanently rather than by
+   preference. Delete the markup too if the trace drawer is ever revisited. */
+.dx-copyid,
+.dx-tfacts,
+.dx-verdict-owner{display:none}

@@ -1164,23 +1164,12 @@ details.panel.floating > summary{padding-left:var(--lg)}
    have any size at all — inline it collapses to nothing */
 .statusbar .sb-item{display:inline-flex;align-items:center;gap:7px}
 .statusbar .sb-item:empty{display:none}
-.statusbar .sb-dev{background:none;border:0;cursor:pointer;color:var(--fg-4);
-  font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.12em;text-transform:uppercase;
-  padding:0;margin-left:var(--lg)}
-.statusbar .sb-dev:hover{color:var(--fg-2)}
-.statusbar .sb-dev:focus-visible{outline:1px solid var(--accent);outline-offset:3px;border-radius:2px}
-.statusbar .sb-dev[aria-pressed="true"]{color:var(--accent)}
 /* Diagnostics IS in the rail. It was hidden behind Developer mode so a new
    reader would not meet `ohlc invariant failure` by wandering — but a
    reachable route missing from the nav breaks the active state (nothing
    highlights when you land there) and leaves the DEGRADED chip pointing at
    a destination with no home. Developer mode still gates the RAWEST
    material inside the surface; the route itself is navigable. */
-/* keyed to BODY, not .shell: the console panel lives on the stage, which is
-   not a .shell descendant, so the old selector never matched anything and the
-   raw log showed for everyone (beta pass, 4 Aug 2026) */
-body:not(.dev) #consolePanel{display:none}
-
 /* status orb — ambient state, not decoration */
 .orb{width:7px;height:7px;border-radius:50%;flex:none;background:var(--fg-4)}
 .orb.good{background:var(--green);box-shadow:0 0 8px rgba(0,255,170,.6)}
@@ -1199,16 +1188,6 @@ body:not(.dev) #consolePanel{display:none}
    One column below 900, where .cols-4 is already down to two.
    (.cols-3 was defined here and applied by nothing; it has been deleted.) */
 @media(max-width:900px){.cols-2,.cols-4{grid-template-columns:1fr}}
-
-/* backend console — the operator watching the engines think */
-#console{height:260px;overflow:auto;padding:var(--md) var(--lg);margin:0;
-  background:rgba(0,0,0,.45);color:var(--fg-3);font-size:var(--fs-2);line-height:1.65;
-  white-space:pre-wrap;word-break:break-word}
-#console .l-err{color:var(--red-2)}
-#console .l-warn{color:var(--amber)}
-#console .l-info{color:var(--fg-2)}
-#console .l-mark{color:var(--accent)}
-#console .l-time{color:var(--fg-4)}
 
 /* ---------- CHART surface: the chart owns the screen ---------- */
 /* stage rows are 56 topbar + 26 statusbar; --xl padding top and bottom */
