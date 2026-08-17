@@ -106,6 +106,23 @@ ok('trade synchronizes evidence, chart, and ticket as three explicit areas', () 
     'same-market setup and inspection changes must mask the old ticket too');
 });
 
+ok('a new chart market releases the previous market price range', () => {
+  const load = CHART.slice(CHART.indexOf('async function load(opts)'),
+    CHART.indexOf('/* The operator\'s live trade'));
+  assert(CHART.includes('let priceScaleMarket = null'),
+    'the price-axis market identity must not depend on painted, which setup changes clear');
+  assert(load.includes('const resetPriceScale = priceScaleMarket !== marketKey'),
+    'symbol/timeframe changes must be distinguished from same-market refreshes');
+  const setData = load.indexOf('series.setData(candles)');
+  const autoScale = load.indexOf('series.priceScale().applyOptions({autoScale: true})');
+  assert(setData >= 0 && autoScale > setData,
+    'the new candles must release the old manual vertical range before the viewport paints');
+  assert(load.indexOf('priceScaleMarket = marketKey') > autoScale,
+    'the axis identity must advance only after its reset succeeds');
+  assert(CHART.includes('_priceScaleAuto: () => series ?'),
+    'canvas-only price-scale state must stay observable to the browser regression');
+});
+
 ok('overview setup count and bot phase use the operational read model', () => {
   assert(OPERATIONS_UI.includes("$('mSetups').textContent = ready"));
   assert(!/\$\('mSetups'\)\.textContent = split\.ordered\.length/.test(

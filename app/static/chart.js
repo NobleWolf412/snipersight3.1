@@ -137,6 +137,13 @@ window.SSChart = (() => {
   // a switch (clear first, everything on screen is the old market) from a
   // refresh (repaint in place, never flash).
   let painted = null;                         // 'SYM|TF' of the painted market
+  /* The market whose prices last established the right-axis range. Keep this
+     separate from `painted`: prepare() deliberately clears painted when the
+     selected setup changes on the SAME chart, but that must not throw away a
+     scale the operator just adjusted. A real symbol/timeframe switch does
+     need auto-scale restored, otherwise LINK can inherit BTC's 60k range and
+     render far below the visible canvas. */
+  let priceScaleMarket = null;                // 'SYM|TF' of the price-axis range
 
   /* The four layers below (gaps/shelf/ranges/signals) read engines that ran
      from the beginning and had nowhere to appear. They are LAZY: their facts
@@ -1165,7 +1172,9 @@ window.SSChart = (() => {
       return;
     }
     $('chartEmpty').style.display = 'none';
-    painted = sym + '|' + tf;      // from here down, the screen describes THIS market
+    const marketKey = sym + '|' + tf;
+    const resetPriceScale = priceScaleMarket !== marketKey;
+    painted = marketKey;           // from here down, the screen describes THIS market
     /* Lazy-layer facts are per market — drop them the moment the market
        changes, or the old symbol's gaps would be drawn under the new
        symbol's candles. The RE-FETCH is deliberately not here: awaiting it
@@ -1178,6 +1187,13 @@ window.SSChart = (() => {
       precision: digits(candles[candles.length - 1].close),
       minMove: Math.pow(10, -digits(candles[candles.length - 1].close))}});
     series.setData(candles);
+    if(resetPriceScale){
+      // Vertical dragging disables Lightweight Charts' auto-scale. setData()
+      // preserves that manual range, so explicitly release it for a new
+      // market before setting the new time window.
+      series.priceScale().applyOptions({autoScale: true});
+      priceScaleMarket = marketKey;
+    }
     /* Volume coloured by the bar it belongs to, so a spike reads as buying or
        selling at a glance instead of as a bare quantity. */
     if(volSeries) volSeries.setData(candles.map(c => ({
@@ -3221,6 +3237,9 @@ window.SSChart = (() => {
   return {open, prepare, onShow, onHide,
     /* Introspection, for the suites and for answering "why can I not see that
        swing on my phone" without guessing. A cap nobody can observe is
-       indistinguishable from a bug. */
-    _markerDrop: () => lastMarkerDrop};
+       indistinguishable from a bug. The price-scale state is equally invisible
+       behind Lightweight Charts' canvas and lets browser verification prove a
+       market switch released a manually pinned range. */
+    _markerDrop: () => lastMarkerDrop,
+    _priceScaleAuto: () => series ? !!series.priceScale().options().autoScale : null};
 })();
