@@ -12,7 +12,11 @@ from decimal import Decimal
 
 from . import aggregator, importer, venues
 
-QUALITY_VERSION = "quality-v0.1-draft"
+QUALITY_VERSION = "quality-v0.2-draft"
+# v0.2: venue-acknowledged empty buckets remain auditable SERVE_FLAG notes but
+# no longer turn an otherwise healthy scanner DEGRADED. They are evidence that
+# a bucket did not exist, not a repair queue; unexplained sequence gaps remain
+# blocking. The persisted read model now carries notes separately from warnings.
 # v0.1: the persisted verdict distinguishes current missing producer lineage
 # from historical/operational facts, and repeated imports of the same empty
 # window no longer multiply the anonymous known-gap budget.  Both change what
@@ -400,9 +404,9 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
                        f"{len(unexplained)} unexplained discontinuities in candle sequence",
                        sym, tf)
             if len(missing) > len(unexplained):
-                _issue(checks, "DATA", "DEGRADED", "KNOWN_VENUE_GAPS",
+                _issue(checks, "DATA", "PASS", "KNOWN_VENUE_GAPS",
                        f"{len(missing) - len(unexplained)} venue-acknowledged empty "
-                       f"buckets (logged at import; no trades or venue outage)", sym, tf)
+                       f"buckets (accepted evidence note; no repair required)", sym, tf)
         developing = sum(r[0] + sec > now for r in rows)
         if developing:
             _issue(checks, "DATA", "BLOCKED", "DEVELOPING_CANDLES",
@@ -736,7 +740,12 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
               "evaluation_allowed": status != "BLOCKED",
               "strategy_rules_changed": False, "stages": stages,
               "blockers": [c for c in checks if c["status"] == "BLOCKED"],
-              "warnings": [c for c in checks if c["status"] == "DEGRADED"]}
+              "warnings": [c for c in checks if c["status"] == "DEGRADED"],
+              # A non-clean rung can still be accepted evidence. Keep it in
+              # the durable verdict without letting it impersonate work the
+              # operator or scanner can repair.
+              "notes": [c for c in checks
+                        if c["status"] == "PASS" and c["rung"] != "SERVE"]}
     if persist:
         cur = con.execute(
             "INSERT INTO quality_runs"

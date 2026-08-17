@@ -3535,6 +3535,7 @@ weighed in. Name the facts you used.`;
     lastDiagHealth = h;
     renderDiagState();
     const blockers = (h.blockers || []).length, warns = (h.warnings || []).length;
+    const acceptedNotes = (h.notes || []).length;
 
     /* THE EMPTY-WINDOW RULE, site 3 of 4 — and the most consequential, because
        this orb is always visible and governs trust in every other number.
@@ -3579,7 +3580,10 @@ weighed in. Name the facts you used.`;
         ? 'BLOCKED — the engine is refusing to size new entries on this data. ' +
           'Fix the data before trading. Diagnostics lists what failed.'
       : h.status === 'PASS'
-        ? 'Every data check passed. Nothing is being held back.'
+        ? acceptedNotes
+          ? `Every actionable data check passed. ${acceptedNotes} accepted data ` +
+            'notes are retained for audit; no repair is required.'
+          : 'Every data check passed. Nothing is being held back.'
         : 'Trading continues — the data is being used with a mark on it, not ' +
           'held back. Only BLOCKED stops new entries. Diagnostics lists what ' +
           'is flagged.';
@@ -3598,9 +3602,12 @@ weighed in. Name the facts you used.`;
     };
     const rc = h.rung_counts || {};
     const counted = Object.keys(rc).length
-      ? Object.entries(rc).map(([k, v]) => `${RUNG[k] || k.toLowerCase()} ${v}`).join(' · ')
+      ? Object.entries(rc).filter(([, v]) => v)
+        .map(([k, v]) => `${RUNG[k] || k.toLowerCase()} ${v}`).join(' · ')
       : `${blockers} blockers · ${warns} warnings`;
-    $('dCounts').textContent = h.worst_rung
+    $('dCounts').textContent = h.status === 'PASS' && acceptedNotes
+      ? `passed · ${acceptedNotes} accepted data notes`
+      : h.worst_rung
       ? `worst severity: ${RUNG[h.worst_rung] || h.worst_rung} — ${counted}`
       : counted;
     $('nDiag').textContent = blockers || '';
@@ -3652,8 +3659,12 @@ weighed in. Name the facts you used.`;
     /* SERVE_FLAG means the engine used the data and recorded the caveat. It is
        evidence worth preserving, but presenting 85 expected venue voids as
        open work buried the two stale series that actually needed attention. */
-    const notes = findings.filter(c => c.status !== 'BLOCKED' && c.rung === 'SERVE_FLAG');
-    const actionable = findings.filter(c => !notes.includes(c));
+    // v0.2 owns notes explicitly. Keep the SERVE_FLAG split for the one audit
+    // cycle during deployment where the browser may still receive a v0.1
+    // recorded verdict from before the scanner restarts.
+    const legacyNotes = findings.filter(c => c.status !== 'BLOCKED' && c.rung === 'SERVE_FLAG');
+    const notes = [...(h.notes || []), ...legacyNotes];
+    const actionable = findings.filter(c => !legacyNotes.includes(c));
     $('dIssues').innerHTML = renderIssueGroups(actionable, 'no open issues');
     $('dNotes').innerHTML = renderIssueGroups(notes, 'no data notes', true);
   }
@@ -4755,6 +4766,17 @@ weighed in. Name the facts you used.`;
         by[k] = (by[k] || 0) + 1;
       });
       L.push('', `OPEN ISSUES (${warns.length})`);
+      L.push(...rows(Object.entries(by).sort((a, b) => b[1] - a[1])
+        .map(([k, n]) => [k.replace(/_/g, ' ').toLowerCase(), '×' + n])));
+    }
+    const notes = h.notes || warns.filter(w => w.rung === 'SERVE_FLAG');
+    if(notes.length){
+      const by = {};
+      notes.forEach(n => {
+        const k = (n.code || n.rung || 'UNLABELLED').toString();
+        by[k] = (by[k] || 0) + 1;
+      });
+      L.push('', `ACCEPTED DATA NOTES (${notes.length})`);
       L.push(...rows(Object.entries(by).sort((a, b) => b[1] - a[1])
         .map(([k, n]) => [k.replace(/_/g, ' ').toLowerCase(), '×' + n])));
     }

@@ -181,6 +181,12 @@ holes. Still union every explicit timestamp from every retry: the final poll
 may receive a candle and report zero gaps without erasing the empty buckets
 earlier polls proved.
 
+**A venue-acknowledged empty bucket is an evidence note, not damaged data.**
+Keep it auditable at `SERVE_FLAG`, but do not degrade bot health or send the
+operator to repair it. Never fill it from a different venue: that mixes two
+markets and contaminates the strategy record. Only an unexplained sequence gap
+is a blocker.
+
 **Do not POST to write endpoints to test them.** `/api/manual/arm`,
 `/api/positions/close` and `/api/positions/adopt` write to the operator's actual
 book. Use the suites, or a scratch database.

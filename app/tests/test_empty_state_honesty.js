@@ -155,8 +155,10 @@ ok('Pipeline: severity rungs are translated, not dropped', () => {
 
 ok('Pipeline: expected venue caveats do not bury actionable issues', () => {
   const b = body('loadHealth');
-  assert(/c\.rung === 'SERVE_FLAG'/.test(b),
-         'the mildest evidence notes are not classified from server authority');
+  assert(/h\.notes \|\| \[\]/.test(b),
+         'accepted evidence notes are not read from their server-owned field');
+  assert(/legacyNotes/.test(b) && /c\.rung === 'SERVE_FLAG'/.test(b),
+         'a recorded pre-upgrade verdict loses its accepted venue notes');
   assert(/dIssues'\)\.innerHTML = renderIssueGroups\(actionable/.test(b),
          'Open Issues still receives every informational venue note');
   assert(/dNotes'\)\.innerHTML = renderIssueGroups\(notes/.test(b),

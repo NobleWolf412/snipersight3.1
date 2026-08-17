@@ -95,6 +95,11 @@ class TestMarketQuality(QualityStoreCase):
             self.con, "BTC-USD", now=base + 5 * 3600)
         self.assertNotIn("SEQUENCE_GAPS", {c["code"] for c in checks})
         self.assertIn("KNOWN_VENUE_GAPS", {c["code"] for c in checks})
+        known = next(c for c in checks if c["code"] == "KNOWN_VENUE_GAPS")
+        self.assertEqual(known["status"], "PASS",
+                         "an accepted venue void is evidence, not degraded health")
+        self.assertEqual(known["rung"], "SERVE_FLAG",
+                         "the accepted absence must remain visible")
 
     def test_aggregate_mismatch_is_blocking(self):
         self.complete_market()
@@ -138,6 +143,14 @@ class TestMarketQuality(QualityStoreCase):
         # buckets are qualifying partials is not reported as unverifiable.
         self.assertNotIn("NO_COMPLETE_BUCKETS",
                          {c["code"] for c in checks if c["tf"] == "4H"})
+
+    def test_acknowledged_gap_is_a_note_not_a_warning(self):
+        self._partial_market()
+        report = quality.audit(self.con, now=20_000)
+        self.assertEqual(report["status"], "PASS")
+        self.assertEqual(report["warnings"], [])
+        self.assertIn("KNOWN_VENUE_GAPS",
+                      {c["code"] for c in report["notes"]})
 
     def test_corrupted_partial_bar_is_blocking(self):
         """A partial bar that does not reconcile to its present source candles

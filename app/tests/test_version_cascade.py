@@ -66,7 +66,9 @@ OPERATIONAL_EXPECTED = {
     # opportunity-v0.5: risk reasons are trader-readable, unavailable grades
     # are not rejection reasons, and top-down stays independent of risk state.
     "opportunities": "opportunity-v0.5-draft",
-    "quality": "quality-v0.1-draft",
+    # quality-v0.2: acknowledged venue voids are durable notes, not warnings;
+    # unexplained gaps remain blockers. Operational read-model change only.
+    "quality": "quality-v0.2-draft",
     "apexbridge": "apexbridge-v0.1-draft",
     "stocks": "stocks-foundation-v0.2-draft",
     "stock_calendar": "stock-calendar-v0.1-draft",

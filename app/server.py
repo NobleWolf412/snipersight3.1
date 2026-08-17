@@ -3684,6 +3684,7 @@ def pipeline_health(symbol: str | None = None):
             return {"version": quality.QUALITY_VERSION,
                     "status": "PENDING", "evaluation_allowed": True,
                     "pending": True, "stages": [], "blockers": [], "warnings": [],
+                    "notes": [],
                     "source": "none", "detail": "first audit running"}
         return report
     finally:
