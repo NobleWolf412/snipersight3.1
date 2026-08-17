@@ -95,8 +95,8 @@
     "semantic_hash": ""
   },
   "app/engine/execsim.py": {
-    "mtime": 1786246639.2373257,
-    "ast_hash": "1c609f4c4bfc408d8bd36058c23a6604",
+    "mtime": 1786908969.1617248,
+    "ast_hash": "446a68fb1b1a2b02bb2f2be03d3dd7c1",
     "semantic_hash": ""
   },
   "app/engine/factorgrade.py": {
@@ -295,8 +295,8 @@
     "semantic_hash": "47f094964312946f8a2b7750b749b432"
   },
   "app/live.py": {
-    "mtime": 1786589291.5463254,
-    "ast_hash": "6c5d1f386cb950dbde71b0e5e7e37e5a",
+    "mtime": 1786909605.4487524,
+    "ast_hash": "6b7b1a1f9e554a8c743ed56c644190b7",
     "semantic_hash": ""
   },
   "app/notify.py": {
@@ -425,9 +425,9 @@
     "semantic_hash": "9a4699182e37452be6c64c3b8c13bd8b"
   },
   "app/tests/test_armed_order.py": {
-    "mtime": 1785410703.853372,
-    "ast_hash": "107afb35f53aafe7728381b067e4b0c7",
-    "semantic_hash": "107afb35f53aafe7728381b067e4b0c7"
+    "mtime": 1786917811.615452,
+    "ast_hash": "71b973be58d5c85dc12d9f9c35cd250b",
+    "semantic_hash": ""
   },
   "app/tests/test_audit_cache.py": {
     "mtime": 1785382699.795995,
@@ -815,8 +815,8 @@
     "semantic_hash": "77de747bd913d04ec328184174713abd"
   },
   "app/tests/test_version_cascade.py": {
-    "mtime": 1786650638.4724534,
-    "ast_hash": "3222f68698a87953a2b8442c97440b46",
+    "mtime": 1786908973.1788354,
+    "ast_hash": "2b4a2bb14fa94c14fbbaf6885b96f4e5",
     "semantic_hash": ""
   },
   "app/tests/test_volatility.py": {
@@ -930,8 +930,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786650844.9179018,
-    "ast_hash": "75d9a692e69e7e04efa335e7ca72da67",
+    "mtime": 1786908974.1480372,
+    "ast_hash": "6f4c09c4536b23e1e839cb444577ad11",
     "semantic_hash": ""
   },
   "PRODUCT.md": {
@@ -1405,8 +1405,8 @@
     "semantic_hash": ""
   },
   "app/tests/test_live_clock.py": {
-    "mtime": 1786590030.4003954,
-    "ast_hash": "164daa9b9479b3fd336aedc85a204fb8",
+    "mtime": 1786908971.1772623,
+    "ast_hash": "51822ae3e50e31bd1935347fd56af6e6",
     "semantic_hash": ""
   },
   ".codex-remote-attachments/019ff320-27ef-71a2-a3c1-8d174dfec6a6/09f61d5f-1da9-4929-b711-2308d9f00a7a/1-Photo-1.jpg": {
