@@ -60,3 +60,9 @@ graphify-out/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
 # session running `git add -A` would otherwise write all 63 MB into history
 # permanently — and the working tree here is genuinely shared.
 sst/
+
+# Images pasted into a Codex remote session. Machine-local session scratch —
+# they belong to a conversation, not to the repo, and the same `git add -A`
+# hazard applies as everything else in this block: a shared working tree makes
+# one careless stage permanent.
+.codex-remote-attachments/
