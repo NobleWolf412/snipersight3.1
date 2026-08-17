@@ -1,16 +1,16 @@
 # Graph Report - snipersight3.1  (2026-08-16)
 
 ## Corpus Check
-- 283 files · ~578,445 words
+- 283 files · ~578,710 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 6569 nodes · 11683 edges · 359 communities (321 shown, 38 thin omitted)
-- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 419 edges (avg confidence: 0.64)
+- 6569 nodes · 11662 edges · 357 communities (320 shown, 37 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 398 edges (avg confidence: 0.63)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `cdab96a0`
+- Built from commit: `cb4a6b34`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -326,7 +326,6 @@
 - SniperSight development
 - .ol
 - test_venues.py
-- plan_facts
 - mode-control.js
 - operations.js
 - test_orientation_and_axes.js
@@ -350,7 +349,6 @@
 - RuntimeError
 - EntryModelAuthority
 - TestEveryRowIsAccountedFor
-- te
 - _facts
 - test_market_workspaces.js
 - funding.py
@@ -400,19 +398,19 @@
 - **Evidence-Gated Path to Live Execution** — docs_hardening_research_gates, docs_program_plan_gate_answer, docs_program_plan_simulator_fill_defect, docs_spec_confirmed_entry_two_by_two_replay [INFERRED 0.85]
 - **Strategy Grading Rig** — docs_salvage_from_snipersight_trading_factor_contribution, docs_salvage_from_snipersight_trading_edge_significance, docs_spec_confirmed_entry_promotion_criterion, docs_program_plan_program_plan [INFERRED 0.85]
 
-## Communities (359 total, 38 thin omitted)
+## Communities (357 total, 37 thin omitted)
 
 ### Community 0 - "Chart Vendor Core"
 Cohesion: 0.05
-Nodes (10): an(), en(), f(), hn(), ln(), rn(), si, tn() (+2 more)
+Nodes (9): an(), en(), f(), hn(), ln(), rn(), tn(), un() (+1 more)
 
 ### Community 1 - "Chart Vendor Rendering"
-Cohesion: 0.06
-Nodes (5): Et, gi(), ut, yi, zn()
+Cohesion: 0.04
+Nodes (6): ai, ct, Et, si, ut, yi
 
 ### Community 2 - "Chart Vendor Coordinates"
 Cohesion: 0.05
-Nodes (4): mn, sn(), vt(), wn()
+Nodes (5): gi(), mn, sn(), vt(), wn()
 
 ### Community 3 - "Manual Trading Engine"
 Cohesion: 0.38
@@ -423,8 +421,8 @@ Cohesion: 0.05
 Nodes (25): candle(), Regression tests for `engine.entrystats`.  The four properties that make this to, The bar BEFORE confirmation reaches the target. A walk that looked         back, Belt and braces on the boundary: if the index selection is ever         changed, Mirrors execsim's STOP_FIRST rule. A counterfactual that resolved         ambigu, entry 100 / sl 95 / tp 115 -> plan R:R 3.0, and execsim fills at the         lim, The fill bar opens at 102. Plan risk is 100-95=5 and plan reward         115-100, A feature present on 40 of 60 trades must not borrow the n=60 floor.         Jud (+17 more)
 
 ### Community 5 - "Chart UI Layer"
-Cohesion: 0.07
-Nodes (63): applyLevels(), bookPrices(), boot(), candle_index_at(), clearChart(), closePicker(), drawClosedTrade(), drawOverlays() (+55 more)
+Cohesion: 0.10
+Nodes (56): applyLevels(), bookPrices(), boot(), candle_index_at(), clearChart(), closePicker(), drawClosedTrade(), drawOverlays() (+48 more)
 
 ### Community 6 - "Design System & Consistency Docs"
 Cohesion: 0.05
@@ -436,11 +434,11 @@ Nodes (26): bars(), Volume engine tests — the properties that must not regress
 
 ### Community 8 - "Chart Vendor API"
 Cohesion: 0.02
-Nodes (50): ae(), b(), bi(), bs(), bt(), ce(), ci(), Cn (+42 more)
+Nodes (42): ae(), bi(), bt(), ce(), Cn, de(), dt(), fe() (+34 more)
 
 ### Community 9 - "Chart Vendor Internals"
-Cohesion: 0.05
-Nodes (5): as(), ds(), jn(), zs, CP
+Cohesion: 0.07
+Nodes (5): as(), ps(), vs(), ys(), CP
 
 ### Community 10 - "Manual Book Tests"
 Cohesion: 0.05
@@ -481,6 +479,10 @@ Nodes (21): Decimal, RangeCase, Range engine tests — the properties that must 
 ### Community 19 - "API Server Endpoints"
 Cohesion: 0.03
 Nodes (65): apex_state(), automation_drill_start(), candles(), console(), copilot_health(), cycle_summary(), draft_bracket(), edge_stats() (+57 more)
+
+### Community 20 - "Chart Vendor Panes"
+Cohesion: 0.06
+Nodes (3): hs(), jn(), zs
 
 ### Community 21 - "Indicator Engines"
 Cohesion: 0.10
@@ -580,11 +582,11 @@ Nodes (15): CandleTest, ListingGapTest, ProductsTest, RankTest, Phemex perp adap
 
 ### Community 46 - "Chart Vendor Chart API"
 Cohesion: 0.08
-Nodes (5): G, gn, qn(), xi, xn()
+Nodes (8): b(), ci(), di(), fi(), mi, pi(), S(), wi()
 
 ### Community 48 - "Chart Vendor Crosshair"
-Cohesion: 0.20
-Nodes (6): gs(), ks(), ls(), Ss(), ws, xs()
+Cohesion: 0.19
+Nodes (7): bs(), gs(), ks(), ls(), Ss(), ws, xs()
 
 ### Community 49 - "Trend Engine Tests"
 Cohesion: 0.09
@@ -648,11 +650,11 @@ Nodes (10): play_for(), Market Weather — the strip that tells the operator why
 
 ### Community 64 - "Chart Vendor Layout"
 Cohesion: 0.04
-Nodes (10): es(), fs(), ii, ki(), kn, ms(), N, ps() (+2 more)
+Nodes (7): E(), es(), fs(), ii, ki(), N, Rs
 
 ### Community 65 - "Simulator Convention Tests"
-Cohesion: 0.05
-Nodes (10): Be, c(), ni, ti, assert, fs, load(), path (+2 more)
+Cohesion: 0.03
+Nodes (7): Be, c(), d(), ni, re(), ti, v()
 
 ### Community 66 - "BTC Alignment Tests"
 Cohesion: 0.09
@@ -671,20 +673,20 @@ Cohesion: 0.15
 Nodes (6): _FakeChild, Not restarting must not mean not telling. The operator still needs to         kn, Mirrors Child.kill: records our own hand, then terminates. The         attributi, Skip returns (import or db) must still stamp `at` so cadence stays 60s     inste, NOT mocked, deliberately.          The first version of _orphans() shelled out t, TestAuditCadenceOnSkip
 
 ### Community 70 - "Chart Vendor Price Scale Formatting"
-Cohesion: 0.11
+Cohesion: 0.10
 Nodes (3): pe(), qs(), ye()
 
 ### Community 71 - "Chart Vendor Watermark"
-Cohesion: 0.05
-Nodes (4): pn, st, Ts(), un()
+Cohesion: 0.06
+Nodes (3): pn, st, Ts()
 
 ### Community 72 - "Chart Vendor Time Scale API"
-Cohesion: 0.05
-Nodes (8): ee(), he, le(), R(), re(), se(), T(), t()
+Cohesion: 0.25
+Nodes (7): ms(), assert, fs, load(), path, sleep(), SRC
 
 ### Community 73 - "Diagnostics & Edge View UI"
-Cohesion: 0.17
-Nodes (22): allDiagnostics(), esc(), filteredRecords(), format(), health, load(), payload, pipelineRecords() (+14 more)
+Cohesion: 0.07
+Nodes (35): allDiagnostics(), esc(), filteredRecords(), format(), health, load(), payload, pipelineRecords() (+27 more)
 
 ### Community 74 - "Chart Vendor Renderer Base"
 Cohesion: 0.11
@@ -765,6 +767,10 @@ Nodes (25): _criterion(), current(), _ensure(), ModeConflict, ModeRejected, obse
 ### Community 93 - "Kraken Adapter"
 Cohesion: 0.15
 Nodes (16): fetch_candles(), funding_rate(), _get(), list_products(), maintenance_margin(), Decimal, rank_by_volume(), _RateLimiter (+8 more)
+
+### Community 94 - "Chart Vendor Series Views"
+Cohesion: 0.08
+Nodes (6): ds(), ee(), kn, lt, us, zn()
 
 ### Community 95 - "Factor Redundancy Tests"
 Cohesion: 0.14
@@ -1226,10 +1232,6 @@ Nodes (10): assert, CSS, E(), fs, HTML, path, S(), SETTINGS (+2 more)
 Cohesion: 0.10
 Nodes (12): AuditPrefixCoverageCase, AuditStreamCase, The evidence stream — what `data/engine-audit.log` must and must not carry.  `en, RunRecorder's DEBUG line is already a row in engine_runs, with more         deta, Attach-as-you-build leaked one engine.log handler per get_logger         retry w, Handler.handle runs filters outside emit()'s try/except, so a         filter tha, Everything in the audit file is also in the hot file. The split is         about, The failure mode this guards is additive and silent.      Someone adds a write e (+4 more)
 
-### Community 214 - "Fact Store Conventions"
-Cohesion: 0.13
-Nodes (3): ai, hi(), li()
-
 ### Community 215 - "Venue Seam & Order Ticket"
 Cohesion: 0.22
 Nodes (10): Edge Statistics (bootstrap CI, edgestats), Execution Simulator (execsim.py), Fee-Aware Setup Gate, Phemex Perp Adapter (phemex.py), Venue Seam (venues.py), Validation Report 001 pre-gate (exec-v0.3), Validation Report 001 (exec-v0.3, net of costs), Validation Report 002 (exec-v0.4, post fee-gate) (+2 more)
@@ -1431,8 +1433,8 @@ Cohesion: 0.67
 Nodes (4): SniperSight Brand Identity (military/precision theme), SniperSight Logo, Green Sniper Scope Reticle Emblem, SNIPERSIGHT Metallic Wordmark
 
 ### Community 275 - "Manifest & Cost Tests"
-Cohesion: 0.13
-Nodes (5): A(), ie(), ne(), qt, zt
+Cohesion: 0.05
+Nodes (13): A(), At, he, ie(), jt, kt, le(), ne() (+5 more)
 
 ### Community 282 - "Agent roles"
 Cohesion: 0.13
@@ -1538,10 +1540,6 @@ Nodes (6): Change, Hand off, Orient, Route the work, SniperSight development, Ve
 Cohesion: 0.29
 Nodes (4): The verdict must be able to say 'do not ship this'., The real 2026-07-30 result: both changes beat the baseline alone and         to, A harness that cannot reproduce a known book must not describe an         unkno, VerdictLogic
 
-### Community 315 - "plan_facts"
-Cohesion: 0.60
-Nodes (4): capTriggers(), ensure(), markFocusable(), show()
-
 ### Community 323 - "test_orientation_and_axes.js"
 Cohesion: 0.20
 Nodes (8): assert, CSS, EDGE, fs, HTML, path, S(), SHELL
@@ -1567,8 +1565,8 @@ Cohesion: 0.20
 Nodes (8): assert, CHART, CSS, fs, HTML, path, S(), SERVER
 
 ### Community 329 - "NextWakeMath"
-Cohesion: 0.08
-Nodes (6): bn, ht(), ji, ke, qi(), ys()
+Cohesion: 0.07
+Nodes (7): bn, hi(), ht(), ji, ke, li(), qi()
 
 ### Community 330 - "test_ui_read_models.py"
 Cohesion: 0.43
@@ -1601,10 +1599,6 @@ Nodes (14): checkpoint_wal(), connect(), get_active_baseline(), _migrate(), Path
 ### Community 341 - "test_one_source_of_truth.js"
 Cohesion: 0.33
 Nodes (5): assert, CHART, fs, path, S()
-
-### Community 346 - "te"
-Cohesion: 0.11
-Nodes (3): jt, kt, te()
 
 ### Community 347 - "_facts"
 Cohesion: 0.06
@@ -1651,24 +1645,24 @@ Cohesion: 0.22
 Nodes (9): analyse_symbol(), apex_action(), facts(), Generic as_of-cursored fact query — the same contract for every engine.      `, Run the engine chain over ONE symbol, on demand.      48 of the symbols in the, Run one real scan cycle on demand — the same code path the live loop     runs,, ApexShell action verbs. Allow-listed and non-destructive: `audit` refreshes, scan_now() (+1 more)
 
 ## Knowledge Gaps
-- **317 isolated node(s):** `fs`, `path`, `assert`, `HTML`, `MARKETS` (+312 more)
+- **317 isolated node(s):** `fs`, `path`, `assert`, `STATIC`, `HTML` (+312 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **38 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **37 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `ProtectedBroker` connect `status` to `Chart Vendor Series`, `ProtectedBroker`?**
-  _High betweenness centrality (0.046) - this node is a cross-community bridge._
+  _High betweenness centrality (0.051) - this node is a cross-community bridge._
 - **Why does `AutomationMode` connect `Cycle Detection Engine` to `Chart Vendor Marker Rendering`, `Shared Pipeline Loop Tests`, `Chart Vendor Renderer Base`, `ProtectedBroker`, `Chart Vendor Series`, `Execution Simulator & Risk`, `CustodyOverridesTheSimulatorsStory`, `Chart Vendor Pane Views`, `test_autonomy_contracts.py`, `Volatility Engine`, `A/B Calibration Tests`?**
-  _High betweenness centrality (0.032) - this node is a cross-community bridge._
+  _High betweenness centrality (0.033) - this node is a cross-community bridge._
 - **Why does `BrokerOrder` connect `ProtectedBroker` to `Chart Vendor Marker Rendering`, `Shared Pipeline Loop Tests`, `Chart Vendor Renderer Base`, `status`, `Chart Vendor Series`, `CustodyOverridesTheSimulatorsStory`, `Notification Delivery`, `One Source of Truth JS Tests`, `A/B Calibration Tests`?**
-  _High betweenness centrality (0.027) - this node is a cross-community bridge._
+  _High betweenness centrality (0.028) - this node is a cross-community bridge._
 - **Are the 18 inferred relationships involving `f()` (e.g. with `S()` and `S()`) actually correct?**
   _`f()` has 18 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `fs`, `path`, `assert` to the rest of the system?**
   _317 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Chart Vendor Core` be split into smaller, more focused modules?**
-  _Cohesion score 0.0521978021978022 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.052091112770724424 - nodes in this community are weakly interconnected._
 - **Should `Chart Vendor Rendering` be split into smaller, more focused modules?**
-  _Cohesion score 0.05536723163841808 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.042105263157894736 - nodes in this community are weakly interconnected._

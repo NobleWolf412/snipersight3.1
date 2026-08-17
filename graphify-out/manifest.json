@@ -320,8 +320,8 @@
     "semantic_hash": ""
   },
   "app/static/chart.js": {
-    "mtime": 1786503134.5131183,
-    "ast_hash": "3c8cd1962716f4240e83eaa6b5d063ac",
+    "mtime": 1786935030.6520638,
+    "ast_hash": "c64f2f92aeaecbfd3f5498695bf86c6f",
     "semantic_hash": ""
   },
   "app/static/confirm-dialog.js": {
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "app/tests/test_cockpit_redesign.js": {
-    "mtime": 1786577067.9677632,
-    "ast_hash": "9bc8249f916915e102f64b9148ebd1eb",
+    "mtime": 1786935030.6540627,
+    "ast_hash": "c7f5095b333562418e38ee46062ff7f3",
     "semantic_hash": ""
   },
   ".claude/agents/architect.md": {
