@@ -180,8 +180,8 @@
     "semantic_hash": ""
   },
   "app/engine/quality.py": {
-    "mtime": 1786593553.1426718,
-    "ast_hash": "645852e6653a8d57dd4ee62798606a4f",
+    "mtime": 1786960774.53134,
+    "ast_hash": "1bb76ef96d3df21804e814062809e83b",
     "semantic_hash": ""
   },
   "app/engine/ranges.py": {
@@ -315,8 +315,8 @@
     "semantic_hash": "6c01759a9f1c493b111a4f844e2cacf8"
   },
   "app/server.py": {
-    "mtime": 1786650637.2005541,
-    "ast_hash": "299d6a5e2ed9f48e4cdd8da928bbb27f",
+    "mtime": 1786960774.533311,
+    "ast_hash": "d22f3303b71ff1e372158405d47d5094",
     "semantic_hash": ""
   },
   "app/static/chart.js": {
@@ -360,8 +360,8 @@
     "semantic_hash": "bb318371ce8811435f42f4a6ba8d64a7"
   },
   "app/static/shell.js": {
-    "mtime": 1786621846.2915041,
-    "ast_hash": "2415f101306b33636668d594acff9671",
+    "mtime": 1786960791.97657,
+    "ast_hash": "a7605e167d630334dc872da96e8e8ca9",
     "semantic_hash": ""
   },
   "app/static/ssdata.js": {
@@ -540,8 +540,8 @@
     "semantic_hash": "9ec3d1e26f1d696543dbf53ecca87f87"
   },
   "app/tests/test_empty_state_honesty.js": {
-    "mtime": 1786594295.8256545,
-    "ast_hash": "103252e95e05e32e859c7fec8a2363e6",
+    "mtime": 1786960804.3736205,
+    "ast_hash": "69bfcfd91ef234a030ca15dcd89e336c",
     "semantic_hash": ""
   },
   "app/tests/test_engine_contracts.py": {
@@ -680,8 +680,8 @@
     "semantic_hash": "7eceb938c76e23e18282310753ee0d5f"
   },
   "app/tests/test_pipeline_quality.py": {
-    "mtime": 1786593549.4791343,
-    "ast_hash": "10df971ad7a0bd09eabfa3266e56a379",
+    "mtime": 1786960827.2445905,
+    "ast_hash": "1b47994cb978992fda3c4fdb10c4564d",
     "semantic_hash": ""
   },
   "app/tests/test_pipeline_roster.py": {
@@ -815,8 +815,8 @@
     "semantic_hash": "77de747bd913d04ec328184174713abd"
   },
   "app/tests/test_version_cascade.py": {
-    "mtime": 1786908973.1788354,
-    "ast_hash": "2b4a2bb14fa94c14fbbaf6885b96f4e5",
+    "mtime": 1786960774.53431,
+    "ast_hash": "97f03a6754528487fdb20c1f8fd77535",
     "semantic_hash": ""
   },
   "app/tests/test_volatility.py": {
@@ -930,8 +930,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1786908974.1480372,
-    "ast_hash": "6f4c09c4536b23e1e839cb444577ad11",
+    "mtime": 1786960774.5353222,
+    "ast_hash": "fcaa412789bd8b10734e42fbf8ea6a4f",
     "semantic_hash": ""
   },
   "PRODUCT.md": {
