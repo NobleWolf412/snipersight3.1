@@ -130,6 +130,38 @@ MAX_ENTRY_BARS = 4
 FUNDING_RATE_PER_SETTLEMENT = Decimal("0.0001")
 Q2 = Decimal("0.01")
 
+
+def unresolved(con) -> dict[tuple[str, str], list[dict]]:
+    """Current simulator orders that still need market data to become terminal.
+
+    The universe is allowed to reject a market at any refresh; an already
+    placed order is not allowed to disappear with it.  This work list is read
+    from durable lifecycle facts so it survives both universe churn and process
+    restarts.  Only the current execution generation belongs to the current
+    paper book; older generations remain recorded history.
+    """
+    rows = con.execute(
+        "WITH latest_order AS ("
+        " SELECT symbol,tf,json_extract(payload,'$.setup_id') AS setup_id,"
+        " json_extract(payload,'$.event') AS event,"
+        " ROW_NUMBER() OVER (PARTITION BY json_extract(payload,'$.setup_id')"
+        " ORDER BY confirmed_at DESC,id DESC) AS rn"
+        " FROM facts WHERE kind='order' AND algo_version=?"
+        "), terminal AS ("
+        " SELECT DISTINCT json_extract(payload,'$.setup_id') AS setup_id"
+        " FROM facts WHERE kind='exec' AND algo_version=?"
+        ") SELECT o.symbol,o.tf,o.setup_id,o.event FROM latest_order o"
+        " LEFT JOIN terminal t ON t.setup_id=o.setup_id"
+        " WHERE o.rn=1 AND o.setup_id IS NOT NULL AND t.setup_id IS NULL"
+        " AND o.event IN ('PLACED','FILLED')"
+        " ORDER BY o.symbol,o.tf,o.setup_id",
+        (EXEC_VERSION, EXEC_VERSION)).fetchall()
+    work: dict[tuple[str, str], list[dict]] = {}
+    for symbol, tf, setup_id, event in rows:
+        work.setdefault((symbol, tf), []).append(
+            {"setup_id": setup_id, "event": event})
+    return work
+
 # v0.2 (EXEC-1, §14): trading costs modeled. Entry is a resting limit at the
 # zone edge -> fee only, no slippage. TP is a resting limit -> fee only.
 # SL and TIMEOUT exits are market orders -> fee + slippage (0.05 ATR at exit).

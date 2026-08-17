@@ -40,7 +40,34 @@ class LiveClockContract(unittest.TestCase):
              patch.object(live.importer, "backfill", side_effect=backfill), \
              patch.object(live.ingest, "history_floor", return_value=0), \
              patch.object(live.venues, "REFERENCE", {}), \
+             patch.object(live.execsim, "unresolved", return_value={}), \
              patch("engine.manual.unresolved", return_value={}):
             self.assertEqual(live.cycle(_Connection(), Mock()), (0, []))
 
         self.assertEqual(calls, [("TESTUSDT", "5m", 0, 599, 599)])
+
+    def test_cycle_imports_an_unresolved_trade_after_universe_removal(self):
+        calls = []
+
+        def backfill(_con, symbol, tf, start, end, *, as_of=None):
+            calls.append((symbol, tf, start, end, as_of))
+            return {"candles": 0, "gaps": 0}
+
+        pinned = {("XLMUSDT", "15m"): [
+            {"setup_id": "xlm|setup", "event": "FILLED"}]}
+        with patch.object(live.time, "time", return_value=599), \
+             patch.object(live.universe, "scan_symbols",
+                          return_value=["BTCUSDT"]), \
+             patch.object(live.execsim, "unresolved", return_value=pinned), \
+             patch.object(live.importer, "native_tfs",
+                          return_value={"5m": 300}), \
+             patch.object(live.importer, "backfill", side_effect=backfill), \
+             patch.object(live.ingest, "history_floor", return_value=0), \
+             patch.object(live.venues, "REFERENCE", {}), \
+             patch("engine.manual.unresolved", return_value={}):
+            self.assertEqual(live.cycle(_Connection(), Mock()), (0, []))
+
+        self.assertEqual(
+            calls,
+            [("BTCUSDT", "5m", 0, 599, 599),
+             ("XLMUSDT", "5m", 0, 599, 599)])

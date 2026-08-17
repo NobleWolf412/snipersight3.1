@@ -24,6 +24,8 @@ engine you changed, and bump those too.
 """
 import unittest
 
+import live
+
 from engine import (aggregator, basis, bias, breakout, cooldowns, cycles,
                     execsim, venues, liquidity, ma, manual, momentum, ranges,
                     regime, risk, scalein, setups, structure, swings, importer,
@@ -38,6 +40,9 @@ from engine import apexbridge, phemex_private, positions, quality
 # state and wire contracts; lock them independently so a rewrite beneath an old
 # label fails the same gate instead of relying on review memory.
 OPERATIONAL_EXPECTED = {
+    # live-v0.1: unresolved simulator orders pin their data source and receive
+    # exit-only processing after universe removal.
+    "live": "live-v0.1-draft",
     "contracts": "contracts-v0.3-draft",
     # automation-v0.5: every drill names and enforces its required evidence;
     # restart demands a boot-id change, so lost-response recovery inside one
@@ -73,6 +78,7 @@ OPERATIONAL_EXPECTED = {
 def operational_versions():
     from engine import opportunities
     return {
+        "live": live.LIVE_VERSION,
         "contracts": contracts.CONTRACT_VERSION,
         "automation": automation.AUTOMATION_VERSION,
         "autotrader": autotrader.AUTOTRADER_VERSION,

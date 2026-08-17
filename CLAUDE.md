@@ -150,6 +150,13 @@ boundary makes a newly imported bar look developing to the older quality clock.
 That false verdict skipped 12-18 otherwise healthy markets at a time. A network
 request finishing later is not permission to move the input boundary.
 
+**An unresolved order owns its market-data feed until it is terminal.** Universe
+membership decides whether a market may create new opportunities; it must never
+retire the candles needed by an already-placed order. XLMUSDT filled at 16:00Z
+on 2026-08-12, fell below the liquidity floor 15 minutes later, and then sat
+open for four days because its 100-bar timeout had no bars to count. A rejected
+market receives import plus exit resolution only, never the setup pipeline.
+
 **An asset class is a workspace boundary, not a symbol filter.** Crypto and US
 Stocks share the shell, vault and failure grammar, but not their store, scanner,
 universe, book, baseline or recurring reads. The crypto venue resolver derives

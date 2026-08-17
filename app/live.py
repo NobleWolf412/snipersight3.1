@@ -25,9 +25,16 @@ from pathlib import Path
 
 import notify
 from engine import (automation, autotrader, broker_factory, execution, positions, store,
-                    importer, aggregator, risk, universe, ingest, quality,
+                    importer, aggregator, execsim, risk, universe, ingest, quality,
                     marketdata, pipeline, venues)
 from engine.runlog import get_logger
+
+LIVE_VERSION = "live-v0.1-draft"
+# v0.1: an unresolved strategy order pins its market-data feed until terminal.
+# On 2026-08-12 XLMUSDT filled at 16:00Z, fell below the universe liquidity
+# floor at 16:15Z, and received no later 15m candles.  Its 100-bar timeout could
+# therefore never advance.  Pinned markets resolve exits only; they do not run
+# the setup pipeline after the universe has rejected them.
 
 # ---------------------------------------------------------------- exit forensics
 #
@@ -372,8 +379,17 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     # without a dollar of paper risk touching it. Using `current_symbols` here
     # would leave Kraken cold and defeat the whole point of warming it.
     scan = universe.scan_symbols(con)
-    for i, sym in enumerate(scan, 1):
-        _beat(f"import {sym} ({i}/{len(scan)})")
+    unresolved_exec = execsim.unresolved(con)
+    scan_set = set(scan)
+    pinned_exec = {key: value for key, value in unresolved_exec.items()
+                   if key[0] not in scan_set}
+    import_symbols = sorted(scan_set | {symbol for symbol, _tf in pinned_exec})
+    if pinned_exec:
+        log.debug(
+            f"execution pin: {len(pinned_exec)} unresolved market/timeframe "
+            f"pair(s) outside the universe remain on data and exit resolution")
+    for i, sym in enumerate(import_symbols, 1):
+        _beat(f"import {sym} ({i}/{len(import_symbols)})")
         # One symbol's transient venue error must not abort the scan. A single
         # HTTP 429 killed an entire cycle on 2026-07-29 — every other symbol
         # went unscanned because one call failed. Skip it and carry on; the next
@@ -481,6 +497,28 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
         _beat(f"aggregate {sym} ({i}/{len(tracked)})")
         for tf in ("4H", "1W"):
             aggregator.aggregate(con, sym, tf)
+
+    # A universe decision governs NEW opportunities, never the lifecycle of an
+    # order already placed.  Run only execsim here: sending an off-universe
+    # symbol through the full pipeline could create fresh setups and keep it
+    # pinned forever.  The quality gate remains mandatory because resolving an
+    # exit across an unexplained candle gap would invent which level hit first.
+    pinned_blocked = []
+    pinned_by_symbol: dict[str, list[str]] = {}
+    for symbol, tf in pinned_exec:
+        pinned_by_symbol.setdefault(symbol, []).append(tf)
+    for symbol, tfs in sorted(pinned_by_symbol.items()):
+        _beat(f"resolve pinned {symbol}")
+        try:
+            quality.assert_market_ready(con, symbol, now)
+            for tf in sorted(tfs, key=lambda value: importer.TF_SECONDS[value]):
+                execsim.run(con, symbol, tf, importer.TF_SECONDS[tf])
+        except Exception as exc:
+            pinned_blocked.append(f"{symbol} ({type(exc).__name__}: {exc})")
+    if pinned_blocked:
+        log.warning(
+            f"open execution resolution blocked for {len(pinned_blocked)} "
+            f"symbol(s): {'; '.join(pinned_blocked[:4])}")
     # The engine loop lives in `pipeline.run_symbol` — ONE loop, shared with
     # `ingest.run_engines`, exactly as the roster already is. This block used
     # to carry its own copy with two behaviours the other loop lacked (the
@@ -677,7 +715,8 @@ def main():
     log.info(f"live loop start (once={args.once}) poll={POLL_SECONDS}s")
     hb_path = Path(__file__).resolve().parent / "data" / "heartbeat.json"
     n_cycles = 0
-    state = {"cycles": 0, "last_new_candles": 0, "last_new_setups": 0}
+    state = {"scanner_version": LIVE_VERSION, "cycles": 0,
+             "last_new_candles": 0, "last_new_setups": 0}
 
     def write_hb(phase):
         """Heartbeat EVERY step, not just every poll — the UI light trusts this."""

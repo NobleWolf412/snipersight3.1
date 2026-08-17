@@ -176,6 +176,46 @@ class Lineage(_StoreCase):
         self.assertIn("armed_lineage", miss)
 
 
+class UnresolvedExecutionWork(_StoreCase):
+    """A placed strategy order owns its data feed until a terminal exec fact."""
+
+    def _fact(self, kind, sid, at, *, event=None, version=None):
+        payload = {"setup_id": sid}
+        if event is not None:
+            payload["event"] = event
+        if kind == "exec":
+            payload["outcome"] = "TP"
+        store.insert_fact(
+            self.con, symbol="XLMUSDT", tf="15m", kind=kind,
+            market_time=at, confirmed_at=at,
+            algo_version=version or execsim.EXEC_VERSION, payload=payload)
+        self.con.commit()
+
+    def test_latest_filled_order_without_exit_is_work(self):
+        self._fact("order", "open", 100, event="PLACED")
+        self._fact("order", "open", 200, event="FILLED")
+
+        work = execsim.unresolved(self.con)
+
+        self.assertEqual(work, {("XLMUSDT", "15m"): [
+            {"setup_id": "open", "event": "FILLED"}]})
+
+    def test_placed_order_without_fill_is_also_work(self):
+        self._fact("order", "waiting", 100, event="PLACED")
+
+        self.assertEqual(execsim.unresolved(self.con), {
+            ("XLMUSDT", "15m"): [
+                {"setup_id": "waiting", "event": "PLACED"}]})
+
+    def test_terminal_and_retired_generation_orders_are_not_work(self):
+        self._fact("order", "closed", 100, event="FILLED")
+        self._fact("exec", "closed", 200)
+        self._fact("order", "old", 300, event="FILLED",
+                   version="exec-v0.22-draft")
+
+        self.assertEqual(execsim.unresolved(self.con), {})
+
+
 # Fields the VALIDATED payload must carry, read from the source so this test
 # fails when the payload changes rather than drifting quietly beside it.
 def _validated_fields():
