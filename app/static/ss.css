@@ -2818,7 +2818,12 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   white-space:nowrap;letter-spacing:.02em;
   /* over candles, so it needs its own ground to stay readable */
   background:rgba(7,11,16,.72);padding:2px 6px;border-radius:var(--r-sm)}
-.c-ohlc.up{color:var(--green)} .c-ohlc.down{color:var(--red-2)}
+/* The strip sits ON the chart, so it follows the candles down. `--green` is
+   #00ffaa, the loudest colour in the app, over bodies that have just been
+   softened — it read as the most important thing on the surface for a line
+   that merely names the bar under the cursor. Existing tokens only: this pass
+   introduces no new custom property anywhere. */
+.c-ohlc.up{color:var(--green-soft)} .c-ohlc.down{color:var(--red-2)}
 /* KEPT below 640, where it used to be dropped. The reasoning for dropping it
    — "the first thing worth losing, the price chip already carries the close" —
    is right for a narrow laptop and backwards for a phone. With a mouse the

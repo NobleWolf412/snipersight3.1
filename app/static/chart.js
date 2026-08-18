@@ -239,20 +239,54 @@ window.SSChart = (() => {
   function boot(){
     if(booted) return;
     booted = true;
+    /* CANVAS COLOURS ARE LITERALS, AND HAVE TO BE.
+       Lightweight Charts parses colour strings itself and its parser predates
+       oklch(), which is the form every surface token in ss.css is written in —
+       hand it a resolved `var(--fg-4)` and the option is dropped without a
+       word. So these are hex and rgba, chosen to sit in the stylesheet's
+       family rather than read from it.
+
+       WHAT CHANGED. The candles were `#4ade80` and `#f87171` at 75% — full
+       signal colours, on the largest object on screen, in an app whose design
+       rule is that saturated colour stays under ~10% of any screen. Every
+       level line here is a signal colour too, so the three prices the decision
+       is made on were competing with two hundred candles wearing the same
+       paint. These are the same hues at roughly a third of the chroma:
+       direction still reads at a glance, and nothing on the chart is now
+       louder than the plan drawn over it. */
     chart = LightweightCharts.createChart($('chartBox'), {
       layout: {background: {color: 'transparent'}, textColor: '#7d8c83',
                fontFamily: "'JetBrains Mono',ui-monospace,monospace", fontSize: 10},
-      grid: {vertLines: {color: 'rgba(255,255,255,.035)'},
-             horzLines: {color: 'rgba(255,255,255,.035)'}},
-      crosshair: {mode: 0},
-      rightPriceScale: {borderColor: 'rgba(255,255,255,.10)'},
-      timeScale: {borderColor: 'rgba(255,255,255,.10)',
+      /* NEARLY INVISIBLE, and vertical fainter than horizontal. A grid is a
+         reading aid for PRICE, which is what the horizontal lines carry; the
+         vertical ones only repeat what the time axis already says, and at .035
+         they were the noisiest thing behind the candles. */
+      grid: {vertLines: {color: 'rgba(255,255,255,.012)'},
+             horzLines: {color: 'rgba(255,255,255,.022)'}},
+      /* The crosshair's two axis tags are the only labels on this chart the
+         operator did not ask for, so they are the quietest: a near-black
+         tablet instead of the library default `#131722`, which is a blue-black
+         belonging to somebody else's app and not to an olive one. */
+      crosshair: {mode: 0,
+                  vertLine: {color: 'rgba(255,255,255,.16)', style: 3,
+                             labelBackgroundColor: 'rgba(18,22,18,.94)'},
+                  horzLine: {color: 'rgba(255,255,255,.16)', style: 3,
+                             labelBackgroundColor: 'rgba(18,22,18,.94)'}},
+      rightPriceScale: {borderColor: 'rgba(255,255,255,.05)'},
+      timeScale: {borderColor: 'rgba(255,255,255,.05)',
                   timeVisible: true, secondsVisible: false},
     });
     series = chart.addCandlestickSeries({
-      upColor: 'rgba(74,222,128,.75)', downColor: 'rgba(248,113,113,.75)',
-      borderUpColor: '#4ade80', borderDownColor: '#f87171',
-      wickUpColor: '#4ade80', wickDownColor: '#f87171'});
+      upColor: 'rgba(126,180,146,.45)', downColor: 'rgba(196,124,124,.45)',
+      borderUpColor: '#7eb492', borderDownColor: '#c47c7c',
+      wickUpColor: 'rgba(126,180,146,.65)', wickDownColor: 'rgba(196,124,124,.65)',
+      /* The dashed last-price line, and the tag the right axis draws for it.
+         Left to itself the library paints both in the last bar's own colour,
+         so the brightest pill on the axis changed hue every close; a fixed
+         neutral makes it a reading of where price IS rather than a third
+         opinion about direction. */
+      priceLineColor: 'rgba(255,255,255,.22)', priceLineStyle: 2,
+      priceLineWidth: 1});
 
     /* VOLUME, on a chart whose engine computes 231,946 volume facts and whose
        operator could not see a single bar of it. Its own price scale, pinned
@@ -262,7 +296,7 @@ window.SSChart = (() => {
        bars around it", which is shape, not magnitude. */
     volSeries = chart.addHistogramSeries({
       priceScaleId: 'vol', priceFormat: {type: 'volume'},
-      color: 'rgba(148,163,184,.35)'});
+      color: 'rgba(148,163,184,.28)'});
     chart.priceScale('vol').applyOptions({
       scaleMargins: {top: 0.86, bottom: 0}, visible: false});
 
@@ -1238,7 +1272,11 @@ window.SSChart = (() => {
        selling at a glance instead of as a bare quantity. */
     if(volSeries) volSeries.setData(candles.map(c => ({
       time: c.time, value: c.volume || 0,
-      color: c.close >= c.open ? 'rgba(74,222,128,.30)' : 'rgba(248,113,113,.30)'})));
+      // Same family as the candles above them, at half their weight — a volume
+      // bar answers "more or less than its neighbours", which is shape, not
+      // magnitude. Left at the old full-chroma greens and reds it became the
+      // loudest thing on a chart whose candles had just been taken down.
+      color: c.close >= c.open ? 'rgba(126,180,146,.26)' : 'rgba(196,124,124,.26)'})));
     paintOHLC(candles[candles.length - 1]);
     // NOT fitContent(): 1500 bars squeezed into one screen is an unreadable
     // hairline. Open on a working window of recent bars — the operator can
@@ -1563,7 +1601,8 @@ window.SSChart = (() => {
       if(!isFinite(price)) continue;
       tradeLines.push(series.createPriceLine({
         price, color: colour, lineWidth: 1, lineStyle: 2,
-        axisLabelVisible: true, title}));
+        axisLabelVisible: true, axisLabelColor: 'rgba(18,22,18,.94)',
+        axisLabelTextColor: colour, title}));
     }
     /* Move to WHEN it happened. Landing on the newest 120 bars would show the
        lines floating over price that has nothing to do with the trade — the
@@ -1619,9 +1658,17 @@ window.SSChart = (() => {
       const v = parseFloat(price);
       if(!isFinite(v)) continue;
       posN++;
+      /* A SMALL PILL, NOT A BLOCK. Left alone the axis tag takes the LINE's
+         colour as its background (`axisLabelColor || color`), so three solid
+         amber slabs stack down the right edge — the loudest thing on the
+         chart, restating what the gold line already says. Dark tablet, amber
+         text: the tag reads as a label OF the line rather than as a fourth
+         object. The line itself is untouched; `#fbbf24` is still what LIVE
+         means everywhere in this app. */
       if(drawn) posLines.push(series.createPriceLine({
         price: v, color: '#fbbf24', lineWidth: 1, lineStyle: k === 'entry' ? 0 : 3,
-        axisLabelVisible: true, title: label}));
+        axisLabelVisible: true, axisLabelColor: 'rgba(18,22,18,.94)',
+        axisLabelTextColor: '#fbbf24', title: label}));
     }
     /* The ladder, on the chart. A rung already taken is drawn as a fact — the
        size behind it is gone — and one still waiting as a dotted intention, so
@@ -1636,6 +1683,8 @@ window.SSChart = (() => {
       if(drawn) posLines.push(series.createPriceLine({
         price: v, color: filled ? 'rgba(251,191,36,.55)' : '#fbbf24',
         lineWidth: 1, lineStyle: filled ? 3 : 2, axisLabelVisible: true,
+        axisLabelColor: 'rgba(18,22,18,.94)',
+        axisLabelTextColor: filled ? 'rgba(251,191,36,.7)' : '#fbbf24',
         title: `YOURS · ${Math.round(+r.fraction * 100)}% ${filled ? 'OFF' : 'AT'}`}));
     }
     paintLevelCounts();
@@ -1808,7 +1857,8 @@ window.SSChart = (() => {
       zoneLines.push(series.createPriceLine({
         price: +p.level, color: 'rgba(245,158,11,.55)',
         lineWidth: 1, lineStyle: 2,             // dashed: inferred, not measured
-        axisLabelVisible: true,
+        axisLabelVisible: true, axisLabelColor: 'rgba(18,22,18,.94)',
+        axisLabelTextColor: 'rgba(245,158,11,.9)',
         title: p.side === 'HIGH' ? 'STOPS ABOVE' : 'STOPS BELOW'}));
     }
 
