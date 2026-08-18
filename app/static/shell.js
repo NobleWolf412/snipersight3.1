@@ -2055,7 +2055,7 @@
           tp <b style="color:var(--green)">${px(s.tp)}</b> ·
           sl <b style="color:var(--red-2)">${px(s.sl)}</b>
         </div>`}
-        <div class="mc-nums t-mono"><span class="term" data-t="rr">R:R</span>
+        <div class="mc-nums t-mono"><span class="term" data-t="rr">Reward/risk</span>
           <b style="color:var(--fg)">${s.rr}</b></div>
         <div class="mc-story">${storyOf(s)}</div>
         <div class="traceable" data-trace="${esc(s.setup_id || '')}"

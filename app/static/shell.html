@@ -396,8 +396,10 @@
         <div class="seg" id="opFilters" role="group" aria-label="Filter setup state">
           <button class="on" data-op-filter="ACTIVE" aria-pressed="true">Live <span data-op-count="ACTIVE">—</span></button>
           <button data-op-filter="READY" aria-pressed="false">Ready <span data-op-count="READY">—</span></button>
-          <button data-op-filter="FORMING" aria-pressed="false">Forming <span data-op-count="FORMING">—</span></button>
-          <button data-op-filter="WATCHING" aria-pressed="false">Watching <span data-op-count="WATCHING">—</span></button>
+          <button data-op-filter="FORMING" aria-pressed="false"
+                  title="Approaching — the setup is built and price is walking toward the entry. These can become tradeable today.">Approaching <span data-op-count="FORMING">—</span></button>
+          <button data-op-filter="WATCHING" aria-pressed="false"
+                  title="Watching — the market is on the list but no setup has formed on it yet. Nothing here is close to an entry.">Watching <span data-op-count="WATCHING">—</span></button>
           <button data-op-filter="HISTORY" aria-pressed="false">History <span data-op-count="HISTORY">—</span></button>
         </div>
         <p id="opStatus" class="t-note" role="status" aria-live="polite">Loading server-ranked setups…</p>
@@ -602,7 +604,7 @@
               ><button type="button" data-step="+t">+tick</button
               ><button type="button" data-step="+r">+0.1R</button>
             </div>
-            <label class="fld"><span class="t-label"><span class="term" data-t="tp">Take profit</span></span>
+            <label class="fld"><span class="t-label"><span class="term" data-t="tp">Target</span></span>
               <input id="tkTp" class="t-mono" inputmode="decimal" autocomplete="off"></label>
             <div class="tk-nudge" data-k="tp" aria-label="Adjust take profit">
               <button type="button" data-step="-r">−0.1R</button
@@ -1069,8 +1071,8 @@
         <div class="panel-body">
           <div class="system-fact-grid" id="automationFacts" role="status">
             <div><span>Halt state</span><b>Reading…</b></div>
-            <div><span>Dispatch</span><b>Reading…</b></div>
-            <div><span>Promotion lock</span><b>Reading…</b></div>
+            <div><span>Can it send orders?</span><b>Reading…</b></div>
+            <div><span>Is live trading unlocked?</span><b>Reading…</b></div>
             <div><span>Custody</span><b>Reading…</b></div>
           </div>
           <p class="t-note" id="modeExplanation">Reading server mode and promotion locks…</p>

@@ -33,12 +33,12 @@
     $('riskChip').classList.remove('data-stale');
     $('exposureChip').classList.remove('data-stale');
     $('venueNote').textContent = data.venue === 'PHEMEX_USDT_PERPETUAL'
-      ? 'Phemex · USDT perpetuals' : (data.venue || 'Venue unknown');
+      ? 'Phemex · perpetual futures' : (data.venue || 'Venue unknown');
     $('riskChip').textContent = `Risk ${usd(a.total_risk_remaining_usd || 0)} free`;
     $('riskChip').title = `${a.risk_per_trade_pct || '—'}% per trade · ` +
       `${usd(a.daily_loss_remaining_usd || 0)} left before the UTC daily halt`;
-    $('exposureChip').textContent = `Open ${a.open_positions || 0} · ` +
-      `Working ${a.working_orders || 0}`;
+    $('exposureChip').textContent = `Positions ${a.open_positions || 0} · ` +
+      `Orders ${a.working_orders || 0}`;
     const opportunities = data.opportunities || {};
     const counts = opportunities.counts || {};
     const ready = Number(counts.READY || 0);

@@ -64,7 +64,7 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
     ticket.dataset.workspaceState = custodyState;
     ticket.classList.toggle('private-managed', managedState);
     custodyPanel.hidden = !managedState;
-    if(managedState) custodyPanel.innerHTML = `<span class="op-kicker">Server custody</span>
+    if(managedState) custodyPanel.innerHTML = `<span class="op-kicker">Who controls this trade?</span>
       <strong>${position.owner === 'MANUAL_OVERRIDE' ? 'Manual override - bot changes paused' : 'Position managed'}</strong>
       <dl><div><dt>Entry</dt><dd>${window.SSOpportunityUI.px(position.entry)}</dd></div>
       <div><dt>Protective stop</dt><dd>${window.SSOpportunityUI.px(position.stop)}</dd></div>

@@ -167,7 +167,7 @@
 
   function missing(setupId){
     return `<div class="trade-evidence-empty bad"><span class="op-state">Setup unavailable</span>
-      <h2>Selected setup is no longer in the current baseline</h2><p>${esc(setupId || 'Unknown setup')} was removed, expired, or superseded. No replacement was selected.</p>
+      <h2>This setup is no longer current — review a fresh setup</h2><p>${esc(setupId || 'Unknown setup')} was removed, expired, or superseded. No replacement was selected.</p>
       <a class="btn btn-primary" href="#opportunities">Back to Setups</a></div>`;
   }
 

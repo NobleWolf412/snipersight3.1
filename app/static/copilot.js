@@ -258,12 +258,9 @@
         <div class="cp-head">
           <span class="cp-title">Spotter</span>
           <span class="cp-sub">observe · capture</span>
-          ${mode === 'observe' ? `<select id="cpModel" class="btn" title="model for the next message">
-            <option value="sonnet"${model==='sonnet'?' selected':''}>Sonnet</option>
-            <option value="haiku"${model==='haiku'?' selected':''}>Haiku</option>
-            <option value="opus"${model==='opus'?' selected':''}>Opus</option>
-          </select>
-          <button class="btn" id="cpClear" title="forget this conversation">New</button>` : ''}
+          ${mode === 'observe'
+            ? `<button class="btn" id="cpClear" title="forget this conversation">New</button>`
+            : ''}
           <button class="btn" id="cpMin"
                   title="fold Spotter into a floating beacon — a recording keeps recording"
                   aria-label="Minimize Spotter">–</button>
@@ -321,8 +318,15 @@
       if(analyze) analyze.addEventListener('click', analyzeCapture);
       return;
     }
+    /* GUARDED, because this binding sits upstream of the Send button's.
+       The dock no longer offers a model picker — Sonnet/Haiku/Opus is
+       developer vocabulary in a trader's sidebar, and System > Claude is the
+       one place that preference is set. But an unguarded getElementById here
+       would throw before #cpText, #cpSend and #cpClear were ever bound, so
+       removing the select would have silently killed Send while every text
+       assertion stayed green. The stored value is still read at startup. */
     const sel = document.getElementById('cpModel');
-    sel.addEventListener('change', () => {
+    if(sel) sel.addEventListener('change', () => {
       model = sel.value;
       localStorage.setItem('ss-cp-model', model);
     });
