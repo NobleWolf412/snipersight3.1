@@ -80,6 +80,40 @@ ok('the deleted prose layer stays deleted', () => {
   assert(!/lessons\.js/.test(HTML), 'lessons.js is referenced again');
 });
 
+/* Operator ruling, 17 Aug 2026: "my app is full of jargon. all screens. stuff
+   I've never even read." Every screen carried its name twice — once in plain
+   English and once as a callsign, in the nav sublabel and again in the surface
+   heading. Both said the same thing and neither was the answer to anything.
+
+   These two are the same ratchet as the block above, one layer up: that one
+   stops paragraphs regrowing, these stop the SECOND NAME regrowing. A word the
+   operator has to translate is worse than a word that is merely long. */
+ok('a surface heading is the question, not a callsign', () => {
+  for (const codename of ['Command Center', 'Setup Radar', 'Execution Bay',
+                          'Debrief', 'Control Room']) {
+    assert(!HTML.includes(codename),
+      `"${codename}" is back — a surface heading is the question it answers, ` +
+      `not a second name for the screen`);
+  }
+});
+
+ok('each destination is named once', () => {
+  /* The rail is five links plus Spotter. A <small> inside any of them is the
+     sublabel habit returning: the visible word is already the whole label. */
+  assert(!/<a href="#(?:overview|opportunities|trade|performance|system)"[^>]*>[\s\S]{0,240}?<small>/
+    .test(HTML), 'a nav sublabel came back — one word per destination');
+  assert(!/<button[^>]+id="btnSpotter"[\s\S]{0,240}?<small>/.test(HTML),
+    'the Spotter sublabel came back');
+  /* The address is the contract, not the label: these five hashes are in
+     bookmarks and in the router's alias table, and renaming a screen must
+     never move them. */
+  for (const hash of ['#overview', '#opportunities', '#trade', '#performance',
+                      '#system']) {
+    assert(HTML.includes(`href="${hash}"`),
+      `${hash} no longer exists — a label rename moved an address`);
+  }
+});
+
 ok('panel titles stay under four words', () => {
   const heads = [...HTML.matchAll(/<h2 class="t-section">([\s\S]*?)<\/h2>/g)]
     .map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());

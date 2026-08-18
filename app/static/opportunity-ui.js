@@ -144,8 +144,8 @@
 
   function tradeEvidence(row){
     if(!row) return `<div class="trade-evidence-empty"><span class="op-state">No setup selected</span>
-      <h2>Chart inspection</h2><p>Open a Setup Radar candidate to synchronize evidence, chart, and ticket.</p>
-      <a class="btn btn-primary" href="#opportunities">Open Setup Radar</a></div>`;
+      <h2>Chart inspection</h2><p>Open a setup to see why the bot likes it, on the chart and in the ticket.</p>
+      <a class="btn btn-primary" href="#opportunities">Open Setups</a></div>`;
     const s = setup(row), entry = row.entry_recommendation || {};
     const grade = row.evidence || {}, td = s.top_down || {};
     return `<div class="trade-evidence-head"><span class="op-state">${esc(label(row.state))}</span>
@@ -168,7 +168,7 @@
   function missing(setupId){
     return `<div class="trade-evidence-empty bad"><span class="op-state">Setup unavailable</span>
       <h2>Selected setup is no longer in the current baseline</h2><p>${esc(setupId || 'Unknown setup')} was removed, expired, or superseded. No replacement was selected.</p>
-      <a class="btn btn-primary" href="#opportunities">Return to Setup Radar</a></div>`;
+      <a class="btn btn-primary" href="#opportunities">Back to Setups</a></div>`;
   }
 
   window.SSOpportunityUI = {card, detail, tradeEvidence, missing, entryRecommendation,

@@ -188,7 +188,7 @@
       paint();
     }
     catch(err){
-      status.textContent = 'Setup Radar unavailable';
+      status.textContent = 'Setups unavailable';
       root.innerHTML = `<div class="panel op-empty bad"><span class="op-state">Data degraded</span>
         <h2>Opportunity data unavailable</h2><p>No setup is actionable.</p></div>`;
       selectedId = null;

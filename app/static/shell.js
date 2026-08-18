@@ -2187,7 +2187,7 @@
   const NEAR_SAY = {
     AT_ZONE: () =>
       ['CONTACT', 'chip-t3',
-       'Price is in the zone. If the engine takes it, it appears in Mission Briefs.'],
+       'Price is in the zone. If the engine takes it, it appears in Trades on now.'],
     IN_RANGE: () =>
       ['TRACKING', 'chip-t2',
        'Close enough that the engine is considering this zone. Most never become setups.'],
@@ -2322,16 +2322,16 @@
         $('nearCount').textContent = 'DATA GAP';
         $('nearLede').textContent =
           `${errored} market check${errored === 1 ? '' : 's'} could not be read. ` +
-          'Overwatch cannot call this clear.';
+          'Market watch cannot call this clear.';
         box.innerHTML = '<div class="empty mw-empty warn">Market structure is unavailable for part of this sweep. The bot will retry.</div>';
       }else if(!Number(counts.symbols || 0)){
         $('nearCount').textContent = 'NO MARKETS';
-        $('nearLede').textContent = 'No eligible market was available for this Overwatch sweep.';
+        $('nearLede').textContent = 'No eligible market was available for this market sweep.';
         box.innerHTML = '<div class="empty mw-empty">There is no market universe to watch yet.</div>';
       }else{
         $('nearCount').textContent = '0 markets close';
         $('nearLede').textContent = 'No watched market is close enough to a live zone yet.';
-        box.innerHTML = '<div class="empty mw-empty">Overwatch is clear. The bot will keep checking.</div>';
+        box.innerHTML = '<div class="empty mw-empty">Market watch is clear. The bot will keep checking.</div>';
       }
       return;
     }
@@ -2484,7 +2484,7 @@
       $('nearPanel').style.display = '';
       $('nearCount').textContent = 'UNAVAILABLE';
       $('nearLede').textContent =
-        'Overwatch could not load its market sweep. Do not treat this as all clear.';
+        'Market watch could not load its market sweep. Do not treat this as all clear.';
       $('near').innerHTML = '<div class="empty mw-empty warn">Market watch is unavailable. The bot will retry.</div>';
       throw err;
     }

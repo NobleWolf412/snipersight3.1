@@ -271,7 +271,7 @@
        This sentence is the only thing on the surface that says whether an
        empty rail is correct or broken, and it used to sit two thousand
        pixels below the empty rail it was explaining. It now renders into
-       #missionLede, directly under the Mission Briefs — the operator reads
+       #missionLede, directly under Trades on now — the operator reads
        "nothing is in a tradeable condition" in the same glance as the
        nothing. Owned here still: one authority, new address. */
     const lede = document.getElementById('missionLede');
@@ -322,9 +322,9 @@
       <div class="wx-failbody">
         <b>Market Weather could not load.</b>
         <code>${esc(msg)}</code>
-        <div>No market condition is being reported. Do not read empty Mission
-        Briefs above as &ldquo;nothing to trade&rdquo; until this is fixed &mdash;
-        this is a failed request, not a quiet market.</div>
+        <div>No market condition is being reported. Do not read an empty
+        Trades on now above as &ldquo;nothing to trade&rdquo; until this is
+        fixed &mdash; this is a failed request, not a quiet market.</div>
       </div>
     </div>`;
   }

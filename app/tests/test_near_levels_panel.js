@@ -14,7 +14,8 @@
      · a market that could not be read is announced, because a missing row and
        "price is nowhere near a level there" look identical on screen;
      · the panel says what it excluded — the shadow half is 11 of 30 symbols;
-     · an empty list says Overwatch is clear rather than leaving a blank tab.
+     · an empty list says the market watch is clear rather than leaving a blank
+       tab.
 
    Source text rather than a rendered DOM, per the suite's convention: these
    are contracts about which branch exists at all, and a renderer test can only
@@ -54,13 +55,13 @@ ok('the panel and its mount exist in the shell', () => {
   assert(/id="nearLede"/.test(HTML), 'the lede that states scope is missing');
 });
 
-ok('an empty list gives the Overwatch tab a clear state', () => {
-  assert(/if\(!rows\.length\)\{[\s\S]*?Overwatch is clear\./.test(RENDER),
+ok('an empty list gives the Market watch tab a clear state', () => {
+  assert(/if\(!rows\.length\)\{[\s\S]*?Market watch is clear\./.test(RENDER),
     'renderNear must explain that the watch is clear');
   assert(/if\(errored\)[\s\S]*?cannot call this clear/.test(RENDER),
     'an unreadable sweep must outrank the healthy clear state');
   assert(!/if\(!rows\.length\)\{[^}]*display\s*=\s*'none'/.test(RENDER),
-    'the selected Overwatch tab must not become a blank panel');
+    'the selected Market watch tab must not become a blank panel');
 });
 
 ok('a failed request replaces loading with a local unavailable state', () => {

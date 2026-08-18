@@ -89,14 +89,14 @@
 
   <!-- Five operator jobs. Old hashes remain router aliases, not navigation. -->
   <nav class="nav">
-    <a href="#overview" class="on" data-route="overview" data-s="command"><span>Overview</span><small>Command Center</small><span class="nav-count" id="nCommand"></span></a>
-    <a href="#opportunities" data-route="opportunities" data-s="opportunities"><span>Opportunities</span><small>Setup Radar</small></a>
-    <a href="#trade" data-route="trade" data-s="chart"><span>Trade</span><small>Execution Bay</small></a>
-    <a href="#performance" data-route="performance" data-s="results"><span>Performance</span><small>Debrief</small></a>
-    <a href="#system" data-route="system" data-s="settings"><span>System</span><small>Control Room</small><span class="nav-count" id="nDiag"></span></a>
+    <a href="#overview" class="on" data-route="overview" data-s="command"><span>Overview</span><span class="nav-count" id="nCommand"></span></a>
+    <a href="#opportunities" data-route="opportunities" data-s="opportunities"><span>Setups</span></a>
+    <a href="#trade" data-route="trade" data-s="chart"><span>Trade</span></a>
+    <a href="#performance" data-route="performance" data-s="results"><span>Results</span></a>
+    <a href="#system" data-route="system" data-s="settings"><span>System</span><span class="nav-count" id="nDiag"></span></a>
     <button type="button" class="nav-spotter" id="btnSpotter"
             title="open Spotter — observe the facts or capture a local session">
-      <span>Spotter</span><small>Observe · Capture</small>
+      <span>Spotter</span>
     </button>
     <!-- Compatibility hooks for old bookmarks and contract tests. Hidden from
          users: Settings/Diagnostics and Ledger now live inside their parent. -->
@@ -116,7 +116,7 @@
     <section class="surface on" id="s-command" tabindex="-1">
       <div class="surface-head">
         <h1 class="t-page">Overview</h1>
-        <p>Command Center — what is the bot doing now?</p>
+        <p>What is the bot doing now?</p>
       </div>
 
       <!-- THE ANSWER, ABOVE THE EVIDENCE.
@@ -153,7 +153,7 @@
               <details><summary>What each mode does</summary><p>Off recommends only. Paper simulates. Shadow records intent. Testnet uses test funds. Live uses real funds.</p></details></div>
             <div><span class="op-kicker">Initial risk</span><strong>1R per trade · 1 position · 2R total</strong>
               <small>4R UTC daily-loss halt · paper sizes R at 2%, live at 0.25%</small></div>
-            <div><span class="op-kicker">First mission</span><strong>Radar → Trade → Debrief</strong>
+            <div><span class="op-kicker">Start here</span><strong>Setups → Trade → Results</strong>
               <small>Review one paper setup end to end.</small></div>
           </div>
           <div class="fr-acts">
@@ -259,15 +259,15 @@
           <span class="chip" style="margin-left:auto">hand-picked · not engine record</span>
           <span class="chip" id="mineRisk">—</span>
         </div>
-        <!-- A RAIL, because these are live trades. Mission Briefs and Overwatch
-             are both card rails driven by makeRail(); this was the last surface
+        <!-- A RAIL, because these are live trades. Trades on now and Market
+             watch are both card rails driven by makeRail(); this was the last surface
              carrying the operator's own money that still rendered as rows.
              Full chrome — prev/next and a live region — the same set the
              mission wheel and Progression carry, because makeRail's navState
              is a no-op without opts.status and "2 of 3" announced to nobody is
              the sighted reader's cue withheld from everyone else.
 
-             What must NOT come across from Mission Briefs is the material. See
+             What must NOT come across from Trades on now is the material. See
              `.mc.mine` in ss.css: same anatomy, deliberately different plate. -->
         <div class="mb-shell">
           <button class="mb-nav mb-prev" id="minePrev" aria-label="previous hand-picked trade" hidden>
@@ -283,12 +283,12 @@
       </div>
 
       <!-- "Engaged — detail" stood here: a second, row-shaped rendering of the
-           same open positions the Mission Briefs rail already carries. Its
+           same open positions the Trades on now rail already carries. Its
            controls (the keyboard-operable symbol, Reasons, the composed hold
            question and Close) all moved onto the mission card, so nothing was
            lost with the panel. -->
 
-      <!-- MISSION BRIEFS — the Setup Deck and the Approaching radar, fused
+      <!-- TRADES ON NOW — the Setup Deck and the Approaching radar, fused
            into one horizontally scanned rail of dossier cards. The two feeds
            stay two feeds (deckSplit() still owns "how many setups", the radar
            payload still owns "what is forming") — what changed is only the
@@ -311,7 +311,7 @@
             <button class="overview-tab on" id="overviewMissionsTab" type="button"
                     role="tab" aria-selected="true" aria-controls="overviewMissions"
                     data-overview-tab="missions">
-              <span>Mission briefs</span>
+              <span>Trades on now</span>
               <span class="overview-tab-meta">
                 <span class="mission-position t-mono" id="mbPosition" aria-hidden="true">— / —</span>
                 <span class="chip chip-amber" id="radarCount" hidden>—</span>
@@ -320,7 +320,7 @@
             <button class="overview-tab" id="overviewOverwatchTab" type="button"
                     role="tab" aria-selected="false" aria-controls="overviewOverwatch"
                     tabindex="-1" data-overview-tab="overwatch">
-              <span>Overwatch</span>
+              <span>Market watch</span>
               <span class="overview-tab-meta"><span class="chip" id="nearCount">—</span></span>
             </button>
           </div>
@@ -359,14 +359,14 @@
         </section>
       </div>
 
-      <!-- Overwatch is the second tab above, not a second page section. Its
+      <!-- Market watch is the second tab above, not a second page section. Its
            single ranked carousel combines the server's market condition with
            its nearest watched zone. Every card still says whether the engine
            is actually considering that zone; descriptive structure must not
            be mistaken for an engine trade plan. -->
       <!-- Market Weather's mount. Everything it used to DRAW here has found a
            better address: the per-symbol grid is one card per market in Market
-           Overwatch above, the lead sentence is #missionLede beside the rail it
+           watch above, the lead sentence is #missionLede beside the rail it
            explains, and the Bitcoin backdrop is on Chart beside the decision it
            bears on. What is left is the loud fallback — if /api/weather fails,
            it says so HERE, on the surface whose emptiness it would otherwise be
@@ -380,11 +380,11 @@
            which is where "what is the machine actually doing" belongs. -->
     </section>
 
-    <!-- ─── OPPORTUNITIES / SETUP RADAR ─── -->
+    <!-- ─── SETUPS (route and surface id remain `opportunities`) ─── -->
     <section class="surface" id="s-opportunities" tabindex="-1">
       <div class="surface-head">
-        <h1 class="t-page">Opportunities</h1>
-        <p>Setup Radar — what deserves attention?</p>
+        <h1 class="t-page">Setups</h1>
+        <p>What deserves attention?</p>
       </div>
       <div class="op-toolbar panel" aria-label="Opportunity filters">
         <div class="seg" id="opFilters" role="group" aria-label="Filter setup state">
@@ -414,7 +414,7 @@
            because the chart needs the height, but present, because "what am I
            deciding here" should not be the operator's inference. -->
       <div class="surface-head chart-head">
-        <div><h1 class="t-page">Trade</h1><p>Execution Bay — should I enter or manage this trade?</p></div>
+        <div><h1 class="t-page">Trade</h1><p>Should I enter or manage this trade?</p></div>
         <div class="trade-state" id="tradeState" role="status" aria-live="polite">
           <span>Workspace state</span><b>PLANNING</b><small>Select a setup or inspect the chart.</small>
         </div>
@@ -501,8 +501,8 @@
       <div class="chart-main">
         <aside class="panel trade-evidence" id="tradeEvidence" aria-label="Selected setup evidence">
           <div class="trade-evidence-empty"><span class="op-state">No setup selected</span>
-            <h2>Chart inspection</h2><p>Open a Setup Radar candidate to synchronize evidence, chart, and ticket.</p>
-            <a class="btn btn-primary" href="#opportunities">Open Setup Radar</a></div>
+            <h2>Chart inspection</h2><p>Open a setup to see why the bot likes it, on the chart and in the ticket.</p>
+            <a class="btn btn-primary" href="#opportunities">Open Setups</a></div>
         </aside>
         <div class="panel chart-pane" id="chartPane">
           <div id="chartBox"></div>
@@ -777,7 +777,7 @@
 
     <!-- ─── PERFORMANCE / DEBRIEF ─── -->
     <section class="surface" id="s-results" tabindex="-1">
-      <div class="surface-head"><h1 class="t-page">Performance</h1><p>Debrief — is the method earning trust?</p></div>
+      <div class="surface-head"><h1 class="t-page">Results</h1><p>Is the method earning trust?</p></div>
       <div class="workspace-tabs" id="performanceTabs" data-workspace-tabs="performance" aria-label="Performance views">
         <button class="on" type="button" data-view="overview" aria-pressed="true">Overview</button>
         <button type="button" data-view="strategies" aria-pressed="false">Strategies</button>
@@ -1045,7 +1045,7 @@
 
     <!-- ─── SCANNER SETUP ─── -->
     <section class="surface" id="s-settings" tabindex="-1">
-      <div class="surface-head"><h1 class="t-page">System</h1><p>Control Room — what can run, and why?</p></div>
+      <div class="surface-head"><h1 class="t-page">System</h1><p>What can run, and why?</p></div>
       <div class="workspace-tabs" id="systemTabs" data-workspace-tabs="system" aria-label="System views">
         <button class="on" type="button" data-view="automation" aria-pressed="true">Automation</button>
         <button type="button" data-view="risk" aria-pressed="false">Risk</button>
@@ -1214,7 +1214,7 @@
 
     <!-- ─── DIAGNOSTICS ─── -->
     <section class="surface" id="s-diagnostics" tabindex="-1">
-      <div class="surface-head"><h1 class="t-page">System</h1><p>Control Room — what is failing, and why?</p></div>
+      <div class="surface-head"><h1 class="t-page">System</h1><p>What is failing, and why?</p></div>
       <div class="workspace-tabs" aria-label="System views">
         <a href="#system" data-system-target="automation">Automation</a>
         <a href="#system" data-system-target="risk">Risk</a>
@@ -1304,8 +1304,8 @@
       </div>
 
       <!-- REFUSED SETUPS — the per-instance view, directly under its own
-           aggregate. These cards used to sit on Command, first inside Mission
-           Briefs and then as a fourth Overwatch tab, and in both places they
+           aggregate. These cards used to sit on Command, first inside the
+           trades rail and then as a fourth market-watch tab, and in both places they
            were dead trades in the panel that answers "what should I do right
            now". The question they answer is "why did nothing fire", and that
            is this surface's whole subject: the funnel above counts the
@@ -1405,7 +1405,7 @@
          not in the equity curve, not in the manual book. It is the purest
          measure of operator skill this app holds. -->
     <section class="surface" id="s-ledger" tabindex="-1">
-      <div class="surface-head"><h1 class="t-page">Performance</h1><p>Debrief — where are the outcomes coming from?</p></div>
+      <div class="surface-head"><h1 class="t-page">Results</h1><p>Where are the outcomes coming from?</p></div>
       <div class="surface-tabs" aria-label="Performance views">
         <a href="#performance">Evidence</a>
         <a class="on" href="#performance-ledger">Trade journal</a>
@@ -1430,10 +1430,16 @@
 
       <!-- NON-OPTIONAL, and static rather than rendered: a banner that depends
            on a fetch is a banner that can be absent exactly when the numbers
-           below it are wrong. -->
+           below it are wrong.
+
+           Which is why it may only state what is PERMANENTLY true. It used to
+           end "and the forward record is negative" — a live claim baked into
+           static markup, so it would have gone on saying it after the record
+           turned positive. The books being separate is structural; their sign
+           is not, and the cards below own it. -->
       <div class="era-band ledger-warn">
         Three separate books, <b>never added</b>. They cover different windows
-        and different capital, and the forward record is negative.
+        and different capital.
       </div>
 
       <!-- A GRID, NOT A WHEEL. The rule: a rail when the front card answers the
