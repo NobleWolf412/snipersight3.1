@@ -173,7 +173,6 @@
             <span class="command-kicker">Bot overview</span>
             <h2 class="t-section">Autonomous scan</h2>
           </div>
-          <span class="command-mode" id="commandMode">MODE LOADING</span>
           <div class="spacer" style="margin-left:auto"></div>
           <!-- "Check now", not "Run Scan". Rules says outright that this does
                nothing extra — it runs the same pass immediately instead of
@@ -225,11 +224,14 @@
             <div class="tile"><span class="t-label">Next trade risk</span><span class="t-metric" id="mRisk">—</span></div>
           </div>
         </div>
-        <div class="command-pulse" aria-label="System pulse">
-          <div><span>Scanner</span><b id="commandScanner">Checking...</b></div>
-          <div><span>Market data</span><b id="commandData">Checking...</b></div>
-          <div><span>Exposure</span><b id="commandExposure">Checking...</b></div>
-        </div>
+        <!-- The system pulse stood here: Scanner, Market data and Exposure,
+             three values read from /api/operations and rendered inches below
+             the topbar chips that already carried the same three facts from
+             the same payload. Three of them, on the one screen the operator
+             opens to answer "what is the bot doing".
+
+             The topbar is the authority for all three and is outside .stage,
+             so it survives on every surface — which this row never did. -->
         <!-- Risk is part of the bot's current operating picture, not a third
              destination competing with its directive and work queue. The
              existing read-model mounts stay intact; only their hierarchy has
@@ -1504,10 +1506,14 @@
        produced them, and the date the current window opened. A trader reading
        `Facts 4,182,993 · Engine swing-v0.7` learns nothing they can act on,
        and pays for it with the only always-visible strip on the screen. -->
+  <!-- ONE FACT, NOT THREE. This strip also restated the eligible count (the
+       topbar chip and the Command tile both carry it) and spelled out the
+       execution mode in a sentence (the topbar chip carries that too, and its
+       failure state now carries the warning this sentence used to). What is
+       left is the only thing here that the topbar cannot answer from a phone
+       without a hover: whether the screen in front of you is current. -->
   <footer class="statusbar">
     <span class="sb-item"><span class="orb" id="sbOrb"></span><b id="sbLive">connecting…</b></span>
-    <span class="sb-item" id="sbWatch"></span>
-    <span id="executionStatus" style="margin-left:auto">Loading execution mode…</span>
   </footer>
 
 </div>

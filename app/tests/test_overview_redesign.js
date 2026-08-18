@@ -19,7 +19,7 @@ function ok(name, fn) {
 
 console.log('overview redesign');
 
-ok('bot overview contains its directive, instruments, pulse, and guardrails', () => {
+ok('bot overview contains its directive, instruments, and guardrails', () => {
   const brief = HTML.indexOf('class="panel panel-accent bracket command-hero"');
   const missions = HTML.indexOf('class="panel floating mb-panel overview-intel"');
   const risk = HTML.indexOf('id="budgetPanel"');
@@ -28,15 +28,51 @@ ok('bot overview contains its directive, instruments, pulse, and guardrails', ()
   assert(missions > brief, 'mission carousel must follow the brief');
   assert(HTML.includes('>Bot overview</span>'));
   assert(!HTML.includes('>Rules of engagement</h2>'));
-  for (const id of ['commandMode', 'commandScanner',
-    'commandData', 'commandExposure']) assert(HTML.includes(`id="${id}"`), id + ' is missing');
 });
 
 ok('command state is painted from the operations read model', () => {
   assert(OPS.includes("api('/api/operations')"));
-  assert(OPS.includes('scanner.eligible_markets'));
+  assert(OPS.includes('scanner.eligible_markets') || SHELL.includes('scanner'),
+    'nothing reads the scanner state from the read model');
   assert(OPS.includes('a.open_positions'));
-  assert(OPS.includes("$('commandData').className"), 'data degradation has no visible tone');
+});
+
+/* ONE AUTHORITY PER FACT, AND IT IS THE TOPBAR.
+
+   Mode, scanner state and exposure were each rendered THREE times on the
+   Overview: the topbar chip, the command hero's pulse row inches below it,
+   and the statusbar — all three from the same payload, so a disagreement
+   between them could only ever be a bug. The eligible count managed three
+   renderings too (topbar chip, Command tile, statusbar).
+
+   The topbar won every one of them because it is outside .stage, so it is
+   the only one of the three that survives on Chart, Results and System.
+
+   These assert the count, not the absence of particular ids: a fourth
+   rendering added later fails just as loudly as a restored third. */
+ok('mode, scanner and exposure are each stated once', () => {
+  for (const gone of ['commandMode', 'commandScanner', 'commandData',
+                      'commandExposure', 'executionStatus', 'sbWatch']) {
+    assert(!HTML.includes(`id="${gone}"`), gone + ' restates a topbar fact again');
+    assert(!OPS.includes(`'${gone}'`), 'operations.js writes ' + gone + ' again');
+  }
+  for (const [id, what] of [['modeChip', 'execution mode'], ['scanTxt', 'scanner state'],
+                            ['exposureChip', 'open exposure'], ['healthTxt', 'data health']]) {
+    assert((HTML.match(new RegExp(`id="${id}"`, 'g')) || []).length === 1,
+      `${what} has more than one display again`);
+  }
+  assert(!CSS.includes('.command-pulse'), 'the pulse row CSS outlived its markup');
+  assert(!CSS.includes('.command-mode'), 'the hero mode chip CSS outlived its markup');
+});
+
+/* The statusbar sentence carried this warning and the statusbar sentence is
+   gone. It may not go with it: the whole point of the mode display is that a
+   dead feed must never read as "orders are safely disabled". */
+ok('a dead operations feed still says do not trust the mode', () => {
+  assert(/do not assume orders are disabled/i.test(OPS),
+    'the surviving mode display lost the warning the statusbar used to carry');
+  assert(/mode\.title =/.test(OPS) && /MODE UNKNOWN/.test(OPS),
+    'the mode chip failure state no longer explains itself');
 });
 
 /* The disposition line had TWO writers producing one sentence from one
@@ -100,8 +136,9 @@ ok('active trade cards are semantic and have one dominant management action', ()
   assert(SHELL.includes('>Review setup</button>'));
 });
 
-ok('the command brief and pulse collapse for mobile', () => {
-  assert(/@media\(max-width:900px\)[\s\S]*?\.command-pulse\{grid-template-columns:1fr\}/.test(CSS));
+ok('the command brief collapses for mobile', () => {
+  assert(/@media\(max-width:900px\)[\s\S]*?\.command-heading\{flex-basis:100%\}/.test(CSS),
+    'the hero heading no longer takes the full row once the mode chip is gone');
   assert(/@media\(max-width:640px\)[\s\S]*?\.command-hero>\.panel-head \.btn\{[^}]*min-height:44px/.test(CSS));
   assert(/@media\(max-width:640px\)[\s\S]*?\.overview-tab\{[^}]*flex:1[^}]*min-width:0/.test(CSS));
 });

@@ -1058,29 +1058,12 @@ details.panel.floating > summary{padding-left:var(--lg)}
 .command-kicker{font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.18em;
   text-transform:uppercase;color:var(--fg-4)}
 .command-heading .t-section{font:650 var(--fs-5)/1.15 var(--f-display);letter-spacing:.06em}
-.command-heading p{max-width:68ch;margin:3px 0 0;font:var(--fs-2)/1.5 var(--f-body);color:var(--fg-2)}
-.command-mode{display:inline-flex;align-items:center;min-height:28px;padding:0 9px;
-  border:1px solid var(--border);border-radius:3px;font:650 var(--fs-1)/1 var(--f-mono);
-  letter-spacing:.16em;color:var(--fg-3)}
-.command-mode.good{color:var(--green);border-color:rgba(0,255,170,.45)}
-.command-mode.warn{color:var(--amber);border-color:rgba(255,194,102,.45)}
-.command-mode.bad{color:var(--red-2);border-color:rgba(248,113,113,.45)}
 .command-hero>.panel-body{padding:0 var(--lg) var(--lg)}
 .command-hero .grid{gap:1px;background:var(--border-soft);border:1px solid var(--border-soft);
   border-radius:var(--r-lg);overflow:hidden}
 .command-hero .tile{min-height:104px;padding:var(--md);border:0;border-radius:0;
   background:rgba(0,0,0,.28);box-shadow:none}
 .command-hero .tile .t-metric{font-size:var(--fs-6)}
-.command-pulse{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;
-  background:var(--border-soft);border-top:1px solid var(--border-soft)}
-.command-pulse>div{display:flex;align-items:center;justify-content:space-between;gap:var(--sm);
-  min-width:0;padding:10px var(--lg);background:rgba(0,0,0,.22)}
-.command-pulse span,.command-pulse b{font:600 var(--fs-1)/1.3 var(--f-mono);
-  letter-spacing:.11em;text-transform:uppercase}
-.command-pulse span{color:var(--fg-4)}
-.command-pulse b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg-2)}
-.command-pulse b.good{color:var(--green)}.command-pulse b.warn{color:var(--amber)}
-.command-pulse b.bad{color:var(--red-2)}
 
 /* Guardrails qualify what the directive may do, so they belong inside the
    bot overview instead of posing as another page section. */
@@ -1117,16 +1100,12 @@ details.panel.floating > summary{padding-left:var(--lg)}
 
 @media(max-width:900px){
   .command-hero>.panel-head{align-items:center}
-  .command-heading{flex-basis:calc(100% - 110px)}
+  .command-heading{flex-basis:100%}
   .command-hero .spacer{display:none}
-  .command-pulse{grid-template-columns:1fr}
 }
 @media(max-width:640px){
-  .command-heading{flex-basis:100%}
-  .command-mode{order:-1}
   .command-hero>.panel-head .btn{flex:1;justify-content:center;min-height:44px}
   .command-hero>.panel-head #btnAuto{display:none}
-  .command-pulse>div{min-height:44px;padding-inline:var(--md)}
   .command-guardrail-head{align-items:flex-start}
   .command-guardrail-head>div{display:block}
   .command-guardrail-head strong{display:block;margin-top:5px}

@@ -28,12 +28,6 @@
       `<span>${name}</span>`;
     modeChip.title = MODE_NOTE[name] || 'Execution mode unavailable';
     document.body.dataset.automationMode = name;
-    const commandMode = $('commandMode');
-    if(commandMode){
-      commandMode.textContent = name;
-      commandMode.className = 'command-mode ' + (name === 'LIVE' ? 'bad' :
-        name === 'TESTNET' || name === 'SHADOW' ? 'warn' : 'good');
-    }
 
     const a = data.account || {};
     $('riskChip').classList.remove('data-stale');
@@ -45,9 +39,6 @@
       `${usd(a.daily_loss_remaining_usd || 0)} left before the UTC daily halt`;
     $('exposureChip').textContent = `Open ${a.open_positions || 0} · ` +
       `Working ${a.working_orders || 0}`;
-    $('executionStatus').textContent = MODE_NOTE[name] || 'Execution mode unavailable';
-    const scanner = data.scanner || {};
-    const health = data.data || {};
     const opportunities = data.opportunities || {};
     const counts = opportunities.counts || {};
     const ready = Number(counts.READY || 0);
@@ -56,16 +47,6 @@
     if($('mSetupsSub')) $('mSetupsSub').textContent = forming
       ? `${forming} still forming` : '';
     if($('nCommand')) $('nCommand').textContent = ready || '';
-    if($('commandScanner')) $('commandScanner').textContent =
-      `${scanner.state || 'UNKNOWN'} · ${scanner.eligible_markets == null ? '—' : scanner.eligible_markets} ELIGIBLE`;
-    if($('commandData')){
-      $('commandData').textContent = health.status || 'UNKNOWN';
-      $('commandData').className = health.status === 'HEALTHY' ? 'good' :
-        health.status === 'BLOCKED' ? 'bad' : 'warn';
-    }
-    if($('commandExposure')) $('commandExposure').textContent =
-      `${a.open_positions || 0} POSITION${Number(a.open_positions) === 1 ? '' : 'S'} · ` +
-      `${a.working_orders || 0} WORKING`;
     const auto = $('btnAuto');
     if(auto){
       auto.textContent = `Automation: ${name.toLowerCase()}`;
@@ -130,24 +111,23 @@
     if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
     try{ paint(await api('/api/operations')); }
     catch(err){
+      /* THE MODE CHIP IS THE ONLY MODE DISPLAY LEFT, so its failure state
+         carries what the deleted statusbar sentence used to say. It is in the
+         topbar, which is outside .stage and therefore on every surface —
+         which the disposition line is not. */
       const mode = $('modeChip');
-      if(mode){ mode.textContent = 'MODE UNKNOWN'; mode.className = 'chip chip-red'; }
-      if($('commandMode')){
-        $('commandMode').textContent = 'MODE UNKNOWN';
-        $('commandMode').className = 'command-mode bad';
+      if(mode){
+        mode.textContent = 'MODE UNKNOWN';
+        mode.className = 'chip chip-red';
+        mode.title = 'Execution state unavailable — do not assume orders are disabled';
       }
       /* Publish the FAILURE, do not just stop publishing. Leaving the last
          good payload in place let the disposition line go on describing a
          healthy bot from data that had stopped arriving — a stale sentence
-         reads exactly like a current one. The reader announces it loudly. */
+         reads exactly like a current one. The reader announces it loudly, in
+         the same sentence the statusbar used to carry. */
       window.SSOperationsData = {unavailable: true};
       announce();
-      if($('commandScanner')) $('commandScanner').textContent = 'UNAVAILABLE';
-      if($('commandData')){
-        $('commandData').textContent = 'UNAVAILABLE';
-        $('commandData').className = 'bad';
-      }
-      if($('commandExposure')) $('commandExposure').textContent = 'UNKNOWN';
       if($('riskChip')){
         $('riskChip').textContent = 'Risk unavailable';
         $('riskChip').title = 'Server risk budget is stale or unavailable';
@@ -158,8 +138,6 @@
         $('exposureChip').title = 'Server position and order counts are stale or unavailable';
         $('exposureChip').classList.add('data-stale');
       }
-      if($('executionStatus')) $('executionStatus').textContent =
-        'Execution state unavailable — do not assume orders are disabled';
       console.warn('operations read model unavailable', err);
     }
   }

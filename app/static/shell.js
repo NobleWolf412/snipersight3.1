@@ -612,15 +612,20 @@
         : `The engine is behind — last checked ${agoText(sc.age_s)}. ` +
           'Setups and prices on screen may be out of date.';
 
-    // The same two facts restated along the bottom, so they are answerable
-    // from Chart or Rules without looking up at the header.
+    /* IS WHAT I AM LOOKING AT CURRENT — restated along the bottom, because
+       the topbar chip is not readable from Chart or System without looking up.
+       The eligible COUNT used to be restated here too, which made three
+       renderings of one number on one screen (topbar chip, Command tile, here).
+       The count went; the freshness stayed, because it is the only one of the
+       two that changes what the operator should believe about the screen.
+
+       The age rides on the degraded states only. It was previously reachable
+       just through the topbar chip's hover title, which a finger cannot reach
+       — and "Catching up" without a number is the one case where the operator
+       needs to know whether that means seconds or an hour. */
     $('sbOrb').className = 'orb ' + tone;
     $('sbLive').textContent = !sc.alive ? 'Not watching'
-      : fresh ? 'Watching the market' : 'Catching up';
-    // names the set, like every other count on screen
-    $('sbWatch').textContent = sc.alive && sets.tradeable
-      ? `${sets.tradeable} eligible · checked ${agoText(sc.age_s)}`
-      : '';
+      : fresh ? 'Watching the market' : `Catching up · last checked ${agoText(sc.age_s)}`;
 
     if(o.baseline){
       $('baselineChip').textContent = o.baseline.label || 'forward window';
