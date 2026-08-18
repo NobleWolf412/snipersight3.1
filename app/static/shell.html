@@ -1404,27 +1404,27 @@
            panel is on Results now and the single account of why it has been on
            both surfaces lives beside it there. -->
 
-      <!-- static/diagnostics.html was a complete second application — its own
-           header, stylesheet, and a searchable decision-provenance view this
-           surface lacked — reachable only by TYPING THE PATH. Nothing linked
-           to it. Yet it shipped with an ?embed=1 mode that hides its chrome:
-           someone designed it to be embedded here and stopped one step short.
-           This is that step. The iframe stays src-less until opened, so the
-           second app costs nothing until someone asks for it. -->
-      <details class="explainer" id="provenance" style="margin-top:var(--lg)">
-        <summary class="explainer-head">
-          <h2 class="t-section">Decision Provenance</h2>
-          <span class="wx-sub">every decision, searchable — rules, values, missing evidence</span>
-        </summary>
-        <div class="prov-body">
-          <iframe id="provFrame" data-src="/static/diagnostics.html?embed=1"
-                  title="Decision provenance — searchable record of every decision"></iframe>
-          <div class="t-label" style="padding:var(--sm) var(--lg);text-transform:none;letter-spacing:0">
-            Also available as a
-            <a href="/static/diagnostics.html" target="_blank" rel="noopener">full page</a>.
-          </div>
-        </div>
-      </details>
+      <!-- DECISION PROVENANCE LIVES IN CITADEL NOW.
+
+           static/diagnostics.html is a complete second application - its own
+           header, stylesheet, and a searchable record of every decision with
+           the rule, the expression, expected against actual, and the fields
+           that were never captured. It was embedded here in a lazy iframe.
+
+           It is forensics: it answers "why did it decide that, three days
+           ago", which is investigation, not the question this cockpit exists
+           to answer. Citadel frames the SAME page - Studio > Decisions - so
+           there is still exactly one renderer and one authority for every
+           number on it. The page itself is untouched and still served here,
+           because that frame is what serves it.
+
+           What stays is the door, one line, for an operator standing on this
+           surface who wants the record now. -->
+      <p class="t-label diag-handover" style="margin-top:var(--lg);text-transform:none;letter-spacing:0">
+        Every decision is recorded and searchable on the
+        <a href="/static/diagnostics.html" target="_blank" rel="noopener">decision history page</a>,
+        and in Citadel under Studio &rarr; Decisions.
+      </p>
 
       <!-- The Backend Console stood here until 2026-08-13. It tailed the raw
            engine log — `zone zone-v0.11-draft XRPUSDT 15m in=981 new=14 2187ms`

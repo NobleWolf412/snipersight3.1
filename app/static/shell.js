@@ -4932,17 +4932,6 @@ weighed in. Name the facts you used.`;
     }catch(err){ /* best-effort; the health chip owns API state */ }
     finally{ polling = false; }
   }
-  /* Decision Provenance — the second application, loaded on demand.
-     diagnostics.html shipped with an ?embed=1 mode that hides its own chrome;
-     someone designed it to be embedded here and stopped one step short of
-     wiring it. The iframe is src-less in the markup and gets its URL on the
-     FIRST open only, so the extra page and its fetches cost nothing until the
-     operator actually asks for provenance. */
-  const prov = $('provenance');
-  if(prov) prov.addEventListener('toggle', () => {
-    const f = $('provFrame');
-    if(prov.open && f && !f.src) f.src = f.dataset.src;
-  });
 
   /* The console version of this ran at 2s while Diagnostics was open, because
      someone might be reading the log. Nobody is reading the log any more, so

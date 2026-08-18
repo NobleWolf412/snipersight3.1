@@ -69,23 +69,27 @@ ok('the shimmer exists and is motion-guarded', () => {
          + 'who asked their machine to stop moving things');
 });
 
-ok('the provenance app is embedded on Diagnostics', () => {
-  assert(/id="provenance"/.test(HTML), 'no provenance disclosure');
-  assert(/id="provFrame"/.test(HTML), 'no iframe');
-  assert(/diagnostics\.html\?embed=1/.test(HTML),
-         'the embed mode its author built is still unused');
+/* THE SECOND APPLICATION MOVED OUT, IT DID NOT MULTIPLY.
+
+   diagnostics.html was embedded here in a lazy iframe. It is forensics -
+   "why did it decide that, three days ago" - so it now lives in Citadel,
+   which frames THE SAME PAGE. That is the whole reason this is safe: one
+   renderer, one authority for every number on it, and nothing recomputed on
+   the other side. These two assert both halves of that: the cockpit no
+   longer embeds it, and the page it framed is still served and still
+   reachable from here. */
+ok('the provenance app is no longer embedded in the cockpit', () => {
+  assert(!/id="provFrame"/.test(HTML), 'the second application is back inside the cockpit');
+  assert(!/provFrame/.test(JS), 'the iframe loader outlived its iframe');
+  assert(!/diagnostics\.html\?embed=1/.test(HTML),
+    'the cockpit embeds the embed mode again - Citadel is the one frame now');
 });
 
-ok('the iframe is lazy', () => {
-  const i = HTML.indexOf('id="provFrame"');
-  const tag = HTML.slice(HTML.lastIndexOf('<iframe', i), HTML.indexOf('>', i) + 1);
-  assert(/data-src=/.test(tag), 'no deferred URL');
-  assert(!/\ssrc=/.test(tag),
-         'the second application loads for every Diagnostics visit whether or '
-         + 'not anyone opens it');
-  // and something actually promotes data-src to src on open
-  assert(/provFrame/.test(JS) && /f\.src = f\.dataset\.src/.test(JS),
-         'nothing ever loads the frame, so the panel opens onto a blank void');
+ok('the page Citadel frames is still served and still reachable', () => {
+  assert(S('diagnostics.html').length > 0,
+    'Citadel frames /static/diagnostics.html - deleting it breaks the handover');
+  assert(/decision history page/.test(HTML),
+    'no door left on Diagnostics for an operator standing right here');
 });
 
 ok('the standalone page is linked, not orphaned', () => {

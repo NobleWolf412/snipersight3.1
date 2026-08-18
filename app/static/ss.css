@@ -637,9 +637,6 @@ details.panel.floating > summary{padding-left:var(--lg)}
   margin-left:auto;transition:transform .15s ease}
 .explainer[open] .explainer-head::after{transform:rotate(180deg)}
 .explainer-head:hover .t-section{color:var(--fg-2)}
-/* The one .explainer left in the tree (Decision Provenance) fills its body
-   with .prov-body, so the .explainer-body / .explainer-steps rules that
-   styled the old settings essay had nothing to style. */
 @media (prefers-reduced-motion: reduce){
   .explainer-head::after{transition:none}
 }
@@ -660,13 +657,6 @@ details.panel.floating > summary{padding-left:var(--lg)}
 .skel-line{display:block;height:12px}
 /* skeletons inside prose bands inherit the band's padding; don't double it */
 .era-band .skeleton, .t-body .skeleton{padding:0}
-
-/* Decision Provenance: the second application, embedded where it belongs.
-   The iframe gets its src ONLY when the disclosure opens — see shell.js —
-   so the page inside costs nothing until someone asks for it. */
-.prov-body iframe{width:100%;height:72vh;border:0;display:block;
-  background:#070b10;border-top:1px solid var(--border-soft)}
-.prov-body a{color:var(--accent)}
 
 /* D5 — a count you cannot open is an assertion. "known venue gaps ×91" told an
    operator a number and refused to show them one, on the surface that asks
