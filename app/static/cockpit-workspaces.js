@@ -109,7 +109,12 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
         ['LIVE', p.live_router_build_enabled ? 'BUILD PRESENT - all live gates still apply' : 'BLOCKED - live router build lock is active']
       ].map(([stage,detail]) => {
         const scope = stage === 'PAPER' ? summary : mode.evidence_scope || {};
-        return `<article><b>${stage}</b><span>${esc(detail)}</span><small>Population: ${esc(scopeLabel(scope.population))} · Window: ${esc(scopeLabel(scope.window))}</small></article>`;
+        /* ONE SENTENCE, NOT TWO READ-MODEL NAMES. This printed
+           "Population: FUNDED_PAPER_TRADES / Window: ACTIVE_BASELINE" as a
+           label pair on four cards - database contracts, wearing the clothes
+           of a caption. Same two server-owned values, said the way a trader
+           would ask the question: what is being counted, and since when. */
+        return `<article><b>${stage}</b><span>${esc(detail)}</span><small>Counting ${esc(scopeLabel(scope.population))}, ${esc(scopeLabel(scope.window))}</small></article>`;
       }).join('');
     }catch(err){
       $('performanceTrust').dataset.verdict = 'DEGRADED';
