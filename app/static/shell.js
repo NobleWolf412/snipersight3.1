@@ -893,21 +893,60 @@
     if(document.body.dataset.mode !== mode) document.body.dataset.mode = mode;
   }
 
+  /* One sentence, one wording. Both branches below can reach a dead scanner,
+     and two spellings of "the scanner is not running" is how the operator
+     learns to read one of them as a different, milder fault. */
+  const SCANNER_DEAD =
+    'The scanner is not running, so nothing is being watched. Diagnostics names the failing check.';
+
   function renderDisposition(){
     const el = $('disposition');
     if(!el) return;
     const operational = window.SSOperationsData;
     if(operational){
+      /* THE LINE READS; IT DOES NOT DERIVE, AND IT DOES NOT DUMP.
+
+         It used to print "Bot progress - IMPORT / BTCUSDT": the scanner's
+         internal stage, de-underscored, on the line that exists to say what
+         the bot is doing. A stage name is not an answer — it is the engine
+         talking to itself in front of the operator.
+
+         The answer already existed. opportunities.summary() on the server
+         writes exactly this sentence ("No setup currently meets entry rules.
+         Scanning continues.") and is pinned by test_opportunities; it was
+         being rendered in the panel below and ignored up here.
+
+         The ladder is ordered by what would stop the operator acting, most
+         disqualifying first: an unreadable feed outranks a halt, because a
+         halt read from stale data is not a fact. The guardrail clause is
+         fourth and not last on purpose — "3 setups are ready" is a lie by
+         omission when the risk budget is spent, and that pairing is the one
+         thing this line can say that no single panel below it can. */
       const mode = operational.automation || {};
       const scanner = operational.scanner || {};
-      const stage = scanner.stage
-        ? String(scanner.stage).replaceAll('_',' ').replaceAll(':',' / ')
-        : scanner.state || 'UNKNOWN';
-      el.textContent = mode.halted
-        ? 'New entries are halted. Existing protection remains active.'
-        : `Bot progress - ${stage}`;
-      el.className = 'disposition' + (mode.halted ? ' warn'
-        : ['OFFLINE','STALE'].includes(scanner.state) ? ' bad' : '');
+      const chances = operational.opportunities || {};
+      const ready = Number((chances.counts || {}).READY || 0);
+      const stop = lastConstraint && lastConstraint.blocked ? lastConstraint : null;
+
+      let tone, text;
+      if(operational.unavailable){
+        tone = 'bad';
+        text = 'Execution state is unavailable. Do not assume order dispatch is disabled.';
+      } else if(mode.halted){
+        tone = 'warn';
+        text = 'New entries are halted. Existing protection remains active.';
+      } else if(['OFFLINE','STALE'].includes(scanner.state)){
+        tone = 'bad';
+        text = SCANNER_DEAD;
+      } else if(ready && stop){
+        tone = 'warn';
+        text = `${ready} ${ready === 1 ? 'setup is' : 'setups are'} ready, but ${stop.clause}.`;
+      } else {
+        tone = ready ? 'go' : '';
+        text = chances.narrative || 'No opportunity decision is available.';
+      }
+      el.className = 'disposition' + (tone ? ' ' + tone : '');
+      el.textContent = text;
       return;
     }
     if(!lastOverview) return;              // still loading: keep the skeleton
@@ -936,7 +975,7 @@
          whether the market is quiet or the scanner is dead uses one sentence
          for two opposite situations, and the operator cannot tell them apart. */
       tone = 'bad';
-      text = 'The scanner is not running, so nothing is being watched. Diagnostics names the failing check.';
+      text = SCANNER_DEAD;
     } else if(n && stop){
       tone = 'warn';
       text = `${n} ${n === 1 ? 'setup is' : 'setups are'} ready, but ${stop.clause}.`;
@@ -5482,5 +5521,11 @@ weighed in. Name the facts you used.`;
   addEventListener('ss:market-change', event => {
     if(event.detail && event.detail.market === 'crypto') refresh();
   });
+  /* operations.js polls at 15s and this file at 30s, and the disposition line
+     quotes both payloads. Without this the sentence would answer "what is the
+     bot doing" on the slower of the two clocks — up to 30s of describing a
+     bot that had already halted. Repainting on the announcement costs one
+     read of state already in memory; nothing is fetched here. */
+  addEventListener('ss:operations', renderDisposition);
   setInterval(refresh, 30000);
 })();

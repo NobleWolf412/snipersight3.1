@@ -28,16 +28,46 @@ ok('bot overview contains its directive, instruments, pulse, and guardrails', ()
   assert(missions > brief, 'mission carousel must follow the brief');
   assert(HTML.includes('>Bot overview</span>'));
   assert(!HTML.includes('>Rules of engagement</h2>'));
-  for (const id of ['commandNarrative', 'commandMode', 'commandScanner',
+  for (const id of ['commandMode', 'commandScanner',
     'commandData', 'commandExposure']) assert(HTML.includes(`id="${id}"`), id + ' is missing');
 });
 
 ok('command state is painted from the operations read model', () => {
   assert(OPS.includes("api('/api/operations')"));
-  assert(OPS.includes('opportunities.narrative'));
   assert(OPS.includes('scanner.eligible_markets'));
   assert(OPS.includes('a.open_positions'));
   assert(OPS.includes("$('commandData').className"), 'data degradation has no visible tone');
+});
+
+/* The disposition line had TWO writers producing one sentence from one
+   payload, and both printed the scanner's raw stage: `Bot progress - IMPORT /
+   BTCUSDT`. The server had already written the plain sentence that belonged
+   there. These pin the arrangement that replaced them, not the prose. */
+ok('one writer owns the disposition sentence', () => {
+  assert(!/\$\('disposition'\)/.test(OPS),
+    'operations.js writes the disposition again — two authorities for one sentence');
+  /* Backtick-anchored so the comments recording WHY this was removed do not
+     themselves trip the guard: what is banned is rendering the string, not
+     naming it. */
+  assert(!/`Bot progress/.test(OPS) && !/`Bot progress/.test(SHELL),
+    'the raw scanner stage is back on the line that should carry a sentence');
+  assert(!/scanner\.stage/.test(OPS) && !/scanner\.stage/.test(SHELL),
+    'the scanner stage is being read into a surface again');
+  assert(!HTML.includes('id="commandNarrative"'),
+    'the hero restates the disposition line again');
+  assert(SHELL.includes('opportunities') && /chances\.narrative/.test(SHELL),
+    'the disposition no longer reads the server narrative — it is deriving its own');
+});
+
+ok('the disposition stays loud when it cannot answer', () => {
+  assert(/unavailable[\s\S]{0,400}?Do not assume order dispatch is disabled/.test(SHELL),
+    'an unreadable operations feed no longer says so on the line');
+  assert(/window\.SSOperationsData = \{unavailable: true\}/.test(OPS),
+    'a failed poll leaves the last good payload in place, so the line goes stale silently');
+  assert(/The scanner is not running/.test(SHELL),
+    'a dead scanner no longer reads differently from a quiet market');
+  assert(/addEventListener\('ss:operations'/.test(SHELL) && /ss:operations/.test(OPS),
+    'the sentence no longer repaints on the operations cadence');
 });
 
 ok('the carousel exposes position and a route to the comparison surface', () => {
@@ -90,7 +120,12 @@ ok('long overview explanation is collapsed behind optional detail', () => {
   assert(WEATHER.includes('<summary>Universe details</summary>'));
   assert(!WEATHER.includes('so quiet days are normal'));
   assert(!SHELL.includes('Nothing is open right now, and nothing needs you'));
-  assert(OPS.includes('MODE_SHORT'));
+  /* MODE_SHORT existed to stop the hero's sentence carrying the long mode
+     note. The hero has no sentence now, so the short form has no reader at
+     all — a stronger version of the same property. The chip states the mode
+     and its title carries the long note. */
+  assert(!OPS.includes('MODE_SHORT'), 'the hero grew a mode sentence again');
+  assert(OPS.includes('MODE_NOTE'), 'the mode chip lost its explanation');
 });
 
 console.log('\n  ' + passed + ' passed');

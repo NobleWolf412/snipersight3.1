@@ -15,11 +15,6 @@
     TESTNET: 'TESTNET — orders use Phemex test funds',
     LIVE: 'LIVE — real funds; restricted by promotion and risk gates'
   };
-  const MODE_SHORT = {
-    OFF: 'Recommendations only.', PAPER: 'Simulation only.',
-    SHADOW: 'Orders are recorded, not sent.', TESTNET: 'Using test funds.',
-    LIVE: 'Real funds active.'
-  };
 
   function paint(data){
     window.SSOperationsData = data;
@@ -61,23 +56,6 @@
     if($('mSetupsSub')) $('mSetupsSub').textContent = forming
       ? `${forming} still forming` : '';
     if($('nCommand')) $('nCommand').textContent = ready || '';
-    const disposition = $('disposition');
-    if(disposition){
-      const stage = scanner.stage
-        ? String(scanner.stage).replaceAll('_',' ').replaceAll(':',' / ')
-        : scanner.state || 'UNKNOWN';
-      disposition.textContent = mode.halted
-        ? 'New entries are halted. Existing protection remains active.'
-        : `Bot progress - ${stage}`;
-      disposition.className = 'disposition' + (mode.halted ? ' warn'
-        : ['OFFLINE','STALE'].includes(scanner.state) ? ' bad' : '');
-    }
-    const narrative = $('commandNarrative');
-    if(narrative){
-      narrative.textContent = mode.halted
-        ? 'New entries are halted. Existing positions remain under protective management.'
-        : `${opportunities.narrative || 'No opportunity decision is available.'} ${MODE_SHORT[name] || ''}`;
-    }
     if($('commandScanner')) $('commandScanner').textContent =
       `${scanner.state || 'UNKNOWN'} · ${scanner.eligible_markets == null ? '—' : scanner.eligible_markets} ELIGIBLE`;
     if($('commandData')){
@@ -94,7 +72,23 @@
       auto.title = mode.reasons && mode.reasons.length
         ? mode.reasons.map(r => r.summary).join(' ') : MODE_NOTE[name];
     }
+    announce();
   }
+
+  /* THE DISPOSITION LINE IS NOT PAINTED HERE, and this event is why.
+
+     It used to be, and it printed "Bot progress - IMPORT / BTCUSDT" — the raw
+     scanner stage, on the one line whose entire job is to answer "what is the
+     bot doing" in a sentence. Worse, shell.js held a second writer for the
+     same node that reproduced the same expression, so the app had two
+     authorities for one sentence and both were wrong.
+
+     shell.js now owns it alone, because that sentence needs BOTH payloads:
+     the server's narrative and halt state from here, and the binding
+     guardrail clause from /api/portfolio, which this module never sees. It
+     reads window.SSOperationsData, so all this has to do is say "there is
+     new state" — at the 15s operations cadence rather than shell's 30s. */
+  const announce = () => dispatchEvent(new CustomEvent('ss:operations'));
 
   function bindOverviewTabs(){
     const tabs = [...document.querySelectorAll('[data-overview-tab]')];
@@ -142,8 +136,12 @@
         $('commandMode').textContent = 'MODE UNKNOWN';
         $('commandMode').className = 'command-mode bad';
       }
-      if($('commandNarrative')) $('commandNarrative').textContent =
-        'Execution state is unavailable. Do not assume order dispatch is disabled.';
+      /* Publish the FAILURE, do not just stop publishing. Leaving the last
+         good payload in place let the disposition line go on describing a
+         healthy bot from data that had stopped arriving — a stale sentence
+         reads exactly like a current one. The reader announces it loudly. */
+      window.SSOperationsData = {unavailable: true};
+      announce();
       if($('commandScanner')) $('commandScanner').textContent = 'UNAVAILABLE';
       if($('commandData')){
         $('commandData').textContent = 'UNAVAILABLE';
