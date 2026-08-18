@@ -167,7 +167,7 @@ window.SSChart = (() => {
      the ask was a volume knob and not a mute — the engine may well have the
      better entry, and it cannot say so from behind a switch nobody found. */
   const overlays = {yours: true, engine: true,
-                    swings: true, structure: true, zones: true,
+                    swings: false, structure: false, zones: false,
                     liquidity: false, cycle: false,
                     gaps: false, shelf: false, ranges: false, signals: false};
   /* ...and they are drawn from the book and the ticket rather than from the
@@ -175,6 +175,46 @@ window.SSChart = (() => {
      goes through drawPosition()/applyLevels() instead — see the Layers
      handler. */
   const LEVEL_LAYERS = {yours: 1, engine: 1};
+
+  /* ═══════════ FOUR PRESETS, AND THE TWO THEY MAY NEVER TOUCH ═══════════
+
+     Eleven switches is not a control, it is homework: to read this chart you
+     had to already know which nine of them to move, and the operator's
+     standing complaint about this surface is clutter. These are the four ways
+     the chart is actually read, one press each.
+
+     `yours` and `engine` ARE NOT IN ANY PRESET, and nothing here writes them.
+     Between them they own the operator's entry, stop and target: the gold
+     lines of a filled trade (drawPosition reads `overlays.yours`) and the
+     ticket bracket about to be armed (applyLevels reads whichever of the two
+     `bracketMine` names). Hiding those takes the drag handles with them
+     (placeHandles) while the ticket keeps showing the prices and Arm stays
+     live — a chart with no entry, stop or target under a ticket that says
+     there is one. That is not a quieter chart, it is a lie about what is
+     planned. The two switches stay under the operator's own hand, default ON,
+     exactly as they were.
+
+     The liquidation price is not on this list because it is not a layer at
+     all: it is a ticket line (`#tkLiq`, written by syncLeverage from the
+     venue's own maths), so nothing here can reach it either.
+
+     Clean is the default for the same reason the four lazy layers ship off —
+     a first chart should be readable before it is informative. */
+  const PRESET_KEYS = ['swings', 'structure', 'zones', 'liquidity', 'cycle',
+                       'gaps', 'shelf', 'ranges', 'signals'];
+  const PRESETS = {
+    clean:      [],
+    trade:      ['zones'],
+    structure:  ['zones', 'swings', 'structure', 'liquidity'],
+    everything: PRESET_KEYS,
+  };
+  const PRESET_LABEL = {clean: 'Clean', trade: 'Trade',
+                        structure: 'Structure', everything: 'Everything'};
+  const PRESET_FALLBACK = 'clean';
+  /* localStorage, not sessionStorage: this is a standing preference about how
+     the operator reads a chart, not a per-session position like the workspace
+     view tabs. Same shape as markets.js's `ss.market-workspace.v1`. */
+  const PRESET_STORE = 'ss.chart-preset.v1';
   const VISIBLE_BARS = 120;                   // the opening window, not the limit
 
   /* Through SSData. /api/overview, /api/portfolio and /api/trade-config are all
@@ -1992,14 +2032,83 @@ window.SSChart = (() => {
     if(btn) btn.classList.remove('loading');
   }
 
+  /* The saved preset, or Clean. localStorage throws with storage disabled and
+     in a private window that has denied it; an unreadable preference is not
+     worth surfacing, because the fallback IS a good chart. */
+  function savedPreset(){
+    try{
+      const v = localStorage.getItem(PRESET_STORE);
+      return PRESETS[v] ? v : PRESET_FALLBACK;
+    }catch(e){ return PRESET_FALLBACK; }
+  }
+
+  /* Which preset the nine switches currently spell, or null when they spell
+     none. Every individual switch still moves — that was always the volume
+     knob — so the button has to be able to say `Custom` rather than keep
+     naming a preset the chart has stopped matching. */
+  function presetNow(){
+    for(const name of Object.keys(PRESETS)){
+      const on = new Set(PRESETS[name]);
+      if(PRESET_KEYS.every(k => overlays[k] === on.has(k))) return name;
+    }
+    return null;
+  }
+
+  /* Apply a preset to the nine layers it owns — never to `yours` or `engine`,
+     see PRESETS. `defer` is boot: the switches are set before the first load,
+     so load()'s own lazy tail fetches and draws once, instead of this painting
+     a chart that has no candles yet. */
+  async function applyPreset(name, opts){
+    const pick = PRESETS[name] ? name : PRESET_FALLBACK;
+    const on = new Set(PRESETS[pick]);
+    for(const k of PRESET_KEYS) overlays[k] = on.has(k);
+    if(!(opts && opts.quiet)){
+      try{ localStorage.setItem(PRESET_STORE, pick); }
+      catch(e){ console.warn('[chart] the layer preset will not survive a reload'); }
+    }
+    paintLayerButtons();
+    if(opts && opts.defer) return;
+    for(const k of Object.keys(LAZY)) if(overlays[k]) await ensureLayer(k);
+    if(candles.length) drawOverlays();
+  }
+
+  /* Every switch and every preset chip repainted from `overlays` itself, so
+     the menu cannot disagree with what is drawn. The `on` CLASS is
+     authoritative — labelOverlays reads it back to set aria-pressed — which is
+     why it is written here rather than inferred at paint time. */
+  function paintLayerButtons(){
+    document.querySelectorAll('#cLayersPop [data-o]').forEach(b => {
+      const on = !!overlays[b.dataset.o];
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+    const now = presetNow();
+    document.querySelectorAll('#cLayersPop [data-preset]').forEach(b => {
+      const on = b.dataset.preset === now;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+    paintLayersBtn();
+  }
+
+  /* The button says WHAT YOU ARE LOOKING AT. `Layers 3/11` was a count nobody
+     can act on — three of what, and is three right? The preset name answers
+     the question the control is actually asking, and `Custom` is the honest
+     answer once a switch has been moved by hand. The name replaces the visible
+     word, so aria-label carries what the control opens. */
   function paintLayersBtn(){
-    const on = Object.values(overlays).filter(Boolean).length;
-    $('cLayersBtn').textContent = `Layers ${on}/${Object.keys(overlays).length}`;
+    const name = PRESET_LABEL[presetNow()] || 'Custom';
+    const btn = $('cLayersBtn');
+    btn.textContent = name;
+    btn.setAttribute('aria-label', 'Chart layers — ' + name);
   }
 
   /* the count is the honesty: 0 means "no facts on this timeframe", not "off" */
   function labelOverlays(n){
-    document.querySelectorAll('#cLayersPop button').forEach(b => {
+    /* [data-o], not `button` — the preset chips are buttons in this popup too,
+       and they carry no data-label, so the old selector rewrote each of them
+       to the string "undefined" and marked them .empty. Nothing throws. */
+    document.querySelectorAll('#cLayersPop [data-o]').forEach(b => {
       const k = b.dataset.o, c = n[k];
       /* Name only. "Swings 42" put a fact-store row count on a toggle whose
          only question is on/off — 42 of what, and is 42 good? The count keeps
@@ -2617,10 +2726,16 @@ window.SSChart = (() => {
     });
     $('cLayersPop').addEventListener('click', async e => {
       const b = e.target.closest('button'); if(!b) return;
+      // A preset chip is a button in this popup too. Branch before the toggle,
+      // or `overlays[undefined]` gets set, the tally counts a key that draws
+      // nothing, and the press appears to do nothing at all.
+      if(b.dataset.preset){ await applyPreset(b.dataset.preset); return; }
       const key = b.dataset.o;
       overlays[key] = !overlays[key];
-      b.classList.toggle('on', overlays[key]);
-      paintLayersBtn();
+      // Repainted from `overlays`, not from this one button: moving a switch by
+      // hand is what makes the chart stop matching a preset, and the chips have
+      // to clear when it does.
+      paintLayerButtons();
       // Lazy layers pay for themselves on first use only; the await is why
       // this handler is async, and drawOverlays runs after either way so
       // switching a layer OFF is instant.
@@ -2632,6 +2747,13 @@ window.SSChart = (() => {
          draw prices its de-duplication had been suppressing. */
       if(LEVEL_LAYERS[key] && series){ drawPosition(); applyLevels(); }
     });
+    /* THE SAVED PRESET, BEFORE THE FIRST LOAD. `defer` skips the fetch-and-draw
+       — there are no candles yet — so load()'s own lazy tail does it once, and
+       the switches on screen match what will be drawn from the first paint
+       rather than flicking a beat later. `quiet` because writing back what we
+       have just read is not a preference change. */
+    applyPreset(savedPreset(), {quiet: true, defer: true});
+
     $('tkDir').addEventListener('click', e => {
       const b = e.target.closest('button'); if(!b) return;
       setDir(b.dataset.d);

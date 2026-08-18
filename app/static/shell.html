@@ -466,6 +466,18 @@
           <button class="btn" id="cLayersBtn" aria-haspopup="true"
                   aria-expanded="false">Layers</button>
           <div class="layers-pop" id="cLayersPop" hidden>
+            <!-- FOUR PRESETS above eleven switches. Neither level switch is in
+                 any of them: they own the entry, stop and target, and a preset
+                 that could hide those is not a quieter chart, it is a chart
+                 that has stopped saying what the trade is. See PRESETS in
+                 chart.js. Deliberately NOT a .layer-group — that count is
+                 pinned at three by test_cockpit_redesign.js. -->
+            <div class="layer-presets" role="group" aria-label="Chart presets">
+              <button data-preset="clean" aria-pressed="true" title="candles, volume and your own levels — nothing else">Clean</button>
+              <button data-preset="trade" aria-pressed="false" title="adds the zones the setup was built on">Trade</button>
+              <button data-preset="structure" aria-pressed="false" title="adds swings, market structure and liquidity pools">Structure</button>
+              <button data-preset="everything" aria-pressed="false" title="every layer, including the four that fetch on demand">Everything</button>
+            </div>
             <!-- THE LOUDEST THING ON THIS CHART, and until now the only thing
                  on it with no switch. Open a filled manual trade and six price
                  lines land at once: three gold ones that are yours, three the
@@ -484,9 +496,9 @@
               <button data-o="engine" data-label="Engine plan" class="on" data-note="the engine's own untouched levels — the setup it is waiting on, or the trade it is already in">Engine plan</button>
             </div>
             <div class="layer-group"><span>Structure</span>
-              <button data-o="swings" data-label="Swings" class="on">Swings</button>
-              <button data-o="structure" data-label="Structure" class="on">Structure</button>
-              <button data-o="zones" data-label="Zones" class="on">Zones</button>
+              <button data-o="swings" data-label="Swings">Swings</button>
+              <button data-o="structure" data-label="Structure">Structure</button>
+              <button data-o="zones" data-label="Zones">Zones</button>
               <button data-o="liquidity" data-label="Liquidity" data-note="stop clusters inferred from the chart's own shape — a likely place for stops, not a measured one">Liquidity</button>
             </div>
             <!-- The engines that ran from day one with nowhere to appear.

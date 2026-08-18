@@ -2745,6 +2745,11 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 
 /* layers menu */
 .layers-wrap{position:relative}
+/* The Layers button now names the preset, so its label changes width from
+   CLEAN to EVERYTHING. `.chart-top` is flex-wrap: without a reserved slot the
+   control row rewraps when a preset is picked and the chart under it resizes —
+   the same reflow #cPrice, #cFresh and #cLive already reserve width against. */
+#cLayersBtn{min-width:126px;text-align:center}
 .layers-pop{position:absolute;top:calc(100% + 6px);right:0;z-index:60;
   display:flex;flex-direction:column;min-width:190px;background:var(--card);
   border:1px solid var(--accent);border-radius:var(--r-lg);
@@ -3059,6 +3064,25 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
     max-height:calc(100vh - var(--topbar-h) - 190px);
     max-height:calc(100dvh - var(--topbar-h) - 190px)}
 }
+/* THE PRESET ROW. 2x2, not 4-across: "Everything" at --fs-1 mono with this
+   tracking is ~80px, and four of those clip inside a 310px popup — the word
+   the operator is reading is the one that would be cut. 44px targets, because
+   this is now the first control a thumb reaches in this menu.
+   `.layers-pop button` above gives every button in here a checkbox ::before
+   and a left-aligned flex row; a preset chip is neither, so both are undone
+   here. Specificity is EQUAL, so this only works because the block sits later
+   in the file — do not move it above the .layers-pop button rules. */
+.layer-presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;
+  padding:7px;border-bottom:1px solid var(--border-soft)}
+.layer-presets button{display:flex;align-items:center;justify-content:center;
+  min-height:44px;padding:6px 4px;border:1px solid var(--border);
+  border-radius:var(--r-sm);background:var(--card-2);color:var(--fg-3);cursor:pointer;
+  font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;text-align:center}
+.layer-presets button::before{display:none}
+.layer-presets button:hover{color:var(--fg);border-color:var(--accent)}
+.layer-presets button.on{border-color:var(--accent);color:var(--accent);
+  background:rgba(var(--accent-rgb),.12)}
 .layer-group{padding:7px;border-bottom:1px solid var(--border-soft)}
 .layer-group:last-child{border-bottom:0}
 .layer-group>span{display:block;padding:4px 7px 6px;font:650 9px/1 var(--f-mono);
