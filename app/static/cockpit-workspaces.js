@@ -173,8 +173,8 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
       const promotion = mode.promotion || {};
       $('automationFacts').innerHTML = [
         ['Halt state', mode.halted ? 'HALTED' : 'CLEAR'],
-        ['Dispatch', mode.dispatch_allowed ? 'ALLOWED BY CURRENT MODE' : 'NOT ALLOWED'],
-        ['Promotion lock', promotion.live_router_build_enabled ? 'GATES APPLY' : 'LIVE BUILD LOCKED'],
+        ['Can it send orders?', mode.dispatch_allowed ? 'ALLOWED BY CURRENT MODE' : 'NOT ALLOWED'],
+        ['Is live trading unlocked?', promotion.live_router_build_enabled ? 'GATES APPLY' : 'LIVE BUILD LOCKED'],
         ['Custody', mode.mode === 'SHADOW' ? 'RECORD ONLY' : mode.mode]
       ].map(([key,value]) => `<div><span>${key}</span><b>${esc(value)}</b></div>`).join('');
 

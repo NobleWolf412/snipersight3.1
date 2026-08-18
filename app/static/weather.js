@@ -253,7 +253,7 @@
     const other = d.n_other || 0;
     const parts = [];
     if (shadow) {
-      parts.push(`${shadow} <span class="term" data-t="shadow">shadow</span>`
+      parts.push(`${shadow} <span class="term" data-t="shadow">watch-only</span>`
         + `, measured but never sized${shadowLive ? ` (${shadowLive} live)` : ''}`);
     }
     if (warming) {
@@ -263,7 +263,7 @@
       parts.push(`${other} unclassified`);
     }
     const aside = parts.length
-      ? `<details class="mission-detail"><summary>Universe details</summary>` +
+      ? `<details class="mission-detail"><summary>Market breakdown</summary>` +
         `<div>${parts.join(' · ')}</div></details>`
       : '';
 

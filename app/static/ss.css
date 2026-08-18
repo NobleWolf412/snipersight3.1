@@ -912,7 +912,8 @@ details.panel.floating > summary{padding-left:var(--lg)}
 #factorEvidenceRoot[data-performance-view]{margin-top:0}
 
 /* ---------- Setup Radar ---------- */
-.op-toolbar{position:sticky;top:calc(var(--xl) * -1);z-index:8;display:flex;align-items:center;
+.op-filter-note{flex-basis:100%;margin:0;order:9}
+.op-toolbar{position:sticky;top:calc(var(--xl) * -1);z-index:8;display:flex;align-items:center;flex-wrap:wrap;
   gap:var(--md);padding:var(--sm) var(--md);margin-bottom:var(--lg);box-shadow:none;
   background:color-mix(in oklch,var(--bg-2) 94%,transparent)}
 .op-toolbar .t-note{margin:0 0 0 auto;text-align:right}
@@ -956,7 +957,7 @@ details.panel.floating > summary{padding-left:var(--lg)}
 .op-score-pair>span{display:flex;flex-direction:column;align-items:center;justify-content:center;
   min-width:64px;padding:6px;background:var(--bg-2)}
 .op-score-pair b{font:650 var(--fs-3)/1 var(--f-display);color:var(--fg)}
-.op-score-pair small{max-width:76px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;
+.op-score-pair small{max-width:92px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font:600 8px/1.15 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--fg-4)}
 .op-compact-levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;
   margin:0;background:var(--border-soft)}
@@ -3037,6 +3038,11 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   letter-spacing:.09em;text-transform:uppercase;color:var(--fg-4)}
 .factor-grade-facts dd,.system-fact-grid b{display:block;margin:4px 0 0;overflow-wrap:anywhere;
   font:600 var(--fs-2)/1.3 var(--f-mono);color:var(--fg-2)}
+/* Three of these keys are QUESTIONS now ("Can it send orders?"). A question
+   set in 9px tracked caps stops reading as a question, so this one grid opts
+   out of the shouting label treatment its siblings keep. */
+#automationFacts span{font-family:var(--f-body);font-size:var(--fs-1);
+  letter-spacing:.02em;text-transform:none;color:var(--fg-3)}
 .op-detail-actions{gap:var(--sm)}
 .op-detail-actions .op-trace{background:var(--bg-2)}
 
@@ -3090,6 +3096,15 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   background:rgba(var(--accent-rgb),.12)}
 .layer-group{padding:7px;border-bottom:1px solid var(--border-soft)}
 .layer-group:last-child{border-bottom:0}
+/* THE CANVAS KEY. Set in body type, not the mono caps the switches wear:
+   the switches are labels to scan, these are sentences to read. */
+.layer-legend{margin-top:6px;padding:7px 0 0;border-top:1px solid var(--border-soft)}
+.layer-legend>span{display:block;padding:0 7px 6px;font:650 9px/1 var(--f-mono);
+  letter-spacing:.14em;text-transform:uppercase;color:var(--fg-4)}
+.layer-legend dl{display:grid;gap:5px;margin:0;padding:0 7px}
+.layer-legend dl>div{display:grid;grid-template-columns:62px 1fr;gap:8px;align-items:baseline}
+.layer-legend dt{font:650 var(--fs-1)/1.3 var(--f-mono);letter-spacing:.06em;color:var(--fg-2)}
+.layer-legend dd{margin:0;font:var(--fs-1)/1.4 var(--f-body);color:var(--fg-3)}
 .layer-group>span{display:block;padding:4px 7px 6px;font:650 9px/1 var(--f-mono);
   letter-spacing:.14em;text-transform:uppercase;color:var(--fg-4)}
 
@@ -3177,7 +3192,10 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
    z-index too). Expressed from the same tokens so the two move together. */
 .performance-scope{position:sticky;top:calc(45px - var(--xl));z-index:7;display:flex;gap:var(--md);
   flex-wrap:wrap;padding:9px var(--md);margin-bottom:var(--md);background:rgba(17,18,14,.96);
-  border:1px solid var(--border);font:var(--fs-1)/1.4 var(--f-mono);text-transform:uppercase}
+  border:1px solid var(--border);font:var(--fs-1)/1.4 var(--f-mono);text-transform:none}
+/* The strip carries a SENTENCE now, not three labelled enums, and all-caps
+   destroys word shape at sentence length — the same rule .era-band holds. */
+.scope-line{margin:0;font:var(--fs-1)/1.5 var(--f-body);color:var(--fg-3);max-width:72ch}
 .performance-scope b{color:var(--fg-3);margin-right:5px}
 .performance-scope i{font-style:normal;color:var(--fg)}
 .performance-scope label{display:flex;align-items:center;gap:var(--xs);margin-left:auto}

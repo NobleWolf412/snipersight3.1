@@ -124,7 +124,7 @@
 
   function stepUniverse(b) {
     const T = 'Does it have anything to scan?';
-    const M = 'The universe is the list of tokens the scanner is allowed to look at.';
+    const M = 'This is the list of markets the scanner is allowed to look at.';
     if (!b.overview.ok) return undetermined(T, b.overview, M);
     const syms = b.overview.d.symbols || [];
     const admitted = syms.filter(s => s.state !== 'WARMING');
@@ -142,9 +142,9 @@
       cta: { href: '#command', label: 'Command' }
     };
     return {
-      title: T, result: 'fail', value: 'the universe is empty',
+      title: T, result: 'fail', value: 'the market list is empty',
       means: M + ' It is empty, so there is nothing to scan and nothing can ever fire.',
-      doing: 'Open Rules and check the universe settings — a minimum volume ' +
+      doing: 'Open Rules and check the market-list settings — a minimum volume ' +
              'or minimum history threshold may be excluding every token.',
       cta: { href: '#settings', label: 'Settings' }
     };

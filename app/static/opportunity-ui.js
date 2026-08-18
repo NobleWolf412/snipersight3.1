@@ -52,7 +52,7 @@
         <div><dt>Sample</dt><dd>${esc(grade.sample_size || 0)}</dd></div>
       </dl>` : '';
     return `${gradeFacts}<div class="op-evidence-grid"><div><h3>Higher-timeframe view</h3><ul>${rungs || '<li>No higher-timeframe readings recorded</li>'}</ul></div>
-      <div><h3>Setup score</h3><ul>${components || '<li>No score components recorded</li>'}</ul></div></div>
+      <div><h3>How the score was built</h3><ul>${components || '<li>No score components recorded</li>'}</ul></div></div>
       ${gradeComponents ? `<div><h3>Proven factor contributions</h3><ul>${gradeComponents}</ul></div>` : ''}`;
   }
 
@@ -66,8 +66,8 @@
       <header>
         <div><span class="op-state">${esc(label(row.state))}</span>
           <h3>${esc(symbol)} <small>${esc(s.direction)}</small></h3></div>
-        <div class="op-score-pair" aria-label="Setup quality ${esc(row.quality_score)}">
-          <span><b>${esc(row.quality_score)}</b><small>Quality</small></span>
+        <div class="op-score-pair" aria-label="Setup score ${esc(row.quality_score)} out of 100">
+          <span><b>${esc(row.quality_score)}</b><small>Setup score</small></span>
           ${gradeScore}
         </div>
       </header>
@@ -127,13 +127,13 @@
         <div><dt>Funding</dt><dd>${econ.funding_r == null ? 'Not recorded' : esc(econ.funding_r + 'R')}</dd></div>
         <div><dt>Slippage</dt><dd>${econ.slippage_r == null ? 'Not recorded' : esc(econ.slippage_r + 'R')}</dd></div>
         <div><dt>Total costs</dt><dd>${econ.total_cost_r == null ? 'Not recorded' : esc(econ.total_cost_r + 'R')}</dd></div>
-        <div><dt>Notional</dt><dd>${esc(money(econ.notional_usd))}</dd></div>
+        <div><dt>Position value</dt><dd>${esc(money(econ.notional_usd))}</dd></div>
         <div><dt>Distance</dt><dd>${econ.distance_atr == null ? 'Not recorded' : esc(econ.distance_atr + ' ATR')}</dd></div>
         <div><dt>Expires</dt><dd>${esc(when(s.expires_at))}</dd></div>
       </dl>
       <section class="op-callout"><span class="op-kicker">Why it exists</span><p>${esc(row.primary_explanation)}</p></section>
       <section class="op-callout caution"><span class="op-kicker">${cautionLabel(row.state)}</span><p>${esc(row.strongest_counterargument)}</p></section>
-      <section class="op-callout"><span class="op-kicker">Invalidation</span><p>${esc(s.invalidation)}</p></section>
+      <section class="op-callout"><span class="op-kicker">What kills this trade</span><p>${esc(s.invalidation)}</p></section>
       <details class="op-detail-evidence"><summary>How the bot scored it</summary>
         ${evidenceBody(row)}
       </details>
@@ -156,11 +156,11 @@
         <strong>${esc(entryRecommendation(entry, row.state))}</strong></div>
       <dl class="trade-evidence-stats"><div><dt>Regime</dt><dd>${esc(label(s.regime))}</dd></div>
         <div><dt>Higher timeframes</dt><dd>${esc(label(td.state))}</dd></div>
-        <div><dt>Setup quality</dt><dd>${esc(row.quality_score)}/100</dd></div>
+        <div><dt>Setup score</dt><dd>${esc(row.quality_score)}/100</dd></div>
         ${hasGrade(grade) ? `<div><dt>Performance grade</dt><dd>${esc(grade.grade)} · ${esc(label(grade.confidence))}</dd></div>` : ''}</dl>
       <section class="trade-brief"><span class="op-kicker">Why it exists</span><p>${esc(row.primary_explanation)}</p></section>
       <section class="trade-brief caution"><span class="op-kicker">${cautionLabel(row.state)}</span><p>${esc(row.strongest_counterargument)}</p></section>
-      <section class="trade-brief"><span class="op-kicker">Invalidation</span><p>${esc(s.invalidation)}</p></section>
+      <section class="trade-brief"><span class="op-kicker">What kills this trade</span><p>${esc(s.invalidation)}</p></section>
       <details class="trade-evidence-more"><summary>How the bot scored it</summary>
         ${evidenceBody(row)}</details>`;
   }

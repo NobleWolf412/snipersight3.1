@@ -64,7 +64,7 @@
       <span class="chip chip-amber" id="modeChip">
         <span class="orb warn"></span><span class="term" data-t="paper">Paper</span>
       </span>
-      <span class="top-venue" id="venueNote" title="active execution venue"><span class="term" data-t="perps">Phemex perps</span></span>
+      <span class="top-venue" id="venueNote" title="active execution venue"><span class="term" data-t="perps">Phemex perpetual futures</span></span>
       <button type="button" class="market-pill" data-market-switch
               aria-label="Switch market workspace">Crypto <span aria-hidden="true">⌄</span></button>
     </div>
@@ -78,7 +78,7 @@
       <span id="equityChip" title="account equity (paper)">
         <span class="topbar-label">Equity</span><b id="equityTxt">—</b><span id="equityRet"></span></span>
       <span id="riskChip" title="server-calculated available open-risk budget">Risk —</span>
-      <span id="exposureChip" title="open positions and working orders">Open —</span>
+      <span id="exposureChip" title="positions you are in, and orders waiting to fill">Open —</span>
     </div>
 
     <span class="t-mono" id="clock" aria-hidden="true">—</span>
@@ -500,6 +500,29 @@
               <button data-o="structure" data-label="Structure">Structure</button>
               <button data-o="zones" data-label="Zones">Zones</button>
               <button data-o="liquidity" data-label="Liquidity" data-note="stop clusters inferred from the chart's own shape — a likely place for stops, not a measured one">Liquidity</button>
+              <!-- THE MARKS ARE PAINTED ON A CANVAS. BOS, CHoCH, HH/HL/LH/LL
+                   and SWEEP are the only vocabulary in this app with no way
+                   in at all: no hover, no focus stop, nothing a screen reader
+                   can reach. The key lives inside the switch that draws them,
+                   which is where the operator is already asking what they are.
+
+                   This block is deliberately NOT one of the switch groups,
+                   and carries NO <button>.
+                   labelOverlays() rewrites the textContent of every
+                   `#cLayersPop button` from its data-label, so a button here
+                   would silently relabel itself "undefined"; and the popup's
+                   click handler flips overlays[b.dataset.o] for any button
+                   descendant, creating an undefined overlay key. -->
+              <div class="layer-legend">
+                <span>What the marks mean</span>
+                <dl>
+                  <div><dt><span class="term" data-t="bos">BOS</span></dt><dd>trend continued past the last high or low</dd></div>
+                  <div><dt><span class="term" data-t="choch">CHoCH</span></dt><dd>first break the other way — the trend may be turning</dd></div>
+                  <div><dt>HH / HL</dt><dd>higher high, higher low — still climbing</dd></div>
+                  <div><dt>LH / LL</dt><dd>lower high, lower low — still falling</dd></div>
+                  <div><dt><span class="term" data-t="sweep">SWEEP</span></dt><dd>stops taken, then price came straight back</dd></div>
+                </dl>
+              </div>
             </div>
             <!-- The engines that ran from day one with nowhere to appear.
                  Lazy: nothing is fetched until one of these is switched on,
@@ -618,7 +641,7 @@
             </div>
             <label class="fld"><span class="t-label"><span class="term" data-t="tp">Target</span></span>
               <input id="tkTp" class="t-mono" inputmode="decimal" autocomplete="off"></label>
-            <div class="tk-nudge" data-k="tp" aria-label="Adjust take profit">
+            <div class="tk-nudge" data-k="tp" aria-label="Adjust target">
               <button type="button" data-step="-r">−0.1R</button
               ><button type="button" data-step="-t">−tick</button
               ><button type="button" data-step="+t">+tick</button
@@ -806,9 +829,15 @@
         <button type="button" data-view="promotion" aria-pressed="false">Promotion</button>
       </div>
       <div class="performance-scope" id="performanceScope" aria-label="Performance evidence scope and filters">
-        <span><b>Population</b> <i id="performancePopulation">Reading server scope</i></span>
-        <span><b>Window</b> <i id="performanceWindow">Reading server window</i></span>
-        <span><b>Authority</b> Server reported</span>
+        <!-- ONE SENTENCE, NOT THREE LABELLED ENUMS. Population / Window /
+             Authority is the store's vocabulary for provenance, and a trader
+             reads three labelled enums as three things to go and look up.
+             BOTH ids survive on purpose: cockpit-workspaces.js
+             showPerformanceScope() writes into them by id, and a suite
+             asserts they exist in this markup. -->
+        <p class="scope-line">These numbers cover
+          <i id="performancePopulation">the server's set</i> over
+          <i id="performanceWindow">the server's window</i>. Every figure is the server's.</p>
         <!-- SCOPED TO THE VIEW IT DRIVES. Population, Window and Authority
              describe every Performance view, so they sit here on all five.
              Breakdown does not: the only thing it filters is
@@ -913,7 +942,7 @@
            awarded one would be the exact thing this app refuses to be. -->
       <div class="panel floating" data-performance-view="promotion" hidden style="margin-bottom:var(--lg)">
         <div class="panel floating-head">
-          <h2 class="t-section">Progression</h2>
+          <h2 class="t-section">Road to real money</h2>
           <span class="chip" id="progCount" style="margin-left:auto">—</span>
         </div>
         <!-- The verdict before the evidence. A UI audit (2026-08-09) found the
@@ -952,8 +981,8 @@
         <div class="journal-tools">
           <label><span class="sr-only">Search bot journal</span><input id="journalSearch"
             type="search" placeholder="Search pair, strategy, direction, outcome" autocomplete="off"></label>
-          <label><span class="sr-only">Filter journal attribution</span><select id="journalSource">
-            <option value="ALL">All attribution</option><option value="BOT">Bot</option>
+          <label><span class="sr-only">Filter by whose trades</span><select id="journalSource">
+            <option value="ALL">Whose trades: all</option><option value="BOT">Bot</option>
             <option value="MANUAL">Manual</option><option value="EXIT">Exits</option>
           </select></label>
           <span class="t-note" id="journalMatch" role="status" aria-live="polite"></span>
@@ -1085,7 +1114,7 @@
             <div><span>Halt state</span><b>Reading…</b></div>
             <div><span>Can it send orders?</span><b>Reading…</b></div>
             <div><span>Is live trading unlocked?</span><b>Reading…</b></div>
-            <div><span>Custody</span><b>Reading…</b></div>
+            <div><span>Who controls this trade?</span><b>Reading…</b></div>
           </div>
           <p class="t-note" id="modeExplanation">Reading server mode and promotion locks…</p>
           <div class="mode-grid" id="modeControls" role="group" aria-label="Operating mode">
@@ -1168,7 +1197,7 @@
           </div>
         </div>
         <div class="panel" data-system-view="strategies" hidden>
-          <div class="panel-head"><h2 class="t-section">Strategies &amp; Universe</h2>
+          <div class="panel-head"><h2 class="t-section">Strategies and markets</h2>
             <span class="chip" id="setDirty" style="margin-left:auto" hidden>unsaved</span></div>
           <div class="panel-body">
             <div class="strategy-catalogue" id="strategyCatalogue" aria-live="polite">

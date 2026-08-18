@@ -154,7 +154,10 @@ ok('the top bar has four explicit jobs instead of a loose chip row', () => {
 
 ok('long overview explanation is collapsed behind optional detail', () => {
   assert(WEATHER.includes('class="mission-detail"'));
-  assert(WEATHER.includes('<summary>Universe details</summary>'));
+  /* 'Universe' was engine vocabulary on a trader surface; the disclosure
+     now says what is inside it rather than naming the read model. */
+  assert(WEATHER.includes('<summary>Market breakdown</summary>'));
+  assert(!WEATHER.includes('Universe details'), 'the read-model name is back on screen');
   assert(!WEATHER.includes('so quiet days are normal'));
   assert(!SHELL.includes('Nothing is open right now, and nothing needs you'));
   /* MODE_SHORT existed to stop the hero's sentence carrying the long mode

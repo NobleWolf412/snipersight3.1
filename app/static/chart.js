@@ -716,7 +716,7 @@ window.SSChart = (() => {
        stop hits. Everything else is the working, and lives in the Numbers
        pane — visible on request rather than occupying the panel by default. */
     key.innerHTML =
-      row('R:R after fees', m.rrNet == null ? '—' : m.rrNet.toFixed(2), rrCls) +
+      row('reward/risk after fees', m.rrNet == null ? '—' : m.rrNet.toFixed(2), rrCls) +
       row('size', m.size == null ? '—' : pf(m.size)) +
       row('you risk', m.riskUsd == null ? '—' : usd(m.riskUsd));
 
@@ -725,8 +725,8 @@ window.SSChart = (() => {
        rows saying what is already permanently on screen an inch lower. */
     out.innerHTML =
       row('risk / unit', pf(m.riskPerUnit)) +
-      row('R:R gross', m.rrGross.toFixed(2)) +
-      row('notional', m.notional == null ? '—' : usd(m.notional)) +
+      row('reward/risk before fees', m.rrGross.toFixed(2)) +
+      row('position value', m.notional == null ? '—' : usd(m.notional)) +
       // Margin is what leverage actually moves. Shown next to notional so the
       // difference between "the position" and "what it costs to hold" is
       // visible rather than inferred.
@@ -930,7 +930,7 @@ window.SSChart = (() => {
       ? `${liq} · funding ≈${perDay.toFixed(3)}%/day to hold`
       : liq;
     $('tkLiq').title = perDay
-      ? `Perps charge funding every ${(24 / cfg.cost.funding_per_day).toFixed(0)}` +
+      ? `Perpetual futures charge funding every ${(24 / cfg.cost.funding_per_day).toFixed(0)}` +
         ` hours while the position is open. This is the modelled rate the cost` +
         ` engine charges, not a live quote — a multi-day hold pays it` +
         ` repeatedly, and on a tight target that can cost more than the trade` +
@@ -3300,7 +3300,7 @@ window.SSChart = (() => {
      all of them. */
   const PICK_GROUPS = [
     ['ADMITTED', 'scanned'],
-    ['SHADOW', 'shadow — never sized'],
+    ['SHADOW', 'watch-only — never sized'],
     ['UNTRACKED', 'not scanned'],
   ];
   let pickIdx = -1;                    // keyboard highlight, -1 = none

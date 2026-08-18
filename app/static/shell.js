@@ -571,7 +571,7 @@
     $('mUniverse').textContent = sets.tradeable;
     const sub = [`of ${sets.stored} stored`];
     if (sets.warming) sub.push(`${sets.warming} warming`);
-    if (sets.shadow)  sub.push(`${sets.shadow} shadow — never sized`);
+    if (sets.shadow)  sub.push(`${sets.shadow} watch-only — never sized`);
     $('mUniverseSub').textContent = sub.join(' · ');
 
     /* The deck comes from the shared selector, so a filled position leaves it
@@ -1891,7 +1891,7 @@
     [/confirm/i,                             'Confirmation'],
     [/sweep|liquidity/i,                     'Trigger'],
     [/^TP\b/i,                               'Target'],
-    [/^R:R\b/i,                              'Reward'],
+    [/^R:R\b/i,                              'Reward/risk'],
     [/cost|fee|slippage/i,                   'Costs'],
     [/\bregime\b/i,                          'Trend'],
     [/\bagrees\b|\bopposes\b|^\d+[DWHM]\b/i, 'Higher timeframe'],
@@ -2333,8 +2333,8 @@
 
   /* The engine's universe state, in words. It was printed as a raw enum. */
   const UNIVERSE_LABEL = {
-    ADMITTED: 'Tradeable', SHADOW: 'Shadow — never sized',
-    WARMING: 'Warming up', UNTRACKED: 'Not in the universe',
+    ADMITTED: 'Tradeable', SHADOW: 'Watch-only — never sized',
+    WARMING: 'Warming up', UNTRACKED: 'Not being scanned',
   };
 
   /* ONE RANKED DECK. Four tabs became one rail.
@@ -5262,7 +5262,7 @@ weighed in. Name the facts you used.`;
           lgRow('wins', fmt(b.wins)) +
           lgRow('total R', b.total_r == null ? '—' : rr(b.total_r),
                 b.total_r == null ? '' : Number(b.total_r) >= 0 ? 'good' : 'bad') +
-          lgRow('expectancy', b.expectancy_r == null ? '—' : rr(b.expectancy_r) + '/trade',
+          lgRow('average per trade', b.expectancy_r == null ? '—' : rr(b.expectancy_r) + '/trade',
                 b.expectancy_r == null ? '' : Number(b.expectancy_r) >= 0 ? 'good' : 'bad'),
         /* PRINTED EVERY TIME, including when the count is zero. A ticket armed
            without a valid risk figure stores none, so that trade has an R and

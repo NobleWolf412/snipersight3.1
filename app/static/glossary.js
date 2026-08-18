@@ -6,36 +6,30 @@
    Plain-English first sentence; the precise version second. */
 window.GLOSSARY = {
   /* ---- market structure ---- */
-  swing:      "A turning point on the chart — a high where price stopped rising, or a low where it stopped falling. SniperSight ranks them minor / intermediate / major by how much they actually mattered.",
-  major:      "A turning point big enough to matter months later. Scored on how far price reversed, how long the level held, volume at the turn, and how many later breaks it caused.",
   bos:        "Break of Structure — price closed beyond a previous major high or low, confirming the trend is continuing in that direction.",
   choch:      "Change of Character — the first break AGAINST the prevailing trend. A warning that the trend may be ending, not proof that it has.",
   zone:       "A price band where buyers or sellers previously stepped in hard. Demand zones sit under price, supply zones above.",
-  demand:     "A zone below price where buying previously overwhelmed selling — a candidate area to go long from.",
-  supply:     "A zone above price where selling previously overwhelmed buying — a candidate area to go short from.",
   liquidity:  "Clusters of stop-loss orders resting above highs or below lows. Price often reaches for them before reversing. SniperSight infers these from the chart's own shape — repeated highs or lows at nearly the same price — so it is a LIKELY place for stops, not a measured one: nothing here can see the real order book. No playbook trades them, so treat a marked pool as context, not a target.",
   sweep:      "Price pushed past a high or low, triggered the stops there, then came straight back. Often a reversal signal rather than a real break.",
   regime:     "The market's current weather: trending up, trending down, ranging, or transitioning. Different regimes call for different playbooks.",
 
   /* ---- cycles ---- */
-  dcl:        "Daily Cycle Low — the bottom of a roughly 60-day rhythm in price. Cycle traders count from one to the next.",
-  wcl:        "Weekly Cycle Low — the bottom of a longer rhythm, roughly 24 weeks, usually containing about three daily cycles.",
   translation:"Where a cycle's high lands within it. Peaks late (right-translated) = strength. Peaks early (left-translated) = weakness.",
   fourYear:   "The four-year rhythm many traders track in Bitcoin, historically anchored near halvings. SniperSight shows the projected low window but treats it as observation, not fact — the sample size is tiny.",
 
   /* ---- trade mechanics ---- */
   entry:      "The price where the trade opens.",
-  tp:         "Take Profit — the price where the trade closes in profit, set automatically when the trade is placed.",
+  tp:         "Target — the price where the trade closes in profit, set automatically when the trade is placed. Exchanges and the engine log call this take-profit; it is the same thing.",
   sl:         "Stop Loss — the price where the trade closes at a loss. Placed where the trade idea would be proven wrong, not at an arbitrary percentage.",
   structuralStop:"A stop placed where the trade idea would be proven wrong, not at a round percentage. SniperSight puts it just past the low the confirming candle rejected — or the zone's far edge if that sits further — plus a small buffer, so the loss is defined by a price the market visibly refused.",
   atr:        "Average True Range — how far this market usually moves in one bar, in its own price units. It is the app's ruler for distance: “0.5 ATR away” means half a typical bar's move, so the same number means the same thing on a quiet market and a violent one.",
-  rr:         "Risk:Reward — how much you stand to gain versus lose. 3.0 means the target is three times further away than the stop.",
+  rr:         "Reward/risk — how much you stand to gain versus what you put at risk. 3.0 means the target sits three times further away than the stop.",
   rMultiple:  "Result measured in units of what you risked. +2R means you made twice what you had at risk; −1R means you lost exactly your planned risk.",
   expectancy: "What one trade is worth on average, in units of what you risked. Add up every result in R and divide by the number of trades — positive means the edge pays, and the honest question is whether it sits far enough from zero to be told apart from luck.",
   trailing:   "A stop that follows price as the trade moves your way, locking in gains instead of sitting still.",
   scaleout:   "Closing part of a position at a level and letting the rest run — 'half off at 1R'. It banks a certain gain and reduces what is still at risk, and it also caps the trade: the half you took off cannot ride to the target. Your result becomes a blend of the two exits, and your book records both so the choice can be judged against simply holding.",
   setup:      "A trade opportunity the scanner found: a direction, an entry, a target, a stop, and the reasoning behind it.",
-  shadow:     "A symbol the scanner watches, scores and simulates but NEVER sizes a real position on — usually because its venue is not one this system trades yet. Its record is evidence about whether to admit that venue, not part of your own record. Market Weather counts shadow symbols separately from tradeable ones for that reason.",
+  shadow:     "Watch-only. A symbol the scanner watches, scores and simulates but NEVER sizes a real position on — usually because its venue is not one this system trades yet. Its record is evidence about whether to admit that venue, not part of your own record. Market Weather counts shadow symbols separately from tradeable ones for that reason.",
   /* Added after the UX audit walked the primary surface as a first-time
      trader and listed the words that appear there with no way to look them
      up. "1D agrees" was the costliest omission: it is the higher-timeframe
@@ -56,17 +50,13 @@ window.GLOSSARY = {
   playbook:   "A named set of rules for one kind of trade: the market condition it needs, what triggers it, where the stop goes, how long it's held. The scanner only produces a setup when a playbook covers what the market is doing — so a quiet day usually means the market is in a state nothing here has a play for, not that nothing is happening.",
   horizon:    "How long a trade is meant to be held. It comes from the timeframe that found it: a 15-minute setup is usually over within a day, a daily one can run for weeks. The horizon is a policy, not a label — it decides how much patience a trade is given before it's closed as going nowhere.",
   confirmation:"Proof that a level held, before the trade opens. Price touching a zone isn't enough; SniperSight waits for a candle to close back out of it, finishing near the far end of its own range. Costs a little of the move, avoids a lot of the losses.",
-  rank:       "SniperSight's confidence score for a setup, 0–100. It is a ranking, deliberately NOT a probability — nothing here claims to know the odds.",
-  confluence: "Separate reasons pointing the same way — the higher timeframe agreeing, a fresh zone, heavy volume at the touch. Counting them only means something if they are independent: five indicators computed from the same closing prices are one opinion counted five times, so a factor here is recorded first and only earns weight once it is shown to predict outcomes.",
-  htfAlignment:"Checking that the bigger timeframe agrees before trusting a smaller one — 4H defers to 1D, 1D to 1W. A 15-minute reversal inside a daily uptrend is usually a pullback; SniperSight records whether the higher timeframe agreed and adds 10 to the rank when it does, but never requires it.",
-  forming:    "Price is approaching a zone but hasn't reached it. A heads-up, not yet a trade.",
-  challenger: "A better setup found for a token that already has one pending. It waits beside the current one until you choose to switch — it never swaps itself.",
 
   /* ---- risk ---- */
   riskPerTrade:"How much of the account you're willing to lose on one trade. Position size is calculated from this and the stop distance, so the loss is the same whether the stop is near or far.",
   drawdown:   "How far the account has fallen from its highest point. The limit that stops the bot trading.",
   leverage:   "Borrowing to hold a bigger position than your cash. It multiplies gains AND losses, and introduces liquidation.",
   liquidation:"On leveraged trades, the price where the exchange force-closes you and takes the margin. Your stop must sit safely inside it.",
+  testnet:    "Real exchange plumbing, fake funds. Orders are actually submitted and actually fill, on the venue's test network — it proves the wiring works without any money being at risk.",
   funding:    "A recurring fee paid between long and short holders on perpetual contracts. It accrues while a position is held, so it matters on multi-day swings.",
   perps:      "Perpetual futures — contracts with no expiry that track the spot price. They allow shorting and leverage; spot markets do not.",
   killSwitch: "An automatic halt. When the day's loss limit is hit, no new trades open until the next day.",
@@ -74,7 +64,6 @@ window.GLOSSARY = {
   /* ---- system ---- */
   paper:      "Simulated trading with fake money. Same code, same decisions, no real orders — used to prove the strategy before risking anything.",
   live:       "Real orders on a real exchange with real money.",
-  scanner:    "The process that pulls market data, maps structure, and looks for setups.",
   baseline:   "The start date of the current forward test. Results before it belong to an older engine and are not mixed in.",
 
   /* The two ERAS. Every trade count in this app belongs to one of them, and the
@@ -84,11 +73,14 @@ window.GLOSSARY = {
      name their era in the same words, and both point at the other. */
   forwardWindow:"The stretch of trading since the current baseline opened. Results reports ONLY this window, so it reads empty until the account safety checks decide the first setup — however many trades came before. Changing a rule starts a new one.",
   recordedBook: "Every trade the simulator has ever closed, across all baselines and every engine version. Diagnostics measures the edge against this, because a confidence interval needs far more trades than one forward window usually holds.",
-  fact:       "One recorded observation, stamped with when it happened, when the system could first know it, and which algorithm version produced it. Facts are never edited — only added.",
   algoVersion:"Which version of an engine produced a result. Changing a rule creates a NEW version rather than editing the old one, so past results stay reproducible.",
-  rejection:  "A candidate the scanner looked at and turned down, with the reason recorded. Rejections are kept because knowing why nothing fired is as useful as knowing why something did.",
   telemetry:  "The debug trail: what each engine did, on what inputs, producing what. Used to prove the CODE is right before judging whether the STRATEGY is right.",
-  blocker:    "A data or pipeline fault serious enough that performance numbers can't be trusted until it's fixed."
+  blocker:    "A data or pipeline fault serious enough that performance numbers can't be trusted until it's fixed.",
+  /* USED AT edgeview.js, DEFINED NOWHERE until now. show() returns silently on
+     an unknown key and markFocusable skips the title and aria-description, so
+     "honest range" was a focusable role="button" that did nothing at all — the
+     one failure mode this file cannot announce. */
+  confidenceRange:"The band the true average is likely to sit in once luck is allowed for. It is built by rebuilding this book thousands of times from its own trades, drawn at random with repeats. If the band crosses zero, nothing has been proven yet."
 };
 
 (function(){
@@ -239,15 +231,13 @@ window.GLOSSARY = {
        and /timeframe/ patterns so the whole phrase is claimed as one term
        rather than half of it being underlined. */
     [/\b\d+[DWHM] (?:agrees|opposes)\b/i, 'htfAgrees'],
-    [/\bhigher[- ]timeframe\b/i, 'timeframe'],
+    [/\bhigher[- ]timeframe\b/i, 'htfAgrees'],
     [/\bliquidity\b/i, 'liquidity'],
-    [/\btimeframes?\b/i, 'timeframe'],
+
     [/\bATR\b/, 'atr'],
-    [/\bpullbacks?\b/i, 'pullback'],
-    [/\breversals?\b/i, 'reversal'],
+
     [/\bplaybooks?\b/i, 'playbook'],
-    [/\btransitions?\b/i, 'transition'],
-    [/\branges?\b/i, 'range'],
+
     [/\bzones?\b/i, 'zone'],
     [/\bregimes?\b/i, 'regime'],
     [/\bsetups?\b/i, 'setup'],
