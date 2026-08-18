@@ -26,12 +26,22 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
         self.assertIn('data-s="diagnostics"', self.html)
         self.assertIn('id="s-diagnostics"', self.html)
 
-    def test_verdict_funnel_and_telemetry_are_all_present(self):
-        """The operator asked for telemetry and rejection reasons in ONE place."""
+    def test_verdict_funnel_and_reasons_are_all_present(self):
+        """The operator asked for the verdict and the rejection reasons in ONE
+        place, and that has not changed.
+
+        The telemetry TABLE is no longer one of them. Stage counts and failure
+        points are engine self-checks - the panel's own chip called them
+        developer detail - and Copy report still carries them. What has to
+        survive on this surface is the failure state, which is why #telChip is
+        still asserted here: a panel may leave, a way of finding out that
+        something is broken may not.
+        """
         for anchor in ('id="dVerdict"', 'id="dFunnel"', 'id="dIssues"',
                        'id="dNotes"',
-                       'id="dTelemetry"'):
+                       'id="telChip"'):
             self.assertIn(anchor, self.html, anchor)
+        self.assertNotIn('id="dTelemetry"', self.html)
 
     def test_refresh_is_read_only_and_reachable(self):
         self.assertIn('id="btnAudit"', self.html)

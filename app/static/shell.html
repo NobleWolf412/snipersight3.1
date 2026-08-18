@@ -1384,16 +1384,21 @@
           <div class="skel" style="height:36px"></div>
         </div></div>
         </div>
-        <div class="panel">
-          <div class="panel-head"><h2 class="t-section">Setup
-            <span class="term" data-t="telemetry">Telemetry</span></h2>
-            <span class="chip" id="telChip" style="margin-left:auto"
-              title="per-setup counters straight from the engine — developer detail">—</span></div>
-          <div id="dTelemetry"><div class="skeleton" role="status" aria-label="loading">
-          <div class="skel" style="height:30px"></div>
-          <div class="skel" style="height:30px"></div>
-          <div class="skel" style="height:30px"></div>
-        </div></div>
+        <!-- SETUP TELEMETRY'S TABLE LEFT THIS SURFACE. Stage counts and
+             failure points are engine self-checks - the panel's own chip
+             title said "developer detail" - and they were several hundred
+             rows on the screen an operator opens when something is wrong.
+             The payload is still fetched, because Copy report composes three
+             of its sections from it (see loadTelemetry).
+
+             What is left is the one state here that is not developer detail:
+             the engine failing its own checks. Hidden while clean, because a
+             chip that is always present is a chip nobody reads. -->
+        <div class="panel" id="telPanel">
+          <div class="panel-head"><h2 class="t-section">Engine self-checks</h2>
+            <span class="chip" id="telChip" style="margin-left:auto" hidden></span>
+            <span class="t-label" style="text-transform:none;letter-spacing:0">
+              Counters and stage detail travel with <b>Copy report</b>.</span></div>
         </div>
       </div>
 

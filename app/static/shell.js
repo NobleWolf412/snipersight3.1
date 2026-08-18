@@ -4838,36 +4838,37 @@ weighed in. Name the facts you used.`;
     const t = await api('/api/setup-telemetry?limit=500');
     lastDiagTelemetry = t;
     renderDiagState();
-    const stages = t.stages || {}, fails = t.failure_points || {};
-    const rows = Object.entries(stages).length ? Object.entries(stages)
-      : Object.entries(fails);
-    /* THE EMPTY-WINDOW RULE, site 2 of 4.
-       `defects ? ... : 'clean'` in green made an EMPTY record set
-       indistinguishable from a checked-and-clean one — while the panel body
-       directly beneath it said "no candidates recorded in this window yet".
-       Chip and body contradicted each other, and the chip is what gets read.
-       The denominator IS the caveat: a verdict without one is not a verdict. */
+    /* THE FETCH STAYS; THE 500-ROW TABLE DOES NOT.
+
+       This panel's own chip title called it "developer detail" and it was
+       right: stage counts and failure points are engine self-checks, read by
+       whoever maintains the engines and by nobody deciding a trade. It was
+       several hundred rows on the surface the operator opens when something
+       is wrong.
+
+       The loader is NOT deleted with it. `Copy report` composes the SETUP
+       TELEMETRY section, the funnel sentence and the version list out of THIS
+       payload, and may not fetch its own copy: two reads of a moving audit can
+       disagree, and a handover that disagrees with the screen is worse than
+       none (rule 9). Deleting the fetch would have quietly emptied three
+       sections of the clipboard with nothing on screen saying so.
+
+       What stays visible is the one state that is not developer detail: a
+       non-zero defect count, which says the engine failed its own checks.
+       Silent when clean - a chip that is always there is a chip nobody
+       reads. */
     const n = (t.records || []).length;
     const defects = (t.records || []).reduce((s, r) => s + (r.defect_count || 0), 0);
-    if(!n){
-      $('telChip').textContent = 'no data';
-      $('telChip').className = 'chip';                    // grey: nothing checked
-    } else if(defects){
-      $('telChip').textContent = defects + ' defects';
-      $('telChip').className = 'chip chip-red';
-    } else {
-      $('telChip').textContent = 'evidence complete · ' + n + ' checked';
-      $('telChip').className = 'chip chip-green';
+    const chip = $('telChip');
+    if(chip){
+      chip.hidden = !defects;
+      if(defects){
+        chip.textContent = defects + ' engine defects of ' + n + ' checked';
+        chip.className = 'chip chip-red';
+        chip.title = 'The engine failed its own checks on these records. '
+          + 'Copy report carries the detail.';
+      }
     }
-    // a real table for the same reason the perf panels are — see perfRows()
-    $('dTelemetry').innerHTML = rows.length
-      ? `<table class="data-table t-mono">
-          <thead><tr><th scope="col">stage</th><th scope="col">count</th></tr></thead>
-          <tbody>${rows.sort((a, b) => b[1] - a[1]).map(([k, n]) =>
-            `<tr><th scope="row">${k.replaceAll('_', ' ').toLowerCase()}</th>
-             <td><b style="color:var(--fg-2)">${fmt(n)}</b></td></tr>`).join('')}
-          </tbody></table>`
-      : '<div class="empty">no candidates recorded in this window yet</div>';
   }
 
   /* ---------- actions ---------- */

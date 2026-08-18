@@ -71,15 +71,26 @@ ok('Results: the empty window says so in words, not just dashes', () => {
   assert(/window empty/.test(b), 'no explanatory band');
 });
 
-ok('Telemetry: zero records is grey "no data", not green "complete"', () => {
-  const seg = SRC.slice(SRC.indexOf('telChip') - 900, SRC.indexOf('telChip') + 900);
-  assert(seg.includes("'no data'"), 'empty record set still reads as a verdict');
-  assert(/evidence complete · /.test(seg),
-         'an evidence-complete verdict carries no denominator');
-  // the grey branch must NOT be chip-green
-  const greyIdx = seg.indexOf("'no data'");
-  const after = seg.slice(greyIdx, greyIdx + 200);
-  assert(!/chip-green/.test(after), 'the no-data branch is painted green');
+/* THE SAME PROPERTY, ENFORCED HARDER.
+
+   This used to assert that an empty record set rendered a grey "no data"
+   chip rather than a green "evidence complete" one - the empty-window rule,
+   site 2 of 4: nothing checked must never read like nothing wrong.
+
+   The stage table has moved off this surface (engine self-checks are
+   developer detail, and Copy report still carries them). The chip that
+   remains says one thing only, and only when it is true: the engine failed
+   its own checks. Zero records now renders NOTHING, which cannot be misread
+   as a pass at all - so the assertion is that the chip is conditional and
+   that the clean branch makes no claim. */
+ok('Telemetry: a clean or empty run makes no claim at all', () => {
+  const seg = SRC.slice(SRC.indexOf('telChip') - 1200, SRC.indexOf('telChip') + 900);
+  assert(/chip\.hidden = !defects/.test(seg),
+    'the engine self-check chip is unconditional again - silence is the clean state');
+  assert(!/chip-green/.test(seg),
+    'a green verdict is back on a panel that only exists to report failure');
+  assert(/defects/.test(seg) && /chip-red/.test(seg),
+    'a non-zero defect count no longer paints itself loud');
 });
 
 /* The colour behind the health word is no longer a literal at each call site —

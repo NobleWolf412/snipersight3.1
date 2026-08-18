@@ -427,9 +427,12 @@ class TestCockpitHierarchy(unittest.TestCase):
         self.assertIn("no slots free", self.js)
         self.assertIn("halted for today", self.js)
 
-    def test_guardrails_and_telemetry_have_a_home(self):
+    def test_guardrails_and_engine_faults_have_a_home(self):
         self.assertIn('id="guardRows"', self.html)
-        self.assertIn('id="dTelemetry"', self.html)
+        # The telemetry table moved off the surface; the engine-fault state it
+        # was buried in did not. A count of failed self-checks is the only part
+        # of that panel an operator can act on.
+        self.assertIn('id="telChip"', self.html)
 
     def test_scanner_state_is_persistent_chrome(self):
         self.assertIn('id="scanChip"', self.html)
