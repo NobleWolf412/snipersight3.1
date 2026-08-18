@@ -223,16 +223,38 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
     }
   }
 
+  /* HIDDEN WHILE THERE IS NOTHING TO MISMATCH, LOUD THE INSTANT THERE IS.
+
+     "Do my positions match the exchange?" is the most consequential question
+     this surface can ask, and while live routing is build-locked the honest
+     answer is that there are no live positions to compare - so the panel is
+     promotion evidence, which is Citadel's half, and it starts hidden.
+
+     It is NOT deleted, and this function decides its visibility rather than
+     the markup: anything other than a clean pass reveals it. A degraded read
+     reveals it too, because "custody could not be read" is exactly the state
+     that must never be silent. The day live routing exists, a mismatch walks
+     back onto this screen by itself. */
+  function reveal(show){
+    const panel = document.getElementById('reconciliationPanel');
+    if(panel) panel.hidden = !show;
+  }
+
   function renderReconciliation(mode){
     const root = $('reconciliationRoot'), chip = $('reconciliationChip');
     if(!root || !chip) return;
-    if(!mode){ chip.textContent = 'unavailable'; chip.className = 'chip chip-red';
+    if(!mode){ reveal(true); chip.textContent = 'unavailable'; chip.className = 'chip chip-red';
       root.innerHTML = '<p class="op-warning">Custody evidence could not be read. Do not assume reconciliation passed.</p>'; return; }
     const op = mode.operational || {}, promotion = mode.promotion || {};
     const observed = Number(op.testnet_lifecycles || 0) > 0 || Number(op.reconciliation_rate || 0) > 0;
     const passed = observed && promotion.testnet_ready === true;
     chip.textContent = passed ? 'promotion ready' : !observed ? 'not observed' : 'gate blocked';
     chip.className = 'chip ' + (passed ? 'chip-green' : 'chip-red');
+    /* A clean pass is the ONLY state that stays folded away. Anything else -
+       a blocked gate, an unobserved run, a duplicate or orphan - is a thing
+       the operator has to be able to see without going looking for it. */
+    const dirty = Number(op.duplicate_orders || 0) > 0 || Number(op.orphan_positions || 0) > 0;
+    reveal(!passed || dirty);
     root.closest('.reconciliation-panel').dataset.state = passed ? 'PROMOTION_READY' : 'BLOCKED';
     root.innerHTML = `<div class="reconciliation-grid">
       <div><span>Success rate</span><b>${observed ? (Number(op.reconciliation_rate) * 100).toFixed(1) + '%' : 'No qualifying run reported'}</b></div>

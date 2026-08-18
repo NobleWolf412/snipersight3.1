@@ -1295,7 +1295,6 @@
         <button class="btn btn-primary" id="btnCopyDiag"
                 title="put a plain-text summary of everything on this surface on the clipboard">
           Copy report</button>
-        <span class="t-label" id="diagStamp"></span>
       </div>
       <!-- THE TWO STATUS READOUTS, PAIRED.
 
@@ -1332,8 +1331,21 @@
           </div>
         </div>
       </div>
-      <div class="panel reconciliation-panel" style="margin-bottom:var(--lg)">
-        <div class="panel-head"><h2 class="t-section">Execution reconciliation</h2>
+      <!-- EXECUTION RECONCILIATION IS HIDDEN, NOT DELETED, and the difference
+           matters. "Do my positions match the exchange?" is the single most
+           important question this surface can answer - the moment real orders
+           exist, a MISMATCH is a blocking alert and belongs at the top of the
+           screen, not folded away.
+
+           But live routing is build-locked (automation.LIVE_ROUTER_BUILD_ENABLED
+           is False), so today this panel is promotion evidence rather than live
+           state: it reports on custody proofs from a testnet run. Evidence is
+           Citadel's half. The mount and its renderer are intact and the panel
+           unhides itself the moment the payload says anything is mismatched -
+           see loadReconciliation in cockpit-workspaces.js. -->
+      <div class="panel reconciliation-panel" id="reconciliationPanel"
+           style="margin-bottom:var(--lg)" hidden>
+        <div class="panel-head"><h2 class="t-section">Do positions match?</h2>
           <span class="chip" id="reconciliationChip" style="margin-left:auto">reading…</span></div>
         <div class="panel-body" id="reconciliationRoot">
           <div class="empty">Reading private custody evidence…</div>

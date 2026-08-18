@@ -4743,12 +4743,11 @@ weighed in. Name the facts you used.`;
     }
     el.textContent = said.join(' ');
 
-    const stamp = $('diagStamp');
-    if(stamp){
-      const v = (t && t.versions) || {};
-      const tags = Object.values(v).filter(Boolean).slice(0, 3).join(' · ');
-      stamp.textContent = tags ? `${tags} — the report carries all of it` : '';
-    }
+    /* THE ENGINE BUILD TAGS ARE NOT ON SCREEN ANY MORE.
+       "zone-v0.11 · setups-v0.9" is the answer to a question only whoever
+       maintains the engines asks, printed on the surface an operator opens
+       when their bot has stopped. Copy report still carries every version,
+       which is where they matter: in the handover, not on the wall. */
   }
 
   /* Plain text, not JSON, and that is a decision. The operator reads this
