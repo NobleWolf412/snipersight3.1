@@ -90,6 +90,35 @@ class AnnotateCase(unittest.TestCase):
             con.close()
 
 
+class VerifiesItselfCase(unittest.TestCase):
+    """The defect this module shipped with, turned into a test.
+
+    Its first version reconstructed labels from ONE of the thirteen regime
+    versions in the store, matched the engine's own recorded regime 68% of the
+    time, and reported a split anyway. A reconstruction that reads a different
+    label than the gate did is not a weaker measurement of the same thing - it
+    is a measurement of something else, and it cannot announce that itself.
+    """
+
+    def test_grade_reports_how_well_it_reproduced_the_engine(self):
+        src = inspect.getsource(regimefresh.grade)
+        self.assertIn("verify(", src,
+                      "grade() presents a split without checking the labels "
+                      "under it against what the engine actually read")
+        self.assertIn("reconstruction", inspect.getsource(regimefresh.grade))
+
+    def test_a_floor_exists_and_is_not_perfection(self):
+        self.assertLess(regimefresh.VERIFY_FLOOR, 1.0,
+                        "demanding a perfect match fails on the 13 of 5,940 "
+                        "that genuinely disagree")
+        self.assertGreater(regimefresh.VERIFY_FLOOR, 0.9)
+
+    def test_the_cli_refuses_to_present_an_untrusted_split_quietly(self):
+        src = inspect.getsource(regimefresh.main)
+        self.assertIn("trustworthy", src)
+        self.assertIn("Do not quote these numbers", src)
+
+
 class NotAGateCase(unittest.TestCase):
     def test_no_trading_module_imports_the_audition(self):
         """House convention: evidence is recorded, not filtered on. Wiring this

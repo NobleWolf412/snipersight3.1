@@ -18,15 +18,27 @@ then fires a median 68 bars later again on WEAKENING_BEAR, 159 on BEAR_TREND.
 
 PULLBACK is a counter-move entry by design: it buys a dip. On the long side the
 dip is a discount. On the short side the same rule SELLS A RALLY — into a bear
-call the market has often already undone. Split PULLBACK SHORT by whether the
-governing label was still true at entry and the whole loss is in the stale half:
+call the market may already have undone. That is the hypothesis. It is NOT a
+finding, and an earlier version of this docstring stated three cohort figures
+as though it were; those came from a scratch analysis that this module never
+reproduced, and they are withdrawn.
 
-    label current, price still below it   n=273  +0.111 R   36% win
-    label current, price back above it    n=628  -0.620 R   14% win
-    label already superseded              n=157  -1.146 R    3% win
+WHY A RECONSTRUCTION HERE CAN LIE, and what is done about it. The store holds
+THIRTEEN regime versions. A later version re-runs over old candles and writes
+its own label for dates a trade was already taken on, so "the regime at time T"
+has more than one answer depending on which version is asked. Measured against
+the engine's own recorded regime (the `details.regime` on every
+NO_ELIGIBLE_PLAYBOOK rejection, which is the value the gate actually read):
 
-That last cohort is close to a guaranteed stop-out, and it is 157 trades the
-book took because a gate consulted a fact that had already been replaced.
+    reconstruct with the CURRENT regime version only ... 68.4% match
+    reconstruct with ALL versions, newest confirmed wins  84.6% match
+    the same, restricted to the CURRENT setup version .. 99.8% match
+
+Only the last is honest, and it is what `grade()` measures: load_candidates is
+scoped to the current setup version, and `_regime_series` to the current regime
+version, so engine and reconstruction were live together. `verify()` proves
+that on the operator's own book rather than asserting it — run it first, and
+distrust any split whose reconstruction does not clear its floor.
 
 WHY THIS IS A MEASUREMENT AND NOT A FIX. Two things this codebase has already
 auditioned came back INVERTED — btcalign graded OPPOSED at +0.536 R against
@@ -58,12 +70,10 @@ import sqlite3
 from . import store
 from .regime import REGIME_VERSION
 
-#: Superseded is the cohort worth naming on its own: the label the gate read
-#: had already been replaced by a newer confirmed regime before the setup
-#: fired. Measured at -1.146 R over 157 trades with a 3% win rate — the worst
-#: cohort found anywhere in this book.
-SUPERSEDED = "SUPERSEDED"
-CURRENT = "CURRENT"
+#: The floor `verify()` must clear before any split here is worth reading. Set
+#: at the measured 99.8% rather than 100%: 13 of 5,940 genuinely disagree, and
+#: a reconstruction that demanded perfection would fail on its own rounding.
+VERIFY_FLOOR = 0.99
 
 #: The staleness cut, in the label's own bars. Chosen as the measured median
 #: wait rather than tuned: PULLBACK fires a median 68 bars after a
@@ -164,6 +174,51 @@ def annotate(con, candidates: list[dict]) -> int:
     return n
 
 
+def verify(con, *, setup_version: str | None = None) -> dict:
+    """Prove the reconstruction against the engine's own recorded regime.
+
+    The gate writes the label it read onto every NO_ELIGIBLE_PLAYBOOK
+    rejection, under `details.regime`. That is ground truth: not a later
+    re-derivation, but the value the decision was made on. This replays
+    `label_asof` at the same confirmed_at and reports how often it agrees.
+
+    It exists because the first version of this module did NOT agree — 68.4%
+    over the whole book — and reported a result anyway. A reconstruction that
+    silently reads a different label than the engine did is not a weaker
+    measurement, it is a measurement of something else.
+    """
+    from .setups import SETUP_VERSION
+    version = setup_version or SETUP_VERSION
+    cache: dict[tuple[str, str], list] = {}
+    agree = wrong = absent = 0
+    con.row_factory = sqlite3.Row
+    rows = con.execute(
+        "SELECT symbol, tf, confirmed_at, payload FROM facts "
+        "WHERE kind='setup_rejection' AND algo_version=?", (version,))
+    for r in rows:
+        payload = json.loads(r["payload"])
+        if payload.get("reason") != "NO_ELIGIBLE_PLAYBOOK":
+            continue
+        truth = (payload.get("details") or {}).get("regime")
+        if truth is None:
+            continue
+        key = (r["symbol"], r["tf"])
+        if key not in cache:
+            cache[key] = _regime_series(con, r["symbol"], r["tf"])
+        mine, _, _, _ = label_asof(cache[key], r["confirmed_at"])
+        if mine is None:
+            absent += 1
+        elif mine == truth:
+            agree += 1
+        else:
+            wrong += 1
+    n = agree + wrong + absent
+    rate = (agree / n) if n else None
+    return {"setup_version": version, "n": n, "agree": agree, "wrong": wrong,
+            "no_label": absent, "match_rate": rate,
+            "trustworthy": bool(rate is not None and rate >= VERIFY_FLOOR)}
+
+
 def factor_extractors(payload: dict) -> dict[str, float]:
     """0/1 flags for outcome_split. Absent when unannotated, so MISSING stays
     honest — an unreadable regime history is not a fresh one."""
@@ -193,12 +248,17 @@ def grade(con, *, setup_version=None, exec_version=None) -> dict:
         kwargs["setup_version"] = setup_version
     if exec_version:
         kwargs["exec_version"] = exec_version
+    # THE RECONSTRUCTION IS CHECKED BEFORE IT IS USED. The first version of
+    # this module reported a split built on a 68% match and called the sign
+    # meaningful; the split was real, the labels underneath it were not.
+    proof = verify(con, setup_version=setup_version)
     candidates, warnings = factorstats.load_candidates(con, **kwargs)
     annotated = annotate(con, candidates)
     splits = {name: factorstats.outcome_split(candidates, name,
                                               factors=factor_extractors)
               for name in ("regime_stale", "regime_fresh", "label_late")}
     return {"derived_at_analysis_time": True,   # no fact written, no gate armed
+            "reconstruction": proof,
             "annotated": annotated, "candidates": len(candidates),
             "warnings": warnings, "splits": splits}
 
@@ -216,6 +276,14 @@ def main(argv=None) -> int:
     if args.json:
         print(json.dumps(result, indent=2, default=str))
         return 0
+    proof = result["reconstruction"]
+    rate = proof["match_rate"]
+    shown = f"{rate:.1%}" if rate is not None else "no ground truth"
+    print(f"reconstruction vs the engine's own recorded regime: {shown} "
+          f"of {proof['n']:,} gated decisions")
+    if not proof["trustworthy"]:
+        print("  *** BELOW THE FLOOR. The labels under the split below are not "
+              "the ones the engine read. Do not quote these numbers. ***")
     print(f"regime freshness — {result['annotated']} of {result['candidates']} "
           f"candidates annotated")
     for name, split in result["splits"].items():
