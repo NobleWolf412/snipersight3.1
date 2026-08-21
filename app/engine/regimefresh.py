@@ -1,12 +1,14 @@
 """Regime freshness — how stale was the label this trade was gated on? READ-ONLY.
 
-PULLBACK's short leg loses money on this book: n=1,136, mean -0.546 R, and the
-loss does not live in the geometry. The bracket is provably fair — under a
-driftless walk the entry/sl/tp triple implies P(target) of 25.4% for PULLBACK
-SHORT against 25.5% / 25.7% / 27.2% for the other three strategy-direction
-groups, a spread of under two points where the realised win rates spread
-nineteen. Widening the stop does not rescue it either: from the tightest to the
-widest quartile on 1H the short only improves from -0.83 R to -0.28 R.
+PULLBACK's short leg loses money on this book, and the loss does not live in
+the geometry. The bracket is provably fair: under a driftless walk the
+entry/sl/tp triple implies almost the same probability of reaching target for
+all four strategy-direction groups, a spread of under two points where the
+realised win rates spread nineteen. Widening the stop does not rescue it
+either - the short stays roughly a full R behind the long at every stop width.
+
+(Figures deliberately not quoted here. They are account results, and this file
+is public. Run the module to see them against your own book.)
 
 What differs is WHEN the trade fires relative to the label that let it fire.
 

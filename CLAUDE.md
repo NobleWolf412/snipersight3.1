@@ -380,6 +380,34 @@ trusting an article, rather than guessing at its age.
 Doc and prose changes are invisible to the hook, which only ever looks at code.
 Those need `/graphify --update`, and that one does cost tokens.
 
+## This repository is public, and the book in it is not
+
+`github.com/NobleWolf412/snipersight3.1` is a PUBLIC repository. Everything
+committed here is readable by anyone, permanently, including after a later
+force-push removes it.
+
+**Measurements from the paper book may be committed. Measurements from a live
+account may not.** The distinction is the source, not the shape: this codebase
+deliberately carries numbers in its comments — "985 of 985 setups", "39 exits
+appeared to end at UNIVERSE onboarded" — and that convention is most of what
+makes the engine files readable. Do not sanitise those. What must never land
+here is the operator's real money: equity, realised P&L, position sizes, or a
+win rate computed over funded live trades.
+
+Today the distinction costs nothing because live routing is build-locked
+(`automation.LIVE_ROUTER_BUILD_ENABLED = False`) and every figure in the store
+is paper. **The day that lock comes off, this rule acquires teeth and the repo
+should go private before the first live fill**, because the moment after is too
+late — git history is not a delete key.
+
+There is deliberately NO automated scanner for this. A regex that banned
+result-shaped strings would fire on twenty-three engine files and fight the
+comment convention above; one narrow enough to avoid that would be trivially
+evaded and would teach false confidence. The control is this paragraph, read by
+whoever flips the live switch, plus repository visibility. `engine/regimefresh.py`
+carries the pattern to copy: keep the reasoning, drop the account figures, and
+tell the reader to run the module against their own book.
+
 ## Four roles, and when to call them
 
 `.claude/agents/` holds four bounded roles. They are jobs, not personalities,
