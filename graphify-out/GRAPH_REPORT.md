@@ -1,16 +1,16 @@
-# Graph Report - snipersight3.1  (2026-08-19)
+# Graph Report - snipersight3.1  (2026-08-20)
 
 ## Corpus Check
-- 285 files · ~581,306 words
+- 285 files · ~581,659 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 6614 nodes · 11823 edges · 363 communities (323 shown, 40 thin omitted)
-- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 479 edges (avg confidence: 0.66)
+- 6615 nodes · 11781 edges · 357 communities (317 shown, 40 thin omitted)
+- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 449 edges (avg confidence: 0.65)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `30b99a17`
+- Built from commit: `80442b96`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -338,32 +338,26 @@
 - NextWakeMath
 - test_ui_read_models.py
 - test_semantics_and_keyboard.js
-- st
+- ei
 - TestPointInTimeUniverse
 - DPAPI Credentials Vault (credentials.py)
 - cycles.py
 - TestMarketQuality
 - volume.py
-- test_action_feedback.js
+- mn
 - CustodyOverridesTheSimulatorsStory
-- test_one_source_of_truth.js
+- renderLedger
 - opportunity-ui.js
-- test_prune_facts.py
+- loadPerformance
 - ni
-- EntryModelAuthority
 - TestEveryRowIsAccountedFor
-- .test_current_versions_are_read_from_the_engines_not_sorted
 - _facts
 - test_market_workspaces.js
 - funding.py
-- .test_every_current_version_is_visible_to_the_pin_scan
 - stocks.py
-- .test_this_suite_cannot_reach_the_live_store
 - Child
 - apex_state
 - ADR-001: Isolated Market Workspaces
-- learning_approve
-- manual_arm
 - markets.js
 - stocks.js
 - opportunity_detail
@@ -373,9 +367,9 @@
 ## God Nodes (most connected - your core abstractions)
 1. `vn` - 114 edges
 2. `ManualCase` - 101 edges
-3. `f()` - 90 edges
+3. `f()` - 88 edges
 4. `sn()` - 68 edges
-5. `RunRecorder` - 62 edges
+5. `RunRecorder` - 60 edges
 6. `as()` - 58 edges
 7. `yi` - 56 edges
 8. `BrokerOrder` - 50 edges
@@ -404,19 +398,19 @@
 - **Evidence-Gated Path to Live Execution** — docs_hardening_research_gates, docs_program_plan_gate_answer, docs_program_plan_simulator_fill_defect, docs_spec_confirmed_entry_two_by_two_replay [INFERRED 0.85]
 - **Strategy Grading Rig** — docs_salvage_from_snipersight_trading_factor_contribution, docs_salvage_from_snipersight_trading_edge_significance, docs_spec_confirmed_entry_promotion_criterion, docs_program_plan_program_plan [INFERRED 0.85]
 
-## Communities (363 total, 40 thin omitted)
+## Communities (357 total, 40 thin omitted)
 
 ### Community 0 - "Chart Vendor Core"
 Cohesion: 0.05
 Nodes (7): an(), en(), hn(), ln(), rn(), tn(), vn
 
 ### Community 1 - "Chart Vendor Rendering"
-Cohesion: 0.05
-Nodes (6): Et, gi(), R(), ut, yi, zn()
+Cohesion: 0.04
+Nodes (6): ai, ci(), Et, Ts(), ut, yi
 
 ### Community 2 - "Chart Vendor Coordinates"
-Cohesion: 0.07
-Nodes (3): mn, sn(), wn()
+Cohesion: 0.06
+Nodes (3): gi(), sn(), wn()
 
 ### Community 3 - "Manual Trading Engine"
 Cohesion: 0.38
@@ -425,10 +419,6 @@ Nodes (9): build(), fail(), load(), paintFailing(), render(), renderDetail(), re
 ### Community 4 - "Entry Stats Tests"
 Cohesion: 0.05
 Nodes (25): candle(), Regression tests for `engine.entrystats`.  The four properties that make this to, The bar BEFORE confirmation reaches the target. A walk that looked         back, Belt and braces on the boundary: if the index selection is ever         changed, Mirrors execsim's STOP_FIRST rule. A counterfactual that resolved         ambigu, entry 100 / sl 95 / tp 115 -> plan R:R 3.0, and execsim fills at the         lim, The fill bar opens at 102. Plan risk is 100-95=5 and plan reward         115-100, A feature present on 40 of 60 trades must not borrow the n=60 floor.         Jud (+17 more)
-
-### Community 5 - "Chart UI Layer"
-Cohesion: 0.18
-Nodes (3): E(), I, $
 
 ### Community 6 - "Design System & Consistency Docs"
 Cohesion: 0.05
@@ -440,19 +430,19 @@ Nodes (26): bars(), Volume engine tests — the properties that must not regress
 
 ### Community 8 - "Chart Vendor API"
 Cohesion: 0.06
-Nodes (18): ae(), bs(), ce(), de(), ei, fe(), mt(), O() (+10 more)
+Nodes (16): ae(), ce(), de(), fe(), L, mt(), O(), oe() (+8 more)
 
 ### Community 9 - "Chart Vendor Internals"
-Cohesion: 0.06
-Nodes (6): as(), f(), ms(), ps(), vs(), CP
+Cohesion: 0.07
+Nodes (7): as(), b(), ps(), S(), vs(), CP, t()
 
 ### Community 10 - "Manual Book Tests"
 Cohesion: 0.04
 Nodes (37): ManualCase, A bar that closes exactly AT `armed_at` is still the past.          Bar 9 clos, The override is the whole design: the engine's simulation of this         setup, execsim charges its market exits fee AND slippage. The first cut of         the, The bug an operator hit: up +1.5R on a SHORT, dragging the stop down         to, status() priced R off the CURRENT stop, so a profit-side stop         inverted, Position geometry is looser than entry geometry, not absent., R times the dollars at risk, quantized ROUND_HALF_UP.          The rounding mo (+29 more)
 
 ### Community 11 - "Bias, Trend & Setups"
-Cohesion: 0.15
-Nodes (6): AutoPruneCase, The scanner's routine telemetry sweep — cadence, receipts, and its cage.  The sw, The cage, pinned at the AST: every function the sweep calls is on         an all, The sweep inherits every keep rule — referenced, failed, newest,         window, No sidecar file, no settings row: due-ness is read from the last         runs re, The two targets keep separate clocks — a manual facts prune must         not pos
+Cohesion: 0.07
+Nodes (22): fetch_candles(), funding_rate(), _get(), list_products(), maintenance_margin(), Decimal, rank_by_volume(), _RateLimiter (+14 more)
 
 ### Community 12 - "Notification Tests"
 Cohesion: 0.06
@@ -472,7 +462,7 @@ Nodes (24): MaCase, Decimal, ramp(), Moving-average engine tests — the propert
 
 ### Community 16 - "Chart Vendor Series"
 Cohesion: 0.08
-Nodes (28): build_plan(), _d(), Decimal, Turn eligible OpportunityCandidate records into the shared execution path.  This, run(), OrderKind, RiskDecision, broker_with() (+20 more)
+Nodes (21): broker_with(), enter_testnet(), EveryDrillNamesItsEvidence, ExpiryCancelsTheVenueOrder, _FakeCancelBroker, make_plan(), memory(), PreWireRefusalIsRetryableAndLoud (+13 more)
 
 ### Community 17 - "Momentum Tests"
 Cohesion: 0.09
@@ -484,35 +474,35 @@ Nodes (21): Decimal, RangeCase, Range engine tests — the properties that must 
 
 ### Community 19 - "API Server Endpoints"
 Cohesion: 0.03
-Nodes (71): apex_state(), automation_drill_start(), candles(), console(), copilot_health(), cycle_summary(), draft_bracket(), edge_stats() (+63 more)
+Nodes (65): apex_state(), automation_drill_start(), candles(), console(), copilot_health(), cycle_summary(), draft_bracket(), edge_stats() (+57 more)
 
 ### Community 20 - "Chart Vendor Panes"
-Cohesion: 0.10
-Nodes (4): d(), hs(), jn(), v()
+Cohesion: 0.06
+Nodes (5): ds(), f(), hs(), jn(), ke
 
 ### Community 21 - "Indicator Engines"
 Cohesion: 0.09
-Nodes (44): detect(), Fair value gaps — three-candle displacement imbalances. algo fvg-v0.1-draft.  Wh, Every qualifying gap in the series, with its fill if one ever printed.      Pure, run(), ema(), plain(), position(), Decimal (+36 more)
+Nodes (41): detect(), Fair value gaps — three-candle displacement imbalances. algo fvg-v0.1-draft.  Wh, Every qualifying gap in the series, with its fill if one ever printed.      Pure, run(), ema(), plain(), position(), Moving-average engine — the ribbon, its slope, and where price sits in it. algo (+33 more)
 
 ### Community 22 - "Manual Fill Timing Tests"
 Cohesion: 0.11
 Nodes (22): FinestTimeframeCase, Manual paper book — the properties that make it safe to have at all.  Two of t, An OPEN intent resolves on the finest series the store actually holds.      Th, `n` 15m bars from ts 0, quiet except where `special` names one., The 4H series those 15m bars aggregate to — same market, one view.          On, The operator's ADAUSDT case, in miniature.          Armed at 15000 — four minu, No-lookahead, re-asked at the finer grid where it now applies.          The ON, 4 bars of 4H is sixteen hours, however the bars are cut.          Left at the (+14 more)
 
 ### Community 23 - "Chart Vendor Scales"
-Cohesion: 0.16
-Nodes (8): PruneFactsCase, We cannot date it' is not 'it is old'. Fail closed., The stop-ship finding. swings.py reads structure-v0.2-draft and         liq-v0.2, The id carries no version, so the reference cannot pick one., A kind absent from DERIVED_KINDS is left alone — the safe direction         for, Record that this algo_version last RAN this long ago. The age gate         measu, Whatever the engine writes today stays, at any age., An A/B loser is evidence while the comparison is live (spec §4).         Age is
+Cohesion: 0.10
+Nodes (13): PruneFactsCase, Retention on superseded derived facts — the reference test, mostly.  `SPEC-persi, We cannot date it' is not 'it is old'. Fail closed., The stop-ship finding. swings.py reads structure-v0.2-draft and         liq-v0.2, The invariant that keeps the scan honest as kinds are added: every         DERIV, engine source already mixes quote styles (factorstats has         single-quoted, `v0.9` sorts above `v0.13`. Sorting version strings would delete the         liv, The id carries no version, so the reference cannot pick one. (+5 more)
 
 ### Community 24 - "Venue Cost Tests"
 Cohesion: 0.05
 Nodes (20): AppendOnlyVersionTest, candle(), EconomicGateTest, ExecSimVenueCostTest, ImmutabilityTest, ProfileResolutionTest, Cost profiles are venue facts, not a process global.  Regression cover for the d, No default argument: charging the wrong venue must not be the path of         le (+12 more)
 
 ### Community 25 - "Chart Vendor Widget Lifecycle"
-Cohesion: 0.18
-Nodes (13): ageText(), bookCard(), closePosition(), go(), ledgerRow(), loadLedger(), markDegraded(), pollScanState() (+5 more)
+Cohesion: 0.22
+Nodes (11): activatable(), ageText(), closePosition(), explainRefusal(), go(), loadLedger(), markDegraded(), pollScanState() (+3 more)
 
 ### Community 26 - "Chart Vendor Data Layer"
-Cohesion: 0.10
-Nodes (30): apply_facts(), apply_runs(), current_versions(), _delete_batch(), _freelist_bytes(), _last_ran_at(), last_runs_prune_at(), main() (+22 more)
+Cohesion: 0.11
+Nodes (29): apply_facts(), apply_runs(), current_versions(), _delete_batch(), _freelist_bytes(), _last_ran_at(), last_runs_prune_at(), main() (+21 more)
 
 ### Community 27 - "UI Structure JS Suites"
 Cohesion: 0.08
@@ -539,8 +529,8 @@ Cohesion: 0.09
 Nodes (15): bars(), EngineContracts, flat(), FvgGeometry, HouseConventions, FVG and volume-profile — evidence engines, held to the house conventions.  The p, No ATR, no scale, no fact — a gap with no volatility yardstick         would car, A window with CONTRAST: price camps in a narrow band on heavy         volume, pu (+7 more)
 
 ### Community 33 - "Shell Health & Staleness"
-Cohesion: 0.09
-Nodes (29): buildCredRows(), buildSettings(), deck(), deckRowInner(), engaged(), expiresIn(), exportJournal(), foundAgo() (+21 more)
+Cohesion: 0.10
+Nodes (21): buildCredRows(), buildSettings(), deckRowInner(), expiresIn(), exportJournal(), foundAgo(), foundTitle(), healthTone() (+13 more)
 
 ### Community 34 - "Cooldown Tests"
 Cohesion: 0.06
@@ -587,24 +577,24 @@ Cohesion: 0.07
 Nodes (15): CandleTest, ListingGapTest, ProductsTest, RankTest, Phemex perp adapter — contract and safety tests. No network.  The endpoint sha, A venue that keeps returning the same first row must not spin., The venue CAN serve 4H directly, unlike Coinbase. The importer still         ag, Market data only. Key handling is the operator's, in OS credential         stor (+7 more)
 
 ### Community 46 - "Chart Vendor Chart API"
-Cohesion: 0.05
-Nodes (6): ii, J, ki(), N, Ri, Rs
+Cohesion: 0.04
+Nodes (8): E(), es(), fs(), ii, ki(), N, Rs, zs
 
 ### Community 47 - "Chart Vendor Number Formatting"
-Cohesion: 0.18
-Nodes (12): acknowledged_gaps(), backfill(), _fetch(), _fetch_rows(), _iso(), native_tfs(), Market-data importer (public endpoints, no credentials — §16).  Multi-venue si, Timeframes imported directly for THIS symbol.      Phemex *can* serve 4H nativ (+4 more)
+Cohesion: 0.07
+Nodes (6): bn, Cn, ht(), st, un(), ys()
 
 ### Community 48 - "Chart Vendor Crosshair"
-Cohesion: 0.21
-Nodes (6): gs(), ks(), ls(), Ss(), ws, xs()
+Cohesion: 0.20
+Nodes (7): bs(), gs(), ks(), ls(), Ss(), ws, xs()
 
 ### Community 49 - "Trend Engine Tests"
 Cohesion: 0.09
 Nodes (14): IsolationCase, The trend-continuation playbook — what it must enter, and what it must not do., A rise to a PEAK, a fall, then a fresh uptrend that pulls back and         resu, Flat, entwined averages describe a market with no trend, and MIXED         is a, THE PROPERTY THE MODULE EXISTS FOR. Every emitted long must have         closed, The slowest ribbon member needs its whole window; without it the         engine, ma.py: 'two implementations of one average is how they come to         disagree, It ships switched off, and the switch is structural rather than a flag. (+6 more)
 
 ### Community 50 - "Execution Simulator & Risk"
-Cohesion: 0.09
-Nodes (32): cross_fill(), plan_versions(), Execution simulator — paper-trades every VALIDATED setup. algo exec-v0.1-draft., Current simulator orders that still need market data to become terminal., Walk forward from the fill bar to a terminal outcome.      Returns (outcome, e, The price a crossing market order actually gets, and the ONE definition., Price one closed leg: slippage, fees, funding, and the R they leave.      THE, Turn a PLAN into the fill it actually got: which bar, what price, whose     fee (+24 more)
+Cohesion: 0.18
+Nodes (18): _day(), dispatch_scale(), gates_for_mode(), Decimal, Risk Authority — §9: strategies request risk, this engine decides. Paper only., THE authority on the envelope. Every reader — the replay, the sizer,     the AP, Quantity scale from the paper-sized risk fact to this mode's R.      The repla, Venue capability. An unrecognised symbol falls back to the SPOT answer —     re (+10 more)
 
 ### Community 51 - "Engine Contract Tests"
 Cohesion: 0.06
@@ -615,8 +605,8 @@ Cohesion: 0.09
 Nodes (14): At a level" — the sweep that says where price is standing, and what the engine, Read-only (§1). A panel that mutated the store while rendering would         ma, `risk.py` refuses to size a SHADOW symbol at any time, so a row for         one, One authority per number (§6). A row and the ticket on that chart         must, Overwatch draws one card per market, so its tab count must use the         same, Degraded paths are audible (§4). A symbol missing from this list         becaus, The Approaching meter was scaled against the wrong constant because         the, `engine_reach` mirrors the gates in `setups.py`'s forming loop.      Read the (+6 more)
 
 ### Community 53 - "Chart Vendor Pane Views"
-Cohesion: 0.06
-Nodes (59): Breakout-retest — trade the level that just broke, when it holds as support., run(), bracket(), for_symbol(), _latest_by_id(), Decimal, Structure-anchored DRAFT bracket for the order ticket. Writes nothing.  ## What, Draft for one symbol/timeframe, read straight from the stored facts. (+51 more)
+Cohesion: 0.33
+Nodes (8): bracket(), for_symbol(), _latest_by_id(), Decimal, Structure-anchored DRAFT bracket for the order ticket. Writes nothing.  ## What, Draft for one symbol/timeframe, read straight from the stored facts., Last recorded state per object. Facts are append-only, so a zone appears     onc, Draft entry/stop/target from live structure, or None if there is none.      Retu
 
 ### Community 54 - "Live Gate Tests"
 Cohesion: 0.11
@@ -631,12 +621,12 @@ Cohesion: 0.15
 Nodes (20): config(), deliver_pending(), enqueue(), event(), heartbeat(), _post(), _queue(), Alerts: one entry point, several destinations, and a queue between them.  WHY A (+12 more)
 
 ### Community 57 - "Fact Store & Migrations"
-Cohesion: 0.12
-Nodes (17): current_run_id(), candle_cache(), canonical_payload(), checkpoint_wal(), fact_hash(), get_active_baseline(), get_facts(), insert_fact() (+9 more)
+Cohesion: 0.05
+Nodes (45): acknowledged_gaps(), backfill(), _fetch(), _fetch_rows(), _iso(), native_tfs(), Market-data importer (public endpoints, no credentials — §16).  Multi-venue si, Timeframes imported directly for THIS symbol.      Phemex *can* serve 4H nativ (+37 more)
 
 ### Community 58 - "Universe & Rate Limiting"
-Cohesion: 0.09
-Nodes (30): aggregate(), _bucket_start(), Canonical higher-timeframe candle aggregator (§19).  4H is built from 1H (UTC-al, _AuditFilter, get_logger(), Run logging — every engine invocation is recorded (file log + engine_runs table), WARNING and above, plus operator write actions. Nothing else., _base_asset() (+22 more)
+Cohesion: 0.07
+Nodes (35): aggregate(), _bucket_start(), Canonical higher-timeframe candle aggregator (§19).  4H is built from 1H (UTC-al, _AuditFilter, get_logger(), WARNING and above, plus operator write actions. Nothing else., _base_asset(), current_symbols() (+27 more)
 
 ### Community 59 - "Kraken Window Walk Tests"
 Cohesion: 0.09
@@ -655,8 +645,12 @@ Cohesion: 0.16
 Nodes (10): play_for(), Market Weather — the strip that tells the operator why the screen is empty.  T, A regime that CAN be traded but needs supporting evidence must not be         r, longs' or 'shorts' is the engine's own direction, not a guess., The strip reports the engine AS CONFIGURED, not as shipped.          setups.pl, Call the engine exactly as the server does, signature and all.      `swept` no, Fresh store between sub-cases, without leaking the previous temp dir., `live` must mean exactly: playbook() returns a play with NO sweep.          Th (+2 more)
 
 ### Community 64 - "Chart Vendor Layout"
-Cohesion: 0.06
-Nodes (3): es(), fs(), zs
+Cohesion: 0.14
+Nodes (22): compute_macd(), compute_rsi(), _pivots(), Decimal, Momentum engine — RSI, MACD, and divergence against the swing facts. algo momen, Wilder RSI per bar index; None until `period` changes exist.      Returns None, (macd, signal, histogram) per bar index, None inside each warmup.      The sig, Schmitt-triggered band state. Enter at 70/30, leave at 65/35.      Holding the (+14 more)
+
+### Community 65 - "Simulator Convention Tests"
+Cohesion: 0.08
+Nodes (3): Be, d(), v()
 
 ### Community 66 - "BTC Alignment Tests"
 Cohesion: 0.09
@@ -675,16 +669,12 @@ Cohesion: 0.15
 Nodes (6): _FakeChild, Not restarting must not mean not telling. The operator still needs to         kn, Mirrors Child.kill: records our own hand, then terminates. The         attributi, Skip returns (import or db) must still stamp `at` so cadence stays 60s     inste, NOT mocked, deliberately.          The first version of _orphans() shelled out t, TestAuditCadenceOnSkip
 
 ### Community 70 - "Chart Vendor Price Scale Formatting"
-Cohesion: 0.08
-Nodes (6): Cn, ct, dt(), nt, u(), wt
-
-### Community 71 - "Chart Vendor Watermark"
-Cohesion: 0.07
-Nodes (3): rt, yn, zi
+Cohesion: 0.13
+Nodes (3): it, jt, u()
 
 ### Community 72 - "Chart Vendor Time Scale API"
-Cohesion: 0.29
-Nodes (8): dimensionTable(), facts(), loadPerformanceWorkspace(), loadSystemWorkspace(), performanceScopeMapping(), renderReconciliation(), reveal(), showPerformanceScope()
+Cohesion: 0.18
+Nodes (13): dimensionTable(), facts(), loadPerformanceWorkspace(), loadSystemWorkspace(), performanceScopeMapping(), renderReconciliation(), reveal(), showPerformanceScope() (+5 more)
 
 ### Community 73 - "Diagnostics & Edge View UI"
 Cohesion: 0.17
@@ -715,12 +705,12 @@ Cohesion: 0.16
 Nodes (12): /api/setup-trace — the per-setup "why didn't THIS one fire?" journey.  The funne, No order fact means the pipeline stopped, not that the order failed.         Ren, History is not absence. The trace resolves, and says which it is., A trace pinned to the current version would 404 on a setup the         operator, Write one setup's fact chain. Only the kinds passed are recorded, so a     test, A tick alone says the gate ran, not what it decided on., _seed(), TestSetupTraceHonestyFlags (+4 more)
 
 ### Community 80 - "Server Narrative Phrasing"
-Cohesion: 0.10
-Nodes (22): _cap(), multi_timeframe_context(), _play_phrase(), Compact synchronized context strip for the decision workspace., The display noun for one recorded regime — the single authority for how     a r, pullback', or 'pullback or reversal' — names taken from the engine., pullback longs' — assembled from playbook()'s own return tuple, so a     playbo, The REVERSAL gate in words, derived from the engine's own constants.      Rest (+14 more)
+Cohesion: 0.12
+Nodes (20): _cap(), multi_timeframe_context(), _play_phrase(), Compact synchronized context strip for the decision workspace., The display noun for one recorded regime — the single authority for how     a r, pullback', or 'pullback or reversal' — names taken from the engine., pullback longs' — assembled from playbook()'s own return tuple, so a     playbo, What setups.playbook() would trade in this regime. Probed, not restated. (+12 more)
 
 ### Community 81 - "he"
-Cohesion: 0.17
-Nodes (10): assert, CSS, E(), fs, HTML, path, S(), SETTINGS (+2 more)
+Cohesion: 0.05
+Nodes (34): assert, BLOCK_COMMENT, CHART, CSS, ENGINE, fs, FUNNEL, HTML (+26 more)
 
 ### Community 82 - "Design Health Reviews"
 Cohesion: 0.16
@@ -767,12 +757,8 @@ Cohesion: 0.14
 Nodes (25): _criterion(), current(), _ensure(), ModeConflict, ModeRejected, observe_safety_event(), operational_evidence(), promotion_summary() (+17 more)
 
 ### Community 93 - "Kraken Adapter"
-Cohesion: 0.15
-Nodes (16): fetch_candles(), funding_rate(), _get(), list_products(), maintenance_margin(), Decimal, rank_by_volume(), _RateLimiter (+8 more)
-
-### Community 94 - "Chart Vendor Series Views"
-Cohesion: 0.08
-Nodes (4): ds(), kn, lt, us
+Cohesion: 0.17
+Nodes (20): applyLevels(), bookPrices(), clearChart(), drawScale(), enginePlanHere(), flagFling(), paintScale(), paintSecondOpinion() (+12 more)
 
 ### Community 95 - "Factor Redundancy Tests"
 Cohesion: 0.14
@@ -787,8 +773,8 @@ Cohesion: 0.14
 Nodes (17): fetch_candles(), funding_rate(), _get(), last_prices(), list_products(), normalize_products(), rank_by_volume(), _RateLimiter (+9 more)
 
 ### Community 98 - "Glossary UI"
-Cohesion: 0.10
-Nodes (6): bi(), kt, se(), te(), vi(), xt()
+Cohesion: 0.12
+Nodes (5): In(), nn(), ot(), R(), T()
 
 ### Community 99 - "Audit Cache Tests"
 Cohesion: 0.11
@@ -815,12 +801,12 @@ Cohesion: 0.19
 Nodes (16): announce(), announceable(), check_drift(), cycle(), _exit_note(), install_exit_forensics(), main(), next_wake() (+8 more)
 
 ### Community 105 - "Portfolio & Position Endpoints"
-Cohesion: 0.08
-Nodes (29): achievement_progress(), adopt_position(), automation_mode(), _automation_read(), automation_status(), close_position(), copilot_chat(), _envelope_config() (+21 more)
+Cohesion: 0.06
+Nodes (38): achievement_progress(), adopt_position(), automation_mode(), _automation_read(), automation_status(), close_position(), copilot_chat(), credentials_status() (+30 more)
 
 ### Community 106 - "QualityStoreCase"
 Cohesion: 0.20
-Nodes (14): connect(), insert_candle(), insert_fact(), insert_paper_event(), Path, Isolated append-only US-equity research store.  This schema is deliberately in, _require_scope(), connect() (+6 more)
+Nodes (14): applyPreset(), drawOverlays(), drawPosition(), labelOverlays(), levelCounts(), openPicker(), paintLayerButtons(), paintLayersBtn() (+6 more)
 
 ### Community 107 - "Copilot Dock JS Tests"
 Cohesion: 0.11
@@ -859,12 +845,12 @@ Cohesion: 0.12
 Nodes (9): operational_versions(), Version lockfile — the guard against a defect this project has committed twice., Fails on ANY version move. That failure is the feature — it is the         mome, The consumer map must describe the code, not an intention. If an         engine, `ma` is consumed by importing its primitives, not its version. The         gene, The migration, held in place.          `manual` is the one engine whose old fa, Two engines under one label is the collision itself, in its purest         form, `exec-v0.9-draft` must not be readable as a swing version. The prefix         i (+1 more)
 
 ### Community 116 - "A/B Test Engine"
-Cohesion: 0.19
-Nodes (18): _bisect_fill(), by_strategy(), calibrate(), _cluster_bootstrap(), _load_setups(), main(), 2x2 replay harness — the gate on setup-v0.7. READ-ONLY, writes no facts.  `doc, Return the one entry model a setup generation recorded.      ``None`` is meaning (+10 more)
+Cohesion: 0.09
+Nodes (33): _bisect_fill(), by_strategy(), calibrate(), _cluster_bootstrap(), _leg_r(), _load_setups(), main(), _Pos (+25 more)
 
 ### Community 117 - "BTC Alignment Engine"
-Cohesion: 0.16
-Nodes (16): b(), activatable(), deckEmptyHtml(), deckSplit(), explainRefusal(), indexHeld(), ladderHtml(), loadOverview() (+8 more)
+Cohesion: 0.22
+Nodes (11): deckEmptyHtml(), deckSplit(), indexHeld(), loadOverview(), loadRefused(), missionRailSync(), renderDeck(), renderFunnel() (+3 more)
 
 ### Community 118 - "Copilot Pack Builder"
 Cohesion: 0.15
@@ -903,12 +889,12 @@ Cohesion: 0.19
 Nodes (13): Serena Project Config, Append-Only Build Journal (BUILDLOG.md), Confirmed Entry (TOUCH→CONFIRMING→VALIDATED), Cross-Fill Phantom Entry Defect (S50), Factor Grading (factorstats), Indicator Engines (ma/momentum/volatility/volume), Maker-Then-Market Entry Model, Nested Cycle Satellite (cycles.py, observational) (+5 more)
 
 ### Community 127 - "A/B Calibration Tests"
-Cohesion: 0.09
-Nodes (34): DecisionReason, EntryRecommendation, EvidenceStatus, ExitDecision, FactorEvidence, FactorGrade, OpportunityCandidate, OpportunityState (+26 more)
+Cohesion: 0.08
+Nodes (38): DecisionReason, EntryRecommendation, EvidenceStatus, ExitDecision, FactorEvidence, FactorGrade, MarketContextSnapshot, OpportunityCandidate (+30 more)
 
 ### Community 128 - "Chart Vendor Marker Rendering"
 Cohesion: 0.11
-Nodes (30): Any, calculate(), _progress(), Decimal, Discipline-only progression for the Tactical Cockpit.  Progress is derived from, Return safe progression using server-owned evidence and gate state., AchievementProgress, MarketContextSnapshot (+22 more)
+Nodes (40): Any, build_plan(), _d(), Decimal, Turn eligible OpportunityCandidate records into the shared execution path.  This, run(), BrokerExecution, ExecutionPlan (+32 more)
 
 ### Community 129 - "Rejection Fact Tests"
 Cohesion: 0.19
@@ -1011,20 +997,20 @@ Cohesion: 0.12
 Nodes (12): ArmingIsPaperAlways, candle(), DispatchCarriesTheModeR, Mode-aware R sizing — the properties that make paper a rehearsal for live.  The, The armed order bakes its size in at arming; that size is paper's         2% of, The one place testnet/live R binds: quantity scaling at plan build., execution.dispatch requires plan/intent quantity equality; the         scale mus, A DECISION fact explains itself: it records the pct it was sized         with an (+4 more)
 
 ### Community 154 - "Performance & Playbook Endpoints"
-Cohesion: 0.17
-Nodes (12): _baseline_setup_ids(), _entry_rules(), overview(), performance(), playbooks(), Per-symbol / per-strategy paper performance, PARTITIONED BY WHETHER THE     ACC, CONFIRMS / STOP GOES text, read from whichever entry model is loaded.      set, How the candidates the scanner turned down split by market condition.      Thi (+4 more)
+Cohesion: 0.14
+Nodes (14): _baseline_setup_ids(), _entry_rules(), overview(), performance(), playbooks(), Per-symbol / per-strategy paper performance, PARTITIONED BY WHETHER THE     ACC, CONFIRMS / STOP GOES text, read from whichever entry model is loaded.      set, How the candidates the scanner turned down split by market condition.      Thi (+6 more)
 
 ### Community 155 - "Chart Bootstrap Glue"
-Cohesion: 0.13
-Nodes (5): A(), At, ie(), ne(), zt
+Cohesion: 0.07
+Nodes (8): A(), At, ie(), kt, ne(), qt, te(), zt
 
 ### Community 156 - "Shell Disposition & Risk Rendering"
-Cohesion: 0.15
-Nodes (10): PruneRunsCase, 97.9% of the live table. Produced nothing, failed at nothing, and         no fac, Rows written before the run_id column existed carry ''. They cannot         be r, --dry-run is the default, and plan_runs must have no side effects., Without this, a pruned store is indistinguishable from a store whose         sca, The spec's §5 shape: dry run is what you get by asking for nothing.          Ass, Lineage. This is the rule the whole table exists to serve., 2 rows in 4.1M on the live store. Keeping every failure forever is         free; (+2 more)
+Cohesion: 0.13
+Nodes (11): PruneRunsCase, Retention on `engine_runs` — what survives a prune, and what it costs.  Every te, 97.9% of the live table. Produced nothing, failed at nothing, and         no fac, Rows written before the run_id column existed carry ''. They cannot         be r, --dry-run is the default, and plan_runs must have no side effects., Without this, a pruned store is indistinguishable from a store whose         sca, The spec's §5 shape: dry run is what you get by asking for nothing.          Ass, Lineage. This is the rule the whole table exists to serve. (+3 more)
 
 ### Community 157 - "Shell Navigation & Near Levels"
-Cohesion: 0.20
-Nodes (12): bindingConstraint(), drawCurve(), loadPortfolio(), loadRisk(), mineRailSync(), renderJournal(), renderMine(), renderMineAside() (+4 more)
+Cohesion: 0.18
+Nodes (13): bindingConstraint(), drawCurve(), loadPortfolio(), loadRisk(), mineRailSync(), renderDisposition(), renderJournal(), renderMine() (+5 more)
 
 ### Community 158 - "Tracer UI"
 Cohesion: 0.22
@@ -1049,10 +1035,6 @@ Nodes (6): The rank decomposition has one job: attribute var(rank) across the te
 ### Community 163 - "Funding In Simulation Tests"
 Cohesion: 0.18
 Nodes (7): ChargedInSimulation, inspect_source(), Two fields, two costs. `fees_price_units` containing funding while         `fun, Real funding varies per settlement and this store holds no historical         s, In reality the paying side flips with the sign of the rate â€” a short, The regression that matters. The function existed for eight sessions         wi, If it were recorded but not subtracted, the fact would look right and         t
-
-### Community 164 - "Manual Order Idempotency Tests"
-Cohesion: 0.30
-Nodes (11): atr_percentiles(), atr_regime(), bollinger(), keltner(), Decimal, Volatility engine — ATR percentile, Bollinger width, and the squeeze. algo vola, (middle, upper, lower) per bar index; None inside the warmup.      POPULATION, (middle, upper, lower) per bar index, EMA-centred and ATR-scaled.      ATR is (+3 more)
 
 ### Community 165 - "PWA Installability Tests"
 Cohesion: 0.17
@@ -1091,8 +1073,8 @@ Cohesion: 0.25
 Nodes (8): liquidationPrice(), partialPrice(), scaleOut(), ticketMath(), assert, CFG, PERP, {ticketMath}
 
 ### Community 174 - "momentum.py"
-Cohesion: 0.06
-Nodes (4): pn, Ts(), un(), vt()
+Cohesion: 0.05
+Nodes (5): pn, rt, si, vt(), zn()
 
 ### Community 175 - "Audit Closeout JS Tests"
 Cohesion: 0.20
@@ -1142,21 +1124,17 @@ Nodes (5): A fact stamped `confirmed_at = T` may not depend on anything after T.
 Cohesion: 0.15
 Nodes (27): ControlOwner, apply_fill(), _ensure(), _event(), _execution_event_once(), _known_order_clients(), managed(), manual_override() (+19 more)
 
-### Community 187 - "execsim.py"
-Cohesion: 0.10
-Nodes (3): ai, hi(), li()
-
 ### Community 188 - ".Mt"
-Cohesion: 0.13
-Nodes (19): gateRows(), ladderRing(), loadLiveGate(), loadNearLevels(), makeRail(), mineCardInner(), missionRailSync(), mountRails() (+11 more)
+Cohesion: 0.25
+Nodes (9): gateRows(), loadLiveGate(), makeRail(), mountRails(), progressionRows(), renderProgression(), renderScoreboard(), renderStatWheel() (+1 more)
 
 ### Community 189 - "Mission Rail & Radar UI"
-Cohesion: 0.05
-Nodes (8): G, gn, H, it, jt, qn(), xi, xn()
+Cohesion: 0.07
+Nodes (6): G, gn, H, qn(), xi, xn()
 
 ### Community 190 - "Shared Data Cache (ssdata.js)"
-Cohesion: 0.10
-Nodes (5): ci(), ji, oi(), qi(), ui()
+Cohesion: 0.11
+Nodes (7): bi(), I, oi(), ui(), vi(), xt(), $
 
 ### Community 191 - "Remote Alert Sink Tests"
 Cohesion: 0.20
@@ -1199,8 +1177,8 @@ Cohesion: 0.22
 Nodes (4): Loud fallback: below MIN_TRADES the honest output is 'unknown'. The prior, r != 0 is not edge. At n=120 the floor is ±0.18; a factor sitting under it, A negative r is a finding, not a bug: the factor is actively steering the, TestOutcomeEdge
 
 ### Community 201 - "Scale-Out Settlement Tests"
-Cohesion: 0.29
-Nodes (9): grade(), _holm(), main(), Grade a PLAYBOOK against the recorded book, on the house bar.  WHAT THIS IS FO, Holm-Bonferroni adjusted p-values, strongest evidence first.      Holm rather, Every playbook with a sample, on one bar, corrected for the multiplicity., _render(), all_tracked_symbols() (+1 more)
+Cohesion: 0.38
+Nodes (9): emit(), entry(), evict(), fetchNow(), get(), invalidate(), marketAllows(), refresh() (+1 more)
 
 ### Community 202 - "on"
 Cohesion: 0.35
@@ -1235,12 +1213,12 @@ Cohesion: 0.28
 Nodes (3): The readable form of a 0/1 factor's outcome edge. A rank term paying points to, Folding 'the store never recorded it' into 'it was absent' is how a         cove, TestOutcomeSplit
 
 ### Community 211 - "Loading State JS Tests"
-Cohesion: 0.24
-Nodes (4): Staleness is only meaningful for a symbol we still track.      Switching the u, If we cannot tell what is live, warn rather than silently suppress., A module-level cache keyed on nothing would let an audit of one         databas, RetiredSymbolStalenessTest
+Cohesion: 0.22
+Nodes (7): assert, CSS, fs, GLOSS, HTML, path, S()
 
 ### Community 212 - "Rules Surface JS Tests"
 Cohesion: 0.29
-Nodes (6): _leg_r(), _Pos, Open position state. Exists because a managed exit cannot be expressed     as a, NET R of one closed leg, priced by execsim.settle — THE costing.      This rep, Walk bars from the fill and return one outcome dict, or None if the data     ru, _simulate()
+Nodes (6): assert, CSS, fs, HTML, path, S()
 
 ### Community 213 - "Semantics & Keyboard JS Tests"
 Cohesion: 0.10
@@ -1267,8 +1245,8 @@ Cohesion: 0.25
 Nodes (8): _audit_kill(), Write who asked for a process to die, next to the supervisor's own log.      B, Stop a process and report the OBSERVED outcome.      Windows note: os.kill(pid, True when a supervisor holds the watchdog lock socket. If we can bind it,     n, Restart supervised processes.      Deliberately has NO spawn capability: it on, _stop_pid(), system_restart(), _watchdog_alive()
 
 ### Community 220 - "ji"
-Cohesion: 0.29
-Nodes (6): assert, fs, load(), path, sleep(), SRC
+Cohesion: 0.39
+Nodes (8): main(), Decimal, Trend continuation — buy strength inside an established trend. UNGRADED.  WHY, Did this CLOSED bar prove the trend resumed?      `setups.confirms` requires t, Per-bar ribbon values, computed with ma.py's OWN functions.      Returns one l, resumes(), _ribbon(), run()
 
 ### Community 221 - "Action Feedback JS Tests"
 Cohesion: 0.17
@@ -1287,8 +1265,8 @@ Cohesion: 0.25
 Nodes (4): Measured 2026-08-05, on the first live run of this system.      Moving deliver, With the toast off and no remote sink, nobody was told. Saying         otherwis, 14 at once is what caused the kill. The queue is durable, so a small         pe, TheToastSinkIsOffUntilAskedFor
 
 ### Community 225 - "c"
-Cohesion: 0.09
-Nodes (6): bn, c(), ht(), ke, si, y()
+Cohesion: 0.12
+Nodes (10): c(), hi(), li(), ms(), assert, fs, load(), path (+2 more)
 
 ### Community 226 - "Playbook Policy Roster Tests"
 Cohesion: 0.32
@@ -1307,8 +1285,8 @@ Cohesion: 0.25
 Nodes (5): Funding â€” the perp cost that was defined in S32 and never charged.  `venues., §1. A measurement that mutates the thing it measures is not one., Asked of `venues`, not re-decided here (§6) — a venue whose         settlement, ReadOnly, SpotPaysNothing
 
 ### Community 231 - "SSData JS Tests"
-Cohesion: 0.12
-Nodes (5): di(), fi(), mi, pi(), wi()
+Cohesion: 0.08
+Nodes (8): ct, di(), dt(), fi(), mi, pi(), wi(), wt
 
 ### Community 232 - "Child Spawn Isolation Tests"
 Cohesion: 0.25
@@ -1331,8 +1309,8 @@ Cohesion: 0.33
 Nodes (4): install(), Path, pythonw(), Install/remove SniperSight autostart at Windows logon.  Writes a silent launcher
 
 ### Community 237 - "applyLevels"
-Cohesion: 0.05
-Nodes (78): applyLevels(), applyPreset(), bookPrices(), boot(), candle_index_at(), clearChart(), closePicker(), drawClosedTrade() (+70 more)
+Cohesion: 0.18
+Nodes (26): boot(), candle_index_at(), closePicker(), drawClosedTrade(), ensureLayer(), load(), loadContext(), loadEquity() (+18 more)
 
 ### Community 238 - "ni"
 Cohesion: 0.83
@@ -1447,8 +1425,8 @@ Cohesion: 0.67
 Nodes (4): SniperSight Brand Identity (military/precision theme), SniperSight Logo, Green Sniper Scope Reticle Emblem, SNIPERSIGHT Metallic Wordmark
 
 ### Community 275 - "Manifest & Cost Tests"
-Cohesion: 0.13
-Nodes (4): ee(), he, le(), qt
+Cohesion: 0.11
+Nodes (5): ee(), he, le(), nt, se()
 
 ### Community 277 - "T"
 Cohesion: 0.18
@@ -1463,8 +1441,8 @@ Cohesion: 0.40
 Nodes (4): Automatic consultation from Claude, Claude + Codex agent loop, Run it, Safety and reversibility
 
 ### Community 284 - ".ja"
-Cohesion: 0.09
-Nodes (24): alignment(), _as_of(), Bias, blocked(), composite(), inputs(), load(), Top-down bias — what the timeframes ABOVE this one are doing. algo bias-v0.1-dra (+16 more)
+Cohesion: 0.07
+Nodes (28): alignment(), _as_of(), Bias, blocked(), composite(), inputs(), load(), Top-down bias — what the timeframes ABOVE this one are doing. algo bias-v0.1-dra (+20 more)
 
 ### Community 285 - "learning.py"
 Cohesion: 0.36
@@ -1494,17 +1472,21 @@ Nodes (3): plan(), test_adapter_refuses_to_round_invalid_tick_or_lot_silently(),
 Cohesion: 0.83
 Nodes (3): Invoke-CapturedCommand(), Invoke-Reviewer(), Invoke-Writer()
 
+### Community 293 - "cockpit-workspaces.js"
+Cohesion: 0.48
+Nodes (6): calculate(), _progress(), Decimal, Discipline-only progression for the Tactical Cockpit.  Progress is derived from, Return safe progression using server-owned evidence and gate state., AchievementProgress
+
 ### Community 294 - "Tactical Cockpit: Remaining Screen Redesign Scope"
 Cohesion: 0.20
 Nodes (9): Acceptance, Delivery order, Opportunities: Setup Radar, Performance: Debrief, Product rule, Shared shell, System: Control Room, Tactical Cockpit Redesign (+1 more)
 
 ### Community 296 - "report"
-Cohesion: 0.25
-Nodes (4): Ladder, MIXED cannot exist with a single rung, and MIXED is the state a         trader, A timeframe outside the ladder reads UNKNOWN, which ALLOWs. It must         not, Two copies of one ladder is the same disease as two copies of one         fill
+Cohesion: 0.33
+Nodes (5): assert, CHART, fs, path, S()
 
 ### Community 297 - "status"
-Cohesion: 0.22
-Nodes (9): credentials_status(), credentials_store(), manual_open(), What credentials EXIST — never their values. There is deliberately no     route, Encrypt and store one credential field.      The value is never logged, never, Stock-workspace readiness without decrypting or probing credentials., Live state of the operator's open trades on one chart.      Resolves first, th, status() (+1 more)
+Cohesion: 0.60
+Nodes (4): capTriggers(), ensure(), markFocusable(), show()
 
 ### Community 298 - "CostTest"
 Cohesion: 0.25
@@ -1515,24 +1497,20 @@ Cohesion: 0.25
 Nodes (7): Evidence and grades, Initial risk contract, Manual custody, Operating modes, Promotion sequence, SniperSight autonomy operations, What happens to a trade idea
 
 ### Community 300 - "t"
-Cohesion: 0.12
-Nodes (9): Cross-venue basis — the spread between where you trade and where depth is.  algo, Record the close-to-close basis for one (symbol, tf) series.      Facts key on t, run(), _classify(), Regime engine — market-state classification from structure facts. algo regime-v, run(), Context manager: times an engine run and records it on exit., RunRecorder (+1 more)
-
-### Community 301 - "test_orientation_and_axes.js"
-Cohesion: 0.20
-Nodes (8): assert, CSS, EDGE, fs, HTML, path, S(), SHELL
+Cohesion: 0.06
+Nodes (58): Cross-venue basis — the spread between where you trade and where depth is.  algo, Record the close-to-close basis for one (symbol, tf) series.      Facts key on t, run(), Breakout-retest — trade the level that just broke, when it holds as support., run(), cross_fill(), plan_versions(), Execution simulator — paper-trades every VALIDATED setup. algo exec-v0.1-draft. (+50 more)
 
 ### Community 302 - "ProtectedBroker"
-Cohesion: 0.11
-Nodes (26): BrokerExecution, BrokerOrder, ExecutionPlan, Broker, Coordinator, DispatchRejected, RuntimeError, AmbiguousSubmission (+18 more)
+Cohesion: 0.13
+Nodes (15): BrokerOrder, PhemexBroker, Decimal, Load instrument rules from this broker's own environment., Synchronize signing expiry to Phemex server time., Amend one known order; the client identity is never changed., Poll active state, then closed history when an order id is known., Return every venue execution since ``start_at`` with exact fees.          Phemex (+7 more)
 
 ### Community 304 - "test_factor_evidence_contract.py"
 Cohesion: 0.73
 Nodes (5): book(), extract(), test_even_a_letter_grade_cannot_change_position_size(), test_evidence_is_chronological_cohort_scoped_and_adjusted(), test_small_forward_sample_is_ungraded_not_a_confident_zero()
 
 ### Community 306 - "draft.py"
-Cohesion: 0.23
-Nodes (9): bt(), on, os(), projection(), refreshAuthority(), renderEvidence(), renderState(), syncSheet() (+1 more)
+Cohesion: 0.21
+Nodes (10): setDir(), bt(), on, os(), projection(), refreshAuthority(), renderEvidence(), renderState() (+2 more)
 
 ### Community 307 - "test_market_context.py"
 Cohesion: 0.80
@@ -1586,41 +1564,41 @@ Nodes (4): Boundaries, Output, Tests, The rules that are not negotiable here
 Cohesion: 0.25
 Nodes (7): assert, CSS, fs, FUNNEL, HTML, path, S()
 
+### Community 329 - "NextWakeMath"
+Cohesion: 0.24
+Nodes (10): ladderHtml(), ladderRing(), loadNearLevels(), mineCardInner(), missionCardInner(), reachPlay(), renderNear(), ringSvg() (+2 more)
+
 ### Community 330 - "test_ui_read_models.py"
 Cohesion: 0.43
 Nodes (4): test_dimensions_never_replace_missing_metadata_with_a_guess(), test_forward_summary_confidence_interval_is_active_baseline_and_deterministic(), test_forward_summary_is_server_owned_and_refuses_small_sample(), _trade()
-
-### Community 331 - "test_semantics_and_keyboard.js"
-Cohesion: 0.22
-Nodes (7): assert, CSS, fs, GLOSS, HTML, path, S()
 
 ### Community 335 - "cycles.py"
 Cohesion: 0.16
 Nodes (18): add_months(), btc_series(), classify_cycles(), detect_lows(), four_year_windows(), fractal_lows(), Nested Cycle Satellite — Bob Loukas / Camel Finance school. OBSERVATIONAL ONLY., Indices whose low is strictly the lowest of +/-w neighbors. (+10 more)
 
 ### Community 336 - "TestMarketQuality"
-Cohesion: 0.08
-Nodes (14): QualityStoreCase, Three of four hours traded; 02:00 the venue served nothing for.          range, agg-v0.2's mirror: a partial bar the aggregator was entitled to         build i, A partial bar that does not reconcile to its present source candles         is, A qualifying partial bucket the aggregator has not built yet is a         DEGRA, Pin for the 2026-08-08 restart loop. An unrecognised tf may indict         the, No acknowledgment -> the aggregator refuses the bucket and the         mirror n, 2026-08-10 13:46: OPUSDT joined the universe, one cycle imported         months (+6 more)
+Cohesion: 0.05
+Nodes (19): QualityStoreCase, Three of four hours traded; 02:00 the venue served nothing for.          range, agg-v0.2's mirror: a partial bar the aggregator was entitled to         build i, A partial bar that does not reconcile to its present source candles         is, A qualifying partial bucket the aggregator has not built yet is a         DEGRA, Pin for the 2026-08-08 restart loop. An unrecognised tf may indict         the, No acknowledgment -> the aggregator refuses the bucket and the         mirror n, 2026-08-10 13:46: OPUSDT joined the universe, one cycle imported         months (+11 more)
 
 ### Community 337 - "volume.py"
 Cohesion: 0.13
 Nodes (26): boundaries(), break_tolerance(), contained(), is_flat(), Decimal, Range engine — horizontal ranges, their boundaries, and their lifecycle. algo r, The house break tolerance: max(1 tick, 0.05*ATR).      structure.py, zones.py, (top, bottom, n_top, n_bottom) — the EXTREME of each cluster, not its mean. (+18 more)
 
-### Community 338 - "test_action_feedback.js"
-Cohesion: 0.29
-Nodes (6): assert, CSS, fs, HTML, path, S()
-
 ### Community 339 - "CustodyOverridesTheSimulatorsStory"
 Cohesion: 0.36
 Nodes (3): CustodyOverridesTheSimulatorsStory, setup_id embeds zone and version, so a persistent zone retested         weeks l, An open real position is a present-tense fact; it overlays even a         setup
 
-### Community 340 - "test_one_source_of_truth.js"
-Cohesion: 0.33
-Nodes (5): assert, CHART, fs, path, S()
+### Community 340 - "renderLedger"
+Cohesion: 0.50
+Nodes (5): bookCard(), ledgerRow(), renderLedger(), renderLedgerExits(), renderLedgerMine()
 
 ### Community 341 - "opportunity-ui.js"
-Cohesion: 0.52
-Nodes (5): card(), detail(), entryRecommendation(), evidenceBody(), tradeEvidence()
+Cohesion: 1.00
+Nodes (3): deck(), engaged(), lifecycleOf()
+
+### Community 342 - "loadPerformance"
+Cohesion: 1.00
+Nodes (3): loadPerformance(), notTakenBlock(), perfRows()
 
 ### Community 347 - "_facts"
 Cohesion: 0.06
@@ -1642,14 +1620,6 @@ Nodes (11): _alpaca_headers(), _get_json(), RuntimeError, US-equity workspace fo
 Cohesion: 0.22
 Nodes (8): ADR-001: Isolated Market Workspaces, Build a separate application, Consequences, Context, Decision, Options Considered, Reskin the crypto application, Shared platform with isolated market workspaces
 
-### Community 358 - "learning_approve"
-Cohesion: 0.11
-Nodes (16): assert, BLOCK_COMMENT, CHART, CSS, ENGINE, fs, FUNNEL, HTML (+8 more)
-
-### Community 359 - "manual_arm"
-Cohesion: 0.15
-Nodes (4): In(), nn(), ot(), T()
-
 ### Community 360 - "markets.js"
 Cohesion: 0.47
 Nodes (3): choose(), paint(), remember()
@@ -1663,24 +1633,24 @@ Cohesion: 0.33
 Nodes (4): OneFillModel, The whole fill model is the engine's, not just the crossing price., The passive limit rests below every low so it can never fill; the         engin, `cross_fill` returns a `slipped` flag and abtest discarded it         (`entry_p
 
 ## Knowledge Gaps
-- **317 isolated node(s):** `FactorEvidence`, `PositionSnapshot`, `ExitDecision`, `PromotionGate`, `UIEvent` (+312 more)
+- **317 isolated node(s):** `RFC-4180`, `fs`, `path`, `assert`, `STATIC` (+312 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **40 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `get_logger()` connect `Universe & Rate Limiting` to `Chart Vendor Marker Rendering`, `Live Scanner Loop`, `Portfolio & Position Endpoints`, `status`, `t`, `Fact Query & Scan Endpoints`, `Chart Vendor Number Formatting`, `Execution Simulator & Risk`, `_facts`, `API Server Endpoints`, `Chart Vendor Pane Views`, `Chart Vendor Data Layer`, `Ri`, `Kraken Adapter`?**
-  _High betweenness centrality (0.093) - this node is a cross-community bridge._
-- **Why does `RunRecorder` connect `t` to `Manual Order Idempotency Tests`, `Cooldown Engine`, `cycles.py`, `TestMarketQuality`, `volume.py`, `Execution Simulator & Risk`, `Loading State JS Tests`, `Indicator Engines`, `Chart Vendor Pane Views`, `Universe & Rate Limiting`, `_facts`?**
-  _High betweenness centrality (0.024) - this node is a cross-community bridge._
+- **Why does `get_logger()` connect `Universe & Rate Limiting` to `Chart Vendor Marker Rendering`, `Live Scanner Loop`, `Portfolio & Position Endpoints`, `Bias, Trend & Setups`, `t`, `Fact Query & Scan Endpoints`, `_facts`, `Fact Store & Migrations`, `Chart Vendor Data Layer`, `Ri`?**
+  _High betweenness centrality (0.090) - this node is a cross-community bridge._
+- **Why does `RunRecorder` connect `t` to `Chart Vendor Layout`, `Cooldown Engine`, `cycles.py`, `TestMarketQuality`, `volume.py`, `Execution Simulator & Risk`, `Indicator Engines`, `Universe & Rate Limiting`, `_facts`, `ji`?**
+  _High betweenness centrality (0.028) - this node is a cross-community bridge._
 - **Why does `TempStore` connect `Weather Endpoint Tests` to `Regime Wording Tests`, `TestEveryRowIsAccountedFor`, `Universe Coverage Tests`, `Weather Row Accounting Tests`?**
   _High betweenness centrality (0.021) - this node is a cross-community bridge._
-- **Are the 22 inferred relationships involving `f()` (e.g. with `buildCredRows()` and `deck()`) actually correct?**
-  _`f()` has 22 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 20 inferred relationships involving `f()` (e.g. with `S()` and `S()`) actually correct?**
+  _`f()` has 20 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 10 inferred relationships involving `RunRecorder` (e.g. with `IntentRejected` and `_RateLimiter`) actually correct?**
   _`RunRecorder` has 10 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `FactorEvidence`, `PositionSnapshot`, `ExitDecision` to the rest of the system?**
+- **What connects `RFC-4180`, `fs`, `path` to the rest of the system?**
   _317 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Chart Vendor Core` be split into smaller, more focused modules?**
-  _Cohesion score 0.05369415807560137 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.054982817869415807 - nodes in this community are weakly interconnected._
