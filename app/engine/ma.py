@@ -294,7 +294,11 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
         for i in range(warmup, len(candles)):
             values = [series[label][i] for label in labels]
-            if any(v is None for v in values) or atr[i] is None:
+            # ATR==0 (14+ perfectly flat bars, seen on low-tick coins like PEPE
+            # 5m in dead hours) makes both the slope deadband and the atr-normalized
+            # close_to_ribbon distances undefined, and the latter would raise
+            # decimal.DivisionByZero on the emit path below.
+            if any(v is None for v in values) or not atr[i]:
                 continue
             deadband = SLOPE_DEADBAND_ATR * atr[i]
             for label in labels:
