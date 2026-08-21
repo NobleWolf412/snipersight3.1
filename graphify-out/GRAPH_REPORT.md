@@ -1,7 +1,7 @@
 # Graph Report - snipersight3.1  (2026-08-20)
 
 ## Corpus Check
-- 285 files · ~581,659 words
+- 285 files · ~581,923 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `80442b96`
+- Built from commit: `6cbe5f30`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

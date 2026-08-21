@@ -81,15 +81,202 @@
   },
   "nodes": [
     {
+      "label": "regimefresh.py",
+      "file_type": "code",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "regimefresh.py"
+    },
+    {
+      "label": "trigger_at()",
+      "file_type": "code",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L94",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_trigger_at",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "trigger_at()"
+    },
+    {
+      "label": "_regime_series()",
+      "file_type": "code",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L107",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_regime_series",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "_regime_series()"
+    },
+    {
+      "label": "label_asof()",
+      "file_type": "code",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L117",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_label_asof",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "label_asof()"
+    },
+    {
+      "label": "annotate()",
+      "file_type": "code",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L143",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_annotate",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "annotate()"
+    },
+    {
+      "label": "verify()",
+      "file_type": "code",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L179",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_verify",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "verify()"
+    },
+    {
+      "label": "factor_extractors()",
+      "file_type": "code",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L224",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_factor_extractors",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "factor_extractors()"
+    },
+    {
+      "label": "grade()",
+      "file_type": "code",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L245",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_grade",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "grade()"
+    },
+    {
+      "label": "main()",
+      "file_type": "code",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L268",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_main",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "main()"
+    },
+    {
+      "label": "Regime freshness \u2014 how stale was the label this trade was gated on? READ-ONLY.",
+      "file_type": "rationale",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_rationale_1",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "regime freshness \u2014 how stale was the label this trade was gated on? read-only."
+    },
+    {
+      "label": "The market event that defined this label, or None when unrecorded.      regime",
+      "file_type": "rationale",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L95",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_rationale_95",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "the market event that defined this label, or none when unrecorded.      regime"
+    },
+    {
+      "label": "(confirmed_at, regime, trigger_at) for one market, in confirmation order.",
+      "file_type": "rationale",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L108",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_rationale_108",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "(confirmed_at, regime, trigger_at) for one market, in confirmation order."
+    },
+    {
+      "label": "The governing label at `ts`, and whether a newer one had already landed.",
+      "file_type": "rationale",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L118",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_rationale_118",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "the governing label at `ts`, and whether a newer one had already landed."
+    },
+    {
+      "label": "Stamp regime-freshness fields onto candidate payloads, in place.      Mutates",
+      "file_type": "rationale",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L144",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_rationale_144",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "stamp regime-freshness fields onto candidate payloads, in place.      mutates"
+    },
+    {
+      "label": "Prove the reconstruction against the engine's own recorded regime.      The ga",
+      "file_type": "rationale",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L180",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_rationale_180",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "prove the reconstruction against the engine's own recorded regime.      the ga"
+    },
+    {
+      "label": "0/1 flags for outcome_split. Absent when unannotated, so MISSING stays     hone",
+      "file_type": "rationale",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L225",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_rationale_225",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "0/1 flags for outcome_split. absent when unannotated, so missing stays     hone"
+    },
+    {
+      "label": "The whole audition: load, annotate, split, and say what held.",
+      "file_type": "rationale",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L246",
+      "_origin": "ast",
+      "id": "app_engine_regimefresh_rationale_246",
+      "community": 76,
+      "community_name": "Chart Vendor Line Renderers",
+      "norm_label": "the whole audition: load, annotate, split, and say what held."
+    },
+    {
       "label": "glossary.js",
       "file_type": "code",
       "source_file": "app/static/glossary.js",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "app_static_glossary",
       "community": 297,
       "community_name": "status",
-      "norm_label": "glossary.js"
+      "norm_label": "glossary.js",
+      "id": "app_static_glossary"
     },
     {
       "label": "ensure()",
@@ -97,10 +284,10 @@
       "source_file": "app/static/glossary.js",
       "source_location": "L88",
       "_origin": "ast",
-      "id": "app_static_glossary_ensure",
       "community": 297,
       "community_name": "status",
-      "norm_label": "ensure()"
+      "norm_label": "ensure()",
+      "id": "app_static_glossary_ensure"
     },
     {
       "label": "show()",
@@ -108,10 +295,10 @@
       "source_file": "app/static/glossary.js",
       "source_location": "L96",
       "_origin": "ast",
-      "id": "app_static_glossary_show",
       "community": 297,
       "community_name": "status",
-      "norm_label": "show()"
+      "norm_label": "show()",
+      "id": "app_static_glossary_show"
     },
     {
       "label": "capTriggers()",
@@ -119,10 +306,10 @@
       "source_file": "app/static/glossary.js",
       "source_location": "L140",
       "_origin": "ast",
-      "id": "app_static_glossary_captriggers",
       "community": 297,
       "community_name": "status",
-      "norm_label": "captriggers()"
+      "norm_label": "captriggers()",
+      "id": "app_static_glossary_captriggers"
     },
     {
       "label": "markFocusable()",
@@ -130,10 +317,10 @@
       "source_file": "app/static/glossary.js",
       "source_location": "L167",
       "_origin": "ast",
-      "id": "app_static_glossary_markfocusable",
       "community": 297,
       "community_name": "status",
-      "norm_label": "markfocusable()"
+      "norm_label": "markfocusable()",
+      "id": "app_static_glossary_markfocusable"
     },
     {
       "label": "shell.js",
@@ -141,10 +328,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "app_static_shell",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "shell.js"
+      "norm_label": "shell.js",
+      "id": "app_static_shell"
     },
     {
       "label": "storageFailed()",
@@ -152,10 +339,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L30",
       "_origin": "ast",
-      "id": "app_static_shell_storagefailed",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "storagefailed()"
+      "norm_label": "storagefailed()",
+      "id": "app_static_shell_storagefailed"
     },
     {
       "label": "go()",
@@ -163,10 +350,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L85",
       "_origin": "ast",
-      "id": "app_static_shell_go",
       "community": 25,
       "community_name": "Chart Vendor Widget Lifecycle",
-      "norm_label": "go()"
+      "norm_label": "go()",
+      "id": "app_static_shell_go"
     },
     {
       "label": "healthTone()",
@@ -174,10 +361,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L337",
       "_origin": "ast",
-      "id": "app_static_shell_healthtone",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "healthtone()"
+      "norm_label": "healthtone()",
+      "id": "app_static_shell_healthtone"
     },
     {
       "label": "ageText()",
@@ -185,10 +372,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L353",
       "_origin": "ast",
-      "id": "app_static_shell_agetext",
       "community": 25,
       "community_name": "Chart Vendor Widget Lifecycle",
-      "norm_label": "agetext()"
+      "norm_label": "agetext()",
+      "id": "app_static_shell_agetext"
     },
     {
       "label": "markDegraded()",
@@ -196,10 +383,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L374",
       "_origin": "ast",
-      "id": "app_static_shell_markdegraded",
       "community": 25,
       "community_name": "Chart Vendor Widget Lifecycle",
-      "norm_label": "markdegraded()"
+      "norm_label": "markdegraded()",
+      "id": "app_static_shell_markdegraded"
     },
     {
       "label": "put()",
@@ -207,10 +394,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L445",
       "_origin": "ast",
-      "id": "app_static_shell_put",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "put()"
+      "norm_label": "put()",
+      "id": "app_static_shell_put"
     },
     {
       "label": "engaged()",
@@ -218,10 +405,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L449",
       "_origin": "ast",
-      "id": "app_static_shell_engaged",
       "community": 341,
       "community_name": "opportunity-ui.js",
-      "norm_label": "engaged()"
+      "norm_label": "engaged()",
+      "id": "app_static_shell_engaged"
     },
     {
       "label": "lifecycleOf()",
@@ -229,10 +416,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L457",
       "_origin": "ast",
-      "id": "app_static_shell_lifecycleof",
       "community": 341,
       "community_name": "opportunity-ui.js",
-      "norm_label": "lifecycleof()"
+      "norm_label": "lifecycleof()",
+      "id": "app_static_shell_lifecycleof"
     },
     {
       "label": "deck()",
@@ -240,10 +427,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L466",
       "_origin": "ast",
-      "id": "app_static_shell_deck",
       "community": 341,
       "community_name": "opportunity-ui.js",
-      "norm_label": "deck()"
+      "norm_label": "deck()",
+      "id": "app_static_shell_deck"
     },
     {
       "label": "symbolSets()",
@@ -251,10 +438,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L484",
       "_origin": "ast",
-      "id": "app_static_shell_symbolsets",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "symbolsets()"
+      "norm_label": "symbolsets()",
+      "id": "app_static_shell_symbolsets"
     },
     {
       "label": "loadOverview()",
@@ -262,10 +449,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L550",
       "_origin": "ast",
-      "id": "app_static_shell_loadoverview",
       "community": 117,
       "community_name": "BTC Alignment Engine",
-      "norm_label": "loadoverview()"
+      "norm_label": "loadoverview()",
+      "id": "app_static_shell_loadoverview"
     },
     {
       "label": "htfChip()",
@@ -273,10 +460,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L649",
       "_origin": "ast",
-      "id": "app_static_shell_htfchip",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "htfchip()"
+      "norm_label": "htfchip()",
+      "id": "app_static_shell_htfchip"
     },
     {
       "label": "expiresIn()",
@@ -284,10 +471,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L661",
       "_origin": "ast",
-      "id": "app_static_shell_expiresin",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "expiresin()"
+      "norm_label": "expiresin()",
+      "id": "app_static_shell_expiresin"
     },
     {
       "label": "foundAgo()",
@@ -295,10 +482,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L675",
       "_origin": "ast",
-      "id": "app_static_shell_foundago",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "foundago()"
+      "norm_label": "foundago()",
+      "id": "app_static_shell_foundago"
     },
     {
       "label": "foundTitle()",
@@ -306,10 +493,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L684",
       "_origin": "ast",
-      "id": "app_static_shell_foundtitle",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "foundtitle()"
+      "norm_label": "foundtitle()",
+      "id": "app_static_shell_foundtitle"
     },
     {
       "label": "reasonText()",
@@ -317,10 +504,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L753",
       "_origin": "ast",
-      "id": "app_static_shell_reasontext",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "reasontext()"
+      "norm_label": "reasontext()",
+      "id": "app_static_shell_reasontext"
     },
     {
       "label": "deckEmptyHtml()",
@@ -328,10 +515,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L781",
       "_origin": "ast",
-      "id": "app_static_shell_deckemptyhtml",
       "community": 117,
       "community_name": "BTC Alignment Engine",
-      "norm_label": "deckemptyhtml()"
+      "norm_label": "deckemptyhtml()",
+      "id": "app_static_shell_deckemptyhtml"
     },
     {
       "label": "deckSplit()",
@@ -339,10 +526,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L817",
       "_origin": "ast",
-      "id": "app_static_shell_decksplit",
       "community": 117,
       "community_name": "BTC Alignment Engine",
-      "norm_label": "decksplit()"
+      "norm_label": "decksplit()",
+      "id": "app_static_shell_decksplit"
     },
     {
       "label": "setAccentMode()",
@@ -350,10 +537,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L890",
       "_origin": "ast",
-      "id": "app_static_shell_setaccentmode",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "setaccentmode()"
+      "norm_label": "setaccentmode()",
+      "id": "app_static_shell_setaccentmode"
     },
     {
       "label": "renderDisposition()",
@@ -361,10 +548,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L907",
       "_origin": "ast",
-      "id": "app_static_shell_renderdisposition",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "renderdisposition()"
+      "norm_label": "renderdisposition()",
+      "id": "app_static_shell_renderdisposition"
     },
     {
       "label": "renderMissions()",
@@ -372,10 +559,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1021",
       "_origin": "ast",
-      "id": "app_static_shell_rendermissions",
       "community": 117,
       "community_name": "BTC Alignment Engine",
-      "norm_label": "rendermissions()"
+      "norm_label": "rendermissions()",
+      "id": "app_static_shell_rendermissions"
     },
     {
       "label": "missionCardInner()",
@@ -383,10 +570,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1079",
       "_origin": "ast",
-      "id": "app_static_shell_missioncardinner",
       "community": 329,
       "community_name": "NextWakeMath",
-      "norm_label": "missioncardinner()"
+      "norm_label": "missioncardinner()",
+      "id": "app_static_shell_missioncardinner"
     },
     {
       "label": "ladderRing()",
@@ -394,10 +581,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1143",
       "_origin": "ast",
-      "id": "app_static_shell_ladderring",
       "community": 329,
       "community_name": "NextWakeMath",
-      "norm_label": "ladderring()"
+      "norm_label": "ladderring()",
+      "id": "app_static_shell_ladderring"
     },
     {
       "label": "renderDeck()",
@@ -405,10 +592,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1152",
       "_origin": "ast",
-      "id": "app_static_shell_renderdeck",
       "community": 117,
       "community_name": "BTC Alignment Engine",
-      "norm_label": "renderdeck()"
+      "norm_label": "renderdeck()",
+      "id": "app_static_shell_renderdeck"
     },
     {
       "label": "closePosition()",
@@ -416,10 +603,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1293",
       "_origin": "ast",
-      "id": "app_static_shell_closeposition",
       "community": 25,
       "community_name": "Chart Vendor Widget Lifecycle",
-      "norm_label": "closeposition()"
+      "norm_label": "closeposition()",
+      "id": "app_static_shell_closeposition"
     },
     {
       "label": "wireCardActions()",
@@ -427,10 +614,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1365",
       "_origin": "ast",
-      "id": "app_static_shell_wirecardactions",
       "community": 25,
       "community_name": "Chart Vendor Widget Lifecycle",
-      "norm_label": "wirecardactions()"
+      "norm_label": "wirecardactions()",
+      "id": "app_static_shell_wirecardactions"
     },
     {
       "label": "explainRefusal()",
@@ -438,10 +625,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1450",
       "_origin": "ast",
-      "id": "app_static_shell_explainrefusal",
       "community": 25,
       "community_name": "Chart Vendor Widget Lifecycle",
-      "norm_label": "explainrefusal()"
+      "norm_label": "explainrefusal()",
+      "id": "app_static_shell_explainrefusal"
     },
     {
       "label": "activatable()",
@@ -449,10 +636,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1480",
       "_origin": "ast",
-      "id": "app_static_shell_activatable",
       "community": 25,
       "community_name": "Chart Vendor Widget Lifecycle",
-      "norm_label": "activatable()"
+      "norm_label": "activatable()",
+      "id": "app_static_shell_activatable"
     },
     {
       "label": "makeRail()",
@@ -460,10 +647,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1529",
       "_origin": "ast",
-      "id": "app_static_shell_makerail",
       "community": 188,
       "community_name": ".Mt",
-      "norm_label": "makerail()"
+      "norm_label": "makerail()",
+      "id": "app_static_shell_makerail"
     },
     {
       "label": "mountRails()",
@@ -471,10 +658,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1694",
       "_origin": "ast",
-      "id": "app_static_shell_mountrails",
       "community": 188,
       "community_name": ".Mt",
-      "norm_label": "mountrails()"
+      "norm_label": "mountrails()",
+      "id": "app_static_shell_mountrails"
     },
     {
       "label": "missionRailSync()",
@@ -482,10 +669,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1710",
       "_origin": "ast",
-      "id": "app_static_shell_missionrailsync",
       "community": 117,
       "community_name": "BTC Alignment Engine",
-      "norm_label": "missionrailsync()"
+      "norm_label": "missionrailsync()",
+      "id": "app_static_shell_missionrailsync"
     },
     {
       "label": "mineRailSync()",
@@ -493,10 +680,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1724",
       "_origin": "ast",
-      "id": "app_static_shell_minerailsync",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "minerailsync()"
+      "norm_label": "minerailsync()",
+      "id": "app_static_shell_minerailsync"
     },
     {
       "label": "indexHeld()",
@@ -504,10 +691,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1792",
       "_origin": "ast",
-      "id": "app_static_shell_indexheld",
       "community": 117,
       "community_name": "BTC Alignment Engine",
-      "norm_label": "indexheld()"
+      "norm_label": "indexheld()",
+      "id": "app_static_shell_indexheld"
     },
     {
       "label": "heldBadge()",
@@ -515,10 +702,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1826",
       "_origin": "ast",
-      "id": "app_static_shell_heldbadge",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "heldbadge()"
+      "norm_label": "heldbadge()",
+      "id": "app_static_shell_heldbadge"
     },
     {
       "label": "storyOf()",
@@ -526,10 +713,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1902",
       "_origin": "ast",
-      "id": "app_static_shell_storyof",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "storyof()"
+      "norm_label": "storyof()",
+      "id": "app_static_shell_storyof"
     },
     {
       "label": "ringSvg()",
@@ -537,10 +724,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1926",
       "_origin": "ast",
-      "id": "app_static_shell_ringsvg",
       "community": 329,
       "community_name": "NextWakeMath",
-      "norm_label": "ringsvg()"
+      "norm_label": "ringsvg()",
+      "id": "app_static_shell_ringsvg"
     },
     {
       "label": "ladderHtml()",
@@ -548,10 +735,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1946",
       "_origin": "ast",
-      "id": "app_static_shell_ladderhtml",
       "community": 329,
       "community_name": "NextWakeMath",
-      "norm_label": "ladderhtml()"
+      "norm_label": "ladderhtml()",
+      "id": "app_static_shell_ladderhtml"
     },
     {
       "label": "deckRowInner()",
@@ -559,10 +746,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L1977",
       "_origin": "ast",
-      "id": "app_static_shell_deckrowinner",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "deckrowinner()"
+      "norm_label": "deckrowinner()",
+      "id": "app_static_shell_deckrowinner"
     },
     {
       "label": "renderFunnel()",
@@ -570,10 +757,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2080",
       "_origin": "ast",
-      "id": "app_static_shell_renderfunnel",
       "community": 117,
       "community_name": "BTC Alignment Engine",
-      "norm_label": "renderfunnel()"
+      "norm_label": "renderfunnel()",
+      "id": "app_static_shell_renderfunnel"
     },
     {
       "label": "renderRadar()",
@@ -581,10 +768,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2102",
       "_origin": "ast",
-      "id": "app_static_shell_renderradar",
       "community": 117,
       "community_name": "BTC Alignment Engine",
-      "norm_label": "renderradar()"
+      "norm_label": "renderradar()",
+      "id": "app_static_shell_renderradar"
     },
     {
       "label": "weatherIndex()",
@@ -592,10 +779,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2258",
       "_origin": "ast",
-      "id": "app_static_shell_weatherindex",
       "community": 329,
       "community_name": "NextWakeMath",
-      "norm_label": "weatherindex()"
+      "norm_label": "weatherindex()",
+      "id": "app_static_shell_weatherindex"
     },
     {
       "label": "reachPlay()",
@@ -603,10 +790,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2301",
       "_origin": "ast",
-      "id": "app_static_shell_reachplay",
       "community": 329,
       "community_name": "NextWakeMath",
-      "norm_label": "reachplay()"
+      "norm_label": "reachplay()",
+      "id": "app_static_shell_reachplay"
     },
     {
       "label": "renderNear()",
@@ -614,10 +801,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2357",
       "_origin": "ast",
-      "id": "app_static_shell_rendernear",
       "community": 329,
       "community_name": "NextWakeMath",
-      "norm_label": "rendernear()"
+      "norm_label": "rendernear()",
+      "id": "app_static_shell_rendernear"
     },
     {
       "label": "loadNearLevels()",
@@ -625,10 +812,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2512",
       "_origin": "ast",
-      "id": "app_static_shell_loadnearlevels",
       "community": 329,
       "community_name": "NextWakeMath",
-      "norm_label": "loadnearlevels()"
+      "norm_label": "loadnearlevels()",
+      "id": "app_static_shell_loadnearlevels"
     },
     {
       "label": "renderPositions()",
@@ -636,10 +823,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2583",
       "_origin": "ast",
-      "id": "app_static_shell_renderpositions",
       "community": 117,
       "community_name": "BTC Alignment Engine",
-      "norm_label": "renderpositions()"
+      "norm_label": "renderpositions()",
+      "id": "app_static_shell_renderpositions"
     },
     {
       "label": "windowLeft()",
@@ -647,10 +834,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2625",
       "_origin": "ast",
-      "id": "app_static_shell_windowleft",
       "community": 329,
       "community_name": "NextWakeMath",
-      "norm_label": "windowleft()"
+      "norm_label": "windowleft()",
+      "id": "app_static_shell_windowleft"
     },
     {
       "label": "renderMine()",
@@ -658,10 +845,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2633",
       "_origin": "ast",
-      "id": "app_static_shell_rendermine",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "rendermine()"
+      "norm_label": "rendermine()",
+      "id": "app_static_shell_rendermine"
     },
     {
       "label": "mineCardInner()",
@@ -669,10 +856,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2696",
       "_origin": "ast",
-      "id": "app_static_shell_minecardinner",
       "community": 329,
       "community_name": "NextWakeMath",
-      "norm_label": "minecardinner()"
+      "norm_label": "minecardinner()",
+      "id": "app_static_shell_minecardinner"
     },
     {
       "label": "renderMineAside()",
@@ -680,10 +867,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2900",
       "_origin": "ast",
-      "id": "app_static_shell_rendermineaside",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "rendermineaside()"
+      "norm_label": "rendermineaside()",
+      "id": "app_static_shell_rendermineaside"
     },
     {
       "label": "renderRiskBudget()",
@@ -691,10 +878,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2925",
       "_origin": "ast",
-      "id": "app_static_shell_renderriskbudget",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "renderriskbudget()"
+      "norm_label": "renderriskbudget()",
+      "id": "app_static_shell_renderriskbudget"
     },
     {
       "label": "bindingConstraint()",
@@ -702,10 +889,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L2992",
       "_origin": "ast",
-      "id": "app_static_shell_bindingconstraint",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "bindingconstraint()"
+      "norm_label": "bindingconstraint()",
+      "id": "app_static_shell_bindingconstraint"
     },
     {
       "label": "renderJournal()",
@@ -713,10 +900,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3028",
       "_origin": "ast",
-      "id": "app_static_shell_renderjournal",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "renderjournal()"
+      "norm_label": "renderjournal()",
+      "id": "app_static_shell_renderjournal"
     },
     {
       "label": "renderTodayTile()",
@@ -724,10 +911,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3149",
       "_origin": "ast",
-      "id": "app_static_shell_rendertodaytile",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "rendertodaytile()"
+      "norm_label": "rendertodaytile()",
+      "id": "app_static_shell_rendertodaytile"
     },
     {
       "label": "loadPortfolio()",
@@ -735,10 +922,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3175",
       "_origin": "ast",
-      "id": "app_static_shell_loadportfolio",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "loadportfolio()"
+      "norm_label": "loadportfolio()",
+      "id": "app_static_shell_loadportfolio"
     },
     {
       "label": "setSub()",
@@ -746,10 +933,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3289",
       "_origin": "ast",
-      "id": "app_static_shell_setsub",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "setsub()"
+      "norm_label": "setsub()",
+      "id": "app_static_shell_setsub"
     },
     {
       "label": "drawCurve()",
@@ -757,10 +944,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3315",
       "_origin": "ast",
-      "id": "app_static_shell_drawcurve",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "drawcurve()"
+      "norm_label": "drawcurve()",
+      "id": "app_static_shell_drawcurve"
     },
     {
       "label": "eqPoint()",
@@ -768,10 +955,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3408",
       "_origin": "ast",
-      "id": "app_static_shell_eqpoint",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "eqpoint()"
+      "norm_label": "eqpoint()",
+      "id": "app_static_shell_eqpoint"
     },
     {
       "label": "eqClear()",
@@ -779,10 +966,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3430",
       "_origin": "ast",
-      "id": "app_static_shell_eqclear",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "eqclear()"
+      "norm_label": "eqclear()",
+      "id": "app_static_shell_eqclear"
     },
     {
       "label": "perfRows()",
@@ -790,10 +977,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3487",
       "_origin": "ast",
-      "id": "app_static_shell_perfrows",
       "community": 342,
       "community_name": "loadPerformance",
-      "norm_label": "perfrows()"
+      "norm_label": "perfrows()",
+      "id": "app_static_shell_perfrows"
     },
     {
       "label": "notTakenBlock()",
@@ -801,10 +988,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3549",
       "_origin": "ast",
-      "id": "app_static_shell_nottakenblock",
       "community": 342,
       "community_name": "loadPerformance",
-      "norm_label": "nottakenblock()"
+      "norm_label": "nottakenblock()",
+      "id": "app_static_shell_nottakenblock"
     },
     {
       "label": "loadPerformance()",
@@ -812,10 +999,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3565",
       "_origin": "ast",
-      "id": "app_static_shell_loadperformance",
       "community": 342,
       "community_name": "loadPerformance",
-      "norm_label": "loadperformance()"
+      "norm_label": "loadperformance()",
+      "id": "app_static_shell_loadperformance"
     },
     {
       "label": "loadHealth()",
@@ -823,10 +1010,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3580",
       "_origin": "ast",
-      "id": "app_static_shell_loadhealth",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "loadhealth()"
+      "norm_label": "loadhealth()",
+      "id": "app_static_shell_loadhealth"
     },
     {
       "label": "loadRisk()",
@@ -834,10 +1021,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3724",
       "_origin": "ast",
-      "id": "app_static_shell_loadrisk",
       "community": 157,
       "community_name": "Shell Navigation & Near Levels",
-      "norm_label": "loadrisk()"
+      "norm_label": "loadrisk()",
+      "id": "app_static_shell_loadrisk"
     },
     {
       "label": "coerceSetting()",
@@ -845,10 +1032,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3768",
       "_origin": "ast",
-      "id": "app_static_shell_coercesetting",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "coercesetting()"
+      "norm_label": "coercesetting()",
+      "id": "app_static_shell_coercesetting"
     },
     {
       "label": "buildSettings()",
@@ -856,10 +1043,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3859",
       "_origin": "ast",
-      "id": "app_static_shell_buildsettings",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "buildsettings()"
+      "norm_label": "buildsettings()",
+      "id": "app_static_shell_buildsettings"
     },
     {
       "label": "patchSettingsState()",
@@ -867,10 +1054,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3896",
       "_origin": "ast",
-      "id": "app_static_shell_patchsettingsstate",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "patchsettingsstate()"
+      "norm_label": "patchsettingsstate()",
+      "id": "app_static_shell_patchsettingsstate"
     },
     {
       "label": "syncSettingInputs()",
@@ -878,10 +1065,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3923",
       "_origin": "ast",
-      "id": "app_static_shell_syncsettinginputs",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "syncsettinginputs()"
+      "norm_label": "syncsettinginputs()",
+      "id": "app_static_shell_syncsettinginputs"
     },
     {
       "label": "loadSettings()",
@@ -889,10 +1076,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3934",
       "_origin": "ast",
-      "id": "app_static_shell_loadsettings",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "loadsettings()"
+      "norm_label": "loadsettings()",
+      "id": "app_static_shell_loadsettings"
     },
     {
       "label": "exportJournal()",
@@ -900,10 +1087,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3990",
       "_origin": "ast",
-      "id": "app_static_shell_exportjournal",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "exportjournal()"
+      "norm_label": "exportjournal()",
+      "id": "app_static_shell_exportjournal"
     },
     {
       "label": "renderScoreboard()",
@@ -911,10 +1098,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4022",
       "_origin": "ast",
-      "id": "app_static_shell_renderscoreboard",
       "community": 188,
       "community_name": ".Mt",
-      "norm_label": "renderscoreboard()"
+      "norm_label": "renderscoreboard()",
+      "id": "app_static_shell_renderscoreboard"
     },
     {
       "label": "statCards()",
@@ -922,10 +1109,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4073",
       "_origin": "ast",
-      "id": "app_static_shell_statcards",
       "community": 188,
       "community_name": ".Mt",
-      "norm_label": "statcards()"
+      "norm_label": "statcards()",
+      "id": "app_static_shell_statcards"
     },
     {
       "label": "renderStatWheel()",
@@ -933,10 +1120,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4131",
       "_origin": "ast",
-      "id": "app_static_shell_renderstatwheel",
       "community": 188,
       "community_name": ".Mt",
-      "norm_label": "renderstatwheel()"
+      "norm_label": "renderstatwheel()",
+      "id": "app_static_shell_renderstatwheel"
     },
     {
       "label": "progressionRows()",
@@ -944,10 +1131,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4171",
       "_origin": "ast",
-      "id": "app_static_shell_progressionrows",
       "community": 188,
       "community_name": ".Mt",
-      "norm_label": "progressionrows()"
+      "norm_label": "progressionrows()",
+      "id": "app_static_shell_progressionrows"
     },
     {
       "label": "gateRows()",
@@ -955,10 +1142,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4207",
       "_origin": "ast",
-      "id": "app_static_shell_gaterows",
       "community": 188,
       "community_name": ".Mt",
-      "norm_label": "gaterows()"
+      "norm_label": "gaterows()",
+      "id": "app_static_shell_gaterows"
     },
     {
       "label": "renderProgression()",
@@ -966,10 +1153,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4224",
       "_origin": "ast",
-      "id": "app_static_shell_renderprogression",
       "community": 188,
       "community_name": ".Mt",
-      "norm_label": "renderprogression()"
+      "norm_label": "renderprogression()",
+      "id": "app_static_shell_renderprogression"
     },
     {
       "label": "loadLiveGate()",
@@ -977,10 +1164,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4309",
       "_origin": "ast",
-      "id": "app_static_shell_loadlivegate",
       "community": 188,
       "community_name": ".Mt",
-      "norm_label": "loadlivegate()"
+      "norm_label": "loadlivegate()",
+      "id": "app_static_shell_loadlivegate"
     },
     {
       "label": "applySettings()",
@@ -988,10 +1175,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4369",
       "_origin": "ast",
-      "id": "app_static_shell_applysettings",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "applysettings()"
+      "norm_label": "applysettings()",
+      "id": "app_static_shell_applysettings"
     },
     {
       "label": "buildCredRows()",
@@ -999,10 +1186,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4495",
       "_origin": "ast",
-      "id": "app_static_shell_buildcredrows",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "buildcredrows()"
+      "norm_label": "buildcredrows()",
+      "id": "app_static_shell_buildcredrows"
     },
     {
       "label": "loadCredentials()",
@@ -1010,10 +1197,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4535",
       "_origin": "ast",
-      "id": "app_static_shell_loadcredentials",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "loadcredentials()"
+      "norm_label": "loadcredentials()",
+      "id": "app_static_shell_loadcredentials"
     },
     {
       "label": "renderDiagState()",
@@ -1021,10 +1208,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4693",
       "_origin": "ast",
-      "id": "app_static_shell_renderdiagstate",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "renderdiagstate()"
+      "norm_label": "renderdiagstate()",
+      "id": "app_static_shell_renderdiagstate"
     },
     {
       "label": "diagReport()",
@@ -1032,10 +1219,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4762",
       "_origin": "ast",
-      "id": "app_static_shell_diagreport",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "diagreport()"
+      "norm_label": "diagreport()",
+      "id": "app_static_shell_diagreport"
     },
     {
       "label": "loadTelemetry()",
@@ -1043,10 +1230,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4841",
       "_origin": "ast",
-      "id": "app_static_shell_loadtelemetry",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "loadtelemetry()"
+      "norm_label": "loadtelemetry()",
+      "id": "app_static_shell_loadtelemetry"
     },
     {
       "label": "pollScanState()",
@@ -1054,10 +1241,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4897",
       "_origin": "ast",
-      "id": "app_static_shell_pollscanstate",
       "community": 25,
       "community_name": "Chart Vendor Widget Lifecycle",
-      "norm_label": "pollscanstate()"
+      "norm_label": "pollscanstate()",
+      "id": "app_static_shell_pollscanstate"
     },
     {
       "label": "toast()",
@@ -1065,10 +1252,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L4972",
       "_origin": "ast",
-      "id": "app_static_shell_toast",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "toast()"
+      "norm_label": "toast()",
+      "id": "app_static_shell_toast"
     },
     {
       "label": "scanResult()",
@@ -1076,10 +1263,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L5011",
       "_origin": "ast",
-      "id": "app_static_shell_scanresult",
       "community": 25,
       "community_name": "Chart Vendor Widget Lifecycle",
-      "norm_label": "scanresult()"
+      "norm_label": "scanresult()",
+      "id": "app_static_shell_scanresult"
     },
     {
       "label": "loadRefused()",
@@ -1087,10 +1274,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L5112",
       "_origin": "ast",
-      "id": "app_static_shell_loadrefused",
       "community": 117,
       "community_name": "BTC Alignment Engine",
-      "norm_label": "loadrefused()"
+      "norm_label": "loadrefused()",
+      "id": "app_static_shell_loadrefused"
     },
     {
       "label": "loadLedger()",
@@ -1098,10 +1285,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L5138",
       "_origin": "ast",
-      "id": "app_static_shell_loadledger",
       "community": 25,
       "community_name": "Chart Vendor Widget Lifecycle",
-      "norm_label": "loadledger()"
+      "norm_label": "loadledger()",
+      "id": "app_static_shell_loadledger"
     },
     {
       "label": "bookCard()",
@@ -1109,10 +1296,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L5156",
       "_origin": "ast",
-      "id": "app_static_shell_bookcard",
       "community": 340,
       "community_name": "renderLedger",
-      "norm_label": "bookcard()"
+      "norm_label": "bookcard()",
+      "id": "app_static_shell_bookcard"
     },
     {
       "label": "renderLedger()",
@@ -1120,10 +1307,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L5175",
       "_origin": "ast",
-      "id": "app_static_shell_renderledger",
       "community": 340,
       "community_name": "renderLedger",
-      "norm_label": "renderledger()"
+      "norm_label": "renderledger()",
+      "id": "app_static_shell_renderledger"
     },
     {
       "label": "ledgerRow()",
@@ -1131,10 +1318,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L5327",
       "_origin": "ast",
-      "id": "app_static_shell_ledgerrow",
       "community": 340,
       "community_name": "renderLedger",
-      "norm_label": "ledgerrow()"
+      "norm_label": "ledgerrow()",
+      "id": "app_static_shell_ledgerrow"
     },
     {
       "label": "renderLedgerMine()",
@@ -1142,10 +1329,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L5350",
       "_origin": "ast",
-      "id": "app_static_shell_renderledgermine",
       "community": 340,
       "community_name": "renderLedger",
-      "norm_label": "renderledgermine()"
+      "norm_label": "renderledgermine()",
+      "id": "app_static_shell_renderledgermine"
     },
     {
       "label": "renderLedgerExits()",
@@ -1153,10 +1340,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L5390",
       "_origin": "ast",
-      "id": "app_static_shell_renderledgerexits",
       "community": 340,
       "community_name": "renderLedger",
-      "norm_label": "renderledgerexits()"
+      "norm_label": "renderledgerexits()",
+      "id": "app_static_shell_renderledgerexits"
     },
     {
       "label": "refresh()",
@@ -1164,10 +1351,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L5450",
       "_origin": "ast",
-      "id": "app_static_shell_refresh",
       "community": 25,
       "community_name": "Chart Vendor Widget Lifecycle",
-      "norm_label": "refresh()"
+      "norm_label": "refresh()",
+      "id": "app_static_shell_refresh"
     },
     {
       "label": "reachableTitles()",
@@ -1175,10 +1362,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L5490",
       "_origin": "ast",
-      "id": "app_static_shell_reachabletitles",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "reachabletitles()"
+      "norm_label": "reachabletitles()",
+      "id": "app_static_shell_reachabletitles"
     },
     {
       "label": "RFC-4180",
@@ -1186,10 +1373,10 @@
       "source_file": "app/static/shell.js",
       "source_location": "L3992",
       "_origin": "ast",
-      "id": "docref_rfc_4180",
       "community": 33,
       "community_name": "Shell Health & Staleness",
-      "norm_label": "rfc-4180"
+      "norm_label": "rfc-4180",
+      "id": "docref_rfc_4180"
     },
     {
       "label": "test_overview_redesign.js",
@@ -1197,10 +1384,10 @@
       "source_file": "app/tests/test_overview_redesign.js",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "app_tests_test_overview_redesign",
       "community": 289,
       "community_name": "test_overview_redesign.js",
-      "norm_label": "test_overview_redesign.js"
+      "norm_label": "test_overview_redesign.js",
+      "id": "app_tests_test_overview_redesign"
     },
     {
       "label": "fs",
@@ -1208,10 +1395,10 @@
       "source_file": "app/tests/test_overview_redesign.js",
       "source_location": "L3",
       "_origin": "ast",
-      "id": "app_tests_test_overview_redesign_fs",
       "community": 289,
       "community_name": "test_overview_redesign.js",
-      "norm_label": "fs"
+      "norm_label": "fs",
+      "id": "app_tests_test_overview_redesign_fs"
     },
     {
       "label": "path",
@@ -1219,10 +1406,10 @@
       "source_file": "app/tests/test_overview_redesign.js",
       "source_location": "L4",
       "_origin": "ast",
-      "id": "app_tests_test_overview_redesign_path",
       "community": 289,
       "community_name": "test_overview_redesign.js",
-      "norm_label": "path"
+      "norm_label": "path",
+      "id": "app_tests_test_overview_redesign_path"
     },
     {
       "label": "assert",
@@ -1230,10 +1417,10 @@
       "source_file": "app/tests/test_overview_redesign.js",
       "source_location": "L5",
       "_origin": "ast",
-      "id": "app_tests_test_overview_redesign_assert",
       "community": 289,
       "community_name": "test_overview_redesign.js",
-      "norm_label": "assert"
+      "norm_label": "assert",
+      "id": "app_tests_test_overview_redesign_assert"
     },
     {
       "label": "STATIC",
@@ -1241,10 +1428,10 @@
       "source_file": "app/tests/test_overview_redesign.js",
       "source_location": "L7",
       "_origin": "ast",
-      "id": "app_tests_test_overview_redesign_static",
       "community": 289,
       "community_name": "test_overview_redesign.js",
-      "norm_label": "static"
+      "norm_label": "static",
+      "id": "app_tests_test_overview_redesign_static"
     },
     {
       "label": "HTML",
@@ -1252,10 +1439,10 @@
       "source_file": "app/tests/test_overview_redesign.js",
       "source_location": "L8",
       "_origin": "ast",
-      "id": "app_tests_test_overview_redesign_html",
       "community": 289,
       "community_name": "test_overview_redesign.js",
-      "norm_label": "html"
+      "norm_label": "html",
+      "id": "app_tests_test_overview_redesign_html"
     },
     {
       "label": "CSS",
@@ -1263,10 +1450,10 @@
       "source_file": "app/tests/test_overview_redesign.js",
       "source_location": "L9",
       "_origin": "ast",
-      "id": "app_tests_test_overview_redesign_css",
       "community": 289,
       "community_name": "test_overview_redesign.js",
-      "norm_label": "css"
+      "norm_label": "css",
+      "id": "app_tests_test_overview_redesign_css"
     },
     {
       "label": "SHELL",
@@ -1274,10 +1461,10 @@
       "source_file": "app/tests/test_overview_redesign.js",
       "source_location": "L10",
       "_origin": "ast",
-      "id": "app_tests_test_overview_redesign_shell",
       "community": 289,
       "community_name": "test_overview_redesign.js",
-      "norm_label": "shell"
+      "norm_label": "shell",
+      "id": "app_tests_test_overview_redesign_shell"
     },
     {
       "label": "OPS",
@@ -1285,10 +1472,10 @@
       "source_file": "app/tests/test_overview_redesign.js",
       "source_location": "L11",
       "_origin": "ast",
-      "id": "app_tests_test_overview_redesign_ops",
       "community": 289,
       "community_name": "test_overview_redesign.js",
-      "norm_label": "ops"
+      "norm_label": "ops",
+      "id": "app_tests_test_overview_redesign_ops"
     },
     {
       "label": "WEATHER",
@@ -1296,10 +1483,10 @@
       "source_file": "app/tests/test_overview_redesign.js",
       "source_location": "L12",
       "_origin": "ast",
-      "id": "app_tests_test_overview_redesign_weather",
       "community": 289,
       "community_name": "test_overview_redesign.js",
-      "norm_label": "weather"
+      "norm_label": "weather",
+      "id": "app_tests_test_overview_redesign_weather"
     },
     {
       "label": "ok()",
@@ -1307,10 +1494,10 @@
       "source_file": "app/tests/test_overview_redesign.js",
       "source_location": "L15",
       "_origin": "ast",
-      "id": "app_tests_test_overview_redesign_ok",
       "community": 289,
       "community_name": "test_overview_redesign.js",
-      "norm_label": "ok()"
+      "norm_label": "ok()",
+      "id": "app_tests_test_overview_redesign_ok"
     },
     {
       "label": "ma.py",
@@ -1509,193 +1696,6 @@
       "community_name": "Indicator Engines",
       "norm_label": "schmitt trigger: latch up/down, and hold through the deadband.      returns th",
       "id": "app_engine_ma_rationale_258"
-    },
-    {
-      "label": "regimefresh.py",
-      "file_type": "code",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "regimefresh.py",
-      "id": "app_engine_regimefresh"
-    },
-    {
-      "label": "trigger_at()",
-      "file_type": "code",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L92",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "trigger_at()",
-      "id": "app_engine_regimefresh_trigger_at"
-    },
-    {
-      "label": "_regime_series()",
-      "file_type": "code",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L105",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "_regime_series()",
-      "id": "app_engine_regimefresh_regime_series"
-    },
-    {
-      "label": "label_asof()",
-      "file_type": "code",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L115",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "label_asof()",
-      "id": "app_engine_regimefresh_label_asof"
-    },
-    {
-      "label": "annotate()",
-      "file_type": "code",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L141",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "annotate()",
-      "id": "app_engine_regimefresh_annotate"
-    },
-    {
-      "label": "verify()",
-      "file_type": "code",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L177",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "verify()",
-      "id": "app_engine_regimefresh_verify"
-    },
-    {
-      "label": "factor_extractors()",
-      "file_type": "code",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L222",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "factor_extractors()",
-      "id": "app_engine_regimefresh_factor_extractors"
-    },
-    {
-      "label": "grade()",
-      "file_type": "code",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L243",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "grade()",
-      "id": "app_engine_regimefresh_grade"
-    },
-    {
-      "label": "main()",
-      "file_type": "code",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L266",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "main()",
-      "id": "app_engine_regimefresh_main"
-    },
-    {
-      "label": "Regime freshness \u2014 how stale was the label this trade was gated on? READ-ONLY.",
-      "file_type": "rationale",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "regime freshness \u2014 how stale was the label this trade was gated on? read-only.",
-      "id": "app_engine_regimefresh_rationale_1"
-    },
-    {
-      "label": "The market event that defined this label, or None when unrecorded.      regime",
-      "file_type": "rationale",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L93",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "the market event that defined this label, or none when unrecorded.      regime",
-      "id": "app_engine_regimefresh_rationale_93"
-    },
-    {
-      "label": "(confirmed_at, regime, trigger_at) for one market, in confirmation order.",
-      "file_type": "rationale",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L106",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "(confirmed_at, regime, trigger_at) for one market, in confirmation order.",
-      "id": "app_engine_regimefresh_rationale_106"
-    },
-    {
-      "label": "The governing label at `ts`, and whether a newer one had already landed.",
-      "file_type": "rationale",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L116",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "the governing label at `ts`, and whether a newer one had already landed.",
-      "id": "app_engine_regimefresh_rationale_116"
-    },
-    {
-      "label": "Stamp regime-freshness fields onto candidate payloads, in place.      Mutates",
-      "file_type": "rationale",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L142",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "stamp regime-freshness fields onto candidate payloads, in place.      mutates",
-      "id": "app_engine_regimefresh_rationale_142"
-    },
-    {
-      "label": "Prove the reconstruction against the engine's own recorded regime.      The ga",
-      "file_type": "rationale",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L178",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "prove the reconstruction against the engine's own recorded regime.      the ga",
-      "id": "app_engine_regimefresh_rationale_178"
-    },
-    {
-      "label": "0/1 flags for outcome_split. Absent when unannotated, so MISSING stays     hone",
-      "file_type": "rationale",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L223",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "0/1 flags for outcome_split. absent when unannotated, so missing stays     hone",
-      "id": "app_engine_regimefresh_rationale_223"
-    },
-    {
-      "label": "The whole audition: load, annotate, split, and say what held.",
-      "file_type": "rationale",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L244",
-      "_origin": "ast",
-      "community": 76,
-      "community_name": "Chart Vendor Line Renderers",
-      "norm_label": "the whole audition: load, annotate, split, and say what held.",
-      "id": "app_engine_regimefresh_rationale_244"
     },
     {
       "label": "test_regimefresh.py",
@@ -73413,13 +73413,297 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L143",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh",
+      "target": "app_engine_regimefresh_annotate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L224",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh",
+      "target": "app_engine_regimefresh_factor_extractors",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L245",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh",
+      "target": "app_engine_regimefresh_grade",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L117",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh",
+      "target": "app_engine_regimefresh_label_asof",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L268",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh",
+      "target": "app_engine_regimefresh_main",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L107",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh",
+      "target": "app_engine_regimefresh_regime_series",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L94",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh",
+      "target": "app_engine_regimefresh_trigger_at",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L179",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh",
+      "target": "app_engine_regimefresh_verify",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_rationale_1",
+      "target": "app_engine_regimefresh",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L95",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_rationale_95",
+      "target": "app_engine_regimefresh_trigger_at",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L112",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_regime_series",
+      "target": "app_engine_regimefresh_trigger_at",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L161",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_annotate",
+      "target": "app_engine_regimefresh_regime_series",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L108",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_rationale_108",
+      "target": "app_engine_regimefresh_regime_series",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L209",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_verify",
+      "target": "app_engine_regimefresh_regime_series",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L162",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_annotate",
+      "target": "app_engine_regimefresh_label_asof",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L118",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_rationale_118",
+      "target": "app_engine_regimefresh_label_asof",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L210",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_verify",
+      "target": "app_engine_regimefresh_label_asof",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L258",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_grade",
+      "target": "app_engine_regimefresh_annotate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L144",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_rationale_144",
+      "target": "app_engine_regimefresh_annotate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L256",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_grade",
+      "target": "app_engine_regimefresh_verify",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L180",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_rationale_180",
+      "target": "app_engine_regimefresh_verify",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "indirect_call",
+      "context": "argument",
+      "confidence": "INFERRED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L260",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_grade",
+      "target": "app_engine_regimefresh_factor_extractors",
+      "confidence_score": 0.5
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L225",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_rationale_225",
+      "target": "app_engine_regimefresh_factor_extractors",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L275",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_main",
+      "target": "app_engine_regimefresh_grade",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "app/engine/regimefresh.py",
+      "source_location": "L246",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "app_engine_regimefresh_rationale_246",
+      "target": "app_engine_regimefresh_grade",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "app/static/glossary.js",
       "source_location": "L140",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_glossary",
-      "target": "app_static_glossary_captriggers",
-      "confidence_score": 1.0
+      "target": "app_static_glossary_captriggers"
     },
     {
       "relation": "contains",
@@ -73428,9 +73712,9 @@
       "source_location": "L88",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_glossary",
-      "target": "app_static_glossary_ensure",
-      "confidence_score": 1.0
+      "target": "app_static_glossary_ensure"
     },
     {
       "relation": "contains",
@@ -73439,9 +73723,9 @@
       "source_location": "L167",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_glossary",
-      "target": "app_static_glossary_markfocusable",
-      "confidence_score": 1.0
+      "target": "app_static_glossary_markfocusable"
     },
     {
       "relation": "contains",
@@ -73450,9 +73734,9 @@
       "source_location": "L96",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_glossary",
-      "target": "app_static_glossary_show",
-      "confidence_score": 1.0
+      "target": "app_static_glossary_show"
     },
     {
       "relation": "calls",
@@ -73462,9 +73746,9 @@
       "source_location": "L100",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_glossary_show",
-      "target": "app_static_glossary_ensure",
-      "confidence_score": 1.0
+      "target": "app_static_glossary_ensure"
     },
     {
       "relation": "calls",
@@ -73474,9 +73758,9 @@
       "source_location": "L168",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_glossary_markfocusable",
-      "target": "app_static_glossary_captriggers",
-      "confidence_score": 1.0
+      "target": "app_static_glossary_captriggers"
     },
     {
       "relation": "contains",
@@ -73485,9 +73769,9 @@
       "source_location": "L1480",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_activatable",
-      "confidence_score": 1.0
+      "target": "app_static_shell_activatable"
     },
     {
       "relation": "contains",
@@ -73496,9 +73780,9 @@
       "source_location": "L353",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_agetext",
-      "confidence_score": 1.0
+      "target": "app_static_shell_agetext"
     },
     {
       "relation": "contains",
@@ -73507,9 +73791,9 @@
       "source_location": "L4369",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_applysettings",
-      "confidence_score": 1.0
+      "target": "app_static_shell_applysettings"
     },
     {
       "relation": "contains",
@@ -73518,9 +73802,9 @@
       "source_location": "L2992",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_bindingconstraint",
-      "confidence_score": 1.0
+      "target": "app_static_shell_bindingconstraint"
     },
     {
       "relation": "contains",
@@ -73529,9 +73813,9 @@
       "source_location": "L5156",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_bookcard",
-      "confidence_score": 1.0
+      "target": "app_static_shell_bookcard"
     },
     {
       "relation": "contains",
@@ -73540,9 +73824,9 @@
       "source_location": "L4495",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_buildcredrows",
-      "confidence_score": 1.0
+      "target": "app_static_shell_buildcredrows"
     },
     {
       "relation": "contains",
@@ -73551,9 +73835,9 @@
       "source_location": "L3859",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_buildsettings",
-      "confidence_score": 1.0
+      "target": "app_static_shell_buildsettings"
     },
     {
       "relation": "contains",
@@ -73562,9 +73846,9 @@
       "source_location": "L1293",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_closeposition",
-      "confidence_score": 1.0
+      "target": "app_static_shell_closeposition"
     },
     {
       "relation": "contains",
@@ -73573,9 +73857,9 @@
       "source_location": "L3768",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_coercesetting",
-      "confidence_score": 1.0
+      "target": "app_static_shell_coercesetting"
     },
     {
       "relation": "contains",
@@ -73584,9 +73868,9 @@
       "source_location": "L466",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_deck",
-      "confidence_score": 1.0
+      "target": "app_static_shell_deck"
     },
     {
       "relation": "contains",
@@ -73595,9 +73879,9 @@
       "source_location": "L781",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_deckemptyhtml",
-      "confidence_score": 1.0
+      "target": "app_static_shell_deckemptyhtml"
     },
     {
       "relation": "contains",
@@ -73606,9 +73890,9 @@
       "source_location": "L1977",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_deckrowinner",
-      "confidence_score": 1.0
+      "target": "app_static_shell_deckrowinner"
     },
     {
       "relation": "contains",
@@ -73617,9 +73901,9 @@
       "source_location": "L817",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_decksplit",
-      "confidence_score": 1.0
+      "target": "app_static_shell_decksplit"
     },
     {
       "relation": "contains",
@@ -73628,9 +73912,9 @@
       "source_location": "L4762",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_diagreport",
-      "confidence_score": 1.0
+      "target": "app_static_shell_diagreport"
     },
     {
       "relation": "contains",
@@ -73639,9 +73923,9 @@
       "source_location": "L3315",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_drawcurve",
-      "confidence_score": 1.0
+      "target": "app_static_shell_drawcurve"
     },
     {
       "relation": "contains",
@@ -73650,9 +73934,9 @@
       "source_location": "L449",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_engaged",
-      "confidence_score": 1.0
+      "target": "app_static_shell_engaged"
     },
     {
       "relation": "contains",
@@ -73661,9 +73945,9 @@
       "source_location": "L3430",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_eqclear",
-      "confidence_score": 1.0
+      "target": "app_static_shell_eqclear"
     },
     {
       "relation": "contains",
@@ -73672,9 +73956,9 @@
       "source_location": "L3408",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_eqpoint",
-      "confidence_score": 1.0
+      "target": "app_static_shell_eqpoint"
     },
     {
       "relation": "contains",
@@ -73683,9 +73967,9 @@
       "source_location": "L661",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_expiresin",
-      "confidence_score": 1.0
+      "target": "app_static_shell_expiresin"
     },
     {
       "relation": "contains",
@@ -73694,9 +73978,9 @@
       "source_location": "L1450",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_explainrefusal",
-      "confidence_score": 1.0
+      "target": "app_static_shell_explainrefusal"
     },
     {
       "relation": "contains",
@@ -73705,9 +73989,9 @@
       "source_location": "L3990",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_exportjournal",
-      "confidence_score": 1.0
+      "target": "app_static_shell_exportjournal"
     },
     {
       "relation": "contains",
@@ -73716,9 +74000,9 @@
       "source_location": "L675",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_foundago",
-      "confidence_score": 1.0
+      "target": "app_static_shell_foundago"
     },
     {
       "relation": "contains",
@@ -73727,9 +74011,9 @@
       "source_location": "L684",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_foundtitle",
-      "confidence_score": 1.0
+      "target": "app_static_shell_foundtitle"
     },
     {
       "relation": "contains",
@@ -73738,9 +74022,9 @@
       "source_location": "L4207",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_gaterows",
-      "confidence_score": 1.0
+      "target": "app_static_shell_gaterows"
     },
     {
       "relation": "contains",
@@ -73749,9 +74033,9 @@
       "source_location": "L85",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_go",
-      "confidence_score": 1.0
+      "target": "app_static_shell_go"
     },
     {
       "relation": "contains",
@@ -73760,9 +74044,9 @@
       "source_location": "L337",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_healthtone",
-      "confidence_score": 1.0
+      "target": "app_static_shell_healthtone"
     },
     {
       "relation": "contains",
@@ -73771,9 +74055,9 @@
       "source_location": "L1826",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_heldbadge",
-      "confidence_score": 1.0
+      "target": "app_static_shell_heldbadge"
     },
     {
       "relation": "contains",
@@ -73782,9 +74066,9 @@
       "source_location": "L649",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_htfchip",
-      "confidence_score": 1.0
+      "target": "app_static_shell_htfchip"
     },
     {
       "relation": "contains",
@@ -73793,9 +74077,9 @@
       "source_location": "L1792",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_indexheld",
-      "confidence_score": 1.0
+      "target": "app_static_shell_indexheld"
     },
     {
       "relation": "contains",
@@ -73804,9 +74088,9 @@
       "source_location": "L1946",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_ladderhtml",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ladderhtml"
     },
     {
       "relation": "contains",
@@ -73815,9 +74099,9 @@
       "source_location": "L1143",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_ladderring",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ladderring"
     },
     {
       "relation": "contains",
@@ -73826,9 +74110,9 @@
       "source_location": "L5327",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_ledgerrow",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ledgerrow"
     },
     {
       "relation": "contains",
@@ -73837,9 +74121,9 @@
       "source_location": "L457",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_lifecycleof",
-      "confidence_score": 1.0
+      "target": "app_static_shell_lifecycleof"
     },
     {
       "relation": "contains",
@@ -73848,9 +74132,9 @@
       "source_location": "L4535",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadcredentials",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadcredentials"
     },
     {
       "relation": "contains",
@@ -73859,9 +74143,9 @@
       "source_location": "L3580",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadhealth",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadhealth"
     },
     {
       "relation": "contains",
@@ -73870,9 +74154,9 @@
       "source_location": "L5138",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadledger",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadledger"
     },
     {
       "relation": "contains",
@@ -73881,9 +74165,9 @@
       "source_location": "L4309",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadlivegate",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadlivegate"
     },
     {
       "relation": "contains",
@@ -73892,9 +74176,9 @@
       "source_location": "L2512",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadnearlevels",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadnearlevels"
     },
     {
       "relation": "contains",
@@ -73903,9 +74187,9 @@
       "source_location": "L550",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadoverview",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadoverview"
     },
     {
       "relation": "contains",
@@ -73914,9 +74198,9 @@
       "source_location": "L3565",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadperformance",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadperformance"
     },
     {
       "relation": "contains",
@@ -73925,9 +74209,9 @@
       "source_location": "L3175",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadportfolio",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadportfolio"
     },
     {
       "relation": "contains",
@@ -73936,9 +74220,9 @@
       "source_location": "L5112",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadrefused",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadrefused"
     },
     {
       "relation": "contains",
@@ -73947,9 +74231,9 @@
       "source_location": "L3724",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadrisk",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadrisk"
     },
     {
       "relation": "contains",
@@ -73958,9 +74242,9 @@
       "source_location": "L3934",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadsettings",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadsettings"
     },
     {
       "relation": "contains",
@@ -73969,9 +74253,9 @@
       "source_location": "L4841",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_loadtelemetry",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadtelemetry"
     },
     {
       "relation": "contains",
@@ -73980,9 +74264,9 @@
       "source_location": "L1529",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_makerail",
-      "confidence_score": 1.0
+      "target": "app_static_shell_makerail"
     },
     {
       "relation": "contains",
@@ -73991,9 +74275,9 @@
       "source_location": "L374",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_markdegraded",
-      "confidence_score": 1.0
+      "target": "app_static_shell_markdegraded"
     },
     {
       "relation": "contains",
@@ -74002,9 +74286,9 @@
       "source_location": "L2696",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_minecardinner",
-      "confidence_score": 1.0
+      "target": "app_static_shell_minecardinner"
     },
     {
       "relation": "contains",
@@ -74013,9 +74297,9 @@
       "source_location": "L1724",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_minerailsync",
-      "confidence_score": 1.0
+      "target": "app_static_shell_minerailsync"
     },
     {
       "relation": "contains",
@@ -74024,9 +74308,9 @@
       "source_location": "L1079",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_missioncardinner",
-      "confidence_score": 1.0
+      "target": "app_static_shell_missioncardinner"
     },
     {
       "relation": "contains",
@@ -74035,9 +74319,9 @@
       "source_location": "L1710",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_missionrailsync",
-      "confidence_score": 1.0
+      "target": "app_static_shell_missionrailsync"
     },
     {
       "relation": "contains",
@@ -74046,9 +74330,9 @@
       "source_location": "L1694",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_mountrails",
-      "confidence_score": 1.0
+      "target": "app_static_shell_mountrails"
     },
     {
       "relation": "contains",
@@ -74057,9 +74341,9 @@
       "source_location": "L3549",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_nottakenblock",
-      "confidence_score": 1.0
+      "target": "app_static_shell_nottakenblock"
     },
     {
       "relation": "contains",
@@ -74068,9 +74352,9 @@
       "source_location": "L3896",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_patchsettingsstate",
-      "confidence_score": 1.0
+      "target": "app_static_shell_patchsettingsstate"
     },
     {
       "relation": "contains",
@@ -74079,9 +74363,9 @@
       "source_location": "L3487",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_perfrows",
-      "confidence_score": 1.0
+      "target": "app_static_shell_perfrows"
     },
     {
       "relation": "contains",
@@ -74090,9 +74374,9 @@
       "source_location": "L4897",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_pollscanstate",
-      "confidence_score": 1.0
+      "target": "app_static_shell_pollscanstate"
     },
     {
       "relation": "contains",
@@ -74101,9 +74385,9 @@
       "source_location": "L4171",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_progressionrows",
-      "confidence_score": 1.0
+      "target": "app_static_shell_progressionrows"
     },
     {
       "relation": "contains",
@@ -74112,9 +74396,9 @@
       "source_location": "L445",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_put",
-      "confidence_score": 1.0
+      "target": "app_static_shell_put"
     },
     {
       "relation": "contains",
@@ -74123,9 +74407,9 @@
       "source_location": "L5490",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_reachabletitles",
-      "confidence_score": 1.0
+      "target": "app_static_shell_reachabletitles"
     },
     {
       "relation": "contains",
@@ -74134,9 +74418,9 @@
       "source_location": "L2301",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_reachplay",
-      "confidence_score": 1.0
+      "target": "app_static_shell_reachplay"
     },
     {
       "relation": "contains",
@@ -74145,9 +74429,9 @@
       "source_location": "L753",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_reasontext",
-      "confidence_score": 1.0
+      "target": "app_static_shell_reasontext"
     },
     {
       "relation": "contains",
@@ -74156,9 +74440,9 @@
       "source_location": "L5450",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_refresh",
-      "confidence_score": 1.0
+      "target": "app_static_shell_refresh"
     },
     {
       "relation": "contains",
@@ -74167,9 +74451,9 @@
       "source_location": "L1152",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderdeck",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderdeck"
     },
     {
       "relation": "contains",
@@ -74178,9 +74462,9 @@
       "source_location": "L4693",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderdiagstate",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderdiagstate"
     },
     {
       "relation": "contains",
@@ -74189,9 +74473,9 @@
       "source_location": "L907",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderdisposition",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderdisposition"
     },
     {
       "relation": "contains",
@@ -74200,9 +74484,9 @@
       "source_location": "L2080",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderfunnel",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderfunnel"
     },
     {
       "relation": "contains",
@@ -74211,9 +74495,9 @@
       "source_location": "L3028",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderjournal",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderjournal"
     },
     {
       "relation": "contains",
@@ -74222,9 +74506,9 @@
       "source_location": "L5175",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderledger",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderledger"
     },
     {
       "relation": "contains",
@@ -74233,9 +74517,9 @@
       "source_location": "L5390",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderledgerexits",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderledgerexits"
     },
     {
       "relation": "contains",
@@ -74244,9 +74528,9 @@
       "source_location": "L5350",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderledgermine",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderledgermine"
     },
     {
       "relation": "contains",
@@ -74255,9 +74539,9 @@
       "source_location": "L2633",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_rendermine",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendermine"
     },
     {
       "relation": "contains",
@@ -74266,9 +74550,9 @@
       "source_location": "L2900",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_rendermineaside",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendermineaside"
     },
     {
       "relation": "contains",
@@ -74277,9 +74561,9 @@
       "source_location": "L1021",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_rendermissions",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendermissions"
     },
     {
       "relation": "contains",
@@ -74288,9 +74572,9 @@
       "source_location": "L2357",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_rendernear",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendernear"
     },
     {
       "relation": "contains",
@@ -74299,9 +74583,9 @@
       "source_location": "L2583",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderpositions",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderpositions"
     },
     {
       "relation": "contains",
@@ -74310,9 +74594,9 @@
       "source_location": "L4224",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderprogression",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderprogression"
     },
     {
       "relation": "contains",
@@ -74321,9 +74605,9 @@
       "source_location": "L2102",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderradar",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderradar"
     },
     {
       "relation": "contains",
@@ -74332,9 +74616,9 @@
       "source_location": "L2925",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderriskbudget",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderriskbudget"
     },
     {
       "relation": "contains",
@@ -74343,9 +74627,9 @@
       "source_location": "L4022",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderscoreboard",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderscoreboard"
     },
     {
       "relation": "contains",
@@ -74354,9 +74638,9 @@
       "source_location": "L4131",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_renderstatwheel",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderstatwheel"
     },
     {
       "relation": "contains",
@@ -74365,9 +74649,9 @@
       "source_location": "L3149",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_rendertodaytile",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendertodaytile"
     },
     {
       "relation": "contains",
@@ -74376,9 +74660,9 @@
       "source_location": "L1926",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_ringsvg",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ringsvg"
     },
     {
       "relation": "contains",
@@ -74387,9 +74671,9 @@
       "source_location": "L5011",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_scanresult",
-      "confidence_score": 1.0
+      "target": "app_static_shell_scanresult"
     },
     {
       "relation": "contains",
@@ -74398,9 +74682,9 @@
       "source_location": "L890",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_setaccentmode",
-      "confidence_score": 1.0
+      "target": "app_static_shell_setaccentmode"
     },
     {
       "relation": "contains",
@@ -74409,9 +74693,9 @@
       "source_location": "L3289",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_setsub",
-      "confidence_score": 1.0
+      "target": "app_static_shell_setsub"
     },
     {
       "relation": "contains",
@@ -74420,9 +74704,9 @@
       "source_location": "L4073",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_statcards",
-      "confidence_score": 1.0
+      "target": "app_static_shell_statcards"
     },
     {
       "relation": "contains",
@@ -74431,9 +74715,9 @@
       "source_location": "L30",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_storagefailed",
-      "confidence_score": 1.0
+      "target": "app_static_shell_storagefailed"
     },
     {
       "relation": "contains",
@@ -74442,9 +74726,9 @@
       "source_location": "L1902",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_storyof",
-      "confidence_score": 1.0
+      "target": "app_static_shell_storyof"
     },
     {
       "relation": "contains",
@@ -74453,9 +74737,9 @@
       "source_location": "L484",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_symbolsets",
-      "confidence_score": 1.0
+      "target": "app_static_shell_symbolsets"
     },
     {
       "relation": "contains",
@@ -74464,9 +74748,9 @@
       "source_location": "L3923",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_syncsettinginputs",
-      "confidence_score": 1.0
+      "target": "app_static_shell_syncsettinginputs"
     },
     {
       "relation": "contains",
@@ -74475,9 +74759,9 @@
       "source_location": "L4972",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_toast",
-      "confidence_score": 1.0
+      "target": "app_static_shell_toast"
     },
     {
       "relation": "contains",
@@ -74486,9 +74770,9 @@
       "source_location": "L2258",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_weatherindex",
-      "confidence_score": 1.0
+      "target": "app_static_shell_weatherindex"
     },
     {
       "relation": "contains",
@@ -74497,9 +74781,9 @@
       "source_location": "L2625",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_windowleft",
-      "confidence_score": 1.0
+      "target": "app_static_shell_windowleft"
     },
     {
       "relation": "contains",
@@ -74508,9 +74792,9 @@
       "source_location": "L1365",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "app_static_shell_wirecardactions",
-      "confidence_score": 1.0
+      "target": "app_static_shell_wirecardactions"
     },
     {
       "relation": "cites",
@@ -74519,9 +74803,9 @@
       "source_location": "L3992",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell",
-      "target": "docref_rfc_4180",
-      "confidence_score": 1.0
+      "target": "docref_rfc_4180"
     },
     {
       "relation": "calls",
@@ -74531,9 +74815,9 @@
       "source_location": "L140",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_go",
-      "target": "app_static_shell_loadledger",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadledger"
     },
     {
       "relation": "calls",
@@ -74543,9 +74827,9 @@
       "source_location": "L132",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_go",
-      "target": "app_static_shell_pollscanstate",
-      "confidence_score": 1.0
+      "target": "app_static_shell_pollscanstate"
     },
     {
       "relation": "calls",
@@ -74555,9 +74839,9 @@
       "source_location": "L139",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_go",
-      "target": "app_static_shell_refresh",
-      "confidence_score": 1.0
+      "target": "app_static_shell_refresh"
     },
     {
       "relation": "calls",
@@ -74567,9 +74851,9 @@
       "source_location": "L2499",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendernear",
-      "target": "app_static_shell_go",
-      "confidence_score": 1.0
+      "target": "app_static_shell_go"
     },
     {
       "relation": "calls",
@@ -74579,9 +74863,9 @@
       "source_location": "L2196",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderradar",
-      "target": "app_static_shell_go",
-      "confidence_score": 1.0
+      "target": "app_static_shell_go"
     },
     {
       "relation": "calls",
@@ -74591,9 +74875,9 @@
       "source_location": "L1377",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_wirecardactions",
-      "target": "app_static_shell_go",
-      "confidence_score": 1.0
+      "target": "app_static_shell_go"
     },
     {
       "relation": "calls",
@@ -74603,9 +74887,9 @@
       "source_location": "L3599",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadhealth",
-      "target": "app_static_shell_healthtone",
-      "confidence_score": 1.0
+      "target": "app_static_shell_healthtone"
     },
     {
       "relation": "calls",
@@ -74615,9 +74899,9 @@
       "source_location": "L383",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_markdegraded",
-      "target": "app_static_shell_agetext",
-      "confidence_score": 1.0
+      "target": "app_static_shell_agetext"
     },
     {
       "relation": "calls",
@@ -74627,9 +74911,9 @@
       "source_location": "L5464",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_refresh",
-      "target": "app_static_shell_markdegraded",
-      "confidence_score": 1.0
+      "target": "app_static_shell_markdegraded"
     },
     {
       "relation": "calls",
@@ -74639,9 +74923,9 @@
       "source_location": "L469",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_deck",
-      "target": "app_static_shell_engaged",
-      "confidence_score": 1.0
+      "target": "app_static_shell_engaged"
     },
     {
       "relation": "calls",
@@ -74651,9 +74935,9 @@
       "source_location": "L459",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_lifecycleof",
-      "target": "app_static_shell_engaged",
-      "confidence_score": 1.0
+      "target": "app_static_shell_engaged"
     },
     {
       "relation": "calls",
@@ -74663,9 +74947,9 @@
       "source_location": "L471",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_deck",
-      "target": "app_static_shell_lifecycleof",
-      "confidence_score": 1.0
+      "target": "app_static_shell_lifecycleof"
     },
     {
       "relation": "calls",
@@ -74675,9 +74959,9 @@
       "source_location": "L584",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadoverview",
-      "target": "app_static_shell_decksplit",
-      "confidence_score": 1.0
+      "target": "app_static_shell_decksplit"
     },
     {
       "relation": "calls",
@@ -74687,9 +74971,9 @@
       "source_location": "L633",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadoverview",
-      "target": "app_static_shell_renderdeck",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderdeck"
     },
     {
       "relation": "calls",
@@ -74699,9 +74983,9 @@
       "source_location": "L588",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadoverview",
-      "target": "app_static_shell_renderdisposition",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderdisposition"
     },
     {
       "relation": "calls",
@@ -74711,9 +74995,9 @@
       "source_location": "L639",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadoverview",
-      "target": "app_static_shell_renderfunnel",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderfunnel"
     },
     {
       "relation": "calls",
@@ -74723,9 +75007,9 @@
       "source_location": "L637",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadoverview",
-      "target": "app_static_shell_rendermissions",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendermissions"
     },
     {
       "relation": "calls",
@@ -74735,9 +75019,9 @@
       "source_location": "L638",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadoverview",
-      "target": "app_static_shell_renderradar",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderradar"
     },
     {
       "relation": "calls",
@@ -74747,9 +75031,9 @@
       "source_location": "L2043",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_deckrowinner",
-      "target": "app_static_shell_htfchip",
-      "confidence_score": 1.0
+      "target": "app_static_shell_htfchip"
     },
     {
       "relation": "calls",
@@ -74759,9 +75043,9 @@
       "source_location": "L2025",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_deckrowinner",
-      "target": "app_static_shell_expiresin",
-      "confidence_score": 1.0
+      "target": "app_static_shell_expiresin"
     },
     {
       "relation": "calls",
@@ -74771,9 +75055,9 @@
       "source_location": "L2034",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_deckrowinner",
-      "target": "app_static_shell_foundago",
-      "confidence_score": 1.0
+      "target": "app_static_shell_foundago"
     },
     {
       "relation": "calls",
@@ -74783,9 +75067,9 @@
       "source_location": "L2034",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_deckrowinner",
-      "target": "app_static_shell_foundtitle",
-      "confidence_score": 1.0
+      "target": "app_static_shell_foundtitle"
     },
     {
       "relation": "calls",
@@ -74795,9 +75079,9 @@
       "source_location": "L2002",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_deckrowinner",
-      "target": "app_static_shell_reasontext",
-      "confidence_score": 1.0
+      "target": "app_static_shell_reasontext"
     },
     {
       "relation": "calls",
@@ -74807,9 +75091,9 @@
       "source_location": "L1163",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderdeck",
-      "target": "app_static_shell_deckemptyhtml",
-      "confidence_score": 1.0
+      "target": "app_static_shell_deckemptyhtml"
     },
     {
       "relation": "calls",
@@ -74819,9 +75103,9 @@
       "source_location": "L1181",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderdeck",
-      "target": "app_static_shell_decksplit",
-      "confidence_score": 1.0
+      "target": "app_static_shell_decksplit"
     },
     {
       "relation": "calls",
@@ -74831,9 +75115,9 @@
       "source_location": "L3227",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadportfolio",
-      "target": "app_static_shell_setaccentmode",
-      "confidence_score": 1.0
+      "target": "app_static_shell_setaccentmode"
     },
     {
       "relation": "calls",
@@ -74843,9 +75127,9 @@
       "source_location": "L3729",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadrisk",
-      "target": "app_static_shell_setaccentmode",
-      "confidence_score": 1.0
+      "target": "app_static_shell_setaccentmode"
     },
     {
       "relation": "calls",
@@ -74855,9 +75139,9 @@
       "source_location": "L2650",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendermine",
-      "target": "app_static_shell_setaccentmode",
-      "confidence_score": 1.0
+      "target": "app_static_shell_setaccentmode"
     },
     {
       "relation": "calls",
@@ -74867,9 +75151,9 @@
       "source_location": "L2983",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderriskbudget",
-      "target": "app_static_shell_renderdisposition",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderdisposition"
     },
     {
       "relation": "calls",
@@ -74879,9 +75163,9 @@
       "source_location": "L1051",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendermissions",
-      "target": "app_static_shell_missioncardinner",
-      "confidence_score": 1.0
+      "target": "app_static_shell_missioncardinner"
     },
     {
       "relation": "calls",
@@ -74891,9 +75175,9 @@
       "source_location": "L1033",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendermissions",
-      "target": "app_static_shell_missionrailsync",
-      "confidence_score": 1.0
+      "target": "app_static_shell_missionrailsync"
     },
     {
       "relation": "calls",
@@ -74903,9 +75187,9 @@
       "source_location": "L1071",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendermissions",
-      "target": "app_static_shell_wirecardactions",
-      "confidence_score": 1.0
+      "target": "app_static_shell_wirecardactions"
     },
     {
       "relation": "calls",
@@ -74915,9 +75199,9 @@
       "source_location": "L2585",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderpositions",
-      "target": "app_static_shell_rendermissions",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendermissions"
     },
     {
       "relation": "calls",
@@ -74927,9 +75211,9 @@
       "source_location": "L1114",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_missioncardinner",
-      "target": "app_static_shell_ladderhtml",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ladderhtml"
     },
     {
       "relation": "calls",
@@ -74939,9 +75223,9 @@
       "source_location": "L1110",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_missioncardinner",
-      "target": "app_static_shell_ladderring",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ladderring"
     },
     {
       "relation": "calls",
@@ -74951,9 +75235,9 @@
       "source_location": "L1146",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_ladderring",
-      "target": "app_static_shell_ringsvg",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ringsvg"
     },
     {
       "relation": "calls",
@@ -74963,9 +75247,9 @@
       "source_location": "L2729",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_minecardinner",
-      "target": "app_static_shell_ladderring",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ladderring"
     },
     {
       "relation": "calls",
@@ -74975,9 +75259,9 @@
       "source_location": "L1822",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_indexheld",
-      "target": "app_static_shell_renderdeck",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderdeck"
     },
     {
       "relation": "calls",
@@ -74987,9 +75271,9 @@
       "source_location": "L5115",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadrefused",
-      "target": "app_static_shell_renderdeck",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderdeck"
     },
     {
       "relation": "calls",
@@ -74999,9 +75283,9 @@
       "source_location": "L1241",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderdeck",
-      "target": "app_static_shell_deckrowinner",
-      "confidence_score": 1.0
+      "target": "app_static_shell_deckrowinner"
     },
     {
       "relation": "calls",
@@ -75011,9 +75295,9 @@
       "source_location": "L1282",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderdeck",
-      "target": "app_static_shell_mountrails",
-      "confidence_score": 1.0
+      "target": "app_static_shell_mountrails"
     },
     {
       "relation": "calls",
@@ -75023,9 +75307,9 @@
       "source_location": "L1281",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderdeck",
-      "target": "app_static_shell_wirecardactions",
-      "confidence_score": 1.0
+      "target": "app_static_shell_wirecardactions"
     },
     {
       "relation": "calls",
@@ -75035,9 +75319,9 @@
       "source_location": "L1341",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_closeposition",
-      "target": "app_static_shell_refresh",
-      "confidence_score": 1.0
+      "target": "app_static_shell_refresh"
     },
     {
       "relation": "calls",
@@ -75047,9 +75331,9 @@
       "source_location": "L1424",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_wirecardactions",
-      "target": "app_static_shell_closeposition",
-      "confidence_score": 1.0
+      "target": "app_static_shell_closeposition"
     },
     {
       "relation": "calls",
@@ -75059,9 +75343,9 @@
       "source_location": "L2691",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendermine",
-      "target": "app_static_shell_wirecardactions",
-      "confidence_score": 1.0
+      "target": "app_static_shell_wirecardactions"
     },
     {
       "relation": "calls",
@@ -75071,9 +75355,9 @@
       "source_location": "L1388",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_wirecardactions",
-      "target": "app_static_shell_activatable",
-      "confidence_score": 1.0
+      "target": "app_static_shell_activatable"
     },
     {
       "relation": "calls",
@@ -75083,9 +75367,9 @@
       "source_location": "L1397",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_wirecardactions",
-      "target": "app_static_shell_explainrefusal",
-      "confidence_score": 1.0
+      "target": "app_static_shell_explainrefusal"
     },
     {
       "relation": "calls",
@@ -75095,9 +75379,9 @@
       "source_location": "L1736",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_minerailsync",
-      "target": "app_static_shell_makerail",
-      "confidence_score": 1.0
+      "target": "app_static_shell_makerail"
     },
     {
       "relation": "calls",
@@ -75107,9 +75391,9 @@
       "source_location": "L1714",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_missionrailsync",
-      "target": "app_static_shell_makerail",
-      "confidence_score": 1.0
+      "target": "app_static_shell_makerail"
     },
     {
       "relation": "calls",
@@ -75119,9 +75403,9 @@
       "source_location": "L1702",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_mountrails",
-      "target": "app_static_shell_makerail",
-      "confidence_score": 1.0
+      "target": "app_static_shell_makerail"
     },
     {
       "relation": "calls",
@@ -75131,9 +75415,9 @@
       "source_location": "L4289",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderprogression",
-      "target": "app_static_shell_makerail",
-      "confidence_score": 1.0
+      "target": "app_static_shell_makerail"
     },
     {
       "relation": "calls",
@@ -75143,9 +75427,9 @@
       "source_location": "L4155",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderstatwheel",
-      "target": "app_static_shell_makerail",
-      "confidence_score": 1.0
+      "target": "app_static_shell_makerail"
     },
     {
       "relation": "calls",
@@ -75155,9 +75439,9 @@
       "source_location": "L2502",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendernear",
-      "target": "app_static_shell_mountrails",
-      "confidence_score": 1.0
+      "target": "app_static_shell_mountrails"
     },
     {
       "relation": "calls",
@@ -75167,9 +75451,9 @@
       "source_location": "L2110",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderradar",
-      "target": "app_static_shell_missionrailsync",
-      "confidence_score": 1.0
+      "target": "app_static_shell_missionrailsync"
     },
     {
       "relation": "calls",
@@ -75179,9 +75463,9 @@
       "source_location": "L2646",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendermine",
-      "target": "app_static_shell_minerailsync",
-      "confidence_score": 1.0
+      "target": "app_static_shell_minerailsync"
     },
     {
       "relation": "calls",
@@ -75191,9 +75475,9 @@
       "source_location": "L3219",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadportfolio",
-      "target": "app_static_shell_indexheld",
-      "confidence_score": 1.0
+      "target": "app_static_shell_indexheld"
     },
     {
       "relation": "calls",
@@ -75203,9 +75487,9 @@
       "source_location": "L2036",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_deckrowinner",
-      "target": "app_static_shell_heldbadge",
-      "confidence_score": 1.0
+      "target": "app_static_shell_heldbadge"
     },
     {
       "relation": "calls",
@@ -75215,9 +75499,9 @@
       "source_location": "L2060",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_deckrowinner",
-      "target": "app_static_shell_storyof",
-      "confidence_score": 1.0
+      "target": "app_static_shell_storyof"
     },
     {
       "relation": "calls",
@@ -75227,9 +75511,9 @@
       "source_location": "L2047",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_deckrowinner",
-      "target": "app_static_shell_ringsvg",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ringsvg"
     },
     {
       "relation": "calls",
@@ -75239,9 +75523,9 @@
       "source_location": "L2725",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_minecardinner",
-      "target": "app_static_shell_ringsvg",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ringsvg"
     },
     {
       "relation": "calls",
@@ -75251,9 +75535,9 @@
       "source_location": "L5204",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderledger",
-      "target": "app_static_shell_ringsvg",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ringsvg"
     },
     {
       "relation": "calls",
@@ -75263,9 +75547,9 @@
       "source_location": "L2477",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendernear",
-      "target": "app_static_shell_ringsvg",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ringsvg"
     },
     {
       "relation": "calls",
@@ -75275,9 +75559,9 @@
       "source_location": "L4283",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderprogression",
-      "target": "app_static_shell_ringsvg",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ringsvg"
     },
     {
       "relation": "calls",
@@ -75287,9 +75571,9 @@
       "source_location": "L2160",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderradar",
-      "target": "app_static_shell_ringsvg",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ringsvg"
     },
     {
       "relation": "calls",
@@ -75299,9 +75583,9 @@
       "source_location": "L4150",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderstatwheel",
-      "target": "app_static_shell_ringsvg",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ringsvg"
     },
     {
       "relation": "calls",
@@ -75311,9 +75595,9 @@
       "source_location": "L2053",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_deckrowinner",
-      "target": "app_static_shell_ladderhtml",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ladderhtml"
     },
     {
       "relation": "calls",
@@ -75323,9 +75607,9 @@
       "source_location": "L2842",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_minecardinner",
-      "target": "app_static_shell_ladderhtml",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ladderhtml"
     },
     {
       "relation": "calls",
@@ -75335,9 +75619,9 @@
       "source_location": "L2385",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendernear",
-      "target": "app_static_shell_weatherindex",
-      "confidence_score": 1.0
+      "target": "app_static_shell_weatherindex"
     },
     {
       "relation": "calls",
@@ -75347,9 +75631,9 @@
       "source_location": "L2415",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendernear",
-      "target": "app_static_shell_reachplay",
-      "confidence_score": 1.0
+      "target": "app_static_shell_reachplay"
     },
     {
       "relation": "calls",
@@ -75359,9 +75643,9 @@
       "source_location": "L2526",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadnearlevels",
-      "target": "app_static_shell_rendernear",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendernear"
     },
     {
       "relation": "calls",
@@ -75371,9 +75655,9 @@
       "source_location": "L3229",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadportfolio",
-      "target": "app_static_shell_renderpositions",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderpositions"
     },
     {
       "relation": "calls",
@@ -75383,9 +75667,9 @@
       "source_location": "L2765",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_minecardinner",
-      "target": "app_static_shell_windowleft",
-      "confidence_score": 1.0
+      "target": "app_static_shell_windowleft"
     },
     {
       "relation": "calls",
@@ -75395,9 +75679,9 @@
       "source_location": "L3232",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadportfolio",
-      "target": "app_static_shell_rendermine",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendermine"
     },
     {
       "relation": "calls",
@@ -75407,9 +75691,9 @@
       "source_location": "L2672",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_rendermine",
-      "target": "app_static_shell_minecardinner",
-      "confidence_score": 1.0
+      "target": "app_static_shell_minecardinner"
     },
     {
       "relation": "calls",
@@ -75419,9 +75703,9 @@
       "source_location": "L3232",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadportfolio",
-      "target": "app_static_shell_rendermineaside",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendermineaside"
     },
     {
       "relation": "calls",
@@ -75431,9 +75715,9 @@
       "source_location": "L2975",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderriskbudget",
-      "target": "app_static_shell_rendermineaside",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendermineaside"
     },
     {
       "relation": "calls",
@@ -75443,9 +75727,9 @@
       "source_location": "L3228",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadportfolio",
-      "target": "app_static_shell_renderriskbudget",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderriskbudget"
     },
     {
       "relation": "calls",
@@ -75455,9 +75739,9 @@
       "source_location": "L2979",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderriskbudget",
-      "target": "app_static_shell_bindingconstraint",
-      "confidence_score": 1.0
+      "target": "app_static_shell_bindingconstraint"
     },
     {
       "relation": "calls",
@@ -75467,9 +75751,9 @@
       "source_location": "L3209",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadportfolio",
-      "target": "app_static_shell_renderjournal",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderjournal"
     },
     {
       "relation": "calls",
@@ -75479,9 +75763,9 @@
       "source_location": "L3213",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadportfolio",
-      "target": "app_static_shell_rendertodaytile",
-      "confidence_score": 1.0
+      "target": "app_static_shell_rendertodaytile"
     },
     {
       "relation": "calls",
@@ -75491,9 +75775,9 @@
       "source_location": "L3251",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadportfolio",
-      "target": "app_static_shell_drawcurve",
-      "confidence_score": 1.0
+      "target": "app_static_shell_drawcurve"
     },
     {
       "relation": "calls",
@@ -75503,9 +75787,9 @@
       "source_location": "L3214",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadportfolio",
-      "target": "app_static_shell_renderscoreboard",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderscoreboard"
     },
     {
       "relation": "calls",
@@ -75515,9 +75799,9 @@
       "source_location": "L3239",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadportfolio",
-      "target": "app_static_shell_setsub",
-      "confidence_score": 1.0
+      "target": "app_static_shell_setsub"
     },
     {
       "relation": "calls",
@@ -75527,9 +75811,9 @@
       "source_location": "L5457",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_refresh",
-      "target": "app_static_shell_loadportfolio",
-      "confidence_score": 1.0
+      "target": "app_static_shell_loadportfolio"
     },
     {
       "relation": "calls",
@@ -75539,9 +75823,9 @@
       "source_location": "L3570",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadperformance",
-      "target": "app_static_shell_perfrows",
-      "confidence_score": 1.0
+      "target": "app_static_shell_perfrows"
     },
     {
       "relation": "calls",
@@ -75551,9 +75835,9 @@
       "source_location": "L3562",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_nottakenblock",
-      "target": "app_static_shell_perfrows",
-      "confidence_score": 1.0
+      "target": "app_static_shell_perfrows"
     },
     {
       "relation": "calls",
@@ -75563,9 +75847,9 @@
       "source_location": "L3571",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadperformance",
-      "target": "app_static_shell_nottakenblock",
-      "confidence_score": 1.0
+      "target": "app_static_shell_nottakenblock"
     },
     {
       "relation": "calls",
@@ -75575,9 +75859,9 @@
       "source_location": "L3587",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadhealth",
-      "target": "app_static_shell_renderdiagstate",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderdiagstate"
     },
     {
       "relation": "calls",
@@ -75587,9 +75871,9 @@
       "source_location": "L3943",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadsettings",
-      "target": "app_static_shell_buildsettings",
-      "confidence_score": 1.0
+      "target": "app_static_shell_buildsettings"
     },
     {
       "relation": "calls",
@@ -75599,9 +75883,9 @@
       "source_location": "L3945",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadsettings",
-      "target": "app_static_shell_patchsettingsstate",
-      "confidence_score": 1.0
+      "target": "app_static_shell_patchsettingsstate"
     },
     {
       "relation": "calls",
@@ -75611,9 +75895,9 @@
       "source_location": "L3944",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadsettings",
-      "target": "app_static_shell_syncsettinginputs",
-      "confidence_score": 1.0
+      "target": "app_static_shell_syncsettinginputs"
     },
     {
       "relation": "calls",
@@ -75623,9 +75907,9 @@
       "source_location": "L3991",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_exportjournal",
-      "target": "app_static_shell_toast",
-      "confidence_score": 1.0
+      "target": "app_static_shell_toast"
     },
     {
       "relation": "calls",
@@ -75635,9 +75919,9 @@
       "source_location": "L4030",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderscoreboard",
-      "target": "app_static_shell_renderprogression",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderprogression"
     },
     {
       "relation": "calls",
@@ -75647,9 +75931,9 @@
       "source_location": "L4029",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderscoreboard",
-      "target": "app_static_shell_renderstatwheel",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderstatwheel"
     },
     {
       "relation": "calls",
@@ -75659,9 +75943,9 @@
       "source_location": "L4134",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderstatwheel",
-      "target": "app_static_shell_statcards",
-      "confidence_score": 1.0
+      "target": "app_static_shell_statcards"
     },
     {
       "relation": "calls",
@@ -75671,9 +75955,9 @@
       "source_location": "L4227",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderprogression",
-      "target": "app_static_shell_progressionrows",
-      "confidence_score": 1.0
+      "target": "app_static_shell_progressionrows"
     },
     {
       "relation": "calls",
@@ -75683,9 +75967,9 @@
       "source_location": "L4236",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderprogression",
-      "target": "app_static_shell_gaterows",
-      "confidence_score": 1.0
+      "target": "app_static_shell_gaterows"
     },
     {
       "relation": "calls",
@@ -75695,9 +75979,9 @@
       "source_location": "L4351",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadlivegate",
-      "target": "app_static_shell_renderprogression",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderprogression"
     },
     {
       "relation": "calls",
@@ -75707,9 +75991,9 @@
       "source_location": "L4544",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadcredentials",
-      "target": "app_static_shell_buildcredrows",
-      "confidence_score": 1.0
+      "target": "app_static_shell_buildcredrows"
     },
     {
       "relation": "calls",
@@ -75719,9 +76003,9 @@
       "source_location": "L4844",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadtelemetry",
-      "target": "app_static_shell_renderdiagstate",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderdiagstate"
     },
     {
       "relation": "calls",
@@ -75731,9 +76015,9 @@
       "source_location": "L4934",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_pollscanstate",
-      "target": "app_static_shell_refresh",
-      "confidence_score": 1.0
+      "target": "app_static_shell_refresh"
     },
     {
       "relation": "calls",
@@ -75743,9 +76027,9 @@
       "source_location": "L4933",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_pollscanstate",
-      "target": "app_static_shell_scanresult",
-      "confidence_score": 1.0
+      "target": "app_static_shell_scanresult"
     },
     {
       "relation": "calls",
@@ -75755,9 +76039,9 @@
       "source_location": "L5144",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_loadledger",
-      "target": "app_static_shell_renderledger",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderledger"
     },
     {
       "relation": "calls",
@@ -75767,9 +76051,9 @@
       "source_location": "L5189",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderledger",
-      "target": "app_static_shell_bookcard",
-      "confidence_score": 1.0
+      "target": "app_static_shell_bookcard"
     },
     {
       "relation": "calls",
@@ -75779,9 +76063,9 @@
       "source_location": "L5315",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderledger",
-      "target": "app_static_shell_renderledgerexits",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderledgerexits"
     },
     {
       "relation": "calls",
@@ -75791,9 +76075,9 @@
       "source_location": "L5314",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderledger",
-      "target": "app_static_shell_renderledgermine",
-      "confidence_score": 1.0
+      "target": "app_static_shell_renderledgermine"
     },
     {
       "relation": "calls",
@@ -75803,9 +76087,9 @@
       "source_location": "L5400",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderledgerexits",
-      "target": "app_static_shell_ledgerrow",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ledgerrow"
     },
     {
       "relation": "calls",
@@ -75815,9 +76099,9 @@
       "source_location": "L5379",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_static_shell_renderledgermine",
-      "target": "app_static_shell_ledgerrow",
-      "confidence_score": 1.0
+      "target": "app_static_shell_ledgerrow"
     },
     {
       "relation": "contains",
@@ -75826,9 +76110,9 @@
       "source_location": "L5",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_tests_test_overview_redesign",
-      "target": "app_tests_test_overview_redesign_assert",
-      "confidence_score": 1.0
+      "target": "app_tests_test_overview_redesign_assert"
     },
     {
       "relation": "contains",
@@ -75837,9 +76121,9 @@
       "source_location": "L9",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_tests_test_overview_redesign",
-      "target": "app_tests_test_overview_redesign_css",
-      "confidence_score": 1.0
+      "target": "app_tests_test_overview_redesign_css"
     },
     {
       "relation": "contains",
@@ -75848,9 +76132,9 @@
       "source_location": "L3",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_tests_test_overview_redesign",
-      "target": "app_tests_test_overview_redesign_fs",
-      "confidence_score": 1.0
+      "target": "app_tests_test_overview_redesign_fs"
     },
     {
       "relation": "contains",
@@ -75859,9 +76143,9 @@
       "source_location": "L8",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_tests_test_overview_redesign",
-      "target": "app_tests_test_overview_redesign_html",
-      "confidence_score": 1.0
+      "target": "app_tests_test_overview_redesign_html"
     },
     {
       "relation": "contains",
@@ -75870,9 +76154,9 @@
       "source_location": "L15",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_tests_test_overview_redesign",
-      "target": "app_tests_test_overview_redesign_ok",
-      "confidence_score": 1.0
+      "target": "app_tests_test_overview_redesign_ok"
     },
     {
       "relation": "contains",
@@ -75881,9 +76165,9 @@
       "source_location": "L11",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_tests_test_overview_redesign",
-      "target": "app_tests_test_overview_redesign_ops",
-      "confidence_score": 1.0
+      "target": "app_tests_test_overview_redesign_ops"
     },
     {
       "relation": "contains",
@@ -75892,9 +76176,9 @@
       "source_location": "L4",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_tests_test_overview_redesign",
-      "target": "app_tests_test_overview_redesign_path",
-      "confidence_score": 1.0
+      "target": "app_tests_test_overview_redesign_path"
     },
     {
       "relation": "contains",
@@ -75903,9 +76187,9 @@
       "source_location": "L10",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_tests_test_overview_redesign",
-      "target": "app_tests_test_overview_redesign_shell",
-      "confidence_score": 1.0
+      "target": "app_tests_test_overview_redesign_shell"
     },
     {
       "relation": "contains",
@@ -75914,9 +76198,9 @@
       "source_location": "L7",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_tests_test_overview_redesign",
-      "target": "app_tests_test_overview_redesign_static",
-      "confidence_score": 1.0
+      "target": "app_tests_test_overview_redesign_static"
     },
     {
       "relation": "contains",
@@ -75925,9 +76209,9 @@
       "source_location": "L12",
       "weight": 1.0,
       "_origin": "ast",
+      "confidence_score": 1.0,
       "source": "app_tests_test_overview_redesign",
-      "target": "app_tests_test_overview_redesign_weather",
-      "confidence_score": 1.0
+      "target": "app_tests_test_overview_redesign_weather"
     },
     {
       "relation": "imports_from",
@@ -76776,290 +77060,6 @@
       "confidence_score": 1.0,
       "source": "app_engine_ma_run",
       "target": "app_engine_ma_slope_state"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L141",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh",
-      "target": "app_engine_regimefresh_annotate"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L222",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh",
-      "target": "app_engine_regimefresh_factor_extractors"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L243",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh",
-      "target": "app_engine_regimefresh_grade"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L115",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh",
-      "target": "app_engine_regimefresh_label_asof"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L266",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh",
-      "target": "app_engine_regimefresh_main"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L105",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh",
-      "target": "app_engine_regimefresh_regime_series"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L92",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh",
-      "target": "app_engine_regimefresh_trigger_at"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L177",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh",
-      "target": "app_engine_regimefresh_verify"
-    },
-    {
-      "relation": "rationale_for",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L1",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_rationale_1",
-      "target": "app_engine_regimefresh"
-    },
-    {
-      "relation": "rationale_for",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L93",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_rationale_93",
-      "target": "app_engine_regimefresh_trigger_at"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L110",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_regime_series",
-      "target": "app_engine_regimefresh_trigger_at"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L159",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_annotate",
-      "target": "app_engine_regimefresh_regime_series"
-    },
-    {
-      "relation": "rationale_for",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L106",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_rationale_106",
-      "target": "app_engine_regimefresh_regime_series"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L207",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_verify",
-      "target": "app_engine_regimefresh_regime_series"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L160",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_annotate",
-      "target": "app_engine_regimefresh_label_asof"
-    },
-    {
-      "relation": "rationale_for",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L116",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_rationale_116",
-      "target": "app_engine_regimefresh_label_asof"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L208",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_verify",
-      "target": "app_engine_regimefresh_label_asof"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L256",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_grade",
-      "target": "app_engine_regimefresh_annotate"
-    },
-    {
-      "relation": "rationale_for",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L142",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_rationale_142",
-      "target": "app_engine_regimefresh_annotate"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L254",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_grade",
-      "target": "app_engine_regimefresh_verify"
-    },
-    {
-      "relation": "rationale_for",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L178",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_rationale_178",
-      "target": "app_engine_regimefresh_verify"
-    },
-    {
-      "relation": "indirect_call",
-      "context": "argument",
-      "confidence": "INFERRED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L258",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 0.5,
-      "source": "app_engine_regimefresh_grade",
-      "target": "app_engine_regimefresh_factor_extractors"
-    },
-    {
-      "relation": "rationale_for",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L223",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_rationale_223",
-      "target": "app_engine_regimefresh_factor_extractors"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L273",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_main",
-      "target": "app_engine_regimefresh_grade"
-    },
-    {
-      "relation": "rationale_for",
-      "confidence": "EXTRACTED",
-      "source_file": "app/engine/regimefresh.py",
-      "source_location": "L244",
-      "weight": 1.0,
-      "_origin": "ast",
-      "confidence_score": 1.0,
-      "source": "app_engine_regimefresh_rationale_244",
-      "target": "app_engine_regimefresh_grade"
     },
     {
       "relation": "contains",
@@ -208011,5 +208011,5 @@
       "source_file": "docs/SALVAGE-from-snipersight-trading.md"
     }
   ],
-  "built_at_commit": "80442b9675fb198de74114aba2c2dae302babad8"
+  "built_at_commit": "6cbe5f303ebedec715b457aac77f84f580b5a990"
 }

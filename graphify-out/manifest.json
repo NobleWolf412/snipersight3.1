@@ -930,8 +930,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1787078788.8235278,
-    "ast_hash": "d6905d71dd6e97e33ea4f3f557c1cac3",
+    "mtime": 1787279430.3577766,
+    "ast_hash": "9a7fc6b68de7940899697b7c58515e02",
     "semantic_hash": ""
   },
   "PRODUCT.md": {
@@ -1470,8 +1470,8 @@
     "semantic_hash": ""
   },
   "app/engine/regimefresh.py": {
-    "mtime": 1787183109.4918563,
-    "ast_hash": "72dc6617d46161a49e3169ba9726f0b9",
+    "mtime": 1787279404.528349,
+    "ast_hash": "d338b1768baf728e0e655ce89474d31c",
     "semantic_hash": ""
   },
   "app/tests/test_regimefresh.py": {
