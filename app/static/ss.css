@@ -902,7 +902,6 @@ details.panel.floating > summary{padding-left:var(--lg)}
 #factorEvidenceRoot[data-performance-view]{margin-top:0}
 
 /* ---------- Setup Radar ---------- */
-.op-filter-note{flex-basis:100%;margin:0;order:9}
 .op-toolbar{position:sticky;top:calc(var(--xl) * -1);z-index:8;display:flex;align-items:center;flex-wrap:wrap;
   gap:var(--md);padding:var(--sm) var(--md);margin-bottom:var(--lg);box-shadow:none;
   background:color-mix(in oklch,var(--bg-2) 94%,transparent)}

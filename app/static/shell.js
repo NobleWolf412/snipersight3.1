@@ -4704,9 +4704,14 @@ weighed in. Name the facts you used.`;
       /* The count and the consequence in the same breath. "DEGRADED" alone
          taught the operator nothing about whether to trade today — the whole
          reason the chip on every surface carries its consequence too. */
-      said.push(broken
-        ? `${broken} thing${broken === 1 ? '' : 's'} failing.`
-        : 'Nothing is failing.');
+            /* THE EMPTY-WINDOW RULE. `broken` is 0 both when everything passed and
+         when NOTHING WAS CHECKED, and those are opposite states. The telemetry
+         chip used to carry the denominator; it now shows only failures, so the
+         distinction has to live here or it lives nowhere. */
+      const checked = ((t && t.records) || []).length;
+      said.push(broken ? `${broken} thing${broken === 1 ? '' : 's'} failing.`
+        : checked ? 'Nothing is failing.'
+        : 'No candidates were recorded in this window, so nothing has been checked.');
       /* "Across the book" is not padding — the two sentences have DIFFERENT
          SCOPES and a UI audit (2026-08-09) read them as one. `broken` counts
          per-symbol, per-timeframe rows; `h` is /api/pipeline-health fetched

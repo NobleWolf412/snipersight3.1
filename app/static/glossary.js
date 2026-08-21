@@ -238,6 +238,28 @@ window.GLOSSARY = {
 
     [/\bplaybooks?\b/i, 'playbook'],
 
+    /* DEFINED IN weather.js, NOT HERE, and that is why these five came back.
+
+       They were deleted once as "matcher rows pointing at undefined keys" -
+       true of this file read alone, false of the app. weather.js fills
+       G.pullback, G.reversal, G.transition, G.range and G.timeframe with `??=`
+       at load, and this table is the ONLY thing that reaches them: no markup
+       carries data-t for any of the five.
+
+       What they underline is the engine's own why-string. setups.py builds
+       "BULL_TREND regime - pullback into DEMAND zone ...", shell.js splits it
+       and runs every clause through SSTeach, so deleting these rows silently
+       stopped the two STRATEGY NAMES being explainable on the panel whose job
+       is explaining the trade.
+
+       SSTeach skips a key with no definition, so a row here is safe even
+       before weather.js has loaded. A row missing is not. */
+    [/\bpullbacks?\b/i, 'pullback'],
+    [/\breversals?\b/i, 'reversal'],
+    [/\btransitions?\b/i, 'transition'],
+    [/\btimeframes?\b/i, 'timeframe'],
+    [/\branges?\b/i, 'range'],
+
     [/\bzones?\b/i, 'zone'],
     [/\bregimes?\b/i, 'regime'],
     [/\bsetups?\b/i, 'setup'],

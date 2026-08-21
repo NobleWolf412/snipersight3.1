@@ -32,8 +32,12 @@ ok('bot overview contains its directive, instruments, and guardrails', () => {
 
 ok('command state is painted from the operations read model', () => {
   assert(OPS.includes("api('/api/operations')"));
-  assert(OPS.includes('scanner.eligible_markets') || SHELL.includes('scanner'),
-    'nothing reads the scanner state from the read model');
+  /* NOT `|| SHELL.includes('scanner')` - shell.js says "scanner" 22 times, so
+     that clause can never fail and the assertion becomes decoration. Pin the
+     property instead: the scanner state is READ off the operations payload,
+     wherever it is read. */
+  assert(/operational\.scanner/.test(SHELL) && /scanner\.state/.test(SHELL),
+    'nothing reads the scanner state off the operations read model');
   assert(OPS.includes('a.open_positions'));
 });
 

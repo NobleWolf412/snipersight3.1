@@ -835,8 +835,14 @@
              BOTH ids survive on purpose: cockpit-workspaces.js
              showPerformanceScope() writes into them by id, and a suite
              asserts they exist in this markup. -->
-        <p class="scope-line">These numbers cover
-          <i id="performancePopulation">the server's set</i> over
+        <!-- TWO SENTENCES, NOT ONE CLAUSE. The server's scope values are
+             written as standalone captions - "Funded paper trades", "Since the
+             active baseline" - so threading them through "cover X over Y"
+             produced "cover Funded paper trades over Since the active
+             baseline". The values are the authority and are not being
+             reworded; the sentence around them is. -->
+        <p class="scope-line">Counting
+          <i id="performancePopulation">the server's set</i>.
           <i id="performanceWindow">the server's window</i>. Every figure is the server's.</p>
         <!-- SCOPED TO THE VIEW IT DRIVES. Population, Window and Authority
              describe every Performance view, so they sit here on all five.
