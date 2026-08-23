@@ -99,8 +99,23 @@ ok('the nav is reachable from the keyboard', () => {
   for (const s of surfaces) {
     assert(bound.includes(s), `surface ${s} has no key`);
   }
+  /* A key may name an ADDRESS rather than a surface, and one now does: 6 is
+     'ledger', which go() resolves through LEGACY_ROUTES to 'performance-ledger'
+     and then through ROUTE_SURFACE onto Results, opening its Journal view. The
+     three books stopped being a surface of their own; the accelerator did not
+     stop working, so the check follows the same two maps go() follows rather
+     than demanding every key be a section id. */
+  const mapText = name => SHELL.slice(SHELL.indexOf(`const ${name} = {`),
+    SHELL.indexOf('};', SHELL.indexOf(`const ${name} = {`)));
+  const pairs = name => Object.fromEntries(
+    [...mapText(name).matchAll(/'?([\w-]+)'?\s*:\s*'([\w-]+)'/g)].map(m => [m[1], m[2]]));
+  const LEGACY = pairs('LEGACY_ROUTES'), TO_SURFACE = pairs('ROUTE_SURFACE');
+  assert(Object.keys(LEGACY).length && Object.keys(TO_SURFACE).length,
+    'the route maps were renamed — this test no longer reads them');
+  const resolve = n => TO_SURFACE[LEGACY[n] || n] || n;
   for (const b of bound) {
-    assert(surfaces.includes(b), `key for '${b}' names a surface that does not exist`);
+    assert(surfaces.includes(resolve(b)),
+      `key for '${b}' resolves to '${resolve(b)}', which is not a surface`);
   }
 });
 

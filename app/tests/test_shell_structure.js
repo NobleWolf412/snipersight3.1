@@ -52,7 +52,7 @@ const ROWS = depths(CODE);
    saying so — which is the entire reason this file exists. Anything with
    `class="surface"` belongs in it, on the commit that adds it. */
 const SURFACES = ['s-command', 's-opportunities', 's-chart', 's-results',
-                  's-ledger', 's-settings', 's-diagnostics'];
+                  's-settings', 's-diagnostics'];
 
 let passed = 0;
 function ok(name, fn) {

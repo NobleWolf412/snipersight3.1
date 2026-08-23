@@ -154,7 +154,11 @@ ok('no term is defined twice', () => {
    are different windows over different capital, so the nouns are not decoration
    here — they are the whole reason the columns may not be added. */
 ok('the Ledger names an era on every book', () => {
-  assert(/id="s-ledger"/.test(HTML), 'no Ledger surface');
+  /* The three books are a VIEW of Results now, not a surface of their own.
+     #s-ledger was a husk: unroutable, and emptied into #performanceLedger by
+     workspaces.js on every load. The host id is what this test needs to
+     anchor on. */
+  assert(/id="performanceLedger"/.test(HTML), 'no Ledger host on Results');
   const i = SHELL.indexOf('function renderLedger(');
   assert(i > 0, 'renderLedger was renamed — this test no longer reads it');
   const block = SHELL.slice(i, SHELL.indexOf('function renderLedgerMine', i));

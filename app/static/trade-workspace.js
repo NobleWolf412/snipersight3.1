@@ -12,6 +12,7 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
   const ticket = document.getElementById('ticket');
   const stateRoot = document.getElementById('tradeState');
   const mobileBar = document.getElementById('tradeMobileBar');
+  const scrim = document.getElementById('tradeSheetScrim');
   if(!evidence || !ticket || !stateRoot || !mobileBar || !window.SSOpportunityUI) return;
   const api = path => window.SSData ? SSData.get(path, 0) :
     fetch(path, {cache:'no-store'}).then(r => { if(!r.ok) throw new Error(r.status); return r.json(); });
@@ -78,10 +79,17 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
     renderState();
   }
 
+  function closeSheet(){
+    if(!sheet) return;
+    sheet = null; syncSheet();
+    if(sheetReturnFocus) sheetReturnFocus.focus({preventScroll:true});
+  }
+
   function syncSheet(){
     const active = mobile.matches ? sheet : null;
     document.body.classList.toggle('trade-sheet-evidence', active === 'evidence');
     document.body.classList.toggle('trade-sheet-action', active === 'action');
+    if(scrim) scrim.hidden = !active;
     mobileBar.querySelectorAll('[data-trade-sheet]').forEach(button => {
       const on = button.dataset.tradeSheet === active;
       button.setAttribute('aria-expanded', String(on));
@@ -112,12 +120,9 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
       (sheet === 'evidence' ? evidence : ticket).focus({preventScroll:true}));
   });
   document.addEventListener('keydown', event => {
-    if(event.key === 'Escape' && sheet){
-      sheet = null; syncSheet();
-      if(sheetReturnFocus) sheetReturnFocus.focus({preventScroll:true});
-      return;
-    }
+    if(event.key === 'Escape' && sheet){ closeSheet(); return; }
   });
+  if(scrim) scrim.addEventListener('click', closeSheet);
   addEventListener('hashchange', () => { if(location.hash !== '#trade'){ sheet = null; syncSheet(); } });
   mobile.addEventListener('change', () => { if(!mobile.matches) sheet = null; syncSheet(); });
 

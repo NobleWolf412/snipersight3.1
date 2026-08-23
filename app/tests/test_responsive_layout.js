@@ -173,16 +173,77 @@ ok('a wide table scrolls rather than being clipped away', () => {
   assert(hit, 'no phone-width scroll container for .data-table');
 });
 
-ok('the nav hint appears only when the strip really has more', () => {
+ok('the hint appears only when a strip really has more', () => {
   /* A fade that is always on lies on the wider screens where everything fits.
      shell.js measures and sets the class; the mask hangs off that class, so
      the hint cannot appear on a strip with nothing hidden. */
   const css = read('ss.css');
   const js = read('shell.js');
-  assert(/\.nav\.scrollable\s*\{[^}]*mask-image/.test(css.replace(/\s+/g, ' ')),
+  assert(/(^|[,\s}])\.scrollable\s*\{[^}]*mask-image/.test(css.replace(/\s+/g, ' ')),
     'the fade is not bound to .scrollable');
   assert(/scrollWidth\s*-\s*\w*\.?clientWidth/.test(js) && /classList\.toggle\('scrollable'/.test(js),
     'shell.js no longer measures the strip before claiming it scrolls');
+});
+
+ok('a phone sheet is a surface, not a window onto the chart', () => {
+  /* .panel's background is two TRANSLUCENT stops. On desktop that composites
+     against the page behind a grid track and reads as solid. Below 900px the
+     evidence and order panels become position:fixed sheets over a live chart,
+     and the same rule let roughly two fifths of the candles — and the chart's
+     own "Loading BTCUSDT · 4H…" copy — through the order form. A UI audit
+     marked seven phone Trade states Broken for that one missing declaration.
+
+     Any opaque base under the gradient fixes it; what must not come back is a
+     sheet whose only background is the translucent one it inherits. */
+  const css = read('ss.css').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+  const sheet = css.match(/\.trade-evidence,\.ticket\{([^}]*position:fixed[^}]*)\}/);
+  assert(sheet, 'the phone sheet rule was renamed — re-anchor this test');
+  const bg = (sheet[1].match(/background:([^;]+)/) || [])[1];
+  assert(bg, 'the fixed sheets have no background of their own, so the chart ' +
+    'shows through .panel\'s translucent gradient');
+  assert(/var\(--bg[^)]*\)|oklch\([^/)]*\)$|#[0-9a-f]{3,8}/i.test(bg.trim()),
+    `the sheet background "${bg.trim()}" has no opaque base layer under it`);
+
+  assert(/\.trade-sheet-scrim\{[^}]*position:fixed/.test(css),
+    'a sheet over a chart with no backdrop: a tap outside drags the candles');
+  const trade = read('trade-workspace.js');
+  assert(/scrim\.hidden = !active/.test(trade), 'the backdrop is never shown or hidden');
+  assert(/scrim\.addEventListener\('click', closeSheet\)/.test(trade),
+    'the backdrop does not close the sheet, so it is decoration with a z-index');
+});
+
+ok('every sideways strip gets the hint, not just the rail', () => {
+  /* The rail was measured and the horizontal TAB rails were not, so Results,
+     System and Stocks each clipped their own tabs on a phone with nothing to
+     say more existed — the same defect, already solved, on three surfaces
+     nobody came back to. So this does not check that those three selectors
+     were added. It checks the CLASS, the way this file checks layout: any
+     element that can scroll sideways must be in what shell.js measures.
+
+     `overflow-x:auto` on a flex row is what makes a strip scroll rather than
+     wrap, so that declaration IS the population. */
+  const css = read('ss.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const js = read('shell.js');
+  const measured = (js.match(/const STRIPS = '([^']+)'/) || [])[1];
+  assert(measured, 'shell.js no longer names the strips it measures');
+  const named = new Set(measured.split(',').map(s => s.trim()));
+
+  const sideways = [];
+  css.replace(/([^{}]+)\{([^}]*)\}/g, (_, sel, body) => {
+    if (!/overflow-x\s*:\s*auto/.test(body)) return '';
+    sel.split(',').forEach(one => {
+      const t = one.trim();
+      // a strip is a bare class on its own; descendant rules are its contents
+      if (/^\.[\w-]+$/.test(t)) sideways.push(t);
+    });
+    return '';
+  });
+  assert(sideways.length >= 2, `found ${sideways.length} sideways strips — re-anchor this scan`);
+  for (const strip of sideways) {
+    assert(named.has(strip),
+      `${strip} scrolls sideways and is not in shell.js's STRIPS, so it clips ` +
+      `with no cue that more exists`);
+  }
 });
 
 ok('a refusal the finger cannot hover is written on the surface', () => {

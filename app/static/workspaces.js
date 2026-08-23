@@ -33,6 +33,18 @@
     };
 
     buttons.forEach(button => button.addEventListener('click', () => show(button.dataset.view)));
+    /* THE ROUTER CANNOT REACH THIS VIEW BY WRITING STORAGE. #performance-ledger
+       is a real address — a bookmark, the rail's Trade journal link, the 6 key
+       — and go() honoured it by setting ss:performance-view and nothing else.
+       That is read exactly once, by show(getSaved(...)) below, at load. So the
+       route worked from a cold start and was inert every time after: the
+       surface switched to Results and the visible view stayed where it was,
+       with the requested one arriving on the NEXT page load instead. This is
+       the live half of the same instruction. */
+    addEventListener('ss:workspace-request', event => {
+      const request = event.detail || {};
+      if(request.name === name) show(request.view);
+    });
     tabs.addEventListener('keydown', event => {
       if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
       const current = buttons.indexOf(document.activeElement);
@@ -45,10 +57,6 @@
     });
     show(getSaved(name, fallback));
   }
-
-  const ledgerContent = document.getElementById('ledgerContent');
-  const ledgerHost = document.getElementById('performanceLedger');
-  if(ledgerContent && ledgerHost) ledgerHost.append(...ledgerContent.children);
 
   bind('performance', 's-results', 'overview');
   bind('system', 's-settings', 'automation');

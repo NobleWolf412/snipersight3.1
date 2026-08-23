@@ -848,11 +848,15 @@ details.panel.floating > summary{padding-left:var(--lg)}
 .nav .nav-count{position:absolute;right:var(--lg);top:11px;font-size:var(--fs-1);color:var(--fg-4)}
 .nav a.on .nav-count{color:var(--accent)}
 .nav-sep{height:1px;background:var(--border-soft);margin:var(--md) var(--lg)}
-/* Retained for intermediate-width rails; JS applies it only after measuring
-   actual overflow, so the hint never claims content is hidden when it fits. */
-.nav.scrollable{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent);
+/* Applied only after measuring actual overflow, so the hint never claims
+   content is hidden when it fits. It is not selector-bound: the rail was the
+   only strip wearing it, and the horizontal tab rails on Results, System and
+   Stocks clipped on a phone with nothing at all to say more existed — the same
+   defect the rail had already been fixed for, on three surfaces that were
+   never told. Anything shell.js measures gets the cue. */
+.scrollable{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent);
   mask-image:linear-gradient(90deg,#000 calc(100% - 34px),transparent)}
-.nav.scrollable.scrolled-end{-webkit-mask-image:none;mask-image:none}
+.scrollable.scrolled-end{-webkit-mask-image:none;mask-image:none}
 
 
 
@@ -876,14 +880,6 @@ details.panel.floating > summary{padding-left:var(--lg)}
 }
 .surface-head{display:flex;align-items:baseline;gap:var(--md);margin-bottom:var(--xl)}
 .surface-head p{color:var(--fg-4);font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.1em}
-.surface-tabs{display:flex;gap:var(--xs);margin:calc(var(--lg) * -1) 0 var(--lg);
-  border-bottom:1px solid var(--border-soft)}
-.surface-tabs a{min-height:44px;display:inline-flex;align-items:center;padding:0 var(--md);
-  color:var(--fg-3);font-family:var(--f-mono);font-size:var(--fs-1);
-  letter-spacing:.12em;text-transform:uppercase;text-decoration:none;border-bottom:2px solid transparent}
-.surface-tabs a:hover,.surface-tabs a:focus-visible{color:var(--fg);outline:none;border-bottom-color:var(--fg-4)}
-.surface-tabs a.on{color:var(--accent);border-bottom-color:var(--accent)}
-
 .workspace-tabs{position:sticky;top:calc(var(--xl) * -1);z-index:9;display:flex;
   gap:var(--xs);margin:calc(var(--lg) * -1) 0 var(--lg);overflow-x:auto;
   border-bottom:1px solid var(--border-soft);background:color-mix(in oklch,var(--bg-2) 95%,transparent)}
@@ -3225,10 +3221,39 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   .chart-head>div:first-child{display:block}
   .trade-state{min-width:0}
   .chart-main{grid-template-columns:1fr;grid-template-areas:"chart";grid-template-rows:minmax(420px,calc(100dvh - var(--topbar-h) - 270px))}
+  /* THE SHEETS WERE TRANSPARENT OVER A LIVE CHART, and that is the whole
+     reason the phone Trade screen read as broken rather than dense. .panel's
+     background is two translucent stops — rgba(0,0,0,.55) over
+     oklch(...) / 0.6 — which is correct on desktop, where the panel sits in a
+     grid track over the page background and composites to a solid surface. It
+     is position:fixed here, over candles and over the chart's own loading and
+     error copy, so roughly two fifths of whatever was behind came through the
+     sheet: labels crossing labels, and "Loading BTCUSDT · 4H…" legible
+     underneath the order form. The same gradient layered over an opaque --bg
+     composites to the exact colour desktop already shows, so the sheets look
+     unchanged and stop being windows. */
   .trade-evidence,.ticket{display:none;position:fixed;z-index:70;left:0;right:0;bottom:108px;
     max-height:min(70dvh,640px);overflow:auto;border-radius:var(--r-lg) var(--r-lg) 0 0;
+    background:linear-gradient(135deg,rgba(0,0,0,.55),oklch(0.22 0.010 125 / 0.6)),var(--bg);
+    border-top:1px solid var(--border);
     box-shadow:0 -16px 48px rgba(0,0,0,.72)}
+  /* .panel::before paints scanlines across the whole surface. Over a chart that
+     texture read as more bleed-through, and a sheet needs the grab affordance
+     more than it needs the texture, so this slot pays for the handle instead. */
+  .trade-evidence::before,.ticket::before{position:sticky;top:0;inset:auto;z-index:2;
+    display:block;width:36px;height:4px;margin:8px auto 0;opacity:1;border-radius:999px;
+    background:var(--border);pointer-events:none}
+  /* The sheet's own heading is its title bar — one authority, not a second
+     label bolted on above the content that already names itself. */
+  .trade-evidence .trade-evidence-head,.trade-evidence .trade-evidence-empty h2,
+  .ticket>.panel-head{position:sticky;top:12px;z-index:1;
+    background:linear-gradient(135deg,rgba(0,0,0,.55),oklch(0.22 0.010 125 / 0.6)),var(--bg)}
   body.trade-sheet-evidence .trade-evidence,body.trade-sheet-action .ticket{display:block}
+  /* A sheet over a chart needs somewhere to press that is not the chart. Escape
+     and the bar button both close it; without this, a tap outside dragged the
+     candles behind a modal-in-all-but-name. */
+  .trade-sheet-scrim{position:fixed;inset:0;z-index:69;background:rgba(0,0,0,.58);
+    border:0;padding:0;-webkit-tap-highlight-color:transparent}
   .trade-mobile-bar{position:fixed;z-index:72;left:0;right:0;bottom:64px;display:grid;
     grid-template-columns:1fr 1fr;gap:1px;padding:0 var(--sm);background:var(--bg-2);
     border-top:1px solid var(--border-soft)}

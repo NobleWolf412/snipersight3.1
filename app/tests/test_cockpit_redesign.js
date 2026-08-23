@@ -132,6 +132,32 @@ ok('overview setup count and bot phase use the operational read model', () => {
     'operations still reads a heartbeat key the scanner never writes');
 });
 
+ok('#performance-ledger opens the Journal after boot, not on the next boot', () => {
+  /* THE ADDRESS WORKED EXACTLY ONCE PER PAGE LOAD. go() honoured
+     #performance-ledger by writing ss:performance-view and nothing else, and
+     that key is read once, by show(getSaved(...)) when workspaces.js binds. So
+     a cold start on the hash landed on the Journal and every later arrival —
+     the rail's Trade journal link, a hashchange, the 6 key — switched to
+     Results and left the visible view where it was, with the request taking
+     effect the NEXT time the app booted. A UI audit read that as the ledger
+     being unreachable, which is what it was.
+
+     Both halves are required: storage covers boot, because shell.js runs
+     before workspaces.js and there is nothing listening yet; the event covers
+     every arrival after it, because by then storage is nobody's input. */
+  const SHELL = fs.readFileSync(path.join(STATIC, 'shell.js'), 'utf8');
+  const at = SHELL.indexOf("route === 'performance-ledger'");
+  assert(at > 0, 'the ledger route is gone — re-anchor this test');
+  const block = SHELL.slice(at, at + 500);
+  assert(/sessionStorage\.setItem\('ss:performance-view', 'journal'\)/.test(block),
+    'the cold-start half is gone: a bookmarked #performance-ledger opens Overview');
+  assert(/ss:workspace-request/.test(block),
+    'the live half is gone: the route only takes effect on the next page load');
+  assert(/addEventListener\('ss:workspace-request'/.test(WORKSPACES) &&
+         /request\.name === name/.test(WORKSPACES),
+    'nothing acts on a view request, so the router writes storage into a void');
+});
+
 ok('performance exposes five focused views and owns factor evidence', () => {
   for (const view of ['overview', 'strategies', 'factors', 'journal', 'promotion']) {
     assert(HTML.includes(`data-view="${view}"`), view + ' tab is missing');
@@ -142,7 +168,20 @@ ok('performance exposes five focused views and owns factor evidence', () => {
   assert(HTML.includes('id="performanceLedger"'));
   assert(/<div class="panel floating" hidden>\s*<div class="mb-shell">/.test(HTML),
     'the duplicate statistic carousel is visible again');
-  assert(WORKSPACES.includes('ledgerHost.append'), 'manual books must join the Journal view');
+  /* The books are AUTHORED in the Journal view now. They used to be markup in
+     a separate #s-ledger surface that workspaces.js emptied into this host on
+     every load, which left the husk behind: an unroutable section, a second
+     <h1>Results</h1>, and two tab links nothing could ever show. Moving them at
+     runtime is the thing that must not come back — a panel that renders in a
+     different place from where it is written is a panel nobody finds. */
+  assert(!WORKSPACES.includes('ledgerHost.append') && !HTML.includes('id="ledgerContent"'),
+    'the books are being relocated at runtime again instead of authored in place');
+  const host = HTML.indexOf('id="performanceLedger"');
+  for (const mount of ['id="ledgerBooks"', 'id="ledgerMine"', 'id="ledgerExits"']) {
+    const at = HTML.indexOf(mount);
+    assert(at > host && at < HTML.indexOf('</section>', host),
+      `${mount} is not inside the Journal view`);
+  }
 });
 
 ok('system separates automation, risk, venues, strategies, and diagnostics', () => {

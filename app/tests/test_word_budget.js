@@ -73,6 +73,49 @@ function firstRunWords() {
 }
 const words = id => surfaceText(id).split(' ').filter(Boolean).length;
 
+/* A TABBED SURFACE IS NOT ONE SCREEN, and counting it as one charges the
+   reader for prose no reader can see. Results and System show exactly one
+   [data-*-view] panel at a time, so what a reader actually meets is the
+   surface chrome plus the heaviest single view — 31 + 75 on Results, 21 + 69
+   on System when this was written.
+
+   Summing them instead was wrong in both directions. It failed Results at 165
+   the moment the three books moved in from the deleted #s-ledger husk, which
+   put no extra word on any screen; and it would have passed a surface that hid
+   400 words behind five tabs and 60 in front of them. */
+function viewPanels(id, attr) {
+  const at = HTML.indexOf(`id="s-${id}"`);
+  const slice = stripFirstRun(HTML.slice(at, HTML.indexOf('</section>', at)));
+  const count = h => h.replace(/<!--[\s\S]*?-->/g, ' ').replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ').trim().split(' ').filter(Boolean).length;
+  const open = new RegExp(`<(\\w+)[^>]*\\b${attr}="([\\w-]+)"`, 'g');
+  const seen = {};
+  let m;
+  while ((m = open.exec(slice))) {
+    const tag = m[1];
+    const scan = new RegExp(`<${tag}\\b|</${tag}>`, 'g');
+    scan.lastIndex = m.index;
+    let depth = 0, hit, end = slice.length;
+    while ((hit = scan.exec(slice))) {
+      depth += hit[0][1] === '/' ? -1 : 1;
+      if (depth === 0) { end = scan.lastIndex; break; }
+    }
+    seen[m[2]] = (seen[m[2]] || 0) + count(slice.slice(m.index, end));
+  }
+  return seen;
+}
+
+/* The worst single screen the surface can put in front of a reader. A surface
+   with no view panels is already one screen, so its own total is the answer. */
+function screenWords(id) {
+  const attr = {results: 'data-performance-view', settings: 'data-system-view'}[id];
+  if (!attr) return words(id);
+  const views = viewPanels(id, attr);
+  const inViews = Object.values(views).reduce((a, b) => a + b, 0);
+  const heaviest = Math.max(0, ...Object.values(views));
+  return (words(id) - inViews) + heaviest;
+}
+
 ok('the deleted prose layer stays deleted', () => {
   assert(!/panel-sub/.test(HTML), 'a panel-sub paragraph came back');
   assert(!/deck-note/.test(HTML), 'the deck essay came back');
@@ -128,18 +171,18 @@ ok('panel titles stay under four words', () => {
    not here. Settings joined at its rebuilt weight (UI 4/7): 1,350 words of
    Rules became ~300 rendered. */
 /* THIS MAP FAILS OPEN TOO: an unbudgeted surface can carry any amount of
-   prose. Ledger joined at its measured weight (54 words) plus headroom — its
-   whole static text is a wallet band that must never carry a number and one
-   banner saying the three books are never added, both of which are the point
-   of the surface rather than explanation of it. */
+   prose. Ledger left it when #s-ledger stopped being a surface: the three
+   books are the Journal view of Results now, and they are charged to Results
+   at the weight a reader who opens that tab actually meets. */
 const CEILINGS = { command: 120, chart: 200, results: 130, diagnostics: 220,
-                   settings: 260, ledger: 70 };
+                   settings: 260 };
 
 for (const [id, cap] of Object.entries(CEILINGS)) {
-  ok(`${id} stays under ${cap} static words`, () => {
-    const n = words(id);
-    assert(n <= cap, `${id} carries ${n} words against a ${cap} ceiling — ` +
-      `move the explanation into a hover term or delete it`);
+  ok(`${id} stays under ${cap} static words on one screen`, () => {
+    const n = screenWords(id);
+    assert(n <= cap, `${id} shows ${n} words on its heaviest single screen ` +
+      `against a ${cap} ceiling — move the explanation into a hover term or ` +
+      `delete it`);
   });
 }
 

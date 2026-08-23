@@ -78,6 +78,12 @@
     system: 'settings', 'system-diagnostics': 'diagnostics'
   };
   let pendingJump = null;
+  /* Assigned by the overflow-cue block below, which runs after go(). A strip
+     inside a hidden surface measures 0x0 and reads as "it fits", so the cue has
+     to be recomputed at the moment a surface becomes visible — and doing that
+     from a hashchange listener would be wrong, because this file registers that
+     listener after go()'s and it would measure the surface being left. */
+  let markStrips = () => {};
   /* Set once the first full refresh has been kicked off. go() runs during
      boot — from the initial hash — and refreshing from inside it then would
      race the boot refresh for no gain. */
@@ -106,8 +112,16 @@
     if(!surface || !document.getElementById('s-' + surface)){
       route = 'overview'; surface = 'command';
     }
+    /* Two writes, because they cover two different moments. The storage key is
+       read once, by workspaces.js at load, so it is what makes a bookmarked
+       #performance-ledger open on the Journal from a cold start. The event is
+       what makes the SAME address work once the page is already up — a rail
+       click, a hashchange, the 6 key — where the storage write alone changed
+       nothing on screen and only took effect the next time the app booted. */
     if(route === 'performance-ledger'){
       try{ sessionStorage.setItem('ss:performance-view', 'journal'); }catch(e){ /* optional */ }
+      dispatchEvent(new CustomEvent('ss:workspace-request',
+        {detail: {name: 'performance', view: 'journal'}}));
     }
     document.body.dataset.route = route;
     document.querySelectorAll('.surface').forEach(s =>
@@ -156,6 +170,7 @@
        missed the beginning. */
     const stage = document.querySelector('.stage');
     if(stage) stage.scrollTop = 0;
+    markStrips();
   }
   document.querySelectorAll('.nav a').forEach(a =>
     a.addEventListener('click', e => {
@@ -175,20 +190,32 @@
      version that cannot lie: it is set only when the strip genuinely has more
      than it can show, so the fade never appears on a screen where everything
      fits. Measured, not guessed at, and re-measured on resize and rotate. */
-  const navEl = document.querySelector('.nav');
-  if(navEl){
+  /* ...and it was told to only ONE strip. The rail got this treatment and the
+     horizontal tab rails did not, so Results, System and Stocks each clipped
+     their own tabs on a phone with no cue whatsoever — the identical defect,
+     already understood and already solved, on three surfaces nobody came back
+     to. Every strip that can scroll sideways is measured here now, so the next
+     one is covered on the day it is added rather than the day it is noticed. */
+  const STRIPS = '.nav,.workspace-tabs,.stock-nav,.dimension-scroll';
+  const marks = [...document.querySelectorAll(STRIPS)].map(el => {
     const markScrollable = () => {
-      const more = navEl.scrollWidth - navEl.clientWidth;
-      navEl.classList.toggle('scrollable', more > 2);
+      const more = el.scrollWidth - el.clientWidth;
+      el.classList.toggle('scrollable', more > 2);
       // and drop the hint once they have actually reached the end
-      navEl.classList.toggle('scrolled-end',
-        more > 2 && navEl.scrollLeft >= more - 2);
+      el.classList.toggle('scrolled-end',
+        more > 2 && el.scrollLeft >= more - 2);
     };
-    markScrollable();
-    navEl.addEventListener('scroll', markScrollable, {passive: true});
-    addEventListener('resize', markScrollable);
+    el.addEventListener('scroll', markScrollable, {passive: true});
+    return markScrollable;
+  });
+  if(marks.length){
+    markStrips = () => marks.forEach(mark => mark());
+    markStrips();
+    addEventListener('resize', markStrips);
+    // switching sub-view changes which tabs are laid out, and their widths
+    addEventListener('ss:workspace-view', markStrips);
     // fonts land after first paint and change the measurement
-    if(document.fonts && document.fonts.ready) document.fonts.ready.then(markScrollable);
+    if(document.fonts && document.fonts.ready) document.fonts.ready.then(markStrips);
   }
   // delegated: a figure rendered later still becomes a door
   document.addEventListener('click', e => {

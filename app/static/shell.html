@@ -796,6 +796,11 @@
         </div>
       </div>
 
+      <!-- Backdrop for the phone sheets. Decorative and aria-hidden: Escape and
+           the bar button are the reachable ways out, so a focus stop here would
+           announce nothing and cost a tab. -->
+      <div class="trade-sheet-scrim" id="tradeSheetScrim" aria-hidden="true" hidden></div>
+
       <div class="trade-mobile-bar" id="tradeMobileBar" aria-label="Trade workspace sheets">
         <button class="btn" type="button" data-trade-sheet="evidence"
                 aria-controls="tradeEvidence" aria-expanded="false">Evidence</button>
@@ -1074,7 +1079,94 @@
            away and are never added to it. -->
       <p class="t-note ledger-link" data-performance-view="journal" hidden>Bot trades, your trades,
         and your exits remain three separate books below.</p>
-      <div id="performanceLedger" data-performance-view="journal" hidden></div>
+      <!-- ─── LEDGER: the three books ───
+
+           THREE BOOKS, NEVER SUMMED. The engine's paper account; the trades the
+           operator armed by hand; the operator's own exits on trades the engine
+           picked. Three windows, three pools of capital, three totals — and no
+           fourth number anywhere on this surface that adds any two of them.
+
+           `manual.arm` never consults the risk authority, so hand-armed size was
+           never drawn from the engine's $10,000. A combined "main wallet" figure
+           would therefore be an invention, and it is the exact leak the version
+           separation exists to prevent: two generations of money under one
+           label. Two figures with two labels is honest; one figure made of both
+           is not.
+
+           The third book is the interesting one. The engine chose those trades
+           and the operator chose when to leave them, both outcomes are recorded,
+           and that money is counted in NO total anywhere else in the store —
+           not in the equity curve, not in the manual book. It is the purest
+           measure of operator skill this app holds. -->
+      <div id="performanceLedger" data-performance-view="journal" hidden>
+
+      <!-- THE WALLET BAND CARRIES NO NUMBER, and must not until a real balance
+           arrives over a signed request. What exists today: a DPAPI credential
+           vault with `read_secret` and no caller. What does not: request
+           signing of any kind — there is no `hmac` import anywhere in app/ —
+           a `balance()` on any venue adapter, or `POST /api/credentials/test`.
+           A placeholder figure here would be the only invented money in the
+           app, and a stored key does not move this band either: the live
+           gate is separate and locked. -->
+      <div class="wallet-band">
+        <span class="chip" id="walletChip">not connected</span>
+        <div class="wallet-say"><b>Exchange wallet</b>
+          <span>No balance is read from any exchange. Nothing on this page is
+          money you can withdraw.</span></div>
+      </div>
+
+      <!-- NON-OPTIONAL, and static rather than rendered: a banner that depends
+           on a fetch is a banner that can be absent exactly when the numbers
+           below it are wrong.
+
+           Which is why it may only state what is PERMANENTLY true. It used to
+           end "and the forward record is negative" — a live claim baked into
+           static markup, so it would have gone on saying it after the record
+           turned positive. The books being separate is structural; their sign
+           is not, and the cards below own it. -->
+      <div class="era-band ledger-warn">
+        Three separate books, <b>never added</b>. They cover different windows
+        and different capital.
+      </div>
+
+      <!-- A GRID, NOT A WHEEL. The rule: a rail when the front card answers the
+           question on its own, a grid when answering it needs two things side
+           by side. "Where are the wins coming from" is a comparison between
+           three books by construction, so all three are on screen at once. -->
+      <div class="ledger-books" id="ledgerBooks">
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:180px"></div></div>
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:180px"></div></div>
+        <div class="skeleton" role="status" aria-label="loading">
+          <div class="skel" style="height:180px"></div></div>
+      </div>
+
+      <!-- The engine's own closed trades are NOT re-tabled here. They already
+           have exactly one rendering, the Trade Journal on Results, and a
+           second copy is how two surfaces start disagreeing. The two tables
+           below are the rows that exist on no other surface. -->
+      <div class="panel floating" style="margin-bottom:var(--lg)">
+        <div class="panel-head"><h2 class="t-section">Your trades</h2>
+          <span class="chip" id="ledgerMineChip" style="margin-left:auto">—</span></div>
+        <div class="panel-body">
+          <div id="ledgerMine"><div class="skeleton" role="status" aria-label="loading">
+            <div class="skel" style="height:24px"></div>
+            <div class="skel" style="height:24px"></div>
+          </div></div>
+        </div>
+      </div>
+
+      <div class="panel floating">
+        <div class="panel-head"><h2 class="t-section">Your exits</h2>
+          <span class="chip" id="ledgerExitChip" style="margin-left:auto">—</span></div>
+        <div class="panel-body">
+          <div id="ledgerExits"><div class="skeleton" role="status" aria-label="loading">
+            <div class="skel" style="height:24px"></div>
+          </div></div>
+        </div>
+      </div>
+      </div>
 
       <!-- "Is the edge real?" — HERE, on the surface that asks it.
 
@@ -1455,103 +1547,6 @@
            anything, and it cost a poll of several kilobytes every two seconds
            for a panel behind a toggle most sessions never turned on.
            `/api/console` still serves the tail for anyone on a terminal. -->
-    </section>
-
-    <!-- ─── LEDGER ───
-
-         THREE BOOKS, NEVER SUMMED. The engine's paper account; the trades the
-         operator armed by hand; the operator's own exits on trades the engine
-         picked. Three windows, three pools of capital, three totals — and no
-         fourth number anywhere on this surface that adds any two of them.
-
-         `manual.arm` never consults the risk authority, so hand-armed size was
-         never drawn from the engine's $10,000. A combined "main wallet" figure
-         would therefore be an invention, and it is the exact leak the version
-         separation exists to prevent: two generations of money under one
-         label. Two figures with two labels is honest; one figure made of both
-         is not.
-
-         The third book is the interesting one. The engine chose those trades
-         and the operator chose when to leave them, both outcomes are recorded,
-         and that money is counted in NO total anywhere else in the store —
-         not in the equity curve, not in the manual book. It is the purest
-         measure of operator skill this app holds. -->
-    <section class="surface" id="s-ledger" tabindex="-1">
-      <div class="surface-head"><h1 class="t-page">Results</h1><p>Where are the outcomes coming from?</p></div>
-      <div class="surface-tabs" aria-label="Performance views">
-        <a href="#performance">Evidence</a>
-        <a class="on" href="#performance-ledger">Trade journal</a>
-      </div>
-
-      <div id="ledgerContent">
-
-      <!-- THE WALLET BAND CARRIES NO NUMBER, and must not until a real balance
-           arrives over a signed request. What exists today: a DPAPI credential
-           vault with `read_secret` and no caller. What does not: request
-           signing of any kind — there is no `hmac` import anywhere in app/ —
-           a `balance()` on any venue adapter, or `POST /api/credentials/test`.
-           A placeholder figure here would be the only invented money in the
-           app, and a stored key does not move this band either: the live
-           gate is separate and locked. -->
-      <div class="wallet-band">
-        <span class="chip" id="walletChip">not connected</span>
-        <div class="wallet-say"><b>Exchange wallet</b>
-          <span>No balance is read from any exchange. Nothing on this page is
-          money you can withdraw.</span></div>
-      </div>
-
-      <!-- NON-OPTIONAL, and static rather than rendered: a banner that depends
-           on a fetch is a banner that can be absent exactly when the numbers
-           below it are wrong.
-
-           Which is why it may only state what is PERMANENTLY true. It used to
-           end "and the forward record is negative" — a live claim baked into
-           static markup, so it would have gone on saying it after the record
-           turned positive. The books being separate is structural; their sign
-           is not, and the cards below own it. -->
-      <div class="era-band ledger-warn">
-        Three separate books, <b>never added</b>. They cover different windows
-        and different capital.
-      </div>
-
-      <!-- A GRID, NOT A WHEEL. The rule: a rail when the front card answers the
-           question on its own, a grid when answering it needs two things side
-           by side. "Where are the wins coming from" is a comparison between
-           three books by construction, so all three are on screen at once. -->
-      <div class="ledger-books" id="ledgerBooks">
-        <div class="skeleton" role="status" aria-label="loading">
-          <div class="skel" style="height:180px"></div></div>
-        <div class="skeleton" role="status" aria-label="loading">
-          <div class="skel" style="height:180px"></div></div>
-        <div class="skeleton" role="status" aria-label="loading">
-          <div class="skel" style="height:180px"></div></div>
-      </div>
-
-      <!-- The engine's own closed trades are NOT re-tabled here. They already
-           have exactly one rendering, the Trade Journal on Results, and a
-           second copy is how two surfaces start disagreeing. The two tables
-           below are the rows that exist on no other surface. -->
-      <div class="panel floating" style="margin-bottom:var(--lg)">
-        <div class="panel-head"><h2 class="t-section">Your trades</h2>
-          <span class="chip" id="ledgerMineChip" style="margin-left:auto">—</span></div>
-        <div class="panel-body">
-          <div id="ledgerMine"><div class="skeleton" role="status" aria-label="loading">
-            <div class="skel" style="height:24px"></div>
-            <div class="skel" style="height:24px"></div>
-          </div></div>
-        </div>
-      </div>
-
-      <div class="panel floating">
-        <div class="panel-head"><h2 class="t-section">Your exits</h2>
-          <span class="chip" id="ledgerExitChip" style="margin-left:auto">—</span></div>
-        <div class="panel-body">
-          <div id="ledgerExits"><div class="skeleton" role="status" aria-label="loading">
-            <div class="skel" style="height:24px"></div>
-          </div></div>
-        </div>
-      </div>
-      </div>
     </section>
 
     <!-- ─── LEARN ─── -->
