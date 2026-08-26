@@ -199,7 +199,9 @@ ok('focused views retain keyboard-sized controls and responsive trade order', ()
 });
 
 ok('390px command layer keeps every safety fact and HALT visible', () => {
-  assert(/@media\(max-width:640px\)[\s\S]*?:root\{--topbar-h:94px\}/.test(CSS));
+  /* The two safety rows remain; tighter 40px + 36px tracks remove twelve pixels
+     of dead chrome without deleting health, equity, risk, exposure, or HALT. */
+  assert(/@media\(max-width:640px\)[\s\S]*?:root\{--topbar-h:82px\}/.test(CSS));
   assert(/#equityChip,#riskChip,#exposureChip\{display:flex!important/.test(CSS));
   assert(/#healthChip\{display:inline-flex!important/.test(CSS));
   /* `flex`, not `block`. The actions track carries TWO buttons on a phone now

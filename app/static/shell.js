@@ -212,6 +212,10 @@
     markStrips = () => marks.forEach(mark => mark());
     markStrips();
     addEventListener('resize', markStrips);
+    /* The stock rail is hidden while Crypto owns the shell, so it measures
+       0x0 at boot. Switching markets unhides it without resizing the window;
+       re-measure at that boundary or its clipped phone tabs get no fade cue. */
+    addEventListener('ss:market-change', markStrips);
     // switching sub-view changes which tabs are laid out, and their widths
     addEventListener('ss:workspace-view', markStrips);
     // fonts land after first paint and change the measurement

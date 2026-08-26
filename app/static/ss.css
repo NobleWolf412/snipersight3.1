@@ -1,34 +1,29 @@
-/* SniperSight design system — implements docs/DESIGN-SYSTEM.md.
-   Rules this file enforces, from that document:
-     · No pure black. Surfaces are olive-tinted OKLCH near-black.
-     · Dynamic accent: green at rest, amber armed, red live. Chrome references
-       var(--accent), never a hard-coded hue.
-     · Mono owns the chrome. Inter appears only in genuine prose.
-     · Saturated colour stays under ~10% of any screen.
-     · Motion is slow and repetitive. Nothing bounces, nothing celebrates. */
+/* SniperSight design system — a quiet, high-density trading terminal.
+   Inter owns interface chrome; JetBrains Mono is reserved for aligned market
+   data and compact machine state. Surfaces are flat, dividers are subtle, and
+   saturated colour communicates status or action rather than decoration. */
 
-@font-face{font-family:'Share Tech Mono';src:url('/static/fonts/share-tech-mono.woff2') format('woff2');font-display:swap}
 @font-face{font-family:'JetBrains Mono';src:url('/static/fonts/jetbrains-400.woff2') format('woff2');font-weight:400;font-display:swap}
 @font-face{font-family:'JetBrains Mono';src:url('/static/fonts/jetbrains-600.woff2') format('woff2');font-weight:600;font-display:swap}
 @font-face{font-family:'JetBrains Mono';src:url('/static/fonts/jetbrains-800.woff2') format('woff2');font-weight:800;font-display:swap}
 @font-face{font-family:'Inter';src:url('/static/fonts/inter-400.woff2') format('woff2');font-weight:400;font-display:swap}
 
 :root{
-  /* surfaces — olive-tinted, never #000 */
-  --bg:oklch(0.18 0.008 120);
-  --bg-2:oklch(0.22 0.010 125);
-  --card:oklch(0.26 0.012 125);
-  --card-2:oklch(0.30 0.012 125);
+  /* neutral terminal surfaces: close to Phemex without copying its brand */
+  --bg:#0b0e11;
+  --bg-2:#101316;
+  --card:#12161a;
+  --card-2:#171c21;
   /* Lifted from 0.36. Every surface here is a near-black on a near-black and
      the border is the ONLY thing separating them, so at 0.36 against a 0.18
      page the edge was barely a suggestion and whole sections read as one
      continuous dark field. This is a border colour only — no text is drawn
      on it and no contrast note depends on it. */
-  --border:oklch(0.44 0.016 130);
-  --border-soft:oklch(0.32 0.015 130 / 0.6);
+  --border:rgba(255,255,255,.12);
+  --border-soft:rgba(255,255,255,.065);
   /* foreground ramp */
-  --fg:oklch(0.94 0.012 150);
-  --fg-2:oklch(0.78 0.012 150);
+  --fg:#f2f4f7;
+  --fg-2:#c9d0d8;
   /* WCAG 2.2 AA, measured against BOTH grounds this app uses. --fg-4 was
      oklch(0.42) — 2.22:1 on --bg and 1.84:1 on --card — and it backs nearly
      every label in the product, including live trade data at 10px. --fg-3 at
@@ -37,12 +32,12 @@
 
      Lifted until the DIMMEST step clears 4.5:1 on the darkest surface it is
      ever drawn on. The ramp compresses rather than inverts: 4 stays dimmer
-     than 3, 3 than 2. The terminal look survives — these are still low-chroma
-     olive greys on near-black — but the text is now readable. */
-  --fg-3:oklch(0.72 0.015 150);   /* 7.0:1 on --bg, 5.8:1 on --card */
-  --fg-4:oklch(0.65 0.013 150);   /* 5.8:1 on --bg, 4.8:1 on --card */
+     than 3, 3 than 2. The terminal look survives — these remain low-chroma
+     neutral greys on near-black — but the text is now readable. */
+  --fg-3:#98a2b3;
+  --fg-4:#7f8998;
   /* status family */
-  --green:#00ffaa; --green-soft:#4ade80;
+  --green:#2ce56b; --green-soft:#4ade80;
   --amber:#ffc266; --amber-2:#fbbf24;
   --red:#ff6464;   --red-2:#f87171;
   --cyan:#22d3ee;  --blue:#60a5fa; --purple:#c084fc;
@@ -50,7 +45,7 @@
   --accent:var(--green);
   --accent-rgb:0,255,170;
   /* type */
-  --f-display:'Share Tech Mono',ui-monospace,monospace;
+  --f-display:'Inter',ui-sans-serif,system-ui,sans-serif;
   --f-body:'Inter',ui-sans-serif,system-ui,sans-serif;
   --f-mono:'JetBrains Mono',ui-monospace,monospace;
 
@@ -83,10 +78,10 @@
   --fs-6:1.625rem;    /* 26px — metrics */
   --fs-7:2rem;        /* 32px — page titles */
   /* spacing + radii */
-  --xs:4px; --sm:8px; --md:14px; --lg:18px; --xl:24px; --shell-x:28px;
-  --r-sm:8px; --r-md:10px; --r-lg:12px; --r-xl:14px; --r-pill:999px;
+  --xs:4px; --sm:8px; --md:12px; --lg:16px; --xl:22px; --shell-x:24px;
+  --r-sm:4px; --r-md:6px; --r-lg:8px; --r-xl:8px; --r-pill:999px;
   /* shell chrome heights — read by the .shell grid AND by #s-chart.on's calc */
-  --topbar-h:56px; --statusbar-h:26px;
+  --topbar-h:56px; --statusbar-h:26px; --rail-w:172px;
   /* ── THE BREAKPOINT SCALE ──
      Four steps, not the twelve ad-hoc values this file had grown
      (560/620/640/720/760/780/900/950/960/1000/1100/1180). Twelve
@@ -168,29 +163,28 @@
 .stock-app{height:100vh;display:grid;grid-template-rows:60px 50px minmax(0,1fr) 28px;
   background:var(--bg);--accent:var(--cyan);--accent-rgb:34,211,238}
 .stock-topbar{display:flex;align-items:center;gap:var(--md);padding:0 var(--shell-x);
-  border-bottom:1px solid var(--border-soft);background:
-  linear-gradient(90deg,rgba(34,211,238,.055),transparent 42%),var(--bg-2)}
+  border-bottom:1px solid var(--border-soft);background:var(--bg)}
 .stock-identity,.stock-authority{display:flex;align-items:center;gap:var(--sm)}
 .stock-identity img{height:26px;width:auto}
-.stock-market-name{font:400 var(--fs-3)/1 var(--f-display);letter-spacing:.2em;
-  text-transform:uppercase;color:var(--cyan);padding-left:var(--sm);border-left:1px solid var(--border)}
+.stock-market-name{font:600 var(--fs-3)/1 var(--f-display);letter-spacing:-.01em;
+  text-transform:none;color:var(--fg);padding-left:var(--sm);border-left:1px solid var(--border)}
 .stock-authority{margin-left:auto}.stock-lock{font:700 var(--fs-1)/1 var(--f-mono);
   letter-spacing:.12em;text-transform:uppercase;color:var(--fg-4)}
 .stock-nav{display:flex;align-items:stretch;padding:0 var(--shell-x);gap:2px;
   border-bottom:1px solid var(--border-soft);background:var(--bg-2);overflow-x:auto}
 .stock-nav button{min-width:100px;padding:0 var(--md);border:0;border-bottom:2px solid transparent;
-  background:transparent;color:var(--fg-4);font:700 var(--fs-1)/1 var(--f-mono);
-  letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+  background:transparent;color:var(--fg-3);font:600 var(--fs-2)/1 var(--f-body);
+  letter-spacing:0;text-transform:none;cursor:pointer}
 .stock-nav button:hover,.stock-nav button:focus-visible{color:var(--fg);outline:0}
-.stock-nav button.on{color:var(--cyan);border-bottom-color:var(--cyan);background:rgba(34,211,238,.035)}
+.stock-nav button.on{color:var(--fg);border-bottom-color:var(--cyan);background:transparent}
 .stock-stage{overflow:auto;padding:clamp(18px,3vw,34px) var(--shell-x)}
 .stock-surface{display:none;max-width:1260px;margin:0 auto;animation:fade .18s ease-out}
 .stock-surface.on{display:block}
 .stock-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--xl);
-  padding:clamp(22px,4vw,42px);border:1px solid var(--border);border-radius:var(--r-xl);
-  background:linear-gradient(120deg,rgba(34,211,238,.07),transparent 58%),var(--bg-2)}
-.stock-hero h1{max-width:740px;margin:5px 0 10px;font:400 clamp(1.75rem,4vw,3rem)/1.05 var(--f-display);
-  letter-spacing:.035em;color:var(--fg)}
+  padding:clamp(22px,4vw,42px);border:1px solid var(--border-soft);border-radius:var(--r-xl);
+  background:var(--card)}
+.stock-hero h1{max-width:740px;margin:5px 0 10px;font:600 clamp(1.75rem,4vw,3rem)/1.08 var(--f-display);
+  letter-spacing:-.025em;color:var(--fg)}
 .stock-hero p{max-width:68ch;color:var(--fg-2);font:var(--fs-3)/1.55 var(--f-body)}
 .stock-hero-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--sm)}
 .stock-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin:var(--lg) 0;
@@ -229,7 +223,7 @@
 .stock-fixture-banner strong{color:var(--amber);font:700 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase}
 .stock-fixture-banner span{color:var(--fg-3);font:var(--fs-1)/1.3 var(--f-mono)}
 .stock-setup-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--lg)}
-.stock-setup-card{padding:var(--lg);border:1px solid var(--border);border-radius:var(--r-xl);background:var(--card);box-shadow:0 10px 26px -14px rgba(0,0,0,.85)}
+.stock-setup-card{padding:var(--lg);border:1px solid var(--border-soft);border-radius:var(--r-xl);background:var(--card);box-shadow:none}
 .stock-setup-card.accepted{border-color:rgba(57,229,140,.45)}.stock-setup-card.rejected{border-color:rgba(255,101,113,.3)}
 .stock-setup-card>header{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--md);padding-bottom:var(--md);border-bottom:1px solid var(--border-soft)}
 .stock-setup-card h2{margin:4px 0 2px;color:var(--fg);font:400 var(--fs-5)/1 var(--f-display)}
@@ -253,8 +247,8 @@
 .stock-review-card>strong{display:block;margin:var(--md) 0 5px;color:var(--green);font:700 clamp(3rem,10vw,6rem)/1 var(--f-display)}.stock-review-card>p{color:var(--fg-2);font:var(--fs-3)/1.4 var(--f-mono)}
 .stock-review-exclusion{display:flex;flex-direction:column;gap:6px;margin-top:var(--xl);padding:var(--md);border:1px solid rgba(255,194,102,.3);border-radius:var(--r-md);background:rgba(255,194,102,.04)}.stock-review-exclusion b{color:var(--amber);font:700 var(--fs-1)/1 var(--f-mono);letter-spacing:.1em;text-transform:uppercase}.stock-review-exclusion span{color:var(--fg-3);font:var(--fs-1)/1.45 var(--f-body)}
 .stock-empty{min-height:380px;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;padding:var(--xl);border:1px solid var(--border);border-radius:var(--r-xl);
-  background:radial-gradient(circle at 50% 20%,rgba(34,211,238,.055),transparent 38%),var(--bg-2)}
+  text-align:center;padding:var(--xl);border:1px solid var(--border-soft);border-radius:var(--r-xl);
+  background:var(--card)}
 .stock-empty-mark{font:700 var(--fs-1)/1 var(--f-mono);letter-spacing:.16em;color:var(--amber)}
 .stock-empty h2{margin:var(--md) 0 var(--sm);font:400 var(--fs-5)/1.2 var(--f-display);color:var(--fg)}
 .stock-empty p{max-width:620px;margin-bottom:var(--lg);font:var(--fs-3)/1.55 var(--f-body);color:var(--fg-3)}
@@ -414,22 +408,22 @@ body{
 }
 
 /* ---------- type roles (six, not fourteen) ---------- */
-.t-page{font-family:var(--f-display);font-size:var(--fs-7);line-height:1;letter-spacing:.2em;
-  text-transform:uppercase;color:var(--accent)}
+.t-page{font-family:var(--f-display);font-size:var(--fs-7);font-weight:600;line-height:1.08;
+  letter-spacing:-.025em;text-transform:none;color:var(--fg)}
 /* Now a real <h2>. Every panel label was a styled <span>, so this app had one
    heading per surface and a screen reader could not navigate it at all. The
    size and weight are set explicitly rather than inherited, because an h2's
    defaults would have changed how all seventeen of them look. */
-.t-section{font-family:var(--f-display);font-size:var(--fs-3);font-weight:400;
-  letter-spacing:.22em;margin:0;
+.t-section{font-family:var(--f-display);font-size:var(--fs-3);font-weight:600;
+  letter-spacing:-.01em;margin:0;
   /* --fg-2, not --fg-3. Every panel heading rendered dimmer than the .chip
      sitting next to it, so each panel's metadata outranked its own title and
      the eye had nothing to climb. The chip drops a step to match. */
-  text-transform:uppercase;color:var(--fg-2);display:flex;align-items:center;gap:var(--sm)}
-.t-metric{font-family:var(--f-display);font-size:var(--fs-6);font-weight:800;line-height:1;
+  text-transform:none;color:var(--fg-2);display:flex;align-items:center;gap:var(--sm)}
+.t-metric{font-family:var(--f-mono);font-size:var(--fs-6);font-weight:600;line-height:1;
   letter-spacing:-.01em;color:var(--fg)}
-.t-label{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.18em;
-  text-transform:uppercase;color:var(--fg-4)}
+.t-label{font-family:var(--f-body);font-size:var(--fs-1);font-weight:600;letter-spacing:.02em;
+  text-transform:none;color:var(--fg-4)}
 /* .t-label's prose sibling. The label style is right for two or three words and
    wrong for a sentence: uppercase removes the ascender-and-descender shape that
    makes a word recognisable without being spelled out, and .18em tracking pulls
@@ -452,19 +446,17 @@ body{
    keyframe .cp-msg.busy uses for "working", so a heading and a pending request
    pulsed identically and neither meant anything. A heading is not an event.
    pulse now belongs to things that are actually in progress. */
-.t-section::before{content:'';width:6px;height:6px;border-radius:50%;
-  background:var(--accent);flex:none}
+.t-section::before{display:none}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
-/* ---------- panel: scanlines as a 2-bit overlay, not a hero effect ----------
+/* ---------- panels ----------
 
-   DEPTH, BECAUSE EDGES ALONE WERE NOT ENOUGH. Every surface in this app is a
-   near-black on a near-black, separated by one hairline at 0.32 lightness —
-   so on a real screen the panels dissolved into the page and the operator
-   could not tell where one section stopped and the next began.
+   Every surface is a near-black separated by a quiet hairline. Working groups
+   stay legible through the neutral surface ladder and alignment, without
+   decorative texture or artificial depth.
 
-   The fix is elevation and edge, never a lighter fill. This file's contrast
-   notes are measured against --bg and --card; washing the panel ground out
+   This file's contrast notes are measured against --bg and --card; washing
+   the panel ground out
    to make it "pop" would silently drop --fg-3 and --fg-4 below the AA they
    were explicitly lifted to clear, which is the same mistake the row-opacity
    bug made and cost three review rounds to find.
@@ -472,25 +464,19 @@ body{
    So: a real shadow with an offset and a soft blur, a top highlight where
    the light would actually catch a raised edge, and a border a step up in
    contrast. Nothing behind the text changes. */
-.panel{position:relative;border:1px solid var(--border);border-radius:var(--r-xl);
-  background:linear-gradient(135deg,rgba(0,0,0,.55),oklch(0.22 0.010 125 / 0.6));
-  box-shadow:0 10px 26px -14px rgba(0,0,0,.85),0 1px 0 rgba(255,255,255,.04) inset;
-  overflow:hidden}
-.panel::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:.35;
-  background:repeating-linear-gradient(0deg,rgba(0,0,0,.20) 0 1px,transparent 1px 3px)}
+.panel{position:relative;border:1px solid var(--border-soft);border-radius:var(--r-xl);
+  background:var(--card);box-shadow:none;overflow:hidden}
+.panel::before{display:none}
 .panel>*{position:relative}
 /* A 1px border under a 24px zero-offset blur is a halo, not depth. The border
    carries the emphasis; the shadow now has an offset and does what a shadow
    does. */
-.panel-accent{border-color:rgba(var(--accent-rgb),.45);
-  box-shadow:0 10px 26px -12px rgba(0,0,0,.85),
-             0 1px 0 rgba(var(--accent-rgb),.10) inset}
+.panel-accent{border-color:rgba(var(--accent-rgb),.38);box-shadow:none}
 /* The header is a BAND, not a line of text above a rule. It is the thing
    that says "a new section starts here", and it was carrying that job with a
    single hairline. */
 .panel-head{display:flex;align-items:center;gap:var(--sm);padding:var(--md) var(--lg);
-  border-bottom:1px solid var(--border);
-  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012))}
+  border-bottom:1px solid var(--border-soft);background:var(--card)}
 .panel-head .t-section{color:var(--fg)}
 .panel-body{padding:var(--lg)}
 
@@ -513,7 +499,7 @@ body{
 .panel.floating > .panel-head{background:none;border-bottom:0;
   padding:var(--md) var(--lg) var(--sm)}
 .panel.floating > .panel-head .t-section{font-size:var(--fs-5);
-  font-family:var(--f-display);letter-spacing:.06em}
+  font-family:var(--f-display);letter-spacing:-.02em}
 /* A section of CARDS needs no ground — the cards are the objects. A section
    of CONTROLS still does: inputs, toggles and meters are not objects, they
    are a form, and a form with nothing behind it reads as loose parts on a
@@ -521,7 +507,7 @@ body{
    floats. This is the one place the two halves of the vibe meet. */
 .panel.floating > .panel-body,
 .panel.floating > .budget-grid{
-  background:linear-gradient(180deg,rgba(255,255,255,.022),rgba(0,0,0,.16));
+  background:var(--card);
   border:1px solid var(--border-soft);border-radius:var(--r-lg);
   box-shadow:0 1px 0 rgba(255,255,255,.04) inset}
 /* rails and lists inside a floating section are already carded — no ground */
@@ -532,18 +518,12 @@ details.panel.floating > summary{padding-left:var(--lg)}
 
 /* corner brackets — "armed and watching" */
 .bracket{position:relative}
-.bracket::after{content:'';position:absolute;inset:0;pointer-events:none;
-  background:
-    linear-gradient(var(--accent),var(--accent)) 0 0/10px 1px no-repeat,
-    linear-gradient(var(--accent),var(--accent)) 0 0/1px 10px no-repeat,
-    linear-gradient(var(--accent),var(--accent)) 100% 100%/10px 1px no-repeat,
-    linear-gradient(var(--accent),var(--accent)) 100% 100%/1px 10px no-repeat;
-  opacity:.5}
+.bracket::after{display:none}
 
 /* ---------- chips ---------- */
 .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:var(--r-pill);
-  background:rgba(255,255,255,.04);color:var(--fg-3);
-  font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.18em;text-transform:uppercase}
+  background:rgba(255,255,255,.045);color:var(--fg-3);
+  font-family:var(--f-body);font-size:var(--fs-1);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
 .chip-accent{background:rgba(var(--accent-rgb),.10);color:var(--accent)}
 .chip-green{background:rgba(0,255,170,.10);color:var(--green)}
 .chip-red{background:rgba(248,113,113,.10);color:var(--red-2)}
@@ -688,18 +668,15 @@ details.panel.floating > summary{padding-left:var(--lg)}
   border-color:rgba(255,100,100,.40)}
 
 /* ---------- buttons ---------- */
-.btn{font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.14em;
-  text-transform:uppercase;padding:9px 14px;border-radius:var(--r-md);cursor:pointer;
+.btn{font-family:var(--f-body);font-size:var(--fs-2);font-weight:600;letter-spacing:.01em;
+  text-transform:none;min-height:36px;padding:8px 14px;border-radius:var(--r-md);cursor:pointer;
   background:rgba(255,255,255,.03);color:var(--fg-2);border:1px solid var(--border);
   transition:border-color .15s,color .15s,background .15s}
 .btn:hover{border-color:var(--accent);color:var(--accent)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .btn:disabled:hover{border-color:var(--border);color:var(--fg-2)}
-/* THE PRIMARY ACTION. Renamed from .btn-primary, which was a hardcoded cyan
-   gradient (#164e63 -> #0a2d3a with a #22d3ee inset) on every primary control:
-   Check now, Copilot, Got it, and the three Save-venue buttons. REDESIGN-PLAN
-   §1 named "cyan-on-black with glow" as the off-brand look the redesign existed
-   to remove, and it was still the most prominent colour in the app.
+/* THE PRIMARY ACTION. It reads --accent, like every other control that signals
+   state, so the primary button follows the current operating mode.
 
    It now reads --accent, like everything else that signals state, which means
    the primary button is amber while the book is paper and red while it is live.
@@ -708,18 +685,16 @@ details.panel.floating > summary{padding-left:var(--lg)}
 
    Still the only 3D-pressable control in the system: the inset highlight and
    the 1px travel on :active are what make it read as the thing to press. */
-.btn-primary{background:rgba(var(--accent-rgb),.14);
-  color:var(--accent);border-color:rgba(var(--accent-rgb),.55);
-  box-shadow:0 1px 0 rgba(var(--accent-rgb),.35) inset,0 2px 6px rgba(0,0,0,.5)}
-.btn-primary:hover{background:rgba(var(--accent-rgb),.20);border-color:var(--accent)}
-.btn-primary:active{transform:translateY(1px);box-shadow:0 1px 3px rgba(0,0,0,.5) inset}
+.btn-primary{background:var(--accent);color:var(--bg);border-color:var(--accent);box-shadow:none}
+.btn-primary:hover{background:color-mix(in srgb,var(--accent) 88%,white);color:var(--bg);border-color:var(--accent)}
+.btn-primary:active{transform:none;filter:brightness(.92)}
 .btn-amber{background:rgba(251,191,36,.10);color:var(--amber-2);border-color:rgba(251,191,36,.40)}
 .btn-amber:hover{border-color:var(--amber-2);color:var(--amber)}
 .btn-red{background:rgba(248,113,113,.10);color:var(--red-2);border-color:rgba(248,113,113,.35)}
 .btn-red:hover{border-color:var(--red);color:var(--red)}
 
 /* ---------- metric tile ---------- */
-.tile{background:rgba(0,0,0,.4);border:1px solid var(--border-soft);border-radius:var(--r-lg);
+.tile{background:var(--card);border:1px solid var(--border-soft);border-radius:var(--r-lg);
   padding:var(--md) 16px;display:flex;flex-direction:column;gap:6px}
 .tile .t-label{color:var(--fg-4)}
 .tile.up .t-metric{color:var(--green)}
@@ -751,26 +726,24 @@ details.panel.floating > summary{padding-left:var(--lg)}
    places they had already drifted once. */
 .shell{display:grid;height:100vh;
   grid-template-rows:var(--topbar-h) 1fr var(--statusbar-h);
-  grid-template-columns:186px 1fr}
+  grid-template-columns:var(--rail-w) 1fr}
 
 .topbar{grid-column:1/-1;display:flex;align-items:center;gap:var(--md);padding:0 var(--shell-x);
-  border-bottom:1px solid var(--border-soft);background:
-  linear-gradient(90deg,rgba(var(--accent-rgb),.035),transparent 34%),
-  linear-gradient(180deg,var(--bg-2),var(--bg))}
+  border-bottom:1px solid var(--border-soft);background:var(--bg)}
 .topbar-identity,.topbar-system,.topbar-account,.topbar-actions{
   display:flex;align-items:center;min-width:0}
 .topbar-identity{gap:var(--sm)}
-.brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-size:var(--fs-4);
-  letter-spacing:.22em;color:var(--fg);text-transform:uppercase}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-size:var(--fs-3);
+  font-weight:600;letter-spacing:-.01em;color:var(--fg);text-transform:none}
 .brand img{height:26px;width:auto;display:block}
-.top-venue{font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;
-  text-transform:uppercase;color:var(--fg-4);white-space:nowrap}
+.top-venue{font:500 var(--fs-1)/1 var(--f-body);letter-spacing:.02em;
+  text-transform:none;color:var(--fg-4);white-space:nowrap}
 .topbar #modeChip{min-height:30px;padding-inline:10px;border:1px solid currentColor;
   border-radius:3px;background:rgba(255,194,102,.05)}
 .topbar-system{gap:var(--md);margin-left:auto;padding:0 var(--md);min-height:32px;
   border-inline:1px solid var(--border-soft)}
 .topbar-system>span{display:inline-flex;align-items:center;gap:7px;min-width:0;
-  font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--fg-3)}
+  font:600 var(--fs-1)/1 var(--f-body);letter-spacing:.02em;text-transform:none;color:var(--fg-3)}
 .topbar-account{gap:0;border:1px solid var(--border-soft);border-radius:var(--r-md);overflow:hidden;
   background:rgba(0,0,0,.22)}
 .topbar-account>span{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 10px;
@@ -835,16 +808,16 @@ details.panel.floating > summary{padding-left:var(--lg)}
 }
 
 .nav{border-right:1px solid var(--border-soft);padding:var(--lg) 0;display:flex;flex-direction:column;gap:2px;
-  background:linear-gradient(180deg,var(--bg-2),var(--bg))}
+  background:var(--bg)}
 .nav a,.nav .nav-spotter{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;
   padding:11px var(--lg);text-decoration:none;
-  font-family:var(--f-mono);font-size:var(--fs-1);font-weight:600;letter-spacing:.18em;text-transform:uppercase;
+  font-family:var(--f-body);font-size:var(--fs-2);font-weight:500;letter-spacing:0;text-transform:none;
   color:var(--fg-3);border-left:2px solid transparent;transition:color .15s,background .15s}
 .nav .nav-spotter{width:100%;margin-top:auto;border-top:1px solid var(--border-soft);border-right:0;
   border-bottom:0;background:rgba(var(--accent-rgb),.025);cursor:pointer;text-align:left}
 .nav a small,.nav .nav-spotter small{font-size:9px;font-weight:400;letter-spacing:.08em;text-transform:none;color:var(--fg-4)}
 .nav a:hover,.nav .nav-spotter:hover{color:var(--fg-2);background:rgba(255,255,255,.02)}
-.nav a.on,body.cp-open .nav .nav-spotter{color:var(--accent);border-left-color:var(--accent);background:rgba(var(--accent-rgb),.06)}
+.nav a.on,body.cp-open .nav .nav-spotter{color:var(--fg);border-left-color:var(--accent);background:var(--card)}
 .nav .nav-count{position:absolute;right:var(--lg);top:11px;font-size:var(--fs-1);color:var(--fg-4)}
 .nav a.on .nav-count{color:var(--accent)}
 .nav-sep{height:1px;background:var(--border-soft);margin:var(--md) var(--lg)}
@@ -860,7 +833,7 @@ details.panel.floating > summary{padding-left:var(--lg)}
 
 
 
-.stage{overflow:auto;padding:var(--xl) var(--shell-x)}
+.stage{overflow:auto;padding:20px var(--shell-x)}
 .surface{display:none;animation:fade .18s ease-out}
 .surface.on{display:block}
 @keyframes fade{from{opacity:0}to{opacity:1}}
@@ -878,19 +851,19 @@ details.panel.floating > summary{padding-left:var(--lg)}
     scroll-behavior:auto !important;
   }
 }
-.surface-head{display:flex;align-items:baseline;gap:var(--md);margin-bottom:var(--xl)}
-.surface-head p{color:var(--fg-4);font-family:var(--f-mono);font-size:var(--fs-1);letter-spacing:.1em}
+.surface-head{display:flex;align-items:baseline;gap:var(--md);margin-bottom:var(--lg)}
+.surface-head p{color:var(--fg-4);font-family:var(--f-body);font-size:var(--fs-2);letter-spacing:0}
 .workspace-tabs{position:sticky;top:calc(var(--xl) * -1);z-index:9;display:flex;
   gap:var(--xs);margin:calc(var(--lg) * -1) 0 var(--lg);overflow-x:auto;
-  border-bottom:1px solid var(--border-soft);background:color-mix(in oklch,var(--bg-2) 95%,transparent)}
+  border-bottom:1px solid var(--border-soft);background:color-mix(in srgb,var(--bg) 94%,transparent)}
 .workspace-tabs button,.workspace-tabs a{min-width:max-content;min-height:44px;display:inline-flex;
   align-items:center;justify-content:center;padding:0 var(--md);background:transparent;border:0;
   border-bottom:2px solid transparent;color:var(--fg-3);cursor:pointer;text-decoration:none;
-  font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase}
+  font:600 var(--fs-2)/1 var(--f-body);letter-spacing:0;text-transform:none}
 .workspace-tabs button:hover,.workspace-tabs button:focus-visible,
 .workspace-tabs a:hover,.workspace-tabs a:focus-visible{color:var(--fg);outline:2px solid transparent;
   border-bottom-color:var(--fg-4)}
-.workspace-tabs .on{color:var(--accent);border-bottom-color:var(--accent)}
+.workspace-tabs .on{color:var(--fg);border-bottom-color:var(--accent)}
 [data-performance-view][hidden],[data-system-view][hidden]{display:none!important}
 #s-settings[data-active-view="risk"] .pack-cols,
 #s-settings[data-active-view="venues"] .pack-cols,
@@ -1163,7 +1136,7 @@ details.panel.floating > summary{padding-left:var(--lg)}
    pane needs it. Stating the question costs one line; not stating it left the
    operator to infer what this surface is for. */
 .chart-head{margin-bottom:0;flex:none;align-items:baseline}
-.chart-head .t-page{font-size:var(--fs-5);letter-spacing:.16em}
+.chart-head .t-page{font-size:var(--fs-5);letter-spacing:-.015em}
 .chart-top{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap;flex:none}
 .chart-main{flex:1;display:grid;grid-template-columns:280px minmax(0,1fr) 320px;
   grid-template-areas:"evidence chart ticket";gap:var(--md);min-height:0}
@@ -1310,7 +1283,7 @@ details.panel.floating > summary{padding-left:var(--lg)}
 }
 
 .chart-pane{position:relative;min-width:0;overflow:hidden}
-/* scanlines belong on chrome, not over price data */
+/* Price data remains free of decorative overlays. */
 .chart-pane::before{display:none}
 #chartBox{position:absolute;inset:0}
 #chartHandles{position:absolute;inset:0;pointer-events:none}
@@ -1660,10 +1633,7 @@ details.panel.floating > summary{padding-left:var(--lg)}
    real swipe physics with no library and no momentum code to get wrong; the
    arrows and drag in shell.js are additive chrome for a mouse. */
 .mb-shell{position:relative}
-/* The stage. The rail sits in its own lit space — a low accent glow pooled
-   where the front card stands, falling off to the panel's black. Background
-   sits on the scroll container's own box, so it holds still while the cards
-   move through it like a spotlight. */
+/* The stage keeps its neutral surface fixed while cards move through it. */
 /* Inline padding is half the track less half a card, so the FIRST and LAST
    card can reach the spotlight too — without it the most urgent card, which
    sorts first, could never be centered and the stack would open on its
@@ -3204,7 +3174,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 .strategy-contract dl>div{padding:8px;background:var(--bg-2)}
 .strategy-contract dt{font:600 9px/1.2 var(--f-mono);text-transform:uppercase;color:var(--fg-4)}
 .strategy-contract dd{margin:4px 0 0;font:var(--fs-1)/1.4 var(--f-mono);color:var(--fg-2)}
-#s-settings>.dirty-banner{position:fixed;left:calc(186px + var(--shell-x));right:var(--shell-x);
+#s-settings>.dirty-banner{position:fixed;left:calc(var(--rail-w) + var(--shell-x));right:var(--shell-x);
   bottom:calc(var(--statusbar-h) + var(--sm));z-index:80;box-shadow:0 10px 30px rgba(0,0,0,.65)}
 .reconciliation-panel[data-state="BLOCKED"]{border-color:rgba(248,113,113,.5)}
 .reconciliation-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--border-soft)}
@@ -3221,25 +3191,13 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   .chart-head>div:first-child{display:block}
   .trade-state{min-width:0}
   .chart-main{grid-template-columns:1fr;grid-template-areas:"chart";grid-template-rows:minmax(420px,calc(100dvh - var(--topbar-h) - 270px))}
-  /* THE SHEETS WERE TRANSPARENT OVER A LIVE CHART, and that is the whole
-     reason the phone Trade screen read as broken rather than dense. .panel's
-     background is two translucent stops — rgba(0,0,0,.55) over
-     oklch(...) / 0.6 — which is correct on desktop, where the panel sits in a
-     grid track over the page background and composites to a solid surface. It
-     is position:fixed here, over candles and over the chart's own loading and
-     error copy, so roughly two fifths of whatever was behind came through the
-     sheet: labels crossing labels, and "Loading BTCUSDT · 4H…" legible
-     underneath the order form. The same gradient layered over an opaque --bg
-     composites to the exact colour desktop already shows, so the sheets look
-     unchanged and stop being windows. */
+  /* A phone sheet must be an opaque surface over the live chart. */
   .trade-evidence,.ticket{display:none;position:fixed;z-index:70;left:0;right:0;bottom:108px;
     max-height:min(70dvh,640px);overflow:auto;border-radius:var(--r-lg) var(--r-lg) 0 0;
-    background:linear-gradient(135deg,rgba(0,0,0,.55),oklch(0.22 0.010 125 / 0.6)),var(--bg);
+    background:var(--card);
     border-top:1px solid var(--border);
     box-shadow:0 -16px 48px rgba(0,0,0,.72)}
-  /* .panel::before paints scanlines across the whole surface. Over a chart that
-     texture read as more bleed-through, and a sheet needs the grab affordance
-     more than it needs the texture, so this slot pays for the handle instead. */
+  /* Phone sheets use this slot for a grab handle. */
   .trade-evidence::before,.ticket::before{position:sticky;top:0;inset:auto;z-index:2;
     display:block;width:36px;height:4px;margin:8px auto 0;opacity:1;border-radius:999px;
     background:var(--border);pointer-events:none}
@@ -3247,7 +3205,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
      label bolted on above the content that already names itself. */
   .trade-evidence .trade-evidence-head,.trade-evidence .trade-evidence-empty h2,
   .ticket>.panel-head{position:sticky;top:12px;z-index:1;
-    background:linear-gradient(135deg,rgba(0,0,0,.55),oklch(0.22 0.010 125 / 0.6)),var(--bg)}
+    background:var(--card)}
   body.trade-sheet-evidence .trade-evidence,body.trade-sheet-action .ticket{display:block}
   /* A sheet over a chart needs somewhere to press that is not the chart. Escape
      and the bar button both close it; without this, a tap outside dragged the
@@ -3280,10 +3238,13 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
 }
 
 @media(max-width:640px){
-  :root{--topbar-h:94px}
-  .topbar{grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:44px 44px;
+  :root{--topbar-h:82px}
+  .topbar{grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:40px 36px;
     align-content:center;gap:0 6px;padding:2px 8px}
   .topbar .brand,#venueNote{display:none}
+  /* The bottom rail already names Trade. Keep the live workspace state, but
+     remove the repeated page title so the chart begins one row sooner. */
+  #s-chart .chart-head>div:first-child{display:none}
   .topbar-identity{display:flex!important;grid-column:1;grid-row:1}
   .topbar-system,.topbar-system:has(#healthChip.degraded){display:flex!important;grid-column:2;grid-row:1;
     min-height:30px;margin:0;padding:0;border:0;overflow:hidden}
@@ -3299,11 +3260,11 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
      tighter tracking and padding are so the two read as a pair rather than
      filling half the bar. */
   .topbar-actions{display:flex!important;gap:4px;grid-column:3;grid-row:1}
-  .topbar-actions .btn{padding-inline:8px;letter-spacing:.06em;white-space:nowrap}
+  .topbar-actions .btn{min-height:32px;padding-inline:8px;letter-spacing:0;white-space:nowrap}
   .topbar-account{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));grid-column:1/-1;
     grid-row:2;width:100%;border:1px solid var(--border-soft);background:rgba(0,0,0,.22)}
   .topbar-account>span,#equityChip,#riskChip,#exposureChip{display:flex!important;justify-content:center;
-    max-width:none;min-width:0;min-height:38px;padding:0 5px!important;border-right:1px solid var(--border-soft);
+    max-width:none;min-width:0;min-height:34px;padding:0 5px!important;border-right:1px solid var(--border-soft);
     overflow:hidden;text-overflow:ellipsis;font-size:9px;letter-spacing:.02em}
   .topbar-account>span:last-child{border-right:0}
   #equityRet{display:none}

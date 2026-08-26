@@ -66,3 +66,11 @@ sst/
 # hazard applies as everything else in this block: a shared working tree makes
 # one careless stage permanent.
 .codex-remote-attachments/
+
+# UI audit and design-QA captures. Screenshot sweeps of every screen state at
+# two viewports, one directory per audit — 558 MB across eleven of them by
+# 2026-08-23, and every rerun writes a fresh set. They are the evidence behind
+# a design verdict, not the verdict: the QA note in docs/ is what survives, and
+# a capture is only meaningful against the build that produced it. This repo is
+# public, so an accidental `git add -A` here is permanent and large.
+artifacts/

@@ -201,7 +201,7 @@ ok('a phone sheet is a surface, not a window onto the chart', () => {
   const bg = (sheet[1].match(/background:([^;]+)/) || [])[1];
   assert(bg, 'the fixed sheets have no background of their own, so the chart ' +
     'shows through .panel\'s translucent gradient');
-  assert(/var\(--bg[^)]*\)|oklch\([^/)]*\)$|#[0-9a-f]{3,8}/i.test(bg.trim()),
+  assert(/var\(--(?:bg|card)[^)]*\)|oklch\([^/)]*\)$|#[0-9a-f]{3,8}/i.test(bg.trim()),
     `the sheet background "${bg.trim()}" has no opaque base layer under it`);
 
   assert(/\.trade-sheet-scrim\{[^}]*position:fixed/.test(css),
@@ -244,6 +244,8 @@ ok('every sideways strip gets the hint, not just the rail', () => {
       `${strip} scrolls sideways and is not in shell.js's STRIPS, so it clips ` +
       `with no cue that more exists`);
   }
+  assert(/addEventListener\('ss:market-change', markStrips\)/.test(js),
+    'switching from Crypto to Stocks reveals a previously hidden strip but never re-measures it');
 });
 
 ok('a refusal the finger cannot hover is written on the surface', () => {
