@@ -3,6 +3,7 @@ never derives them). Serves the chart UI at / and JSON at /api/*.
 
 Run: uvicorn server:app --port 8422
 """
+import hmac
 import json
 import os
 import re
@@ -69,6 +70,13 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 #: waited out a cellular stall; far short of a value stale enough to name the
 #: wrong bar. See /api/manual/arm for why the caller gets to name it at all.
 ARM_CLOCK_SKEW_S = 120
+
+# The hosted dashboard may read only these aggregate, non-mutating surfaces.
+# A valid token never grants access to scan, settings, reset, arming, position,
+# automation, execution or other operator-action endpoints.
+BRIDGE_READ_PATHS = frozenset({
+    "/api/health", "/api/overview", "/api/portfolio",
+})
 
 ALLOWED_USERS_FILE = Path(__file__).resolve().parent / "data" / "allowed-users.txt"
 
@@ -146,7 +154,16 @@ async def _gate(request, call_next):
     are `same-origin`.
     """
     who = request.headers.get("tailscale-user-login")
-    if request.headers.get("x-forwarded-for") is not None:
+    configured_bridge = os.environ.get("SNIPERSIGHT_BRIDGE_TOKEN", "")
+    presented_bridge = request.headers.get("x-snipersight-bridge-token", "")
+    bridge_read = (
+        request.method == "GET"
+        and request.url.path in BRIDGE_READ_PATHS
+        and bool(configured_bridge)
+        and bool(presented_bridge)
+        and hmac.compare_digest(configured_bridge, presented_bridge)
+    )
+    if request.headers.get("x-forwarded-for") is not None and not bridge_read:
         allowed = _allowed_users()
         if not who:
             return _refuse(request, 403, "anonymous",
