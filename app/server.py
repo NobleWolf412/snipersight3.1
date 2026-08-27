@@ -166,7 +166,7 @@ async def _gate(request, call_next):
     }
     if bridge_only and not bridge_read:
         return _refuse(
-            request, 403,
+            request, 403, "bridge-only",
             "This bridge accepts only authenticated read-only Site requests."
         )
     request_host = (request.url.hostname or "").lower()
