@@ -161,6 +161,14 @@ async def _gate(request, call_next):
         and bool(presented_bridge)
         and hmac.compare_digest(configured_bridge, presented_bridge)
     )
+    bridge_only = os.environ.get("SNIPERSIGHT_BRIDGE_ONLY", "").strip().lower() in {
+        "1", "true", "yes"
+    }
+    if bridge_only and not bridge_read:
+        return _refuse(
+            request, 403,
+            "This bridge accepts only authenticated read-only Site requests."
+        )
     request_host = (request.url.hostname or "").lower()
     local_request = request_host in {"localhost", "127.0.0.1", "::1"}
     forwarded = request.headers.get("x-forwarded-for") is not None
