@@ -124,15 +124,13 @@ async def _gate(request, call_next):
     the same admin console. Access is withdrawn by removing the device or the
     user there, or by editing data/allowed-users.txt.
 
-    `X-Forwarded-For` absent means nothing proxied the request, so it came
-    from this machine — the desktop cockpit, the watchdog's health poll, the
-    suites. Those are exempt: anything with code execution here already has
-    the database. A browser cannot forge the header either way; it is on the
-    forbidden list that page script may not set.
+    A request is local only when it has a loopback hostname and no forwarded
+    header. Tailscale Funnel versions may omit X-Forwarded-For, but the public
+    .ts.net hostname still fails closed.
 
-    Present-but-no-identity is refused rather than trusted. That is what a
-    Tailscale *Funnel* request looks like — the public internet — so enabling
-    Funnel by accident fails closed instead of publishing the book.
+    Any non-local request without a valid read-only bridge token must carry a
+    permitted Tailscale identity. Public Funnel traffic has no identity, so it
+    is refused rather than trusted.
 
     ── WHAT ─────────────────────────────────────────────────────────────────
     Twelve endpoints write. Four took their arguments from the query string —
@@ -163,7 +161,10 @@ async def _gate(request, call_next):
         and bool(presented_bridge)
         and hmac.compare_digest(configured_bridge, presented_bridge)
     )
-    if request.headers.get("x-forwarded-for") is not None and not bridge_read:
+    request_host = (request.url.hostname or "").lower()
+    local_request = request_host in {"localhost", "127.0.0.1", "::1"}
+    forwarded = request.headers.get("x-forwarded-for") is not None
+    if (forwarded or not local_request) and not bridge_read:
         allowed = _allowed_users()
         if not who:
             return _refuse(request, 403, "anonymous",
