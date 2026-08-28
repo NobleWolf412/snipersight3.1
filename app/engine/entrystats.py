@@ -98,7 +98,12 @@ from pathlib import Path
 
 from . import costs, store
 
-ENTRYSTATS_VERSION = "entrystats-v0.2-draft"
+ENTRYSTATS_VERSION = "entrystats-v0.3-draft"
+# v0.3: current MAKER_THEN_MARKET orders rest at `maker_limit`, not at the
+# plan's `entry`.  The old composite join compared plan.entry to limit_price,
+# so it reported zero placed orders on the entire current book.  A crossing
+# order records the plan anchor explicitly as `cross_price`; use that to claim
+# the plan, then join the outcome to the FILLED event's actual price.
 # v0.2: the taker-entry penalty uses the spread of the symbol's OWN venue. On
 # the Coinbase default it overstated the penalty on perps by ~4x (0.20% vs
 # 0.05%), and this statistic is what decides whether limit or market entries are
@@ -427,6 +432,16 @@ def _plans_elsewhere(con, keys: set, tried: list[str]) -> list[tuple[str, int]]:
     return sorted(found.items())
 
 
+def _plan_anchor(order: dict):
+    """The plan price an order was created from, not necessarily its limit.
+
+    MAKER_THEN_MARKET records a better passive `limit_price` and keeps the
+    approved setup price in `cross_price`. Older direct-limit facts have no
+    cross price, where the limit itself remains the correct anchor.
+    """
+    return order.get("cross_price") or order.get("limit_price")
+
+
 def load_orders(con, *, setup_version: str = SETUP_VERSION,
                 exec_version: str = EXEC_VERSION, symbol: str | None = None,
                 tf: str | None = None, strategy: str | None = None,
@@ -436,15 +451,16 @@ def load_orders(con, *, setup_version: str = SETUP_VERSION,
     """One record per VALIDATED plan, joined to its order lifecycle, its outcome
     and (optionally) its counterfactual walk. READ-ONLY.
 
-    THE JOIN KEY IS (setup_id, available_at, limit_price), NOT setup_id.
+    THE JOIN KEY IS (setup_id, available_at, plan_anchor), NOT setup_id.
     `setup_id` is `symbol|tf|strategy|zone_id` and carries no version, so the
     same id names a v0.6 plan and a v0.7 plan for the same zone. `execsim` did
     not bump its own version when `setups.py` moved to v0.7, so both books' order
     facts now sit under `exec-v0.7-draft`. Joining on setup_id alone merged them
     — observed on 2026-07-29 as a single "order" that was simultaneously FILLED
     and MISSED, and as a fill rate of 74% for a book whose real rate is 61%. The
-    composite key is exactly what `execsim` wrote (`limit_price = plan.entry`,
-    `available_at = plan.confirmed_at`), so it reconstructs one book cleanly.
+    The anchor is `cross_price` for MAKER_THEN_MARKET and `limit_price` for
+    direct limits; both equal the approved plan entry. `available_at` equals
+    plan.confirmed_at, so the composite reconstructs one book cleanly.
 
     Driving off PLANS rather than off orders is the other half of that: the
     question is "of the setups this version validated, how many filled", and a
@@ -474,7 +490,14 @@ def load_orders(con, *, setup_version: str = SETUP_VERSION,
     forming: dict[str, list[dict]] = {}
     # A SCALE_IN add is a real order in the same book under its own version;
     # dropping it would silently shrink the denominator of the fill rate.
-    versions = [setup_version, SCALE_VERSION]
+    # The default report is deliberately pinned to the legacy study. An
+    # explicit request for the live setup generation must bring its live scale
+    # generation too; otherwise every add is reported as an unclaimed order.
+    from . import scalein, setups as live_setups
+    scale_version = (scalein.SCALE_VERSION
+                     if setup_version == live_setups.SETUP_VERSION
+                     else SCALE_VERSION)
+    versions = [setup_version, scale_version]
     for ver in versions:
         for r in _rows(con, "setup", ver, as_of):
             p = json.loads(r["payload"])
@@ -490,7 +513,7 @@ def load_orders(con, *, setup_version: str = SETUP_VERSION,
     orders: dict[tuple, dict] = {}
     for r in _rows(con, "order", exec_version, as_of):
         p = json.loads(r["payload"])
-        key = (p["setup_id"], p.get("available_at"), p.get("limit_price"))
+        key = (p["setup_id"], p.get("available_at"), _plan_anchor(p))
         slot = orders.setdefault(key, {"symbol": r["symbol"], "tf": r["tf"],
                                        "events": {}})
         slot["events"][p["event"]] = {"confirmed_at": r["confirmed_at"],
@@ -540,10 +563,15 @@ def load_orders(con, *, setup_version: str = SETUP_VERSION,
         if strategy and strat != strategy:
             counts["filtered_out"] += 1
             continue
-        ex = outcomes.get((sid, plan["setup_confirmed_at"], plan.get("entry")))
-
         filled = "FILLED" in ev
         missed = "MISSED" in ev
+        fill_event = ev.get("FILLED", {})
+        # A crossed order settles from the actual market fill, not from either
+        # the plan anchor or the resting maker limit. Joining to the filled
+        # event makes that distinction explicit and still keeps the version-
+        # ambiguous legacy books separate through available_at.
+        ex = outcomes.get((sid, plan["setup_confirmed_at"],
+                           fill_event.get("fill_price"))) if filled else None
         counts["placed"] += 1
         counts["filled"] += int(filled)
         counts["missed"] += int(missed)
@@ -571,8 +599,8 @@ def load_orders(con, *, setup_version: str = SETUP_VERSION,
             "sl": plan.get("sl"),
             "tp": plan.get("tp"),
             "limit_price": placed.get("limit_price"),
-            "fill_price": ev.get("FILLED", {}).get("fill_price"),
-            "bars_to_fill": ev.get("FILLED", {}).get("bars_to_fill"),
+            "fill_price": fill_event.get("fill_price"),
+            "bars_to_fill": fill_event.get("bars_to_fill"),
             "outcome": (ex or {}).get("outcome"),
             "r_multiple": _f((ex or {}).get("r_multiple")),
             "r_gross": _f((ex or {}).get("r_gross")),
@@ -830,6 +858,15 @@ def rr_distortion(records: list[dict]) -> dict:
              if r["planned_rr"] is not None]
     geom = [abs(r["realised_rr"] - r["plan_rr_exact"]) for r in filled]
     all_at_limit = all(r.get("fill_equals_limit") for r in filled) if filled else None
+    recorded_note = (
+        "Every recorded fill equals its resting limit, so realised geometry "
+        "equals planned geometry apart from the plan's 2dp rr field."
+        if all_at_limit else
+        "Recorded fills include prices away from the resting maker limit. "
+        "The realised distribution uses each actual fill against the original "
+        "structural stop and target; this is measured execution distortion, "
+        "not a counterfactual."
+    )
 
     cf_pairs = [(r["plan_rr_exact"], r["cf"]["cf_rr_market"], r)
                 for r in have_plan
@@ -852,13 +889,7 @@ def rr_distortion(records: list[dict]) -> dict:
             "planned_rr": _summary([r["plan_rr_exact"] for r in filled]),
             "realised_rr": _summary([r["realised_rr"] for r in filled]),
             "status": "STRUCTURALLY_ZERO" if all_at_limit else "MEASURED",
-            "note": ("execsim's fill model writes fill_price = limit_price "
-                     "(BAR_TOUCH_FULL_FILL), so realised geometry EQUALS planned "
-                     "geometry by construction. Any residual is the 2dp "
-                     "quantisation of the `rr` field, not a distortion. This "
-                     "measurement cannot detect fill-geometry drift until fills "
-                     "are allowed to differ from the limit price — which is "
-                     "exactly what SPEC §1.3 proposes."),
+            "note": recorded_note,
         },
         "counterfactual_market_next_open": {
             "n": len(cf_pairs),
@@ -1161,8 +1192,11 @@ def report(con=None, *, db_path: Path | None = None,
             "never presented as one.",
             "Counterfactual R is GROSS. It is compared against the recorded "
             "book's r_gross, never against the cost-netted r_multiple.",
-            "Recorded planned-vs-realised R:R is structurally zero under v0.6 — "
-            "execsim fills at the limit price by construction.",
+            ("Recorded R:R uses the actual fill against the approved structural "
+             "stop and target; delayed crosses can therefore differ from the plan."
+             if setup_version != SETUP_VERSION else
+             "Recorded planned-vs-realised R:R is structurally zero under v0.6 — "
+             "execsim fills at the limit price by construction."),
             "Funding is not modelled anywhere in this engine; USDT-perp symbols "
             "settle it 3x/day, so every perp number is an optimistic ceiling.",
             f"No lookahead: every walk starts at the first bar opening at or "

@@ -2477,6 +2477,26 @@ details.panel > summary:focus-visible{outline:2px solid var(--accent);outline-of
 .set-row.changed{background:rgba(var(--accent-rgb),.05)}
 .set-row.changed .t-mono{color:var(--accent)}
 
+/* Diagnostics trade autopsy: conclusion, evidence, then next moves. It stays
+   stacked on phones rather than turning into a sideways forensic table. */
+.autopsy-head{margin:0 0 var(--md);max-width:78ch;color:var(--fg-2);
+  font:600 var(--fs-3)/1.5 var(--f-body)}
+.autopsy-metrics{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));
+  gap:1px;background:var(--border-soft);border:1px solid var(--border-soft);
+  border-radius:var(--r-md);overflow:hidden}
+.autopsy-metrics>div{display:flex;flex-direction:column;gap:5px;padding:12px;
+  background:var(--card)}
+.autopsy-metrics span{font:var(--fs-1)/1.2 var(--f-mono);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--fg-4)}
+.autopsy-metrics b{font:600 var(--fs-2)/1.2 var(--f-mono);color:var(--fg-2)}
+.autopsy-metrics b.good{color:var(--green)}.autopsy-metrics b.bad{color:var(--red-2)}
+.autopsy-watch{display:flex;align-items:center;gap:var(--sm);flex-wrap:wrap;
+  margin-top:var(--md)}
+.autopsy-actions{margin:var(--md) 0 0;padding-left:22px;color:var(--fg-2)}
+.autopsy-actions li{padding:4px 0;line-height:1.45}.autopsy-actions b{
+  font-family:var(--f-mono);font-size:var(--fs-1);color:var(--accent)}
+@media(max-width:640px){.autopsy-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
 /* halted: the whole shell says so, not just the button */
 body.is-halted .topbar{box-shadow:inset 0 -2px 0 var(--red)}
 body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5em;

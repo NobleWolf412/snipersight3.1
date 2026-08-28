@@ -58,13 +58,17 @@ class TempStore(unittest.TestCase):
                      "rr": rr, "rank": rank, "regime": regime, "state": state})
 
     def order(self, sid, *, available_at, event, entry="100", manifest=None,
-              symbol="BTC-USD", tf="1D", direction="LONG", bars_to_fill=0):
+              symbol="BTC-USD", tf="1D", direction="LONG", bars_to_fill=0,
+              limit_price=None, cross_price=None, fill_price=None):
         base = {"setup_id": sid, "side": direction, "order_type": "LIMIT",
-                "limit_price": entry, "available_at": available_at,
+                "limit_price": limit_price or entry,
+                "cross_price": cross_price,
+                "available_at": available_at,
                 "max_entry_bars": 4, "execution_manifest_hash": manifest}
         extra = {}
         if event == "FILLED":
-            extra = {"fill_price": entry, "bars_to_fill": bars_to_fill}
+            extra = {"fill_price": fill_price or entry,
+                     "bars_to_fill": bars_to_fill}
         store.insert_fact(
             self.con, symbol=symbol, tf=tf, kind="order",
             market_time=available_at - DAY,
@@ -450,6 +454,31 @@ class TestVersionSafeJoin(TempStore):
             recs, _, _ = entrystats.load_orders(self.con, setup_version=ver)
             for r in recs:
                 self.assertIn(r["state"], ("FILLED", "MISSED", "UNRESOLVED"))
+
+    def test_maker_then_market_joins_plan_limit_and_actual_fill_once(self):
+        """The current order carries three prices with three different jobs."""
+        sid = "BTC-USD|1D|PULLBACK|cross|setup-v0.19-draft"
+        available = 2 * DAY
+        self.plan(sid, confirmed_at=available, entry="100", sl="95", tp="115",
+                  version="setup-v0.19-draft")
+        for event in ("PLACED", "FILLED"):
+            self.order(sid, available_at=available, event=event,
+                       limit_price="99.5", cross_price="100",
+                       fill_price="102", entry="100")
+        self.outcome(sid, available_at=available, outcome="SL", entry="102")
+        self.con.commit()
+
+        rows, counts, warnings = entrystats.load_orders(
+            self.con, setup_version="setup-v0.19-draft",
+            with_counterfactual=False)
+
+        self.assertEqual((counts["plans"], counts["placed"], counts["filled"]),
+                         (1, 1, 1))
+        self.assertEqual(counts["unclaimed_orders"], 0)
+        self.assertEqual(rows[0]["limit_price"], "99.5")
+        self.assertEqual(rows[0]["fill_price"], "102")
+        self.assertEqual(rows[0]["outcome"], "SL")
+        self.assertFalse([w for w in warnings if "no matching PLACED" in w])
 
 
 # ----------------------------------------- execution window comes from facts

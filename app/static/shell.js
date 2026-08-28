@@ -4843,6 +4843,24 @@ weighed in. Name the facts you used.`;
       L.push(...rows(Object.entries(st).sort((a, b) => b[1] - a[1])
         .map(([k, n]) => [k.replace(/_/g, ' ').toLowerCase(), n])));
     }
+    const a = t.loss_autopsy;
+    if(a && a.closed){
+      const e = a.evidence || {};
+      L.push('', 'TRADE AUTOPSY - CURRENT FUNDED WINDOW');
+      L.push(`  ${a.headline}`);
+      L.push(...rows([
+        ['closed / wins / losses', `${a.closed} / ${e.wins} / ${e.losses}`],
+        ['net / gross / costs', `${e.net_r}R / ${e.gross_r}R / ${e.costs_r}R`],
+        ['current losing streak', e.current_losing_streak],
+        ['loser avg MFE / MAE', `${e.loser_avg_mfe_r}R / ${e.loser_avg_mae_r}R`],
+        ['loser median hold', `${e.loser_median_bars} bars`],
+      ]));
+      if((a.weakest_slices || []).length){
+        L.push('  watchlist  ' + a.weakest_slices.map(s =>
+          `${s.value} ${s.dimension}: n=${s.n}, ${s.expectancy_r}R/trade`).join(' · '));
+      }
+      L.push(...(a.actions || []).map(x => `  NEXT  ${x.label}`));
+    }
     /* GROUPED AND COUNTED, the way the panel on screen shows them. Listed one
        per line this was twelve identical "KNOWN_VENUE_GAPS" and then "…and 87
        more" — 12 lines carrying one fact, and the one number that mattered
@@ -4876,6 +4894,7 @@ weighed in. Name the facts you used.`;
     const t = await api('/api/setup-telemetry?limit=500');
     lastDiagTelemetry = t;
     renderDiagState();
+    renderLossAutopsy(t.loss_autopsy);
     /* THE FETCH STAYS; THE 500-ROW TABLE DOES NOT.
 
        This panel's own chip title called it "developer detail" and it was
@@ -4907,6 +4926,38 @@ weighed in. Name the facts you used.`;
           + 'Copy report carries the detail.';
       }
     }
+  }
+
+  function renderLossAutopsy(a){
+    const panel = $('lossAutopsyPanel'), root = $('lossAutopsyRoot');
+    if(!panel || !root || !a) return;
+    panel.hidden = false;
+    const chip = $('lossAutopsyChip');
+    chip.textContent = a.status === 'COLLECTING' ? 'COLLECTING' : `${a.closed} FUNDED CLOSES`;
+    chip.className = 'chip ' + (a.diagnosis === 'SETUP_SELECTION' ? 'chip-amber' : '');
+    if(!a.closed){
+      root.innerHTML = `<div class="empty">${esc(a.headline)}</div>`;
+      return;
+    }
+    const e = a.evidence || {};
+    const signedR = v => `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(2)}R`;
+    const slices = (a.weakest_slices || []).map(s =>
+      `<span class="chip chip-amber">${esc(s.value)} ${esc(s.dimension)} · n=${s.n} · ${signedR(s.expectancy_r)}/trade</span>`
+    ).join('');
+    const actions = (a.actions || []).map(x =>
+      `<li><b>${esc(x.code.replaceAll('_', ' '))}</b> · ${esc(x.label)}</li>`
+    ).join('');
+    root.innerHTML = `<p class="autopsy-head">${esc(a.headline)}</p>
+      <div class="autopsy-metrics">
+        <div><span>record</span><b>${e.wins}W / ${e.losses}L</b></div>
+        <div><span>net after costs</span><b class="${Number(e.net_r) >= 0 ? 'good' : 'bad'}">${signedR(e.net_r)}</b></div>
+        <div><span>losing streak</span><b>${e.current_losing_streak}</b></div>
+        <div><span>loser MFE / MAE</span><b>${e.loser_avg_mfe_r}R / ${e.loser_avg_mae_r}R</b></div>
+        <div><span>median loser</span><b>${e.loser_median_bars} bars</b></div>
+      </div>
+      ${slices ? `<div class="autopsy-watch"><span class="t-label">WATCHLIST, NOT BLOCKS</span>${slices}</div>` : ''}
+      <ol class="autopsy-actions">${actions}</ol>
+      <p class="t-sub">${esc(a.cohort_caveat || '')}</p>`;
   }
 
   /* ---------- actions ---------- */

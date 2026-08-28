@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import server
-from engine import execsim, risk, setups, store
+from engine import execsim, risk, setups, store, telemetry
 
 
 class TestSetupTelemetryAPI(unittest.TestCase):
@@ -90,6 +90,39 @@ class TestSetupTelemetryAPI(unittest.TestCase):
         self.assertEqual(result["failure_points"], {"STOP_LOSS": 1})
         self.assertEqual(result["records"][0]["why"],
                          "bull regime plus demand zone")
+        self.assertEqual(result["loss_autopsy"]["diagnosis"], "SETUP_SELECTION")
+        self.assertEqual(result["loss_autopsy"]["evidence"]["loser_avg_mfe_r"],
+                         0.3)
+
+    def test_loss_autopsy_uses_only_approved_trades_and_names_weak_slices(self):
+        def row(sid, result, *, tf="1H", direction="SHORT", role="MAKER",
+                approved=True, closed_at=1):
+            return {
+                "setup_id": sid, "tf": tf, "direction": direction,
+                "strategy": "REVERSAL", "entry_role": role,
+                "risk_decision": "APPROVED" if approved else "REJECTED",
+                "outcome": "TP" if result > 0 else "SL",
+                "failure_code": "WINNER" if result > 0 else "STOP_LOSS",
+                "net_r": str(result), "gross_r": str(result + .1),
+                "costs_r": ".1", "mfe_r": "2.0" if result > 0 else ".2",
+                "mae_r": ".2" if result > 0 else "1.2",
+                "bars_held": 9 if result > 0 else 2,
+                "closed_at": closed_at,
+            }
+
+        records = [row("a", -1.1, closed_at=4), row("b", -1.0, closed_at=3),
+                   row("c", -1.2, closed_at=2), row("d", 2.5, tf="15m",
+                                                       direction="LONG",
+                                                       closed_at=1),
+                   row("rejected", 10, approved=False, closed_at=5)]
+        result = telemetry.loss_autopsy(records)
+
+        self.assertEqual(result["closed"], 4)
+        self.assertEqual(result["diagnosis"], "SETUP_SELECTION")
+        self.assertEqual(result["evidence"]["current_losing_streak"], 3)
+        self.assertEqual(result["evidence"]["net_r"], -0.8)
+        self.assertIn("SHORT", {s["value"] for s in result["weakest_slices"]})
+        self.assertIn("not automatic blocks", result["actions"][-1]["label"])
 
 
 if __name__ == "__main__":

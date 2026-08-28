@@ -39,7 +39,8 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
         """
         for anchor in ('id="dVerdict"', 'id="dFunnel"', 'id="dIssues"',
                        'id="dNotes"',
-                       'id="telChip"'):
+                       'id="telChip"', 'id="lossAutopsyPanel"',
+                       'id="lossAutopsyRoot"'):
             self.assertIn(anchor, self.html, anchor)
         self.assertNotIn('id="dTelemetry"', self.html)
 
@@ -56,6 +57,14 @@ class DiagnosticsSurfaceTests(unittest.TestCase):
 
     def test_blocker_count_is_surfaced_in_the_nav(self):
         self.assertIn('id="nDiag"', self.html)
+
+    def test_trade_autopsy_is_server_owned_and_read_only(self):
+        self.assertIn("renderLossAutopsy(t.loss_autopsy)", self.js)
+        start = self.js.index("function renderLossAutopsy")
+        end = self.js.index("/* ---------- actions ----------", start)
+        renderer = self.js[start:end]
+        self.assertNotIn("fetch(", renderer)
+        self.assertIn("WATCHLIST, NOT BLOCKS", renderer)
 
 
 if __name__ == "__main__":

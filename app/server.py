@@ -555,6 +555,7 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
             "engine_faults": engine_faults,
             "unlabelled_rejections": unlabelled,
             "cohorts": cohorts,
+            "loss_autopsy": telemetry.loss_autopsy(records),
             "records": records[:limit],
         }
     finally:

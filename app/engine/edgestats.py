@@ -58,7 +58,12 @@ from decimal import Decimal
 from . import store, venues
 from .execsim import EXEC_VERSION
 
-EDGESTATS_VERSION = "edgestats-v0.3-draft"
+EDGESTATS_VERSION = "edgestats-v0.4-draft"
+# v0.4: FORWARD/HISTORICAL ownership is decided when the plan became
+# available, not when its exit was learned. A position opened before a baseline
+# and closed after it is historical; the old exit-time split moved twelve such
+# trades into the live window. Report membership and every aggregate over it
+# changed, so this read-only engine's version moves.
 # v0.3: the sample floor is applied to the FILTERED book. It was applied to
 # `counts["filled"]`, which is measured before `venue_state` picks a half, so a
 # request whose traded half held 0-9 trades passed the gate. At 0 that was a
@@ -156,6 +161,26 @@ def _risk_index(con, symbol: str | None, tf: str | None) -> dict:
     return idx
 
 
+def _setup_time_index(con, symbol: str | None, tf: str | None) -> dict:
+    """Plan availability by the same identity used for the R denominator."""
+    q = ("SELECT symbol,tf,market_time,confirmed_at,payload FROM facts "
+         "WHERE kind='setup'")
+    args: list = []
+    if symbol:
+        q += " AND symbol=?"
+        args.append(symbol)
+    if tf:
+        q += " AND tf=?"
+        args.append(tf)
+    idx: dict = {}
+    for sym, timeframe, market_time, confirmed_at, payload in con.execute(q, args):
+        p = json.loads(payload)
+        if p.get("state") == "VALIDATED" and p.get("setup_id"):
+            idx.setdefault((sym, timeframe, p["setup_id"], market_time),
+                           set()).add(confirmed_at)
+    return idx
+
+
 def _venue_or_none(symbol: str):
     try:
         return venues.venue_for(symbol)
@@ -206,10 +231,11 @@ def load_trades(con, *, algo_version: str, symbol: str | None = None,
 
     rows = con.execute(q, args).fetchall()
     idx = _risk_index(con, symbol, tf)
+    setup_times = _setup_time_index(con, symbol, tf)
     warnings: list[str] = []
     counts = {"exec_facts": 0, "unfilled_missed": 0, "filtered_out_strategy": 0,
               "excluded_no_stop_distance": 0, "excluded_no_fee_record": 0,
-              "filled": 0}
+              "excluded_no_plan_time": 0, "filled": 0}
     trades: list[dict] = []
     ambiguous, unknown_venue = 0, set()
 
@@ -230,6 +256,16 @@ def load_trades(con, *, algo_version: str, symbol: str | None = None,
                 ambiguous += 1
             continue
         risk = next(iter(cands))
+        available_at = p.get("available_at")
+        if available_at is None:
+            times = setup_times.get((sym, t, p["setup_id"], mt), set())
+            # Historical generations predate the field on exec facts. Their
+            # latest VALIDATED instance is the plan execsim used. Never use the
+            # exit timestamp to decide whether the account could take it.
+            if not times:
+                counts["excluded_no_plan_time"] += 1
+                continue
+            available_at = max(times)
 
         fees = p.get("fees_price_units")
         eff_exit = p.get("effective_exit_price")
@@ -272,6 +308,7 @@ def load_trades(con, *, algo_version: str, symbol: str | None = None,
             "id": fid, "symbol": sym, "tf": t, "strategy": p.get("strategy"),
             "direction": p.get("direction"), "outcome": p.get("outcome"),
             "confirmed_at": confirmed_at,
+            "available_at": int(available_at),
             "risk": risk, "entry": entry, "effective_exit_price": eff_exit,
             "fees_price_units": fees,
             "exit_fee_role": p.get("exit_fee_role", "TAKER"),
@@ -310,6 +347,11 @@ def load_trades(con, *, algo_version: str, symbol: str | None = None,
         warnings.append(
             f"{counts['excluded_no_fee_record']} filled trade(s) excluded: exec "
             f"fact predates cost modelling (no fees_price_units).")
+    if counts["excluded_no_plan_time"]:
+        warnings.append(
+            f"{counts['excluded_no_plan_time']} filled trade(s) excluded: no "
+            f"causal VALIDATED plan time was available. Exit time is never "
+            f"substituted for forward-window ownership.")
     if unknown_venue:
         warnings.append(
             "venue undeterminable for " + ", ".join(sorted(unknown_venue)) +
@@ -569,13 +611,13 @@ def report(con, *, algo_version: str | None = None, symbol: str | None = None,
     # no risk decision was ever made about it. It is evidence about the SIGNAL;
     # only the forward half is evidence about the ACCOUNT.
     baseline_at = store.get_active_baseline(con)["started_at"]
-    counts["forward"] = sum(1 for t in trades if t["confirmed_at"] >= baseline_at)
+    counts["forward"] = sum(1 for t in trades if t["available_at"] >= baseline_at)
     counts["historical"] = len(trades) - counts["forward"]
     counts["baseline_started_at"] = baseline_at
     if window == "FORWARD":
-        trades = [t for t in trades if t["confirmed_at"] >= baseline_at]
+        trades = [t for t in trades if t["available_at"] >= baseline_at]
     elif window == "HISTORICAL":
-        trades = [t for t in trades if t["confirmed_at"] < baseline_at]
+        trades = [t for t in trades if t["available_at"] < baseline_at]
     elif counts["historical"] and counts["forward"]:
         warnings.append(
             f"{counts['historical']} of {len(trades)} trades predate the active "

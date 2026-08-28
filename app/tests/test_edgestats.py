@@ -31,7 +31,7 @@ class TempStore(unittest.TestCase):
 
 def add_trade(con, sid, r_net, *, fees_r="0.10", symbol="BTC-USD", tf="1D",
               market_time=None, confirmed_at=None, strategy="PULLBACK",
-              outcome=None):
+              outcome=None, available_at=None, record_available_at=True):
     """Insert the setup+exec fact pair for one filled paper trade."""
     r_net = Decimal(str(r_net))
     fees_r = Decimal(str(fees_r))
@@ -39,27 +39,29 @@ def add_trade(con, sid, r_net, *, fees_r="0.10", symbol="BTC-USD", tf="1D",
     exit_price = ENTRY + r_gross * RISK
     market_time = market_time if market_time is not None else abs(hash(sid)) % 10**6
     confirmed_at = confirmed_at if confirmed_at is not None else market_time + 86400
+    available_at = available_at if available_at is not None else confirmed_at - 1
     outcome = outcome or ("TP" if r_gross > 0 else "SL")
     store.insert_fact(
         con, symbol=symbol, tf=tf, kind="setup",
-        market_time=market_time, confirmed_at=confirmed_at - 1,
+        market_time=market_time, confirmed_at=available_at,
         algo_version=setups.SETUP_VERSION,
         payload={"setup_id": sid, "strategy": strategy, "direction": "LONG",
                  "entry": str(ENTRY), "sl": str(STOP), "tp": str(exit_price),
                  "rr": "2", "rank": 50, "state": "VALIDATED"})
-    store.insert_fact(
-        con, symbol=symbol, tf=tf, kind="exec",
-        market_time=market_time, confirmed_at=confirmed_at,
-        algo_version=execsim.EXEC_VERSION,
-        payload={"setup_id": sid, "strategy": strategy, "direction": "LONG",
+    execution = {"setup_id": sid, "strategy": strategy, "direction": "LONG",
                  "outcome": outcome, "entry": str(ENTRY),
                  "exit_price": str(exit_price),
                  "effective_exit_price": str(exit_price),
                  "fees_price_units": str(fees_r * RISK),
                  "r_multiple": str(r_net), "r_gross": str(r_gross),
-                 "costs_r": str(fees_r),
-                 "entry_fee_role": "MAKER",
-                 "exit_fee_role": "MAKER" if outcome == "TP" else "TAKER"})
+                 "costs_r": str(fees_r), "entry_fee_role": "MAKER",
+                 "exit_fee_role": "MAKER" if outcome == "TP" else "TAKER"}
+    if record_available_at:
+        execution["available_at"] = available_at
+    store.insert_fact(
+        con, symbol=symbol, tf=tf, kind="exec",
+        market_time=market_time, confirmed_at=confirmed_at,
+        algo_version=execsim.EXEC_VERSION, payload=execution)
 
 
 def add_missed(con, sid, *, symbol="BTC-USD", tf="1D", market_time=0):
@@ -515,3 +517,34 @@ class TestForwardVsHistorical(TempStore):
         self.assertEqual(self._book(window="FORWARD")["filters"]["window"],
                          "FORWARD")
         self.assertIsNone(self._book()["filters"]["window"])
+
+    def test_a_pre_baseline_entry_closed_after_baseline_stays_historical(self):
+        add_trade(self.con, "spanning", "9.0", market_time=3_000_000,
+                  available_at=4_900_000, confirmed_at=5_100_000)
+        fwd = self._book(window="FORWARD")
+        hist = self._book(window="HISTORICAL")
+        self.assertEqual(fwd["book"]["n"], 12)
+        self.assertEqual(hist["book"]["n"], 13)
+        self.assertEqual(fwd["counts"]["forward"], 12)
+        self.assertEqual(fwd["counts"]["historical"], 13)
+
+    def test_legacy_fact_uses_latest_repeated_plan_time_not_exit_time(self):
+        sid = "legacy-repeat"
+        add_trade(self.con, sid, "9.0", market_time=3_000_000,
+                  available_at=4_800_000, confirmed_at=5_200_000,
+                  record_available_at=False)
+        # The setup engine re-emitted the same VALIDATED instance with fresher
+        # evidence before the baseline. execsim's latest-wins map owns it.
+        store.insert_fact(
+            self.con, symbol="BTC-USD", tf="1D", kind="setup",
+            market_time=3_000_000, confirmed_at=4_900_000,
+            algo_version=setups.SETUP_VERSION,
+            payload={"setup_id": sid, "strategy": "PULLBACK",
+                     "direction": "LONG", "entry": str(ENTRY),
+                     "sl": str(STOP), "tp": "191", "rr": "9.1",
+                     "rank": 50, "state": "VALIDATED"})
+
+        fwd = self._book(window="FORWARD")
+        hist = self._book(window="HISTORICAL")
+        self.assertEqual(fwd["book"]["n"], 12)
+        self.assertEqual(hist["book"]["n"], 13)
