@@ -291,7 +291,10 @@
     });
     document.getElementById('frDiag').addEventListener('click', () => {
       dismiss();
-      if(window.SSWizard) SSWizard.open();
+      try{ sessionStorage.setItem('ss:system-view', 'automation'); }catch(e){ /* optional */ }
+      dispatchEvent(new CustomEvent('ss:workspace-request',
+        {detail: {name: 'system', view: 'automation'}}));
+      location.hash = 'system';
     });
   }
 

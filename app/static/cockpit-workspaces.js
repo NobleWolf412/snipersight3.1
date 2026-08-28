@@ -272,13 +272,21 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
 
   wireJournalSearch();
   wirePerformanceBreakdown();
-  loadPerformanceWorkspace();
-  loadSystemWorkspace();
-  setInterval(loadSystemWorkspace, 30000);
+  const routeLoad = () => {
+    const route = location.hash.slice(1) || 'overview';
+    if(route.startsWith('performance')) loadPerformanceWorkspace();
+    if(route === 'system') loadSystemWorkspace();
+  };
+  /* These two workspaces are expensive read models. Loading both behind the
+     Overview made the one request that answers "what should I do?" wait behind
+     performance dimensions, edge statistics, credentials, and playbooks. */
+  routeLoad();
+  addEventListener('hashchange', routeLoad);
+  setInterval(() => {
+    const route = location.hash.slice(1);
+    if(route === 'system') loadSystemWorkspace();
+  }, 30000);
   addEventListener('ss:market-change', event => {
-    if(event.detail && event.detail.market === 'crypto'){
-      loadPerformanceWorkspace();
-      loadSystemWorkspace();
-    }
+    if(event.detail && event.detail.market === 'crypto') routeLoad();
   });
 })();

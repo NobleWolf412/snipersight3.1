@@ -9,6 +9,7 @@ import os
 import re
 import threading
 import time
+import urllib.request
 from collections import Counter
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -2697,6 +2698,162 @@ def opportunity_detail(setup_id: str):
         con.close()
 
 
+CITADEL_STATE_URL = os.environ.get(
+    "SNIPERSIGHT_CITADEL_STATE_URL", "http://127.0.0.1:7788/api/state")
+CITADEL_CONTROL_URL = os.environ.get(
+    "SNIPERSIGHT_CITADEL_CONTROL_URL",
+    "https://noblewolf.tailb37fc7.ts.net:8443/")
+
+
+def _citadel_status() -> dict:
+    """Small, read-only recovery status; Citadel credentials never reach UI."""
+    try:
+        with urllib.request.urlopen(CITADEL_STATE_URL, timeout=0.35) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        server = next((row for row in payload.get("servers", [])
+                       if row.get("id") == "snipersight-app"), None)
+        state = str((server or {}).get("state") or "UNCONFIGURED").upper()
+        health = (server or {}).get("health") or {}
+        healthy = bool(health.get("ok"))
+        if not server:
+            summary = "Citadel is online, but SniperSight is not configured there."
+        elif healthy:
+            summary = "Citadel is online and watching this backend."
+        elif state in {"STOPPED", "CRASHED"}:
+            summary = "Citadel is online and can start this backend from your phone."
+        else:
+            summary = "Citadel is online; this backend needs attention."
+        return {"reachable": True, "server_state": state,
+                "server_healthy": healthy, "control_url": CITADEL_CONTROL_URL,
+                "summary": summary}
+    except (OSError, ValueError, TypeError, KeyError):
+        return {"reachable": False, "server_state": "OFFLINE",
+                "server_healthy": False, "control_url": CITADEL_CONTROL_URL,
+                "summary": "Citadel is offline; phone recovery is unavailable."}
+
+
+def _next_action(*, rows: list[dict], mode: dict, scanner: dict,
+                 account: dict, data_status: str, citadel: dict) -> dict:
+    """Server-owned operator directive; the browser only routes and formats."""
+    def opportunity_action(row: dict, title: str, summary: str, label: str,
+                           tone: str = "ACTIVE") -> dict:
+        setup = row.get("setup") or {}
+        direction = str(setup.get("direction") or "").lower()
+        symbol = str(setup.get("symbol") or "this trade")
+        return {"state": tone, "title": title.format(symbol=symbol,
+                                                       direction=direction),
+                "summary": summary, "bot_handling": "Protection and lifecycle checks continue automatically.",
+                "primary": {"label": label, "route": "trade",
+                            "setup_id": setup.get("setup_id"),
+                            "symbol": setup.get("symbol"),
+                            "timeframe": setup.get("timeframe")},
+                "secondary": {"label": "View all setups", "route": "opportunities"}}
+
+    by_state = {name: next((row for row in rows if row.get("state") == name), None)
+                for name in ("POSITION_OPEN", "ORDER_WORKING", "READY", "FORMING")}
+    if mode.get("halted"):
+        return {"state": "PAUSED", "title": "Review the halt before doing anything else",
+                "summary": "New entries are paused. Existing protection remains active.",
+                "bot_handling": "The bot keeps managing existing exposure while new entries stay blocked.",
+                "primary": {"label": "Review system checks", "route": "system-diagnostics"},
+                "secondary": {"label": "Open System", "route": "system",
+                              "view": "automation"}}
+    if scanner.get("state") in {"OFFLINE", "STALE"}:
+        primary = ({"label": "Open Citadel", "external_url": citadel["control_url"]}
+                   if citadel.get("reachable") else
+                   {"label": "Run diagnostics", "route": "system-diagnostics"})
+        return {"state": "RECOVER", "title": "Restore the scanner",
+                "summary": "Nothing new is being watched until the backend is healthy again.",
+                "bot_handling": "Existing protective orders remain separate from the scanner process.",
+                "primary": primary,
+                "secondary": {"label": "Run diagnostics", "route": "system-diagnostics"}}
+    if by_state["POSITION_OPEN"]:
+        return opportunity_action(
+            by_state["POSITION_OPEN"], "Manage {symbol} {direction}",
+            "A position is open. Check custody, protection, and its exit conditions.",
+            "Manage position")
+    if by_state["ORDER_WORKING"]:
+        return opportunity_action(
+            by_state["ORDER_WORKING"], "Watch the {symbol} {direction} order",
+            "The entry is working. Check its status; do not place a duplicate.",
+            "View working order")
+    if data_status not in {"PASS", "OK"}:
+        return {"state": "CHECK", "title": "Clear the data warning",
+                "summary": "The market record is not clean enough to trust a new setup.",
+                "bot_handling": "Scanning continues, but no degraded result is treated as actionable.",
+                "primary": {"label": "Run diagnostics", "route": "system-diagnostics"},
+                "secondary": {"label": "View System", "route": "system"}}
+    if by_state["READY"]:
+        return opportunity_action(
+            by_state["READY"], "Review {symbol} {direction}",
+            "This is the highest-ranked setup that currently meets entry rules.",
+            "Review setup", "READY")
+    if by_state["FORMING"]:
+        setup = by_state["FORMING"].get("setup") or {}
+        return {"state": "WATCHING", "title": f"Wait on {setup.get('symbol') or 'the leading setup'}",
+                "summary": "The best candidate is still forming; there is no confirmed entry yet.",
+                "bot_handling": "The scanner will promote or refuse it on closed-candle evidence.",
+                "primary": {"label": "Review what is forming", "route": "opportunities",
+                            "setup_id": setup.get("setup_id")},
+                "secondary": {"label": "Check now", "command": "scan"}}
+
+    secondary = ({"label": "Review Shadow mode", "route": "system", "view": "automation"}
+                 if mode.get("mode") == "PAPER" and
+                 not account.get("open_positions") and not account.get("working_orders")
+                 else {"label": "View System", "route": "system"})
+    return {"state": "CLEAR", "title": "You are clear — let the scanner work",
+            "summary": "No setup currently meets entry rules. No trade is the correct action.",
+            "bot_handling": "Closed candles are still being checked across every eligible market.",
+            "primary": {"label": "View market watch", "route": "opportunities"},
+            "secondary": secondary}
+
+
+def _scanner_status() -> dict:
+    try:
+        hb = json.loads(HEARTBEAT.read_text(encoding="utf-8"))
+        age = max(0, int(time.time() - float(hb["ts"])))
+        return {"state": "SCANNING" if age < SCANNER_STALE_S else "STALE",
+                "age_s": age, "stage": hb.get("phase")}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"state": "OFFLINE", "age_s": None, "stage": None}
+
+
+@app.get("/api/command")
+def command_read_model():
+    """Fast first paint: what needs the operator, before the full book loads."""
+    from engine import settings as settings_engine
+    con = store.connect()
+    try:
+        rows = opportunities.list_candidates(con, include_history=False)
+        mode_name, revision, _ = automation.current(con)
+        try:
+            halted = bool(settings_engine.all_settings(con)["halted"])
+        except Exception:
+            halted = True
+        mode = {"mode": mode_name.value, "revision": revision,
+                "halted": halted}
+        quality_row = con.execute(
+            "SELECT status,observed_at FROM quality_runs "
+            "ORDER BY observed_at DESC LIMIT 1").fetchone()
+        quality_status = quality_row[0] if quality_row else "UNKNOWN"
+        scanner = _scanner_status()
+        summary = opportunities.summary(rows)
+        counts = summary.get("counts") or {}
+        account = {"open_positions": int(counts.get("POSITION_OPEN") or 0),
+                   "working_orders": int(counts.get("ORDER_WORKING") or 0)}
+        citadel = _citadel_status()
+        return {"generated_at": int(time.time()), "automation": mode,
+                "account": account, "scanner": scanner,
+                "data": {"status": quality_status,
+                         "observed_at": quality_row[1] if quality_row else None},
+                "opportunities": summary, "citadel": citadel,
+                "next_action": _next_action(
+                    rows=rows, mode=mode, scanner=scanner, account=account,
+                    data_status=quality_status, citadel=citadel)}
+    finally:
+        con.close()
+
+
 @app.get("/api/operations")
 def operations_read_model():
     """Compact command-layer state shared by every cockpit destination."""
@@ -2720,14 +2877,7 @@ def operations_read_model():
         eligible_markets = sum(1 for member in members
                                if member.get("state") == "ADMITTED")
 
-        try:
-            hb = json.loads(HEARTBEAT.read_text(encoding="utf-8"))
-            scanner_age = max(0, int(time.time() - float(hb["ts"])))
-            scanner = {"state": "SCANNING" if scanner_age < SCANNER_STALE_S
-                       else "STALE", "age_s": scanner_age,
-                       "stage": hb.get("phase")}
-        except (OSError, ValueError, KeyError, TypeError):
-            scanner = {"state": "OFFLINE", "age_s": None, "stage": None}
+        scanner = _scanner_status()
 
         equity = Decimal(str(pf.get("equity") or risk.START_EQUITY))
         open_risk = Decimal(str(pf.get("open_risk_usd") or 0))
@@ -2745,10 +2895,7 @@ def operations_read_model():
         day_open_equity = equity - today_pnl
         daily_budget = day_open_equity * _gates["daily_loss_limit_pct"]
         daily_remaining = max(Decimal(0), daily_budget + min(Decimal(0), today_pnl))
-        return {
-            "generated_at": int(time.time()), "venue": "PHEMEX_USDT_PERPETUAL",
-            "automation": mode,
-            "account": {
+        account = {
                 "equity": str(equity.quantize(Decimal("0.01"))),
                 "risk_per_trade_pct": str(_gates["risk_pct"] * 100),
                 "next_risk_usd": str((equity * _gates["risk_pct"]).quantize(Decimal("0.01"))),
@@ -2759,13 +2906,22 @@ def operations_read_model():
                 "daily_loss_remaining_usd": str(daily_remaining.quantize(Decimal("0.01"))),
                 "open_positions": len(pf.get("active_positions") or []),
                 "working_orders": len(pf.get("pending_orders") or []),
-            },
+            }
+        citadel = _citadel_status()
+        return {
+            "generated_at": int(time.time()), "venue": "PHEMEX_USDT_PERPETUAL",
+            "automation": mode,
+            "account": account,
             "scanner": {**scanner, "eligible_markets": eligible_markets},
             "data": {"status": quality_status,
                      "observed_at": quality_row[1] if quality_row else None},
             "opportunities": opp_summary,
             "promotion": gate,
             "operational_evidence": operational,
+            "citadel": citadel,
+            "next_action": _next_action(
+                rows=rows, mode=mode, scanner=scanner, account=account,
+                data_status=quality_status, citadel=citadel),
         }
     finally:
         con.close()

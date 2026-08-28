@@ -82,6 +82,7 @@
   --r-sm:4px; --r-md:6px; --r-lg:8px; --r-xl:8px; --r-pill:999px;
   /* shell chrome heights — read by the .shell grid AND by #s-chart.on's calc */
   --topbar-h:56px; --statusbar-h:26px; --rail-w:172px;
+  --mobile-nav-h:calc(64px + env(safe-area-inset-bottom, 0px));
   /* ── THE BREAKPOINT SCALE ──
      Four steps, not the twelve ad-hoc values this file had grown
      (560/620/640/720/760/780/900/950/960/1000/1100/1180). Twelve
@@ -724,7 +725,7 @@ details.panel.floating > summary{padding-left:var(--lg)}
 /* --topbar-h/--statusbar-h are tokens because #s-chart.on subtracts BOTH of
    them in a calc() that has to agree with this declaration; as literals in two
    places they had already drifted once. */
-.shell{display:grid;height:100vh;
+.shell{display:grid;height:100vh;height:100dvh;
   grid-template-rows:var(--topbar-h) 1fr var(--statusbar-h);
   grid-template-columns:var(--rail-w) 1fr}
 
@@ -1018,6 +1019,20 @@ details.panel.floating > summary{padding-left:var(--lg)}
   text-transform:uppercase;color:var(--fg-4)}
 .command-heading .t-section{font:650 var(--fs-5)/1.15 var(--f-display);letter-spacing:.06em}
 .command-hero>.panel-body{padding:0 var(--lg) var(--lg)}
+.next-action-state{margin-left:auto}
+.next-action-state.state-active,.next-action-state.state-ready{color:var(--amber-2);border-color:rgba(251,191,36,.42)}
+.next-action-state.state-clear{color:var(--green);border-color:rgba(44,229,107,.42)}
+.next-action-state.state-recover,.next-action-state.state-paused,
+.next-action-state.state-check,.next-action-state.state-offline{color:var(--red-2);border-color:rgba(248,113,113,.46)}
+.next-action-summary{max-width:62ch;margin:0 0 var(--md);font:500 var(--fs-4)/1.5 var(--f-body);color:var(--fg)}
+.next-action-bot{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--md);align-items:baseline;
+  margin-bottom:var(--md);padding:9px var(--md);border-left:2px solid var(--accent);background:rgba(0,0,0,.22)}
+.next-action-bot span{font:600 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--fg-4)}
+.next-action-bot strong{font:500 var(--fs-2)/1.45 var(--f-body);color:var(--fg-2)}
+.next-action-controls{display:flex;gap:var(--sm);flex-wrap:wrap;margin-bottom:var(--md)}
+.next-action-controls .btn{min-height:44px}
+.command-tools{display:flex;align-items:center;justify-content:flex-end;gap:var(--sm);margin:0 0 var(--md)}
+.command-tools .command-kicker{margin-right:auto}
 .command-hero .grid{gap:1px;background:var(--border-soft);border:1px solid var(--border-soft);
   border-radius:var(--r-lg);overflow:hidden}
 .command-hero .tile{min-height:104px;padding:var(--md);border:0;border-radius:0;
@@ -1065,6 +1080,12 @@ details.panel.floating > summary{padding-left:var(--lg)}
 @media(max-width:640px){
   .command-hero>.panel-head .btn{flex:1;justify-content:center;min-height:44px}
   .command-hero>.panel-head #btnAuto{display:none}
+  .next-action-controls{display:grid;grid-template-columns:1fr}
+  .next-action-controls .btn{width:100%;justify-content:center}
+  .next-action-bot{grid-template-columns:1fr;gap:5px}
+  .command-tools{display:grid;grid-template-columns:1fr 1fr}
+  .command-tools .command-kicker{grid-column:1/-1}
+  .command-tools #btnAuto{display:none}
   .command-guardrail-head{align-items:flex-start}
   .command-guardrail-head>div{display:block}
   .command-guardrail-head strong{display:block;margin-top:5px}
@@ -1202,7 +1223,7 @@ details.panel.floating > summary{padding-left:var(--lg)}
      The zero minimum lets the track match the viewport; the rules below then
      make the bar's contents actually fit it, rather than overflow silently. */
   .shell{grid-template-columns:minmax(0,1fr);
-    grid-template-rows:var(--topbar-h) minmax(0,1fr) 64px}
+    grid-template-rows:var(--topbar-h) minmax(0,1fr) var(--mobile-nav-h)}
   .shell > *{min-width:0}
 
   /* The bar tightens instead of overflowing: smaller gap and gutter, a smaller
@@ -1224,7 +1245,7 @@ details.panel.floating > summary{padding-left:var(--lg)}
   /* Five destinations plus Spotter at the bottom; no swipe is required to
      discover the assistant or capture control. */
   .nav{grid-row:3;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));
-    overflow:visible;gap:0;padding:0;border:0;border-top:1px solid var(--border-soft)}
+    overflow:visible;gap:0;padding:0 0 env(safe-area-inset-bottom,0px);border:0;border-top:1px solid var(--border-soft)}
   .nav a,.nav .nav-spotter{min-width:0;min-height:64px;align-items:center;justify-content:center;
     padding:6px 2px;border-left:0;border-top:2px solid transparent;
     font-size:9px;letter-spacing:.02em;text-align:center;white-space:normal}
@@ -1239,7 +1260,7 @@ details.panel.floating > summary{padding-left:var(--lg)}
   #opFilters button{min-height:44px}
   .op-levels{grid-template-columns:1fr}
   .op-workspace{grid-template-columns:1fr}
-  .op-detail{position:fixed;z-index:40;inset:var(--topbar-h) 0 64px;
+  .op-detail{position:fixed;z-index:40;inset:var(--topbar-h) 0 var(--mobile-nav-h);
     max-height:none;border-radius:0;overflow:auto;background:var(--card);
     box-shadow:0 -12px 40px rgba(0,0,0,.85)}
   .op-detail-head{position:sticky;top:calc(var(--lg) * -1);z-index:2;
@@ -3192,7 +3213,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
   .trade-state{min-width:0}
   .chart-main{grid-template-columns:1fr;grid-template-areas:"chart";grid-template-rows:minmax(420px,calc(100dvh - var(--topbar-h) - 270px))}
   /* A phone sheet must be an opaque surface over the live chart. */
-  .trade-evidence,.ticket{display:none;position:fixed;z-index:70;left:0;right:0;bottom:108px;
+  .trade-evidence,.ticket{display:none;position:fixed;z-index:70;left:0;right:0;bottom:calc(var(--mobile-nav-h) + 44px);
     max-height:min(70dvh,640px);overflow:auto;border-radius:var(--r-lg) var(--r-lg) 0 0;
     background:var(--card);
     border-top:1px solid var(--border);
@@ -3212,7 +3233,7 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
      candles behind a modal-in-all-but-name. */
   .trade-sheet-scrim{position:fixed;inset:0;z-index:69;background:rgba(0,0,0,.58);
     border:0;padding:0;-webkit-tap-highlight-color:transparent}
-  .trade-mobile-bar{position:fixed;z-index:72;left:0;right:0;bottom:64px;display:grid;
+  .trade-mobile-bar{position:fixed;z-index:72;left:0;right:0;bottom:var(--mobile-nav-h);display:grid;
     grid-template-columns:1fr 1fr;gap:1px;padding:0 var(--sm);background:var(--bg-2);
     border-top:1px solid var(--border-soft)}
   .trade-mobile-bar .btn{min-height:44px;justify-content:center;border-radius:0}

@@ -131,6 +131,16 @@
     }else location.hash = 'trade';
   }
 
+  /* Overview receives a server-owned next action. Reuse the exact selection
+     path the Setup workspace uses so a deep link cannot open Trade with the
+     previous symbol or an empty ticket. */
+  window.SSOpenOpportunity = openTrade;
+  window.SSSelectOpportunity = async id => {
+    if(!payload.items.some(row => row.setup.setup_id === id)) await refresh();
+    if(!payload.items.some(row => row.setup.setup_id === id)) return false;
+    choose(id); return true;
+  };
+
   filters.addEventListener('click', event => {
     const button = event.target.closest('[data-op-filter]');
     if(!button) return;
@@ -172,6 +182,7 @@
 
   async function refresh(){
     if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
+    if(location.hash !== '#opportunities') return;
     try{
       const wanted = selectedId;
       payload = await api('/api/opportunities?include_history=true');
@@ -197,7 +208,8 @@
     }
   }
   refresh();
-  setInterval(refresh, 30000);
+  setInterval(() => { if(location.hash === '#opportunities') refresh(); }, 30000);
+  addEventListener('hashchange', refresh);
   addEventListener('ss:market-change', event => {
     if(event.detail && event.detail.market === 'crypto') refresh();
   });

@@ -26,7 +26,7 @@ ok('bot overview contains its directive, instruments, and guardrails', () => {
   assert(brief > 0, 'command brief is missing');
   assert(risk > brief && risk < missions, 'guardrails must be inside the bot overview');
   assert(missions > brief, 'mission carousel must follow the brief');
-  assert(HTML.includes('>Bot overview</span>'));
+  assert(HTML.includes('>Your next move</span>'));
   assert(!HTML.includes('>Rules of engagement</h2>'));
 });
 
@@ -143,7 +143,7 @@ ok('active trade cards are semantic and have one dominant management action', ()
 ok('the command brief collapses for mobile', () => {
   assert(/@media\(max-width:900px\)[\s\S]*?\.command-heading\{flex-basis:100%\}/.test(CSS),
     'the hero heading no longer takes the full row once the mode chip is gone');
-  assert(/@media\(max-width:640px\)[\s\S]*?\.command-hero>\.panel-head \.btn\{[^}]*min-height:44px/.test(CSS));
+  assert(/@media\(max-width:640px\)[\s\S]*?\.next-action-controls\{[^}]*grid-template-columns:1fr/.test(CSS));
   assert(/@media\(max-width:640px\)[\s\S]*?\.overview-tab\{[^}]*flex:1[^}]*min-width:0/.test(CSS));
 });
 

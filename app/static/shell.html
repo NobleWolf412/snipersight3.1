@@ -146,62 +146,44 @@
       <div class="panel firstrun" id="firstRun" hidden>
         <div class="panel-body">
           <div class="fr-head"><span class="op-state">First deployment</span>
-            <h2 class="t-section">Paper training active</h2>
-            <p>No-trade is a valid result. Real funds remain locked.</p></div>
-          <div class="fr-grid">
-            <div><span class="op-kicker">Mode ladder</span><strong>OFF → PAPER → SHADOW → TESTNET → LIVE</strong>
-              <details><summary>What each mode does</summary><p>Off recommends only. Paper simulates. Shadow records intent. Testnet uses test funds. Live uses real funds.</p></details></div>
-            <div><span class="op-kicker">Initial risk</span><strong>1R per trade · 1 position · 2R total</strong>
-              <small>4R UTC daily-loss halt · paper sizes R at 2%, live at 0.25%</small></div>
-            <div><span class="op-kicker">Start here</span><strong>Setups → Trade → Results</strong>
-              <small>Review one paper setup end to end.</small></div>
-          </div>
+            <h2 class="t-section">Paper training is safe</h2>
+            <p>Start with one setup. Shadow is the next record-only step and sends no orders.</p></div>
           <div class="fr-acts">
-            <button class="btn btn-primary" id="frGo">Start paper scan</button>
-            <button class="btn" id="frDiag">Run system checks</button>
+            <button class="btn btn-primary" id="frGo">Open Setups</button>
+            <button class="btn" id="frDiag">See operating modes</button>
           </div>
         </div>
       </div>
       <div class="panel panel-accent bracket command-hero" style="margin-bottom:var(--lg)">
         <div class="panel-head">
-          <!-- No sentence here. This panel used to restate the disposition line
-               forty pixels above it, from the same payload, in different words:
-               the top line dumped the scanner stage while this one carried the
-               server's actual narrative. One line now, and it is the one that
-               is visible from every surface. -->
+          <!-- The server chooses this directive from halt, health, custody,
+               setup and quality state. The browser formats it and routes it;
+               it never invents a safer or more exciting answer. -->
           <div class="command-heading">
-            <span class="command-kicker">Bot overview</span>
-            <h2 class="t-section">Autonomous scan</h2>
+            <span class="command-kicker">Your next move</span>
+            <h2 class="t-section" id="nextActionTitle">Reading the book...</h2>
           </div>
-          <div class="spacer" style="margin-left:auto"></div>
-          <!-- "Check now", not "Run Scan". Rules says outright that this does
-               nothing extra — it runs the same pass immediately instead of
-               waiting for the next one — so a label implying a heavier,
-               different action was the brightest button on the home screen
-               promising something it never did. -->
-          <button class="btn btn-primary" id="btnScan">Check now</button>
-          <!-- The reason is ON the control, not hidden in a hover title. A
-               disabled button whose explanation you have to discover teaches an
-               operator that the app is arbitrary. -->
-          <!-- "Auto: Off" under a heading that says Scanner read as "the
-               scanner is off" — it means auto-TRADING, and the scanner was
-               running 213 cycles at the time (UX audit, 4 Aug 2026). The
-               label now names what is off, and the reason points at the four
-               criteria in Settings rather than gesturing at an undefined
-               condition. -->
-          <button class="btn" id="btnAuto" disabled
-                  title="the scanner is running — this is automatic ORDER PLACEMENT, locked until the forward record earns it. Settings → Going live lists the four criteria.">Auto-trade: off</button>
-          <!-- The best guidance in the app was three clicks into Diagnostics,
-               under a panel called "Why nothing fired". A newcomer never went
-               there. It runs eight checks and says which to fix first. -->
-          <button class="btn" id="btnDiagnoseCmd"
-                  title="run eight checks and say which one to fix first">Diagnose</button>
+          <span class="chip next-action-state" id="nextActionState">READING</span>
         </div>
         <div class="panel-body">
+          <p class="next-action-summary" id="nextActionSummary">Checking exposure, setups, and system health.</p>
+          <div class="next-action-bot"><span>Bot handling</span><strong id="nextActionBot">Reading...</strong></div>
+          <div class="next-action-controls">
+            <button class="btn btn-primary" id="nextActionPrimary" disabled>Loading</button>
+            <button class="btn" id="nextActionSecondary" disabled>Loading</button>
+          </div>
           <!-- What the last action did, and when. Run Scan used to show
                "Scanning…", revert, and change nothing visible — leaving no way
                to tell a completed scan from a click that missed. -->
           <div class="t-mono scan-result" id="scanResult" hidden></div>
+          <div class="command-tools">
+            <span class="command-kicker">Scanner controls</span>
+            <button class="btn" id="btnScan">Check now</button>
+            <button class="btn" id="btnDiagnoseCmd"
+                    title="run eight checks and say which one to fix first">Diagnose</button>
+            <button class="btn" id="btnAuto" disabled
+                    title="the scanner is running — this is automatic ORDER PLACEMENT, locked until the forward record earns it. Settings → Going live lists the four criteria.">Auto-trade: off</button>
+          </div>
           <div class="grid cols-4">
             <!-- "Eligible markets", not "Tradeable now". A UI audit (2026-08-09)
                  read "Tradeable now 14" above "Nothing to take right now" and
@@ -1223,6 +1205,16 @@
             <button class="btn" data-mode="LIVE">LIVE<small>real funds</small></button>
           </div>
           <p class="op-warning" id="modeLock"></p>
+        </div>
+      </div>
+
+      <div class="panel recovery-panel" data-system-view="automation" style="margin-bottom:var(--lg)">
+        <div class="panel-head"><h2 class="t-section">Phone recovery</h2>
+          <span class="chip" id="citadelState">READING</span></div>
+        <div class="panel-body">
+          <p class="system-consequence" id="citadelSummary">Checking Citadel...</p>
+          <a class="btn btn-primary" id="citadelOpen" href="#" target="_blank" rel="noopener">Open Citadel</a>
+          <p class="t-note">If SniperSight is down, Citadel stays available to start it.</p>
         </div>
       </div>
 

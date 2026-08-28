@@ -15,6 +15,7 @@
 
   async function read(){
     if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
+    if(location.hash !== '#system') return;
     const response = await fetch('/api/automation/status', {cache:'no-store'});
     if(!response.ok) throw new Error(`HTTP ${response.status}`);
     current = await response.json(); paint();
@@ -74,6 +75,9 @@
   read().catch(err => {
     explanation.textContent = `Operating mode unavailable: ${err.message}`;
     controls.querySelectorAll('button').forEach(button => button.disabled = true);
+  });
+  addEventListener('hashchange', () => {
+    if(location.hash === '#system') read().catch(() => {});
   });
   addEventListener('ss:market-change', event => {
     if(event.detail && event.detail.market === 'crypto') read().catch(() => {});

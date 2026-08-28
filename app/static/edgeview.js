@@ -370,6 +370,14 @@
     }
   }
 
-  load();
-  window.SSEdgeView = {reload: load};
+  let loaded = false;
+  const loadOnResults = () => {
+    if(typeof location !== 'undefined'
+      && !(location.hash.slice(1) || '').startsWith('performance')) return;
+    if(loaded) return;
+    loaded = true; load();
+  };
+  loadOnResults();
+  window.addEventListener?.('hashchange', loadOnResults);
+  window.SSEdgeView = {reload: () => { loaded = true; return load(); }};
 })();
