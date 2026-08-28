@@ -191,6 +191,56 @@ class TailnetIdentityTests(unittest.TestCase):
         self.assertEqual(remote["identity"], "operator@example.com")
 
 
+class SiteBridgeTests(unittest.TestCase):
+    """The hosted cockpit is a reader, never a second control plane."""
+
+    def setUp(self):
+        self.client = TestClient(server.app)
+        self._token = os.environ.get("SNIPERSIGHT_BRIDGE_TOKEN")
+        self._only = os.environ.get("SNIPERSIGHT_BRIDGE_ONLY")
+        os.environ["SNIPERSIGHT_BRIDGE_TOKEN"] = "test-bridge-token"
+        os.environ["SNIPERSIGHT_BRIDGE_ONLY"] = "1"
+
+    def tearDown(self):
+        if self._token is None:
+            os.environ.pop("SNIPERSIGHT_BRIDGE_TOKEN", None)
+        else:
+            os.environ["SNIPERSIGHT_BRIDGE_TOKEN"] = self._token
+        if self._only is None:
+            os.environ.pop("SNIPERSIGHT_BRIDGE_ONLY", None)
+        else:
+            os.environ["SNIPERSIGHT_BRIDGE_ONLY"] = self._only
+
+    @staticmethod
+    def _bridge_headers():
+        return {"X-SniperSight-Bridge-Token": "test-bridge-token"}
+
+    def test_every_bridge_path_is_get_only(self):
+        routes = {
+            getattr(route, "path", ""): set(getattr(route, "methods", []) or [])
+            for route in server.app.routes
+        }
+        for path in server.BRIDGE_READ_PATHS:
+            self.assertIn(path, routes, f"bridge path {path} is not mounted")
+            self.assertEqual(
+                routes[path], {"GET"},
+                f"bridge path {path} is no longer read-only")
+
+    def test_bridge_token_opens_an_allowlisted_read(self):
+        r = self.client.get("/api/overview", headers=self._bridge_headers())
+        self.assertEqual(r.status_code, 200)
+
+    def test_bridge_token_cannot_open_settings(self):
+        r = self.client.get("/api/settings", headers=self._bridge_headers())
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json()["identity"], "bridge-only")
+
+    def test_bridge_token_cannot_trigger_a_write(self):
+        r = self.client.post("/api/scan", headers=self._bridge_headers())
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json()["identity"], "bridge-only")
+
+
 class BaselineResetTests(unittest.TestCase):
     """The one endpoint whose effect cannot be undone from the app.
 

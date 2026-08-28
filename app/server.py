@@ -71,11 +71,22 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 #: wrong bar. See /api/manual/arm for why the caller gets to name it at all.
 ARM_CLOCK_SKEW_S = 120
 
-# The hosted dashboard may read only these aggregate, non-mutating surfaces.
+# The hosted dashboard may read only these non-mutating surfaces. Keep this a
+# literal allowlist: the Site gets the cockpit's answers, never a wildcard over
+# /api/ that could silently include a future operator action.
+#
 # A valid token never grants access to scan, settings, reset, arming, position,
-# automation, execution or other operator-action endpoints.
+# automation, execution, credentials or other operator-action endpoints.
 BRIDGE_READ_PATHS = frozenset({
-    "/api/health", "/api/overview", "/api/portfolio",
+    "/api/candles",
+    "/api/health",
+    "/api/near-levels",
+    "/api/opportunities",
+    "/api/overview",
+    "/api/performance",
+    "/api/pipeline-health",
+    "/api/portfolio",
+    "/api/weather",
 })
 
 ALLOWED_USERS_FILE = Path(__file__).resolve().parent / "data" / "allowed-users.txt"
@@ -169,9 +180,18 @@ async def _gate(request, call_next):
             request, 403, "bridge-only",
             "This bridge accepts only authenticated read-only Site requests."
         )
-    request_host = (request.url.hostname or "").lower()
-    local_request = request_host in {"localhost", "127.0.0.1", "::1"}
     forwarded = request.headers.get("x-forwarded-for") is not None
+    request_host = (request.url.hostname or "").lower()
+    # Starlette's in-process TestClient has no loopback socket: it identifies
+    # the ASGI peer as the literal host "testclient". That peer value comes
+    # from the server transport, not the request's Host header, so honoring it
+    # keeps the suite local without reopening the public-hostname hole this
+    # gate exists to close.
+    client_host = request.client.host if request.client else ""
+    local_request = (
+        request_host in {"localhost", "127.0.0.1", "::1"}
+        or client_host == "testclient"
+    ) and not forwarded
     if (forwarded or not local_request) and not bridge_read:
         allowed = _allowed_users()
         if not who:
