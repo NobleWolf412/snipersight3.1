@@ -657,6 +657,12 @@ details.panel.floating > summary{padding-left:var(--lg)}
 .issue-detail{color:var(--fg-4);font-family:var(--f-body);font-size:var(--fs-2)}
 /* a truncated list must say it is truncated, or the sample reads as the whole */
 .issue-more{color:var(--fg-4);font-style:italic}
+/* the plain sentence IS the row; it must be allowed to wrap rather than
+   truncate — a translation you can only half-read is the old code with
+   extra steps. The code itself moves inside the body as evidence. */
+.issue-title{flex:1;min-width:0;color:var(--fg-2);font-size:var(--fs-2);line-height:1.4}
+.issue-action{color:var(--fg-3);font-style:italic}
+.issue-code{color:var(--fg-4)}
 
 /* B5 — every action reports a result and a time. A control that changes nothing
    visible is indistinguishable from one that did not fire. */

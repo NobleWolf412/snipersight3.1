@@ -2733,8 +2733,229 @@ def _citadel_status() -> dict:
                 "summary": "Citadel is offline; phone recovery is unavailable."}
 
 
+# ── Plain-language layer over the quality verdict ──
+# The recorded report speaks in engine codes (SEQUENCE_GAPS, SERVE_FLAG) that
+# are precise and useless to the operator — the 2026-08-29 complaint was,
+# nearly word for word, "Run diagnostics and View System make me shrug: what
+# does any of this mean?". This dictionary is the one translation authority;
+# every surface reads it, none re-phrases. Serve-time only: the scanner's
+# persisted verdict is never rewritten, so this stays presentation, not fact.
+#
+# Each entry is (what happened, what the operator does about it). The action
+# is written for exactly three honest cases: it heals itself, the bot is
+# already retrying, or it needs a human — and "needs a human" always names
+# the concrete step (Copy report on Diagnostics), never just "investigate".
+_PLAIN_HANDOVER = ("Not self-healing — use Copy report on the Diagnostics "
+                   "screen and hand it to whoever maintains the bot.")
+QUALITY_PLAIN = {
+    # DATA
+    "NO_CANDLES": (
+        "No price history is stored yet, so there is nothing to scan.",
+        "Wait for the first import to finish; nothing to repair."),
+    "UNKNOWN_TIMEFRAME": (
+        "Bars are stored on a timeframe this running copy does not recognise "
+        "— usually the checker is running an older build than the importer.",
+        "Restart the app so every part runs the same build."),
+    "OHLC_INVARIANT_FAILURE": (
+        "Some stored price bars are malformed — an impossible high or low, "
+        "or a bar stamped on the wrong clock boundary.",
+        "The bot will not trade this market until the bad bars are "
+        "re-imported. " + _PLAIN_HANDOVER),
+    "SEQUENCE_GAPS": (
+        "The price record has holes the exchange never accounted for — bars "
+        "that should exist and do not.",
+        "The importer keeps retrying on every scan; the market stays "
+        "untradeable until each hole fills or the venue confirms it served "
+        "nothing there. Hours of no progress is worth a Copy report."),
+    "DEVELOPING_CANDLES": (
+        "A bar that had not finished yet was counted as if it were complete "
+        "— normally a timing race during one scan.",
+        "Usually clears on the next scan by itself. If it keeps coming "
+        "back, the clocks disagree: " + _PLAIN_HANDOVER),
+    "STALE_SERIES": (
+        "New bars have stopped arriving for this market — the latest one is "
+        "older than it should be.",
+        "The importer keeps retrying. If it stays stale for hours, the "
+        "venue's feed is down or the symbol was delisted."),
+    "KNOWN_VENUE_GAPS": (
+        "The exchange itself served nothing for these minutes — no trades "
+        "happened, so no bar exists. Kept for the audit trail.",
+        "Nothing to fix."),
+    # AGGREGATION
+    "AGGREGATE_PENDING": (
+        "Bigger-timeframe bars are still being rolled up from the small "
+        "ones — a scheduling lag, not damage.",
+        "Heals itself on the next aggregation pass."),
+    "MISSING_AGGREGATE": (
+        "A bigger-timeframe bar that should have been built from complete "
+        "smaller bars never was.",
+        "The market's higher-timeframe view is untrusted until the roll-up "
+        "runs. Persisting across scans is worth a Copy report."),
+    "AGGREGATE_MISMATCH": (
+        "A bigger-timeframe bar does not add up from the smaller bars it "
+        "was built from — two versions of one history.",
+        _PLAIN_HANDOVER),
+    "ORPHAN_AGGREGATE": (
+        "A bigger-timeframe bar exists with no smaller bars behind it.",
+        _PLAIN_HANDOVER),
+    "NO_COMPLETE_BUCKETS": (
+        "Not one complete bigger-timeframe bar could be verified for this "
+        "market — usually it is still downloading its history.",
+        "Wait for backfill; the market is watched but not trusted yet."),
+    # FACTS
+    "CAUSALITY_VIOLATION": (
+        "A stored record claims the engine knew something before the market "
+        "had done it — the one thing this system may never do.",
+        "Trading on this store stays stopped. " + _PLAIN_HANDOVER),
+    "UNATTRIBUTED_CURRENT_FACTS": (
+        "Recent engine output has no record of which run produced it, so it "
+        "cannot be replayed or audited.",
+        _PLAIN_HANDOVER),
+    # SETUP
+    "INVALID_BRACKET": (
+        "A setup's numbers are impossible — its stop, entry and target are "
+        "not in the right order for its direction.",
+        "That setup is switched off automatically. " + _PLAIN_HANDOVER),
+    "INCOMPLETE_LINEAGE": (
+        "A setup is missing part of its paper trail — its reasoning or its "
+        "cost record.",
+        "The setup still works; its audit trail is weaker. Recurring is "
+        "worth a Copy report."),
+    # RISK
+    "ORPHAN_RISK_DECISION": (
+        "A sizing decision points at a setup that does not exist.",
+        _PLAIN_HANDOVER),
+    "REJECTED_WITH_EXPOSURE": (
+        "A setup that was rejected still shows money at risk — those two "
+        "can never both be true.",
+        "Check the positions list against the venue now. " + _PLAIN_HANDOVER),
+    "SIZED_DECISION_INCOMPLETE": (
+        "An approved trade is missing its size or its dollar amount.",
+        _PLAIN_HANDOVER),
+    # EXECUTION
+    "ORPHAN_ORDER": (
+        "An order exists for a setup that does not.",
+        "Check the working orders against the venue. " + _PLAIN_HANDOVER),
+    "ORDER_BEFORE_AVAILABLE": (
+        "An order was recorded before its setup was even available to act "
+        "on — the record's honesty is broken there.",
+        _PLAIN_HANDOVER),
+    "EXIT_WITHOUT_ORDER": (
+        "A trade exit is recorded with no order behind it.",
+        _PLAIN_HANDOVER),
+    "EXIT_BEFORE_FILL": (
+        "A trade closed before it opened, according to the record.",
+        _PLAIN_HANDOVER),
+    # ACCOUNTING
+    "ACCOUNT_SUMMARY_MISSING": (
+        "Trades were sized but there is no account summary to check them "
+        "against.",
+        "Worth a Copy report if it survives a full scan cycle."),
+    "EQUITY_RECONCILIATION_FAILED": (
+        "The account's stated balance does not match its own trade-by-trade "
+        "ledger.",
+        "Do not trust any equity number on screen. " + _PLAIN_HANDOVER),
+}
+
+
+def _quality_plain(code: str) -> dict:
+    """Plain words for one finding code; REFERENCE_ demotions wrap their base.
+
+    The fallback sentence deliberately admits the dictionary is behind rather
+    than inventing confidence — a translation layer that guesses is worse than
+    the code it hides. A test pins that every code in quality.CODE_RUNG has a
+    real entry, so the fallback should only ever meet a code newer than this
+    build.
+    """
+    base = code
+    reference = code.startswith("REFERENCE_")
+    if reference:
+        base = code[len("REFERENCE_"):]
+    what, action = QUALITY_PLAIN.get(base, (
+        base.replace("_", " ").lower() +
+        " — this build has no plain-language entry for it yet.",
+        _PLAIN_HANDOVER))
+    if reference:
+        what += (" This is a reference feed — context data that is never "
+                 "traded — so it cannot block trading.")
+        action = "Noted for audit; a reference feed cannot stop a trade."
+    return {"what": what, "action": action}
+
+
+def _quality_cause(findings: list[dict]) -> dict | None:
+    """The dominant finding group, in plain words, with its affected markets.
+
+    One sentence a trader can act on beats a complete list nobody reads: the
+    biggest group leads, the other open groups are counted, and Diagnostics
+    remains the complete answer.
+    """
+    if not findings:
+        return None
+    groups: dict[str, list] = {}
+    for c in findings:
+        groups.setdefault(str(c.get("code") or "UNKNOWN"), []).append(c)
+    code = max(groups, key=lambda k: len(groups[k]))
+    plain = _quality_plain(code)
+    # Markets from the DOMINANT group only — a malformed-bar market listed
+    # under "has holes" blames the wrong defect on the wrong symbol, and a
+    # wrong specific is worse than the vague card this replaced.
+    markets = sorted({str(c["symbol"]) for c in groups[code]
+                      if c.get("symbol")})
+    sentence = plain["what"]
+    if markets:
+        shown = ", ".join(markets[:3])
+        more = len(markets) - 3
+        sentence += (f" Affected: {shown} and {more} more."
+                     if more > 0 else f" Affected: {shown}.")
+    others = len(groups) - 1
+    if others:
+        sentence += (f" {others} other issue type"
+                     f"{'s are' if others > 1 else ' is'} also open — "
+                     "Diagnostics lists everything.")
+    total = {str(c["symbol"]) for c in findings if c.get("symbol")}
+    return {"sentence": sentence, "markets": markets,
+            "total_markets": len(total),
+            "code": code, "action": plain["action"]}
+
+
+def _quality_headline(report: dict) -> str:
+    """One sentence for the whole verdict — what it means, then the counts."""
+    blockers = report.get("blockers") or []
+    warnings = report.get("warnings") or []
+    notes = report.get("notes") or []
+    if report.get("status") == "PASS":
+        return ("Every data check passed. Nothing is held back." if not notes
+                else f"Every data check passed. {len(notes)} accepted data "
+                     "notes are kept for audit — they are records, not work.")
+    if blockers:
+        cause = _quality_cause(blockers)
+        return (f"New entries are stopped on the affected data. "
+                f"{cause['sentence']}")
+    cause = _quality_cause(warnings)
+    lead = cause["sentence"] if cause else "A check is flagged."
+    return (f"Trading continues — nothing here stops an entry. {lead} "
+            "Flagged data is used with a visible mark on it.")
+
+
+def _annotate_quality(report: dict) -> dict:
+    """Serve-time translation of a verdict; the persisted report is untouched.
+
+    Adds `plain` per finding and one `headline`. Callers hand it a fresh
+    parse or a fresh audit; the one exception is the cached_audit fallback,
+    whose finding dicts are shared with the in-process cache — annotating
+    those is deterministic and idempotent, so a re-serve writes the same
+    keys with the same values. Nothing here ever reaches quality_runs.
+    """
+    for key in ("blockers", "warnings", "notes"):
+        for c in report.get(key) or []:
+            c["plain"] = _quality_plain(str(c.get("code") or ""))
+    report["headline"] = _quality_headline(report)
+    return report
+
+
 def _next_action(*, rows: list[dict], mode: dict, scanner: dict,
-                 account: dict, data_status: str, citadel: dict) -> dict:
+                 account: dict, data_status: str, citadel: dict,
+                 quality: dict | None = None) -> dict:
     """Server-owned operator directive; the browser only routes and formats."""
     def opportunity_action(row: dict, title: str, summary: str, label: str,
                            tone: str = "ACTIVE") -> dict:
@@ -2778,10 +2999,27 @@ def _next_action(*, rows: list[dict], mode: dict, scanner: dict,
             by_state["ORDER_WORKING"], "Watch the {symbol} {direction} order",
             "The entry is working. Check its status; do not place a duplicate.",
             "View working order")
-    if data_status not in {"PASS", "OK"}:
-        return {"state": "CHECK", "title": "Clear the data warning",
-                "summary": "The market record is not clean enough to trust a new setup.",
-                "bot_handling": "Scanning continues, but no degraded result is treated as actionable.",
+    # BLOCKED is the only verdict the engine refuses to size on, so it is the
+    # only one allowed to outrank a READY setup. The old branch fired one
+    # generic "not clean enough" card for every non-PASS status — including
+    # DEGRADED, which risk.py trades straight through — so the card told the
+    # operator not to trust a setup the engine was about to size, and never
+    # said what was actually wrong. The cause now rides in from the recorded
+    # report; anything unrecognized still fails closed into this branch.
+    if data_status not in {"PASS", "OK", "DEGRADED", "UNKNOWN"}:
+        cause = _quality_cause((quality or {}).get("blockers") or [])
+        n = cause["total_markets"] if cause else 0
+        title = (f"Bad price data on {n} market{'s' if n != 1 else ''}"
+                 if n else "The book's records failed their audit")
+        summary = (cause["sentence"] if cause else
+                   "The scanner's last data audit failed and its detail is "
+                   "not readable right now. Diagnostics has the full list.")
+        return {"state": "CHECK", "title": title,
+                "summary": summary,
+                "bot_handling": "New trades on the affected data are refused "
+                                "automatically; scanning and protection of "
+                                "anything open continue. " +
+                                (cause["action"] if cause else ""),
                 "primary": {"label": "Run diagnostics", "route": "system-diagnostics"},
                 "secondary": {"label": "View System", "route": "system"}}
     if by_state["READY"]:
@@ -2797,6 +3035,29 @@ def _next_action(*, rows: list[dict], mode: dict, scanner: dict,
                 "primary": {"label": "Review what is forming", "route": "opportunities",
                             "setup_id": setup.get("setup_id")},
                 "secondary": {"label": "Check now", "command": "scan"}}
+    # Below READY and FORMING on purpose: a DEGRADED verdict does not stop the
+    # engine sizing, so it must not hide the setup the engine would size. With
+    # nothing more urgent on the book, it is still the most useful directive.
+    if data_status == "DEGRADED":
+        cause = _quality_cause((quality or {}).get("warnings") or [])
+        return {"state": "CHECK", "title": "Data is flagged, not blocked",
+                "summary": (cause["sentence"] if cause else
+                            "A background data check is flagged. Diagnostics "
+                            "has the detail."),
+                "bot_handling": "Trading continues — flagged data is used "
+                                "with a visible mark on it, and only a failed "
+                                "audit stops new entries. " +
+                                (cause["action"] if cause else ""),
+                "primary": {"label": "Run diagnostics", "route": "system-diagnostics"},
+                "secondary": {"label": "View System", "route": "system"}}
+    if data_status == "UNKNOWN":
+        return {"state": "WATCHING", "title": "The first data audit has not finished",
+                "summary": "The scanner has not recorded a data verdict yet. "
+                           "Unchecked is not the same as passed.",
+                "bot_handling": "A verdict is recorded automatically every "
+                                "few minutes once the scanner is running.",
+                "primary": {"label": "Run diagnostics", "route": "system-diagnostics"},
+                "secondary": {"label": "View System", "route": "system"}}
 
     secondary = ({"label": "Review Shadow mode", "route": "system", "view": "automation"}
                  if mode.get("mode") == "PAPER" and
@@ -2834,9 +3095,18 @@ def command_read_model():
         mode = {"mode": mode_name.value, "revision": revision,
                 "halted": halted}
         quality_row = con.execute(
-            "SELECT status,observed_at FROM quality_runs "
+            "SELECT status,observed_at,report FROM quality_runs "
             "ORDER BY observed_at DESC LIMIT 1").fetchone()
         quality_status = quality_row[0] if quality_row else "UNKNOWN"
+        # The report column is the same scanner-recorded verdict last_persisted
+        # serves — read here so the directive can NAME the failing thing
+        # instead of asserting "not clean enough" with no cause attached.
+        quality_report = None
+        if quality_row and quality_row[2]:
+            try:
+                quality_report = json.loads(quality_row[2])
+            except (ValueError, TypeError):
+                quality_report = None
         scanner = _scanner_status()
         summary = opportunities.summary(rows)
         counts = summary.get("counts") or {}
@@ -2846,11 +3116,14 @@ def command_read_model():
         return {"generated_at": int(time.time()), "automation": mode,
                 "account": account, "scanner": scanner,
                 "data": {"status": quality_status,
-                         "observed_at": quality_row[1] if quality_row else None},
+                         "observed_at": quality_row[1] if quality_row else None,
+                         "headline": (_quality_headline(quality_report)
+                                      if quality_report else None)},
                 "opportunities": summary, "citadel": citadel,
                 "next_action": _next_action(
                     rows=rows, mode=mode, scanner=scanner, account=account,
-                    data_status=quality_status, citadel=citadel)}
+                    data_status=quality_status, citadel=citadel,
+                    quality=quality_report)}
     finally:
         con.close()
 
@@ -3874,8 +4147,13 @@ def pipeline_health(symbol: str | None = None):
     """
     con = store.connect()
     try:
+        # Every exit is annotated with the plain-language layer (`plain` per
+        # finding, one `headline`) at serve time — the recorded verdict on
+        # disk stays byte-identical, and the browser renders rather than
+        # translating, so there is exactly one phrasing authority.
         if symbol:
-            return quality.audit(con, symbol=symbol, persist=False)
+            return _annotate_quality(quality.audit(con, symbol=symbol,
+                                                   persist=False))
         report = quality.last_persisted(con)
         if report is None:
             # No recorded verdict yet. The in-process cache is the only thing
@@ -3889,7 +4167,7 @@ def pipeline_health(symbol: str | None = None):
                     "pending": True, "stages": [], "blockers": [], "warnings": [],
                     "notes": [],
                     "source": "none", "detail": "first audit running"}
-        return report
+        return _annotate_quality(report)
     finally:
         con.close()
 

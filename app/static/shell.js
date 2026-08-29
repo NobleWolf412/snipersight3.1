@@ -3690,11 +3690,17 @@ weighed in. Name the facts you used.`;
       ? Object.entries(rc).filter(([, v]) => v)
         .map(([k, v]) => `${RUNG[k] || k.toLowerCase()} ${v}`).join(' · ')
       : `${blockers} blockers · ${warns} warnings`;
-    $('dCounts').textContent = h.status === 'PASS' && acceptedNotes
+    /* The server's plain-language headline leads when it is present — it says
+       what the verdict MEANS and what is dominant ("New entries are stopped…
+       holes in the price record… Affected: X, Y"), which is the sentence the
+       operator asked this panel for. The rung arithmetic stays underneath as
+       the severity ledger rather than being the only sentence on the wall. */
+    const ledger = h.status === 'PASS' && acceptedNotes
       ? `passed · ${acceptedNotes} accepted data notes`
       : h.worst_rung
       ? `worst severity: ${RUNG[h.worst_rung] || h.worst_rung} — ${counted}`
       : counted;
+    $('dCounts').textContent = h.headline ? `${h.headline} (${ledger})` : ledger;
     $('nDiag').textContent = blockers || '';
 
     /* D5 — a count without a drill-in is an assertion, not diagnostics.
@@ -3727,13 +3733,23 @@ weighed in. Name the facts you used.`;
             <span class="t-mono issue-where">${esc(where(c))}</span>
             <span class="issue-detail">${esc(c.details || c.code || '')}</span></div>`).join('');
         const label = blocked ? 'blocker' : note ? 'note' : 'warning';
+        /* The plain sentence is the row; the engine code is evidence inside
+           it. Server-annotated (`plain` from /api/pipeline-health) so every
+           surface phrases a finding identically — the collapsed row used to
+           read "blocker · sequence gaps ×3", which is exactly the shrug this
+           panel exists to prevent. Codes stay visible on expand, beside the
+           per-market details, for the Copy-report handover. */
+        const plain = shown[0] && shown[0].plain;
+        const codeText = code.replaceAll('_', ' ').toLowerCase();
         return `<details class="issue">
           <summary class="issue-head">
             <span class="chip ${blocked ? 'chip-red' : 'chip-amber'}">${label}</span>
-            <span class="t-mono" style="color:var(--fg-2)">${code.replaceAll('_', ' ').toLowerCase()}</span>
+            <span class="issue-title${plain ? '' : ' t-mono'}">${esc(plain ? plain.what : codeText)}</span>
             <b class="t-mono issue-count">×${n}</b>
           </summary>
-          <div class="issue-body">${detail}${
+          <div class="issue-body">${
+            plain ? `<div class="issue-item issue-action">${esc(plain.action || '')}</div>
+            <div class="issue-item t-mono issue-code">engine code: ${esc(codeText)}</div>` : ''}${detail}${
             n > shown.length
               ? `<div class="issue-item issue-more">…and ${n - shown.length} more not listed</div>`
               : ''}</div>
@@ -4815,6 +4831,7 @@ weighed in. Name the facts you used.`;
     L.push(pad('pipeline', (h.status || '—') +
       (h.pending ? ' · audit still running' : '') +
       (h.evaluation_allowed === false ? ' · NOT sizing trades' : ' · sizing trades')));
+    if(h.headline) L.push(pad('meaning', h.headline));
     const rc = h.rung_counts || {};
     if(Object.keys(rc).length)
       L.push(pad('rungs', Object.entries(rc).map(([k, n]) => `${k.toLowerCase()} ${n}`).join(' · ')));
