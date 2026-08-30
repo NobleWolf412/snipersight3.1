@@ -28,11 +28,11 @@ import live
 
 from engine import (aggregator, basis, bias, breakout, cooldowns, cycles,
                     execsim, venues, liquidity, ma, manual, momentum, ranges,
-                    regime, risk, scalein, setups, structure, swings, importer,
-                    volatility, volume, zones, trend)
+                    regime, risk, scalein, sessions, setups, structure, swings,
+                    importer, volatility, volume, zones, trend)
 from engine import (automation, autotrader, contracts, execution, lifecycle,
                     stockcalendar, stockdemo, stocks, stockstore)
-from engine import apexbridge, phemex_private, positions, quality
+from engine import apexbridge, phemex_private, positions, quality, regrade
 
 
 # Operational authorities do not write research facts, so they do not belong
@@ -73,6 +73,10 @@ OPERATIONAL_EXPECTED = {
     # quality-v0.2: acknowledged venue voids are durable notes, not warnings;
     # unexplained gaps remain blockers. Operational read-model change only.
     "quality": "quality-v0.2-draft",
+    # regrade-v0.1: writes durable strategy_regrades rows under this tag —
+    # a reading that outlives retention deserves the same lock as any other
+    # version-stamped durable state.
+    "regrade": "regrade-v0.1-draft",
     "apexbridge": "apexbridge-v0.1-draft",
     "stocks": "stocks-foundation-v0.2-draft",
     "stock_calendar": "stock-calendar-v0.1-draft",
@@ -94,6 +98,7 @@ def operational_versions():
         "lifecycle": lifecycle.LIFECYCLE_VERSION,
         "opportunities": opportunities.OPPORTUNITY_VERSION,
         "quality": quality.QUALITY_VERSION,
+        "regrade": regrade.REGRADE_VERSION,
         "apexbridge": apexbridge.APEXBRIDGE_VERSION,
         "stocks": stocks.STOCKS_FOUNDATION_VERSION,
         "stock_calendar": stockcalendar.STOCK_CALENDAR_VERSION,
@@ -124,6 +129,13 @@ LOCKED = {
     "momentum": momentum.MOMENTUM_VERSION,
     "volatility": volatility.VOLATILITY_VERSION,
     "volume": volume.VOLUME_VERSION,
+    # The fifth indicator engine, locked from its first commit like trend and
+    # basis: a version that only starts being tracked once something reads it
+    # is a version whose early facts nobody can place. Record-only — session
+    # labels gate nothing until factorstats grades them — and clock-derived
+    # from candles alone, so it has no CONSUMERS entry and sits downstream of
+    # nothing but the importer's series.
+    "sessions": sessions.SESSIONS_VERSION,
     "setup": setups.SETUP_VERSION,
     "exec": execsim.EXEC_VERSION,
     "risk": risk.RISK_VERSION,
@@ -228,6 +240,13 @@ EXPECTED = {
     "momentum": "momentum-v0.3-draft",
     "volatility": "volatility-v0.2-draft",
     "volume": "volume-v0.2-draft",
+    # sessions-v0.1: NEW ENGINE, the last of the Wave 2.4 indicator set.
+    # Emit-on-change UTC session labels (ASIA/LONDON/NY_OVERLAP/NY/QUIET) on
+    # 5m/15m/1H only — a 4H bar spans sessions and gets no label. Crypto is
+    # 24/7, so the session is a soft prior to be graded, never a hard gate;
+    # nothing consumes these facts and nothing may until factorstats grades
+    # them, so there is no cascade in either direction.
+    "sessions": "sessions-v0.1-draft",
     # setup-v0.16: WHY prices scale decimals to magnitude — a flat .2f wrote
     # every sub-dollar zone as a degenerate range ("supply zone 0.09-0.09").
     # No strategy rule changed, but the WHY sits inside the content-hashed
