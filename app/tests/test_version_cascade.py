@@ -65,9 +65,11 @@ OPERATIONAL_EXPECTED = {
     # plan implies rather than a hardcoded 1x bucket.
     "phemex_private": "phemex-private-v0.4-draft",
     "lifecycle": "lifecycle-v0.1-draft",
-    # opportunity-v0.5: risk reasons are trader-readable, unavailable grades
-    # are not rejection reasons, and top-down stays independent of risk state.
-    "opportunities": "opportunity-v0.5-draft",
+    # opportunity-v0.6: one HTF policy authority — only the playbook's own
+    # recorded bias verdict blocks; CONFLICT/CONDITIONAL are display states
+    # and a missing ladder reading never holds dispatch. v0.5: risk reasons
+    # trader-readable; top-down independent of risk state.
+    "opportunities": "opportunity-v0.6-draft",
     # quality-v0.2: acknowledged venue voids are durable notes, not warnings;
     # unexplained gaps remain blockers. Operational read-model change only.
     "quality": "quality-v0.2-draft",
