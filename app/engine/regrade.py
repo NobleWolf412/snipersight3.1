@@ -97,16 +97,37 @@ def due(con, now: int) -> bool:
     return prev is None or now - int(prev["observed_at"]) >= INTERVAL_SECONDS
 
 
-def run(con, now: int | None = None, *, resamples: int = RESAMPLES) -> dict:
-    """One full regrade pass, recorded. Read-only against the fact store."""
-    from . import abtest, universe
+def run(con, now: int | None = None, *, resamples: int = RESAMPLES,
+        beat=None) -> dict:
+    """One full regrade pass, recorded. Read-only against the fact store.
+
+    `beat` is an optional heartbeat callback, threaded down to the per-symbol
+    replay loops — a full replay of the book takes minutes against the
+    watchdog's dark-scanner threshold, and the retention sweep already set the
+    precedent: beat inside the work "so a sweep is never mistaken for a hang".
+    """
+    from . import abtest, universe, venues
     from .pipeline import ALL_TFS
     _ensure(con)
     observed_at = int(time.time()) if now is None else int(now)
-    symbols = universe.all_tracked_symbols(con)
+    # Reference series ('@'-keys such as BTCUSDT@binance-spot) are tracked —
+    # they hold 1D candles, so all_tracked_symbols returns them — and they
+    # have NO venue by contract: venues.venue_for raises on them, and the
+    # replay prices trades through costs.profile_for. Unfiltered, the first
+    # reference key raised BEFORE the row insert, so due() stayed true and
+    # the "daily" regrade became an every-cycle crash loop. Same predicate
+    # trendslice/trailexit use, for the same reason: the raise is the
+    # contract keeping a borrowed order book away from money paths, and the
+    # caller's job is not to ask what a reference series would fill at.
+    symbols = [s for s in universe.all_tracked_symbols(con)
+               if not venues.is_reference_key(s)]
     report = abtest.by_strategy(con, symbols, ALL_TFS,
                                 versions=versions_to_grade(),
-                                resamples=resamples)
+                                resamples=resamples, beat=beat)
+    # Two writers CAN race this insert — `live.py --once` beside the CLI
+    # `python -m engine.regrade` writes two rows for one day. Benign by
+    # design: rows are append-only readings, last_run() takes the latest,
+    # and due() only ever stretches the next interval.
     con.execute(
         "INSERT INTO strategy_regrades (observed_at, regrade_version, "
         "abtest_version, trustworthy, report) VALUES (?,?,?,?,?)",
@@ -118,11 +139,34 @@ def run(con, now: int | None = None, *, resamples: int = RESAMPLES) -> dict:
             "report": report}
 
 
-def maybe_run(con, now: int, log=None) -> dict | None:
+def maybe_run(con, now: int, log=None, beat=None) -> dict | None:
     """The scheduled entry point `live.cycle` calls. None means not due yet."""
     if not due(con, now):
         return None
-    res = run(con, now)
+    try:
+        res = run(con, now, beat=beat)
+    except Exception as exc:
+        # A failed regrade must still COUNT AS AN ATTEMPT. Without this row,
+        # due() stays true and the next cycle retries at cycle cadence — a
+        # deterministic failure (the reference-key crash above was one)
+        # turns the daily schedule into a per-cycle crash loop. The failure
+        # is recorded untrustworthy with the error as its report, loudly
+        # logged, and the next try waits the full interval. live.cycle's own
+        # try/except stays as the belt for a failure inside THIS handler.
+        _ensure(con)
+        failure = {"error": f"{type(exc).__name__}: {exc}"}
+        con.execute(
+            "INSERT INTO strategy_regrades (observed_at, regrade_version, "
+            "abtest_version, trustworthy, report) VALUES (?,?,?,?,?)",
+            (int(now), REGRADE_VERSION, "unavailable", 0,
+             json.dumps(failure, sort_keys=True)))
+        con.commit()
+        if log is not None:
+            log.error(f"REGRADE failed and was recorded as an attempt "
+                      f"({failure['error']}) — next try in "
+                      f"{INTERVAL_SECONDS}s, not next cycle")
+        return {"observed_at": int(now), "trustworthy": False,
+                "report": failure}
     if log is not None:
         rep = res["report"]
         # REGRADE is an evidence prefix for the same reason AUTOTRADER is:

@@ -2,8 +2,10 @@
 
 **Status:** HISTORICAL as of 2026-07-31. Written 2026-07-28 after an operator
 interview, approved, and built — phases 1, 2, 3, 4 and 6 are complete, phase 5 is
-partial, and live submission remains locked with no order-placement code behind
-it. The design intent below is still authoritative; **the phase numbers in §6 are
+partial. Live submission remains locked — since 2026-08-27 an order outbox and
+a signed TESTNET adapter exist (`execution.py` / `phemex_private.py`), but
+mainnet routing is build-locked (`automation.LIVE_ROUTER_BUILD_ENABLED`). The
+design intent below is still authoritative; **the phase numbers in §6 are
 not.**
 
 **Do not plan new work with a phase number.** This document and

@@ -27,9 +27,13 @@ at all, because it is the document someone checks *instead of* the code.
   whose stop sits beyond liquidation is refused — by `risk.py` for the strategy
   book and by `manual.validate` for the operator's, on the same formula.
 - Funding: charged per settlement on perps; zero on spot by construction.
-- Execution: **paper research only. No order-placement code exists anywhere in
-  this repository.** `live_enabled` is a hard-coded literal in `server.py`, not a
-  setting, and there is nothing behind it to enable.
+- Execution: **paper research, plus a TESTNET-only private path.** Order
+  placement code now exists — `execution.py` is a full outbox and
+  `phemex_private.py` a signed adapter — but only the testnet path may use it;
+  mainnet routing is build-locked (`automation.LIVE_ROUTER_BUILD_ENABLED` is
+  False and `broker_factory` raises rather than building a mainnet broker).
+  (This bullet claimed "no order-placement code exists anywhere in this
+  repository" until 2026-08-30 — stale from the day the outbox shipped.)
 - Cost profile: per venue, immutable, content-addressed. `costs.profile_for()`
   raises on an unknown symbol rather than falling back.
 

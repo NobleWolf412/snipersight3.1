@@ -45,7 +45,13 @@ from __future__ import annotations
 
 from . import edgestats
 
-LIVEGATE_VERSION = "livegate-v0.1-draft"
+LIVEGATE_VERSION = "livegate-v0.2-draft"
+# v0.2: build_note copy changed — it now names the build lock rather than
+# claiming no order code exists (the outbox and signed testnet adapter shipped
+# 2026-08-27). No criterion moved, but the note is API-visible on two operator
+# surfaces, and a reader of a stored v0.1 payload was being told a different
+# reason for the same lock. Copy that ships over the wire moves the tag — the
+# opportunity-v0.5 precedent (trader-readable reasons were a version).
 
 # ── the criteria ────────────────────────────────────────────────────────────
 # Each is a number an operator can watch move. They are deliberately few: a

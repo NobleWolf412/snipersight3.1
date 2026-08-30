@@ -615,13 +615,19 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     # (trend.py's own note: "NOT REPRODUCIBLE FROM THE STORE ... no way to
     # regrade them on a schedule"). Read-only against facts, records its own
     # row, promotes nothing. Fail-closed like retention: a failed regrade is
-    # a log line, never a reason to stop recording the market. The heartbeat
-    # is beaten first because a full replay of the book takes minutes and
-    # must not be mistaken for a hang.
+    # a log line, never a reason to stop recording the market — and, also
+    # like retention, the heartbeat is threaded INTO the work rather than
+    # beaten once before it: a full replay of the book runs minutes against
+    # the watchdog's 300s dark-scanner threshold, so one beat at the top
+    # reports a healthy regrade as a hang ("a sweep is never mistaken for a
+    # hang" — the sweep above set the precedent). maybe_run records a failed
+    # attempt itself so a deterministic crash retries daily, not per cycle;
+    # this try/except stays as the belt under that handler.
     _beat("regrade")
     try:
         from engine import regrade as _regrade
-        _regrade.maybe_run(con, now, log=log)
+        _regrade.maybe_run(con, now, log=log,
+                           beat=lambda msg: _beat(f"regrade {msg}"))
     except Exception as exc:
         log.error(f"regrade failed closed: {type(exc).__name__}: {exc}")
 

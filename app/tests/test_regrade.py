@@ -118,6 +118,91 @@ class RegradeSchedule(unittest.TestCase):
         self.assertIn(breakout.BREAKOUT_VERSION, vs)
         self.assertIn(trend.TREND_VERSION, vs)
 
+    def test_a_failed_run_is_recorded_as_an_attempt_and_waits_a_day(self):
+        """The crash-loop defect: a run that raised before its INSERT left
+        due() true, so a deterministic failure retried at CYCLE cadence
+        forever. A failure must count as an attempt — recorded untrustworthy
+        with the error as its report, loudly logged, and not retried until
+        the interval elapses."""
+        logged = []
+
+        class _Log:
+            def info(self, msg):
+                logged.append(("info", msg))
+
+            def warning(self, msg):
+                logged.append(("warning", msg))
+
+            def error(self, msg):
+                logged.append(("error", msg))
+
+        with mock.patch("engine.abtest.by_strategy",
+                        side_effect=RuntimeError("boom")), \
+             mock.patch("engine.universe.all_tracked_symbols",
+                        return_value=["BTCUSDT"]):
+            res = regrade.maybe_run(self.con, 5_000_000, log=_Log())
+        self.assertIsNotNone(res)
+        self.assertFalse(res["trustworthy"])
+        self.assertIn("boom", res["report"]["error"])
+        prev = regrade.last_run(self.con)
+        self.assertEqual(prev["observed_at"], 5_000_000)
+        self.assertFalse(prev["trustworthy"])
+        self.assertIn("error", prev["report"])
+        self.assertFalse(regrade.due(self.con, 5_000_000 + 60),
+                         "a failure that leaves the regrade due retries at "
+                         "cycle cadence — the crash loop this fix closes")
+        self.assertTrue(
+            regrade.due(self.con, 5_000_000 + regrade.INTERVAL_SECONDS))
+        self.assertTrue(any(lvl == "error" and "REGRADE" in msg
+                            for lvl, msg in logged),
+                        "a recorded failure must still be loud")
+
+    def test_the_heartbeat_is_threaded_into_the_replay(self):
+        """One beat before minutes of replay reads as a hang to the watchdog
+        (SCANNER_DARK_AFTER_S) — the retention sweep precedent: beat inside
+        the work. The callback must reach the per-symbol loop."""
+        beats = []
+
+        def beat(msg):
+            beats.append(msg)
+
+        with mock.patch("engine.abtest.by_strategy",
+                        return_value=_fake_report()) as by_strategy, \
+             mock.patch("engine.universe.all_tracked_symbols",
+                        return_value=["BTCUSDT"]):
+            regrade.maybe_run(self.con, 6_000_000, beat=beat)
+        self.assertIs(by_strategy.call_args.kwargs.get("beat"), beat)
+
+
+class RegradeUnmocked(unittest.TestCase):
+    """One run with nothing patched, on the store shape that crashed it.
+
+    The mocked suite above mirrors the wiring; only an unmocked run can catch
+    what the mirror lacks. A reference-series key ('@' in the symbol) is
+    tracked the moment it holds a 1D candle, and venues.venue_for raises on
+    it by contract — unfiltered, that raise fired before the INSERT and the
+    daily regrade became an every-cycle crash loop.
+    """
+
+    def test_a_reference_key_in_the_universe_does_not_crash_the_regrade(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        con = store.connect(Path(tmp.name) / "t.db")
+        self.addCleanup(con.close)
+        con.execute(
+            "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ("BTCUSDT@binance-spot", "1D", 0, "100", "102", "98", "100",
+             "1", "test", 0))
+        con.commit()
+        res = regrade.run(con, 7_000_000, resamples=50)
+        self.assertEqual(res["observed_at"], 7_000_000)
+        prev = regrade.last_run(con)
+        self.assertIsNotNone(prev, "the run must record its row")
+        self.assertEqual(prev["observed_at"], 7_000_000)
+        # An empty book grades nothing — the row still exists, which is the
+        # whole point: the attempt is the record, the strategies may be {}.
+        self.assertIsInstance(prev["report"].get("strategies"), dict)
+
 
 if __name__ == "__main__":
     unittest.main()
