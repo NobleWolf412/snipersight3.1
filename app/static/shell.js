@@ -900,8 +900,8 @@
      judgement in words: "Outside these limits: 79 hand-picked".
 
      Red is a tripwire, not a state we expect. live_enabled is a hardcoded
-     False in server.py and there is no order-routing code behind it, so this
-     branch should never fire. It is wired anyway: if that constant ever flips,
+     False in server.py and mainnet routing is build-locked behind it, so this
+     branch should never fire. It is wired anyway: if that lock ever opens,
      every accent in the app turns red before a single order is sent, and
      nobody has to remember to add the warning. */
   /* DO NOT CLAIM A MODE BEFORE THE BOOK HAS ANSWERED.

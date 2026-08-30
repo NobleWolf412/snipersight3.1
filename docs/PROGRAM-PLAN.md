@@ -43,7 +43,7 @@ recorded below so old references resolve. New work is never given a phase number
 | 4. Perps | Phemex adapter, shorts, leverage, liquidation + gate, funding | **done** — engine closed in S45; the operator-facing half (leverage dial, liquidation readout) landed 2026-07-31 |
 | 5. AUTO + guardrails | arm/disarm, drawdown + data-health + timer halts | **partial** — guardrails exist and are wired; AUTO is deliberately locked |
 | 6. Diagnostics + Results | unified debug surface, dual scoreboards | **done** |
-| Locked | live submission | **locked, and empty** — no order-placement code exists anywhere |
+| Locked | live submission | **locked, no longer empty** — the execution outbox and a signed Phemex adapter exist and serve the TESTNET path; mainnet routing is build-locked (`automation.LIVE_ROUTER_BUILD_ENABLED = False`, `broker_factory` raises) |
 
 ---
 

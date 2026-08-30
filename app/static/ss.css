@@ -111,9 +111,9 @@
             .deck-row.held, .ticket.managing, .tk-open and .tkm-dot; the shell
             now agrees with the four components that got there first.
      live   real order submission is possible. server.py hardcodes live_enabled
-            to False and no order-routing code exists behind it, so this should
-            never fire. It is wired as a tripwire: if that constant flips, every
-            accent in the app turns red before an order is sent. */
+            to False and mainnet routing is build-locked behind it, so this
+            should never fire. It is wired as a tripwire: if that lock ever
+            opens, every accent in the app turns red before an order is sent. */
 [data-mode="paper"]{--accent:var(--amber);--accent-rgb:255,194,102}
 [data-mode="live"] {--accent:var(--red);  --accent-rgb:255,100,100}
 [data-mode="idle"] {--accent:var(--green);--accent-rgb:0,255,170}

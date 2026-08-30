@@ -29,7 +29,10 @@ from engine import (automation, autotrader, broker_factory, execution, positions
                     marketdata, pipeline, venues)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.1-draft"
+LIVE_VERSION = "live-v0.2-draft"
+# v0.2: the cycle runs a daily strategy regrade (engine/regrade.py) —
+# read-only, fail-closed, records its own row. The cycle's durable output
+# grew a table, which is what earns the bump.
 # v0.1: an unresolved strategy order pins its market-data feed until terminal.
 # On 2026-08-12 XLMUSDT filled at 16:00Z, fell below the universe liquidity
 # floor at 16:15Z, and received no later 15m candles.  Its 100-bar timeout could
@@ -605,6 +608,22 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
                      f"removed, {swept['rows_after']:,} kept")
     except Exception as exc:
         log.error(f"retention sweep failed closed: {type(exc).__name__}: {exc}")
+
+    # Daily strategy regrade — the scheduled answer to a defect this project
+    # kept re-committing: verdicts produced by harness runs no committed
+    # script reproduces, then quoted for weeks after the sample had moved on
+    # (trend.py's own note: "NOT REPRODUCIBLE FROM THE STORE ... no way to
+    # regrade them on a schedule"). Read-only against facts, records its own
+    # row, promotes nothing. Fail-closed like retention: a failed regrade is
+    # a log line, never a reason to stop recording the market. The heartbeat
+    # is beaten first because a full replay of the book takes minutes and
+    # must not be mistaken for a hang.
+    _beat("regrade")
+    try:
+        from engine import regrade as _regrade
+        _regrade.maybe_run(con, now, log=log)
+    except Exception as exc:
+        log.error(f"regrade failed closed: {type(exc).__name__}: {exc}")
 
     # A notification claims something is actionable NOW. A new fact ROW is not
     # that claim: onboarding a symbol backfills years of candles, the engines

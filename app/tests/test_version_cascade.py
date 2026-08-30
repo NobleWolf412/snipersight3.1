@@ -40,9 +40,11 @@ from engine import apexbridge, phemex_private, positions, quality
 # state and wire contracts; lock them independently so a rewrite beneath an old
 # label fails the same gate instead of relying on review memory.
 OPERATIONAL_EXPECTED = {
-    # live-v0.1: unresolved simulator orders pin their data source and receive
-    # exit-only processing after universe removal.
-    "live": "live-v0.1-draft",
+    # live-v0.2: the cycle runs the daily strategy regrade (fail-closed,
+    # read-only, its own strategy_regrades table). v0.1: unresolved simulator
+    # orders pin their data source and receive exit-only processing after
+    # universe removal.
+    "live": "live-v0.2-draft",
     "contracts": "contracts-v0.3-draft",
     # automation-v0.5: every drill names and enforces its required evidence;
     # restart demands a boot-id change, so lost-response recovery inside one

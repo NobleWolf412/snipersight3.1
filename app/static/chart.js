@@ -2426,10 +2426,10 @@ window.SSChart = (() => {
   /* The Arm button commits to the OPERATOR's paper book and nothing else.
 
      It is not gated on `live_enabled`, because that flag gates a capability
-     that does not exist: there is no order-placement code anywhere in this
-     system (`execsim` line 3). Wiring a paper button to a live flag would have
-     meant the button stayed dead until someone shipped an order router, which
-     is why it was dead. The live reason is still printed underneath, so the
+     the operator cannot reach: mainnet order routing is build-locked (the
+     testnet outbox exists, gated separately). Wiring a paper button to a live
+     flag would have meant the button stayed dead until someone unlocked the
+     mainnet router, which is why it was dead. The live reason is still printed underneath, so the
      distinction between "your paper trade was recorded" and "this system can
      send real orders" is on screen rather than assumed. */
   /* ═══ THE ACTIVE-TRADE BAND ═══
