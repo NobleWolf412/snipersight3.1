@@ -32,7 +32,7 @@ from engine import (aggregator, basis, bias, breakout, cooldowns, cycles,
                     importer, volatility, volume, zones, trend)
 from engine import (automation, autotrader, contracts, execution, lifecycle,
                     stockcalendar, stockdemo, stocks, stockstore)
-from engine import apexbridge, phemex_private, positions, quality, regrade
+from engine import apexbridge, livegate, phemex_private, positions, quality, regrade
 
 
 # Operational authorities do not write research facts, so they do not belong
@@ -73,6 +73,12 @@ OPERATIONAL_EXPECTED = {
     # quality-v0.2: acknowledged venue voids are durable notes, not warnings;
     # unexplained gaps remain blockers. Operational read-model change only.
     "quality": "quality-v0.2-draft",
+    # livegate-v0.2: build_note names the mainnet build lock instead of
+    # claiming no order code exists. The tag ships over the wire on two
+    # operator surfaces, and it was never locked here before — a behaviour
+    # change under an old livegate label failed no gate (cold audit,
+    # 2026-08-31).
+    "livegate": "livegate-v0.2-draft",
     # regrade-v0.1: writes durable strategy_regrades rows under this tag —
     # a reading that outlives retention deserves the same lock as any other
     # version-stamped durable state.
@@ -99,6 +105,7 @@ def operational_versions():
         "opportunities": opportunities.OPPORTUNITY_VERSION,
         "quality": quality.QUALITY_VERSION,
         "regrade": regrade.REGRADE_VERSION,
+        "livegate": livegate.LIVEGATE_VERSION,
         "apexbridge": apexbridge.APEXBRIDGE_VERSION,
         "stocks": stocks.STOCKS_FOUNDATION_VERSION,
         "stock_calendar": stockcalendar.STOCK_CALENDAR_VERSION,

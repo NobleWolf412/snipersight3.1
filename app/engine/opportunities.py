@@ -11,7 +11,7 @@ import json
 import time
 from decimal import Decimal, InvalidOperation
 
-from . import execsim, registry, risk, setups, store, venues
+from . import bias, execsim, registry, risk, setups, store, venues
 from .contracts import (DecisionReason, EntryRecommendation, FactorGrade,
                         OpportunityCandidate, OpportunityState, OrderKind,
                         TopDownDecision, TopDownState, TradeSetup, to_wire)
@@ -79,7 +79,12 @@ def top_down(payload: dict) -> TopDownDecision:
     resolved = str(block.get("resolved") or "ALLOW")
     rungs = block.get("rungs") if isinstance(block.get("rungs"), dict) else {}
     reasons = []
-    if resolved == "BLOCK":
+    # bias.blocked is the ONE place the verdict comparison lives — its
+    # docstring exists precisely to forbid the inline `== "BLOCK"` this
+    # line briefly carried (cold audit, 2026-08-31): if REQUIRE_EVIDENCE
+    # ever grows a third outcome, this display must move with the gate in
+    # setups.py rather than drift from it.
+    if bias.blocked({"resolved": resolved}):
         state = TopDownState.BLOCKED
         reasons.append(DecisionReason(
             "TOP_DOWN_BLOCK", "This playbook's higher-timeframe policy "
