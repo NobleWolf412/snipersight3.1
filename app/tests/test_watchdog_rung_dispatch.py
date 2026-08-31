@@ -525,7 +525,13 @@ class TestChildErrorCapture(unittest.TestCase):
     def test_capture_failure_never_blocks_a_start(self):
         """Logging is housekeeping; it must not stop the scanner coming back."""
         c = self._child("pass")
-        c._err_path = Path("Z:/definitely/not/writable/probe.err.log")
+        # Unwritable, portably: the parent is a plain file, so the capture's
+        # mkdir raises on every platform. A Z:/ drive-letter path only fails
+        # on Windows — on Linux it is a relative directory the capture would
+        # create and write into, and the failure path never runs.
+        blocker = c._err_path.parent / "blocker"
+        blocker.write_text("")
+        c._err_path = blocker / "probe.err.log"
         with patch.object(watchdog, "log"):
             c.start()                      # must not raise
         c.proc.wait(timeout=30)

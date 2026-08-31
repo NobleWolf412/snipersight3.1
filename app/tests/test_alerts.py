@@ -64,8 +64,19 @@ class EnqueueIsCheapAndIdempotent(QueueCase):
         """It is called from the scan loop. A notification must never be able
         to take down the thing it is notifying about — the founding rule of
         this module, and the one it has actually broken before."""
-        notify.QUEUE_DB = Path("Z:/nonexistent/cannot/write/notifications.db")
+        # Unwritable, portably: the queue's parent "directory" is a plain
+        # file, so _queue()'s mkdir raises on every platform. The old
+        # Z:/ drive-letter path only failed on Windows — on Linux it is a
+        # RELATIVE path that mkdir happily creates, so the enqueue succeeded,
+        # this assert failed once, and the stray app/Z:/ db it left behind
+        # made every later run pass through dedupe.
+        blocker = Path(self.tmp.name) / "blocker"
+        blocker.write_text("")
+        notify.QUEUE_DB = blocker / "notifications.db"
         self.assertFalse(notify.enqueue("k", "t", "m"))
+        self.assertTrue(blocker.is_file(),
+                        "the unwritable path was created after all — the "
+                        "failure this test exists to exercise never happened")
 
     def _pending(self):
         con = notify._queue()
