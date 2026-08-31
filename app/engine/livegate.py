@@ -25,19 +25,33 @@ a strategy that no longer exists. Every criterion below is scoped to the
 CURRENT baseline, which is exactly the record that would have been made with
 today's rules.
 
-WHAT THIS DELIBERATELY DOES NOT DO. It does not enable anything. There is no
-order-placement code in this system (see `execsim` line 3), so passing every
-criterion here produces `ready` — evidence earned — and never `enabled`. The
-two are reported separately because they fail for different reasons and are
-fixed by different people: the operator moves the evidence bar by trading the
-paper book, and only a build ships a router. Collapsing them into one flag is
-how the button came to be permanently dead in the first place.
+WHAT THIS DELIBERATELY DOES NOT DO. It does not enable anything. Order
+placement code now EXISTS — `execution.py` is a full outbox and
+`phemex_private.py` a signed adapter — but only the TESTNET path may use it;
+mainnet routing is build-locked (`automation.LIVE_ROUTER_BUILD_ENABLED` is
+False and `broker_factory` raises rather than building a mainnet broker).
+So passing every criterion here produces `ready` — evidence earned — and
+never `enabled`. The two are reported separately because they fail for
+different reasons and are fixed by different people: the operator moves the
+evidence bar by trading the paper book, and only a deliberate build unlocks
+the mainnet router (and the repo goes private first — see CLAUDE.md).
+Collapsing them into one flag is how the button came to be permanently dead
+in the first place. (This paragraph claimed "there is no order-placement
+code in this system" until 2026-08-27, which stopped being true when the
+outbox shipped — a stale claim of exactly the kind that sits beside the
+lock it justifies.)
 """
 from __future__ import annotations
 
 from . import edgestats
 
-LIVEGATE_VERSION = "livegate-v0.1-draft"
+LIVEGATE_VERSION = "livegate-v0.2-draft"
+# v0.2: build_note copy changed — it now names the build lock rather than
+# claiming no order code exists (the outbox and signed testnet adapter shipped
+# 2026-08-27). No criterion moved, but the note is API-visible on two operator
+# surfaces, and a reader of a stored v0.1 payload was being told a different
+# reason for the same lock. Copy that ships over the wire moves the tag — the
+# opportunity-v0.5 precedent (trader-readable reasons were a version).
 
 # ── the criteria ────────────────────────────────────────────────────────────
 # Each is a number an operator can watch move. They are deliberately few: a
@@ -193,8 +207,9 @@ def evaluate(con, *, journal: list[dict], max_drawdown_pct: float,
         "enabled": False,
         "blocked_by_build": True,
         "build_note": ("Even with every criterion met, this system cannot send "
-                       "a real order: no order-routing code exists in it. That "
-                       "is a build task, not something the record earns."),
+                       "a real-money order: mainnet order routing is "
+                       "build-locked. Unlocking it is a deliberate build "
+                       "decision, not something the record earns."),
         "headline": (
             "Evidence bar met — live execution still needs an order router"
             if ready else

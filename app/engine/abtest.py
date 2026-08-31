@@ -357,7 +357,7 @@ def recorded_entry_model(con, symbols, tfs, setup_version):
 
 def run_variant(con, symbols, tfs, setup_version, *, managed, entry_model,
                 profile_override=None, partials=None, trail=None,
-                timestop=None):
+                timestop=None, beat=None):
     """One cell of the 2x2. Returns per-trade results, never aggregates alone.
 
     `profile_override` exists for calibration only. Reproducing a historical
@@ -367,9 +367,17 @@ def run_variant(con, symbols, tfs, setup_version, *, managed, entry_model,
     fees is not a reproduction — it is a different experiment that happens to
     share inputs. The 2x2 cells all use the CORRECTED model, so the comparison
     between them stays internally valid.
+
+    `beat` is an optional per-symbol progress callback, for callers running
+    inside a supervised process: a full-universe replay runs minutes against
+    the watchdog's dark-scanner threshold, and the retention sweep set the
+    precedent — beat inside the work, "so a sweep is never mistaken for a
+    hang". Default None; nothing else changes.
     """
     results = []
     for symbol in symbols:
+        if beat:
+            beat(symbol)
         profile = profile_override or costs.profile_for(symbol)
         for tf in tfs:
             candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
@@ -503,7 +511,8 @@ def _cluster_bootstrap(rows, resamples: int) -> dict | None:
             "p_gt_zero": sum(1 for m in means if m > 0) / resamples}
 
 
-def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000) -> dict:
+def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000,
+                beat=None) -> dict:
     """Replay the live book and split it by PLAYBOOK, with intervals.
 
     The aggregate hides the disagreement. Measured 4 Aug 2026 on 495 trades:
@@ -565,8 +574,12 @@ def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000) -> dict:
         except ValueError as exc:
             model_conflicts[version] = str(exc)
             continue
+        # The per-symbol heartbeat carries the version so a supervisor log can
+        # say WHICH generation's replay is running, not merely that one is.
         for r in run_variant(con, symbols, tfs, version, managed=False,
-                             entry_model=model):
+                             entry_model=model,
+                             beat=None if beat is None else
+                             (lambda s, v=version: beat(f"{v} {s}"))):
             for note in r.get("warnings") or ():
                 replay_degradations.append({
                     "version": version, "setup_id": r["setup_id"],
@@ -610,7 +623,7 @@ def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000) -> dict:
             "clears_zero": bool(cb and cb["ci_lo"] > 0),
             "sample_ok": cb is not None,
         }
-    cal = calibrate(con, symbols, tfs)
+    cal = calibrate(con, symbols, tfs, beat=beat)
     return {"version": ABTEST_VERSION,
             "calibration": cal,
             "trustworthy": (cal.get("trustworthy", False)
@@ -651,7 +664,8 @@ def summarise(results) -> dict:
     }
 
 
-def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01) -> dict:
+def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01, *,
+              beat=None) -> dict:
     """Reproduce the RECORDED book TRADE BY TRADE, and say plainly whether we
     managed it.
 
@@ -732,7 +746,10 @@ def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01) -> dict:
     replayed = run_variant(
         con, symbols, tfs, version, managed=False,
         entry_model="LIMIT_AT_EDGE" if legacy else "MAKER_THEN_MARKET",
-        profile_override=costs.DEFAULT_COST_PROFILE if legacy else None)
+        profile_override=costs.DEFAULT_COST_PROFILE if legacy else None,
+        # Calibration replays the whole recorded book — the same minutes-long
+        # dark window as the version replays, so it beats the same heartbeat.
+        beat=None if beat is None else (lambda s: beat(f"calibrate {s}")))
     rep = summarise(replayed)
     if not recorded or not rep.get("n"):
         return {"status": "UNAVAILABLE", "trustworthy": False,

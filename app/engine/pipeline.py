@@ -29,9 +29,9 @@ engines because it derives purely from exec facts, so it must see the adds too.
 """
 
 from . import (basis, breakout, cooldowns, cycles, execsim, fvg, liquidity,
-               ma, manual, momentum, ranges, regime, scalein, setups,
-               structure, swings, trend, volatility, volprofile, volume,
-               zones)
+               ma, manual, momentum, ranges, regime, scalein, sessions,
+               setups, structure, swings, trend, volatility, volprofile,
+               volume, zones)
 
 # Facts the market DESCRIPTION layer derives. No trading consumer reads the
 # indicator engines yet and none may until `factorstats` grades them — they are
@@ -39,6 +39,10 @@ from . import (basis, breakout, cooldowns, cycles, execsim, fvg, liquidity,
 # grade, which is exactly how `ranges.py` and `cooldowns.py` both died.
 DESCRIPTIVE = (swings, structure, zones, liquidity, regime, ranges,
                ma, momentum, volatility, volume, fvg, volprofile,
+               # sessions reads only candles and the clock, so its place in
+               # this sequence is arbitrary; it self-selects to 5m/15m/1H
+               # (a 4H bar spans sessions) and emits only on label change.
+               sessions,
                # basis self-selects: it early-returns for every symbol without
                # a reference feed (venues.REFERENCE) and every tf but its own,
                # so its presence here costs the other 91 symbols nothing.

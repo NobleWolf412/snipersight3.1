@@ -19,17 +19,63 @@ def setup(**overrides):
     return data
 
 
-def test_top_down_is_a_real_four_state_decision_not_allow_everywhere():
+def test_top_down_states_describe_the_ladder_and_only_policy_blocks():
+    """One HTF authority: the playbook's recorded BIAS_POLICY verdict.
+
+    v0.5 re-derived a policy here — WITH-only eligible, everything else held —
+    which was a second, ungraded authority over the one number bias.py owns,
+    and it scored a missing measurement as a bad one (the rule
+    bias.validate_policy refuses at import time; measured cost 1.02 R/trade
+    when setups.py made the same mistake). The four states stay as the honest
+    display of the ladder; only `resolved == "BLOCK"` gates.
+    """
     assert opportunities.top_down(setup()).state == TopDownState.ALIGNED
+
+    # The ladder disagreeing is a counterargument, not a veto. The playbook's
+    # policy said ALLOW, and dispatch must rehearse the book paper measures.
     conflict = setup(bias={"alignment": "MIXED", "composite": "MIXED",
                            "resolved": "ALLOW", "rungs": {}})
     conflict_candidate = opportunities.candidate(conflict)
     assert conflict_candidate.setup.top_down.state == TopDownState.CONFLICT
-    assert conflict_candidate.state == OpportunityState.BLOCKED
-    assert conflict_candidate.entry_recommendation.order_kind == OrderKind.NONE
+    assert conflict_candidate.state == OpportunityState.READY
+    assert conflict_candidate.eligible is True
+    assert conflict_candidate.entry_recommendation.order_kind == OrderKind.LIMIT
+    assert conflict_candidate.strongest_counterargument == (
+        "Higher-timeframe structure conflicts with this direction.")
+
     blocked = opportunities.candidate(setup(), risk_fact={
         "decision": "REJECTED", "reasons": ["DAILY_LOSS_HALT"]})
     assert blocked.setup.top_down.state == TopDownState.ALIGNED
+
+
+def test_a_missing_ladder_reading_never_holds_dispatch():
+    # UNKNOWN IS NOT A WEAK FORM OF AGAINST — engine/bias.py. A setup with no
+    # bias block at all (or a FLAT/UNKNOWN composite) reads CONDITIONAL for
+    # display and stays fully eligible.
+    unmeasured = setup(bias=None)
+    item = opportunities.candidate(unmeasured)
+    assert item.setup.top_down.state == TopDownState.CONDITIONAL
+    assert item.state == OpportunityState.READY
+    assert item.eligible is True
+    assert item.entry_recommendation.order_kind == OrderKind.LIMIT
+
+    flat = setup(bias={"alignment": "FLAT", "composite": "FLAT",
+                       "resolved": "ALLOW", "rungs": {"1H": "FLAT"}})
+    item = opportunities.candidate(flat)
+    assert item.setup.top_down.state == TopDownState.CONDITIONAL
+    assert item.eligible is True
+
+
+def test_the_playbooks_own_policy_block_is_the_one_ladder_gate():
+    armed = setup(bias={"alignment": "AGAINST", "composite": "DOWN",
+                        "resolved": "BLOCK", "rungs": {"1H": "DOWN"}})
+    item = opportunities.candidate(armed)
+    assert item.setup.top_down.state == TopDownState.BLOCKED
+    assert item.state == OpportunityState.BLOCKED
+    assert item.eligible is False
+    assert item.entry_recommendation.order_kind == OrderKind.NONE
+    assert item.strongest_counterargument == (
+        "This playbook's own higher-timeframe policy blocks this entry.")
 
 
 def test_ready_pullback_recommends_limit_and_never_uses_legacy_rank_for_grade():

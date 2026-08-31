@@ -36,10 +36,15 @@ would be placing orders in the past and the book would show a skill that is
 purely retrospective. `_first_eligible_bar` enforces it, and it is the property
 `test_manual.py` spends the most assertions on.
 
-WHAT THIS IS NOT: a live order router. No order-placement code exists anywhere
-in this system (`execsim` line 3: "No live orders exist anywhere"), and this
-module adds none. It simulates. `live_enabled` in `/api/trade-config` stays
-false and is not reachable from here.
+WHAT THIS IS NOT: a live order router. Order-placement code now EXISTS
+elsewhere — `execution.py` is a full outbox and `phemex_private.py` a signed
+adapter, TESTNET-only, with mainnet routing build-locked
+(`automation.LIVE_ROUTER_BUILD_ENABLED` is False and `broker_factory` raises
+rather than building a mainnet broker) — and this module touches none of it.
+It simulates, and `live_enabled` in `/api/trade-config` is not reachable from
+here. (Until 2026-08-30 this paragraph claimed no order-placement code existed
+anywhere in the system; that stopped being true when the outbox shipped, and a
+stale safety claim is worse than none.)
 
 PARTIAL EXITS (v0.2), and why they cost a version where trailing did not. A
 trailed stop is still ONE settlement: the position closes at one price, on one

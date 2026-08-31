@@ -17,7 +17,25 @@ from .contracts import (DecisionReason, EntryRecommendation, FactorGrade,
                         TopDownDecision, TopDownState, TradeSetup, to_wire)
 
 
-OPPORTUNITY_VERSION = "opportunity-v0.5-draft"
+OPPORTUNITY_VERSION = "opportunity-v0.6-draft"
+# v0.6: the ladder has ONE policy authority, and it is the playbook's own
+# recorded bias verdict — this module stops running a second, ungraded one.
+# Until now `top_down()` blocked dispatch for everything short of a fully
+# agreeing ladder: AGAINST and MIXED were CONFLICT, FLAT and UNKNOWN were
+# CONDITIONAL, and all four zeroed `eligible`. That rule was never graded,
+# contradicted the per-playbook measurement (`bias.py`, 2026-08-04: filtering
+# the live book to WITH-only costs -0.109 R/trade), and scored a MISSING
+# measurement as a bad one — the exact rule `bias.validate_policy` refuses at
+# import time because it cost 1.02 R/trade when setups.py made the same
+# mistake. It also made the testnet path rehearse a different book than the
+# paper book the grades describe, which defeats the shadow comparison.
+# Now: only a recorded `resolved == "BLOCK"` from the playbook's own
+# BIAS_POLICY blocks. The four states remain as the honest DISPLAY of the
+# ladder (aligned / conflict / conditional), and CONFLICT still supplies the
+# strongest counterargument — it is advisory, not a gate. NOT armed here:
+# any preference FOR against-ladder trades (the +0.2755 R bucket is n=126,
+# P(>0) 94.5%, one cell of a 100-cell sweep, measured pre-drift) — that is
+# an edge claim bias.py's own text refuses, not rehearsal fidelity.
 # v0.5: cockpit copy translates risk codes into trader-readable decisions,
 # unavailable setup-specific grades no longer masquerade as a reason to pass,
 # and portfolio/expiry blocks no longer falsify the independent top-down state.
@@ -41,6 +59,20 @@ def _decimal(value, default="0") -> Decimal:
 
 
 def top_down(payload: dict) -> TopDownDecision:
+    """The ladder as a DISPLAY, and the playbook's verdict as the only gate.
+
+    The reading (composite, rungs, alignment) is `bias.py`'s, recorded on the
+    setup fact by the playbook that emitted it, alongside that playbook's own
+    policy verdict in `resolved`. This function renders those; it decides
+    nothing of its own. Only `resolved == "BLOCK"` — the playbook's armed
+    BIAS_POLICY speaking — produces a blocking state. CONFLICT and
+    CONDITIONAL survive as honest descriptions of the ladder and as the
+    strongest counterargument, because a trader deserves to see "the daily
+    disagrees" beside an entry; they no longer veto it. Re-deriving a policy
+    here was a second authority over one number — convention 9's defect —
+    and it was this module, not bias.py, that ended up scoring UNKNOWN as a
+    weak AGAINST.
+    """
     block = payload.get("bias") or {}
     composite = str(block.get("composite") or "UNKNOWN")
     alignment = str(block.get("alignment") or "UNKNOWN")
@@ -50,8 +82,8 @@ def top_down(payload: dict) -> TopDownDecision:
     if resolved == "BLOCK":
         state = TopDownState.BLOCKED
         reasons.append(DecisionReason(
-            "TOP_DOWN_BLOCK", "The higher-timeframe policy blocks this entry.",
-            "CRITICAL"))
+            "TOP_DOWN_BLOCK", "This playbook's higher-timeframe policy "
+            "blocks this entry.", "CRITICAL"))
     elif alignment == "WITH":
         state = TopDownState.ALIGNED
         reasons.append(DecisionReason(
@@ -60,12 +92,14 @@ def top_down(payload: dict) -> TopDownDecision:
         state = TopDownState.CONFLICT
         reasons.append(DecisionReason(
             "TOP_DOWN_CONFLICT", "The higher-timeframe ladder conflicts with "
-            "or disagrees about this direction.", "WARNING"))
+            "or disagrees about this direction. The playbook's measured "
+            "policy allows the trade.", "WARNING"))
     else:
         state = TopDownState.CONDITIONAL
         reasons.append(DecisionReason(
             "TOP_DOWN_CONDITIONAL", "The higher-timeframe ladder is flat or "
-            "does not have enough confirmed information.", "WARNING"))
+            "has no confirmed reading. A missing measurement never blocks.",
+            "INFO"))
     return TopDownDecision(state=state, composite=composite,
                            direction=str(payload.get("direction") or "UNKNOWN"),
                            rungs=rungs, reasons=tuple(reasons),
@@ -261,9 +295,13 @@ def candidate(payload: dict, *, risk_fact: dict | None = None,
     hard_blocked = state in {OpportunityState.BLOCKED, OpportunityState.REJECTED}
     # Portfolio, expiry and execution state must not rewrite the market read.
     # A setup can be top-down aligned and still be skipped for account reasons.
+    #
+    # Only the playbook's own recorded policy verdict blocks (BLOCKED, from
+    # `resolved == "BLOCK"`). CONFLICT and CONDITIONAL are ladder DISPLAY
+    # states — v0.5 treated them as a gate, which was a second ungraded HTF
+    # authority and held every setup whose ladder was merely unmeasured.
     td = top_down(payload)
-    alignment_blocked = td.state in {TopDownState.CONFLICT, TopDownState.BLOCKED}
-    conditional_hold = td.state == TopDownState.CONDITIONAL
+    alignment_blocked = td.state == TopDownState.BLOCKED
     if alignment_blocked and state in {OpportunityState.READY, OpportunityState.FORMING}:
         state = OpportunityState.BLOCKED
     quality, components = _quality(payload, state)
@@ -306,7 +344,7 @@ def candidate(payload: dict, *, risk_fact: dict | None = None,
                         for code in risk_fact["reasons"]]
         reasons.extend(risk_reasons)
     eligible = state == OpportunityState.READY and not hard_blocked and \
-               not alignment_blocked and not conditional_hold
+               not alignment_blocked
     evidence = _ungraded(payload)
     primary = str(payload.get("why") or reasons[0].summary)
     if risk_rejected:
@@ -328,6 +366,9 @@ def candidate(payload: dict, *, risk_fact: dict | None = None,
         counterargument = "The position is already open and is being managed."
     elif state == OpportunityState.CLOSED:
         counterargument = "This trade has finished; review its result in the journal."
+    elif alignment_blocked:
+        counterargument = ("This playbook's own higher-timeframe policy "
+                           "blocks this entry.")
     elif hard_blocked:
         counterargument = "A hard safety rule blocks this setup."
     elif td.state == TopDownState.CONFLICT:
@@ -350,7 +391,7 @@ def candidate(payload: dict, *, risk_fact: dict | None = None,
         evidence=evidence,
         entry_recommendation=recommend_entry(
             payload, state,
-            blocked=hard_blocked or alignment_blocked or conditional_hold),
+            blocked=hard_blocked or alignment_blocked),
         risk_decision=risk_fact, ranking_components=components,
         economics=economics, primary_explanation=primary,
         strongest_counterargument=counterargument,

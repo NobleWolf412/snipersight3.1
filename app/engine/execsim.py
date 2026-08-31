@@ -1,7 +1,14 @@
 """Execution simulator — paper-trades every VALIDATED setup. algo exec-v0.1-draft.
 
-No live orders exist anywhere in this system (§16). This engine replays each
-setup as a limit fill at entry on its trigger bar (guaranteed by construction:
+Nothing here places an order at a venue. (This line claimed "no live orders
+exist anywhere in this system" until 2026-08-30, which stopped being true when
+the outbox shipped: `execution.py` is a full outbox and `phemex_private.py` a
+signed adapter, TESTNET-only, with mainnet routing build-locked —
+`automation.LIVE_ROUTER_BUILD_ENABLED` is False and `broker_factory` raises
+rather than building a mainnet broker. See `livegate.py` for the same
+correction beside the lock it justifies.) This engine SIMULATES: it replays
+each setup as a limit fill at entry on its trigger bar (guaranteed by
+construction:
 the touch bar overlaps the zone edge), then walks forward bar by bar:
 - SL hit when a bar trades through the stop; TP hit when it trades through the
   target. Same bar reaches BOTH -> counted as SL (conservative draft rule,

@@ -46,6 +46,7 @@ AUDIT_PREFIXES = (
     "ANALYSE",
     "RETENTION",
     "AUTOTRADER",
+    "REGRADE",
 )
 
 

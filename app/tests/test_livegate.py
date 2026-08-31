@@ -143,14 +143,14 @@ class LiveGateCase(unittest.TestCase):
         Folding "the evidence is good" into "you may trade" is how the Arm
         button came to be wired to a live flag and stayed dead for months.
         The operator moves the evidence bar by trading the paper book; only a
-        build ships an order router, and no amount of good trading produces
-        one.
+        deliberate build unlocks the mainnet router, and no amount of good
+        trading opens that lock.
         """
         g = self._eval([0.9, 1.1] * (livegate.MIN_FORWARD_TRADES // 2))
         self.assertTrue(g["ready"])
         self.assertFalse(g["enabled"],
                          "a passing evidence bar enabled live execution — "
-                         "there is no order-placement code to enable")
+                         "mainnet routing is build-locked and must stay so")
         self.assertTrue(g["blocked_by_build"])
         self.assertIn("order", g["build_note"].lower())
 
