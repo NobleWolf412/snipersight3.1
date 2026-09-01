@@ -243,7 +243,15 @@ def _run(con, rec, symbol: str, tf: str, tf_seconds: int) -> dict:
 
     # LOCAL promotion: reversal to the next opposite-type micro swing
     for idx, s in enumerate(swings):
-        if atr[s["i"]] is None:
+        # ATR quantizes to ZERO on low-tick coins in dead hours: a one-tick
+        # true range on an 8dp quote Wilder-averages to ~1e-8/14 = 7e-10,
+        # which Q8 rounds to 0E-8 — so the bar is not flat, but its ATR is.
+        # Unguarded, `reversal / atr` below raised decimal.DivisionByZero on
+        # 1,151 recorded runs (PF_PEPEUSD 5m alone 1,041, PF_SHIBUSD 5m 110),
+        # leaving both series with no swing facts past each crash point. Zero
+        # joins None as "no usable ATR measurement" — same guard, same reason,
+        # as ma.py's ribbon distances.
+        if not atr[s["i"]]:
             continue
         opp = next((t for t in swings[idx + 1:] if t["type"] != s["type"]), None)
         if opp is None:
@@ -268,7 +276,7 @@ def _run(con, rec, symbol: str, tf: str, tf_seconds: int) -> dict:
     locals_ = []
     for idx, s in enumerate(swings):
         opp = next((t for t in swings[idx + 1:] if t["type"] != s["type"]), None)
-        if atr[s["i"]] is None or opp is None:
+        if not atr[s["i"]] or opp is None:
             continue
         if abs(Decimal(s["price"]) - Decimal(opp["price"])) < (LOCAL_ATR_MULT * atr[s["i"]]).quantize(Q8):
             continue
@@ -301,7 +309,7 @@ def _run(con, rec, symbol: str, tf: str, tf_seconds: int) -> dict:
         ev = {"vs_left_neighbor": s["_left"], "vs_right_neighbor": s["_right"],
               "margin_pct": s["_margin_pct"],
               "held_candles": held}
-        if atr[i] is not None:
+        if atr[i]:
             rev = abs(Decimal(s["price"]) - Decimal(s["_next_opp"]))
             ev["reversal_atr"] = str((rev / atr[i]).quantize(Q2))
         if i >= 20:
