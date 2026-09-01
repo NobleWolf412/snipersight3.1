@@ -70,13 +70,9 @@ OPERATIONAL_EXPECTED = {
     # and a missing ladder reading never holds dispatch. v0.5: risk reasons
     # trader-readable; top-down independent of risk state.
     "opportunities": "opportunity-v0.6-draft",
-    # quality-v0.3: a market the venue no longer lists reports its unexplained
-    # gaps as RETIRED_SEQUENCE_GAPS (DEGRADED) instead of SEQUENCE_GAPS
-    # (BLOCKED) — the holes cannot be repaired once the market is delisted, so
-    # blocking on them halted the store forever (CRVUSDT/Phemex). v0.2:
-    # acknowledged venue voids are durable notes, not warnings; unexplained
-    # gaps on a LIVE market remain blockers. Read-model change only.
-    "quality": "quality-v0.3-draft",
+    # quality-v0.2: acknowledged venue voids are durable notes, not warnings;
+    # unexplained gaps remain blockers. Operational read-model change only.
+    "quality": "quality-v0.2-draft",
     # livegate-v0.2: build_note names the mainnet build lock instead of
     # claiming no order code exists. The tag ships over the wire on two
     # operator surfaces, and it was never locked here before — a behaviour
