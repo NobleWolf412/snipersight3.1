@@ -26,7 +26,7 @@ from pathlib import Path
 import notify
 from engine import (automation, autotrader, broker_factory, execution, positions, store,
                     importer, aggregator, execsim, risk, universe, ingest, quality,
-                    marketdata, pipeline, venues)
+                    listings, marketdata, pipeline, venues)
 from engine.runlog import get_logger
 
 LIVE_VERSION = "live-v0.2-draft"
@@ -202,6 +202,15 @@ def refresh_universe(con, log, beat=None):
     _last_universe_refresh = time.monotonic()
     # the ranking sweep is a ~40s blocking call — beat inside it, not around it
     prog = (lambda d, t: beat(f"universe {d}/{t}")) if beat else None
+    # Ask the venues what they still LIST, before ranking. Separate from
+    # universe.refresh because that runs twice whenever anything is warming,
+    # and tests drive it offline with an injected ranking. A failed sweep
+    # records swept=false rather than raising: the listing record is evidence
+    # for the quality audit, never a precondition for scanning.
+    try:
+        listings.sweep(con)
+    except Exception as exc:
+        log.warning(f"listing sweep failed: {type(exc).__name__}: {exc}")
     r = universe.refresh(con, progress=prog)
     if r["source"] == "unavailable":
         log.warning("universe refresh: rank source unavailable — unchanged")

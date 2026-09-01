@@ -10,9 +10,19 @@ import json
 import time
 from decimal import Decimal
 
-from . import aggregator, importer, venues
+from . import aggregator, importer, listings, venues
 
-QUALITY_VERSION = "quality-v0.2-draft"
+QUALITY_VERSION = "quality-v0.3-draft"
+# v0.3: a market its VENUE no longer lists reports RETIRED_SEQUENCE_GAPS
+# (DEGRADED) instead of SEQUENCE_GAPS (BLOCKED). Its holes cannot be repaired —
+# no import can serve history for a market that does not exist — so blocking
+# halted the store forever with no action available to the operator (CRVUSDT,
+# delisted from Phemex, absent from /public/products and the 24h ticker while
+# BTCUSDT returned a full 1000 rows; verified against the live API 2026-09-01).
+# The delisting evidence is `listings.listed_on_venue`, NOT universe membership:
+# `members` is the top_n slice of the ranking, so an earlier attempt keyed on it
+# demoted 81 live Phemex perps and was reverted (ba9d8fb). Two guards keep this
+# narrow — a symbol with an unresolved order still BLOCKS, and only gaps demote.
 # v0.2: venue-acknowledged empty buckets remain auditable SERVE_FLAG notes but
 # no longer turn an otherwise healthy scanner DEGRADED. They are evidence that
 # a bucket did not exist, not a repair queue; unexplained sequence gaps remain
@@ -52,6 +62,10 @@ CODE_RUNG = {
     "SEQUENCE_GAPS":           "HALT",
     "DEVELOPING_CANDLES":      "HALT",
     "STALE_SERIES":            "QUARANTINE",   # per-symbol/tf degrade
+    # Same rung and reasoning as STALE_SERIES: a per-symbol finding on a market
+    # that no longer exists to trade. HALT would hand the watchdog a restart
+    # that cannot heal it (the 2026-08-08 loop) — no restart relists a market.
+    "RETIRED_SEQUENCE_GAPS":   "QUARANTINE",
     "KNOWN_VENUE_GAPS":        "SERVE_FLAG",   # documented, not corruption
     # AGGREGATION
     "AGGREGATE_PENDING":       "SERVE_FLAG",   # scheduling lag
@@ -196,6 +210,39 @@ def _live_symbols(con) -> set:
         return {r[0] for r in con.execute(
             "SELECT DISTINCT symbol FROM candles").fetchall()
             if not venues.is_reference_key(r[0])}
+
+
+def _symbols_with_open_orders(con) -> set:
+    """Symbols holding an unresolved simulator order.
+
+    These are the one population that must keep BLOCKING whatever the venue
+    did. `live.py` resolves pinned exits for symbols OUTSIDE the scan set, and
+    `assert_market_ready` — which stops only on BLOCKED — is the sole gate in
+    front of `execsim.run`. Its comment states the harm exactly: resolving an
+    exit across an unexplained candle gap "would invent which level hit first".
+    A delisting makes that WORSE, not better: the missing bars are never coming,
+    so the invented fill would be permanent. It would then enter the graded book
+    that decides whether live routing unlocks.
+
+    Fails CLOSED — on any error every symbol is treated as holding an order, so
+    the demotion cannot fire on a store we could not read.
+    """
+    try:
+        from . import execsim
+        return {symbol for symbol, _tf in execsim.unresolved(con)}
+    except Exception:
+        return _ALL_SYMBOLS
+
+
+class _AllSymbols(frozenset):
+    """Contains everything — the fail-closed answer to 'which symbols hold an
+    open order' when the store could not be read."""
+
+    def __contains__(self, item) -> bool:
+        return True
+
+
+_ALL_SYMBOLS = _AllSymbols()
 
 
 def _issue(checks, stage, status, code, details, symbol=None, tf=None):
@@ -362,6 +409,7 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
         _issue(checks, "DATA", "BLOCKED", "NO_CANDLES",
                "no market candles are available", symbol)
     live = _live_symbols(con)
+    pinned = _symbols_with_open_orders(con)
 
     for sym, tf in series:
         sec = importer.TF_SECONDS.get(tf)
@@ -400,9 +448,43 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
                 # failures are caught independently by MISSING_AGGREGATE below.
                 unexplained = []
             if unexplained:
-                _issue(checks, "DATA", "BLOCKED", "SEQUENCE_GAPS",
-                       f"{len(unexplained)} unexplained discontinuities in candle sequence",
-                       sym, tf)
+                # A market its VENUE no longer lists has RETIRED history, not
+                # broken history. The hole is unrepairable BY CONSTRUCTION, so
+                # a blocker on it never clears and the operator has no action
+                # to take — CRVUSDT halted the store on every cycle this way.
+                # Same cry-wolf failure the STALE_SERIES scoping below already
+                # fixed for its own check; gaps were the DATA blocker it was
+                # never applied to.
+                #
+                # THE EVIDENCE IS THE VENUE'S PRODUCT LIST, not universe
+                # membership. `members` is the top_n slice of the ranking
+                # (default 20) while Phemex listed 101 perps, so keying on it
+                # demoted 81 live markets — reverted as ba9d8fb, and the reason
+                # this reads `listings` instead. `listed_on_venue` answers None
+                # for every doubt (never swept, sweep failed, record stale,
+                # venue unknown) and only False on positive evidence that the
+                # venue answered without naming the symbol; None keeps the
+                # blocker, so an outage cannot retire a book.
+                #
+                # Two deliberate narrowings on top of that:
+                #  · A symbol with an unresolved order keeps BLOCKING. That is
+                #    the population live.py resolves pinned exits for, and
+                #    inventing a fill there is worse on a delisted market than
+                #    a live one — the bars are never coming.
+                #  · Only gaps demote. Malformed rows and developing candles
+                #    indict the STORE, which is live and repairable whatever
+                #    the venue did, so they keep blocking.
+                retired = (sym not in pinned
+                           and listings.listed_on_venue(con, sym, now) is False)
+                if retired:
+                    _issue(checks, "DATA", "DEGRADED", "RETIRED_SEQUENCE_GAPS",
+                           f"{len(unexplained)} unexplained discontinuities in a "
+                           f"market the venue no longer lists — retired history, "
+                           f"unrepairable, not blocking", sym, tf)
+                else:
+                    _issue(checks, "DATA", "BLOCKED", "SEQUENCE_GAPS",
+                           f"{len(unexplained)} unexplained discontinuities in candle sequence",
+                           sym, tf)
             if len(missing) > len(unexplained):
                 _issue(checks, "DATA", "PASS", "KNOWN_VENUE_GAPS",
                        f"{len(missing) - len(unexplained)} venue-acknowledged empty "

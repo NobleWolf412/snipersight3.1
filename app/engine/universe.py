@@ -149,6 +149,26 @@ def _get(path: str, retries: int = RANK_RETRIES):
     raise last
 
 
+def coinbase_products() -> list[dict]:
+    """Every USD product Coinbase currently LISTS — the venue's own answer to
+    "does this market exist", with no ranking judgement applied.
+
+    Separate from `rank_by_volume`'s filter because the two answer different
+    questions and a caller that conflates them gets a live market wrong. A
+    `limit_only` or `auction_mode` pair is listed and serves history; it is
+    merely not rankable into a tradeable universe. A symbol whose /stats call
+    429s is absent from the ranking while fully listed.
+
+    RAISES on a failed fetch rather than returning []. An empty listing and an
+    unreachable venue are opposite facts — one says "nothing is listed", the
+    other says "we did not ask successfully" — and any caller that decides
+    whether a market was delisted must be able to tell them apart.
+    """
+    return [p for p in _get("/products")
+            if p.get("quote_currency") == "USD" and p.get("status") == "online"
+            and not p.get("trading_disabled")]
+
+
 def rank_by_volume(progress=None) -> list[tuple[str, float]]:
     """Live: all online USD spot pairs, ranked by 24h USD volume. Fail-soft.
 
@@ -157,13 +177,16 @@ def rank_by_volume(progress=None) -> list[tuple[str, float]]:
     liveness heartbeat needs to tick inside it rather than around it.
     """
     try:
-        prods = _get("/products")
+        prods = coinbase_products()
     except Exception:
         return []
+    # Ranking eligibility is NARROWER than listing, deliberately. A limit_only
+    # or auction_mode pair is still listed and still serves history — it just
+    # must not be ranked into a tradeable universe. `coinbase_products` owns
+    # the listing question; these three filters own the ranking question.
     usd = [p["id"] for p in prods
-           if p.get("quote_currency") == "USD" and p.get("status") == "online"
-           and not p.get("trading_disabled") and not p.get("limit_only")
-           and not p.get("auction_mode") and not _is_stable(p["id"])]
+           if not p.get("limit_only") and not p.get("auction_mode")
+           and not _is_stable(p["id"])]
     # /products is NOT volume-ordered, so we must stat every online USD pair to
     # rank correctly (missing a high-volume pair like SOL/XRP would silently
     # shrink the universe). ~388 calls, hourly refresh — well within limits.

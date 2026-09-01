@@ -32,7 +32,8 @@ from engine import (aggregator, basis, bias, breakout, cooldowns, cycles,
                     importer, volatility, volume, zones, trend)
 from engine import (automation, autotrader, contracts, execution, lifecycle,
                     stockcalendar, stockdemo, stocks, stockstore)
-from engine import apexbridge, livegate, phemex_private, positions, quality, regrade
+from engine import (apexbridge, listings, livegate, phemex_private, positions,
+                    quality, regrade, universe)
 
 
 # Operational authorities do not write research facts, so they do not belong
@@ -70,9 +71,27 @@ OPERATIONAL_EXPECTED = {
     # and a missing ladder reading never holds dispatch. v0.5: risk reasons
     # trader-readable; top-down independent of risk state.
     "opportunities": "opportunity-v0.6-draft",
-    # quality-v0.2: acknowledged venue voids are durable notes, not warnings;
-    # unexplained gaps remain blockers. Operational read-model change only.
-    "quality": "quality-v0.2-draft",
+    # quality-v0.3: a market the VENUE no longer lists reports its unexplained
+    # gaps as RETIRED_SEQUENCE_GAPS (DEGRADED) rather than SEQUENCE_GAPS
+    # (BLOCKED) — the holes cannot be repaired once the market is gone, so
+    # blocking halted the store forever (CRVUSDT/Phemex). Reads `listings`,
+    # never universe membership: `members` is the top_n slice, and keying on it
+    # demoted 81 live perps (reverted, ba9d8fb). v0.2: acknowledged venue voids
+    # are durable notes, not warnings; gaps on a LIVE market still block.
+    "quality": "quality-v0.3-draft",
+    # listings-v0.1: the venue product sweep, appended one fact per venue per
+    # run. Locked from birth — quality's verdict now depends on it, and a
+    # version nobody tracks until something reads it leaves its early facts
+    # unplaceable. The coupling is listings -> quality; CONSUMERS is keyed on
+    # LOCKED and both of these are operational, so it cannot be recorded there.
+    "listings": "listings-v0.1-draft",
+    # universe is locked here while deliberately NOT moving. A UNIVERSE_VERSION
+    # bump re-tags the fact `admitted_at` reads with confirmed_at<=as_of, so
+    # every setup confirmed before the bump would find no fact at or before it
+    # FOREVER, and risk would re-decide the whole graded book beside its own
+    # unmoved version. It was in neither dict, so that bump would have failed
+    # nothing — locking it at the moment we chose not to move it is free.
+    "universe": "universe-v0.3-draft",
     # livegate-v0.2: build_note names the mainnet build lock instead of
     # claiming no order code exists. The tag ships over the wire on two
     # operator surfaces, and it was never locked here before — a behaviour
@@ -104,6 +123,8 @@ def operational_versions():
         "lifecycle": lifecycle.LIFECYCLE_VERSION,
         "opportunities": opportunities.OPPORTUNITY_VERSION,
         "quality": quality.QUALITY_VERSION,
+        "listings": listings.LISTINGS_VERSION,
+        "universe": universe.UNIVERSE_VERSION,
         "regrade": regrade.REGRADE_VERSION,
         "livegate": livegate.LIVEGATE_VERSION,
         "apexbridge": apexbridge.APEXBRIDGE_VERSION,
