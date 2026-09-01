@@ -12,7 +12,18 @@ from decimal import Decimal
 
 from . import aggregator, importer, venues
 
-QUALITY_VERSION = "quality-v0.2-draft"
+QUALITY_VERSION = "quality-v0.3-draft"
+# v0.3: a symbol the venue no longer lists reports RETIRED_SEQUENCE_GAPS
+# (DEGRADED) instead of SEQUENCE_GAPS (BLOCKED). Its holes are unrepairable by
+# construction — no future import can fill history for a market that no longer
+# exists — so blocking on them halts the store forever with no action available
+# to the operator. CRVUSDT was delisted from Phemex and failed every cycle:
+# absent from /public/products and the 24h ticker, its klines answering
+# `code:0 OK` with zero rows, while BTCUSDT returned a full 1000 (verified
+# against the live API 2026-09-01). Same cry-wolf failure STALE_SERIES was
+# scoped against — 108 retired spot symbols, 108 permanent warnings — applied
+# to the one DATA check that still blocked on retired markets. Changes what
+# the persisted verdict calls a blocker, so it carries a new version.
 # v0.2: venue-acknowledged empty buckets remain auditable SERVE_FLAG notes but
 # no longer turn an otherwise healthy scanner DEGRADED. They are evidence that
 # a bucket did not exist, not a repair queue; unexplained sequence gaps remain
@@ -52,6 +63,11 @@ CODE_RUNG = {
     "SEQUENCE_GAPS":           "HALT",
     "DEVELOPING_CANDLES":      "HALT",
     "STALE_SERIES":            "QUARANTINE",   # per-symbol/tf degrade
+    # Same rung and the same reasoning as STALE_SERIES: a per-symbol finding
+    # on a market nothing trades any more. HALT would hand the watchdog a
+    # restart that cannot heal it (the 2026-08-08 loop) — the venue delisted
+    # the market; no amount of restarting brings its history back.
+    "RETIRED_SEQUENCE_GAPS":   "QUARANTINE",
     "KNOWN_VENUE_GAPS":        "SERVE_FLAG",   # documented, not corruption
     # AGGREGATION
     "AGGREGATE_PENDING":       "SERVE_FLAG",   # scheduling lag
@@ -196,6 +212,25 @@ def _live_symbols(con) -> set:
         return {r[0] for r in con.execute(
             "SELECT DISTINCT symbol FROM candles").fetchall()
             if not venues.is_reference_key(r[0])}
+
+
+def _known_universe(con) -> set | None:
+    """Symbols the venue still lists, in any state — None when we cannot tell.
+
+    Same once-per-audit, never-cached reasoning as `_live_symbols`: a module
+    global keyed on nothing is shared across CONNECTIONS, so one database's
+    universe would decide another database's verdicts.
+
+    Fails CLOSED, unlike `_live_symbols`. Staleness fails open because a
+    spurious warning is cheap; this one withdraws a blocker, so "cannot tell"
+    must never read as "everything retired". None on any doubt keeps the
+    blocker exactly where it is today.
+    """
+    try:
+        from . import universe
+        return universe.known_symbols(con)
+    except Exception:
+        return None
 
 
 def _issue(checks, stage, status, code, details, symbol=None, tf=None):
@@ -362,6 +397,7 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
         _issue(checks, "DATA", "BLOCKED", "NO_CANDLES",
                "no market candles are available", symbol)
     live = _live_symbols(con)
+    known = _known_universe(con)
 
     for sym, tf in series:
         sec = importer.TF_SECONDS.get(tf)
@@ -400,9 +436,41 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
                 # failures are caught independently by MISSING_AGGREGATE below.
                 unexplained = []
             if unexplained:
-                _issue(checks, "DATA", "BLOCKED", "SEQUENCE_GAPS",
-                       f"{len(unexplained)} unexplained discontinuities in candle sequence",
-                       sym, tf)
+                # A market the venue no longer lists has RETIRED data, not
+                # broken data. The hole is unrepairable BY CONSTRUCTION — no
+                # future import can serve history for a market that does not
+                # exist — so a blocker on it never clears and the operator has
+                # no action to take. CRVUSDT sat delisted from Phemex halting
+                # the store on every cycle. This is the cry-wolf failure the
+                # STALE_SERIES scoping below already fixed for its own check;
+                # gaps were the one DATA blocker it was never applied to.
+                #
+                # Deliberately narrow. Only SEQUENCE_GAPS demotes: malformed
+                # rows (OHLC_INVARIANT_FAILURE) and developing candles indict
+                # the STORE, which is live and repairable whatever the venue
+                # did, so they keep blocking on a retired symbol.
+                #
+                # `retired` is membership in the venue's own ranking, not
+                # tradeability: refresh() drops a delisted symbol from
+                # `members` entirely while a WARMING or REJECTED one stays,
+                # so an ADMITTED-only test would silently stop blocking on
+                # every symbol still warming up. known_symbols() answers None
+                # when it cannot tell, and None keeps the blocker — one failed
+                # venue sweep must not switch a fail-closed gate off.
+                # A reference key is excluded: the REFERENCE_ demotion at the
+                # end of this function owns those, and prefixing a demoted
+                # code would produce one no CODE_RUNG entry declares.
+                retired = (known is not None and sym not in known
+                           and not venues.is_reference_key(sym))
+                if retired:
+                    _issue(checks, "DATA", "DEGRADED", "RETIRED_SEQUENCE_GAPS",
+                           f"{len(unexplained)} unexplained discontinuities in a "
+                           f"market the venue no longer lists — retired history, "
+                           f"unrepairable, not blocking", sym, tf)
+                else:
+                    _issue(checks, "DATA", "BLOCKED", "SEQUENCE_GAPS",
+                           f"{len(unexplained)} unexplained discontinuities in candle sequence",
+                           sym, tf)
             if len(missing) > len(unexplained):
                 _issue(checks, "DATA", "PASS", "KNOWN_VENUE_GAPS",
                        f"{len(missing) - len(unexplained)} venue-acknowledged empty "

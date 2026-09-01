@@ -2767,6 +2767,12 @@ QUALITY_PLAIN = {
         "The importer keeps retrying on every scan; the market stays "
         "untradeable until each hole fills or the venue confirms it served "
         "nothing there. Hours of no progress is worth a Copy report."),
+    "RETIRED_SEQUENCE_GAPS": (
+        "This market has holes in its stored history, but the exchange has "
+        "delisted it — it is no longer offered, so the missing bars can "
+        "never be fetched.",
+        "Nothing to fix and nothing to wait for. The bot does not trade this "
+        "market and its old bars cannot block anything."),
     "DEVELOPING_CANDLES": (
         "A bar that had not finished yet was counted as if it were complete "
         "— normally a timing race during one scan.",

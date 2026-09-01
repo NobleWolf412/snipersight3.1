@@ -327,6 +327,39 @@ def shadow_symbols(con) -> list[str]:
             if m["state"] == "SHADOW"]
 
 
+def known_symbols(con) -> set[str] | None:
+    """Every symbol the latest universe fact listed, in ANY state — or None
+    when the store cannot say.
+
+    Deliberately distinct from `current_symbols` (ADMITTED — the TRADEABLE
+    set) because it answers a different question: does the VENUE still list
+    this market at all? `refresh` builds `members` by walking the venue's own
+    ranking, so a market the venue has DELISTED is not REJECTED or WARMING —
+    it is absent entirely, while a symbol that is merely illiquid or short of
+    history is still a member. A caller that used the ADMITTED set to detect
+    delisting would read every WARMING symbol as retired.
+
+    None means "cannot tell", never "nothing is listed". A cold store, a
+    damaged payload, or the low-coverage refusal that records no members
+    (refresh returns source="low_coverage" rather than overwrite the universe
+    on a bad venue sweep) must not let a caller conclude that every market
+    retired at once — that is one failed HTTP sweep away from switching off
+    whatever the caller guards.
+    """
+    row = con.execute(
+        "SELECT payload FROM facts WHERE kind='universe' AND algo_version=? "
+        "ORDER BY id DESC LIMIT 1", (UNIVERSE_VERSION,)).fetchone()
+    if not row:
+        return None
+    try:
+        members = json.loads(row[0])["members"]
+    except (ValueError, TypeError, KeyError):
+        return None
+    if not members:
+        return None
+    return {m["symbol"] for m in members}
+
+
 def scan_symbols(con) -> list[str]:
     """Everything the engines should RUN over: traded plus shadow.
 
