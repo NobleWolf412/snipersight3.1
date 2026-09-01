@@ -127,6 +127,28 @@ def list_products() -> list[dict]:
     return normalize_products(_get("/public/products") or {})
 
 
+def listed_symbols() -> list[str]:
+    """Every USDT perp the venue NAMES, whatever its trading status.
+
+    Deliberately different from `list_products`, which keeps only "Listed"
+    because it feeds a tradeable universe. Listing is a different question, and
+    Phemex answers it directly: of 873 USDT perps in the payload on 2026-09-01,
+    101 were "Listed" and 772 "Delisted" — CRVUSDT among the latter. That is
+    the venue STATING the delisting, not us inferring it from absence.
+
+    So this excludes exactly that marker and keeps everything else. A perp
+    suspended for maintenance, or in a cancel-only wind-down, is still a market
+    whose history the venue can serve, and a caller deciding whether a market
+    was DELISTED must not read a reversible halt as one. An unrecognised future
+    status is kept for the same reason — doubt means listed.
+    """
+    data = (_get("/public/products") or {}).get("data") or {}
+    return [p["symbol"] for p in data.get("perpProductsV2") or []
+            if p.get("settleCurrency") == SETTLE
+            and p.get("quoteCurrency") == QUOTE and p.get("symbol")
+            and str(p.get("status", "")).lower() != "delisted"]
+
+
 def rank_by_volume(progress=None) -> list[tuple[str, float]]:
     """USDT perps ranked by 24h turnover in quote currency (USD-equivalent).
 

@@ -125,8 +125,8 @@ class TestGapDemotion(ListingCase):
         self.record("phemex-perp", ["BTCUSDT", "ETHUSDT"])
         found = self.codes("CRVUSDT")
         self.assertNotIn("SEQUENCE_GAPS", found)
-        self.assertEqual(found["RETIRED_SEQUENCE_GAPS"]["status"], "DEGRADED")
-        self.assertEqual(found["RETIRED_SEQUENCE_GAPS"]["rung"], "QUARANTINE")
+        self.assertEqual(found["RETIRED_SEQUENCE_GAPS"]["status"], "PASS")
+        self.assertEqual(found["RETIRED_SEQUENCE_GAPS"]["rung"], "SERVE_FLAG")
 
     def test_a_live_but_low_ranked_market_still_blocks(self):
         """THE REGRESSION THAT CAUSED THE REVERT. Phemex listed 101 perps while
@@ -154,7 +154,8 @@ class TestGapDemotion(ListingCase):
         self.gapped("CRVUSDT")
         self.record("phemex-perp", ["BTCUSDT"])
         with mock.patch("engine.execsim.unresolved",
-                        return_value={("CRVUSDT", "1H"): [{}]}):
+                        return_value={("CRVUSDT", "1H"): [{}]}), \
+                mock.patch("engine.universe.scan_symbols", return_value=[]):
             self.assertIn("SEQUENCE_GAPS", self.codes("CRVUSDT"))
 
     def test_unreadable_order_book_keeps_blocking(self):
@@ -162,6 +163,28 @@ class TestGapDemotion(ListingCase):
         self.record("phemex-perp", ["BTCUSDT"])
         with mock.patch("engine.execsim.unresolved",
                         side_effect=RuntimeError("db locked")):
+            self.assertIn("SEQUENCE_GAPS", self.codes("CRVUSDT"))
+
+    def test_an_unresolved_manual_intent_still_blocks(self):
+        """manual.run settles the operator's hand-armed trades by walking
+        candles, on the same roster. The quality gate is the only thing
+        stopping it settling across the hole."""
+        self.gapped("CRVUSDT")
+        self.record("phemex-perp", ["BTCUSDT"])
+        with mock.patch("engine.manual.unresolved",
+                        return_value={("CRVUSDT", "1H"): [{}]}), \
+                mock.patch("engine.universe.scan_symbols", return_value=[]):
+            self.assertIn("SEQUENCE_GAPS", self.codes("CRVUSDT"))
+
+    def test_a_symbol_still_in_the_scan_set_blocks(self):
+        """The audit computes the open-order set ONCE, before its loop, but
+        the pipeline creates a setup and simulates it moments after this gate
+        passes — so a scanned symbol acquires an order that did not exist when
+        we looked. universe.refresh also keeps its previous members
+        indefinitely under low rank coverage, so this window is not one hour."""
+        self.gapped("CRVUSDT")
+        self.record("phemex-perp", ["BTCUSDT"])
+        with mock.patch("engine.universe.scan_symbols", return_value=["CRVUSDT"]):
             self.assertIn("SEQUENCE_GAPS", self.codes("CRVUSDT"))
 
     def test_only_gaps_demote(self):
@@ -192,3 +215,124 @@ class TestGapDemotion(ListingCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestListingSourcesAreListingsNotTradeability(ListingCase):
+    """The adapters' own product rosters drop anything not currently tradeable,
+    because they feed a TRADEABLE universe. Reading those as the listing turns
+    a maintenance halt or a cancel-only wind-down into a delisting — which
+    tells the operator a live market's repairable holes are unrepairable. The
+    sweep must read the venue's NAMING instead.
+    """
+
+    def test_coinbase_keeps_halts_and_drops_only_delisted(self):
+        from engine import universe
+        payload = [
+            {"id": "AAA-USD", "quote_currency": "USD", "status": "online"},
+            {"id": "BBB-USD", "quote_currency": "USD", "status": "online",
+             "trading_disabled": True},          # maintenance halt -> LISTED
+            {"id": "CCC-USD", "quote_currency": "USD", "status": "online",
+             "limit_only": True},                # serving history -> LISTED
+            {"id": "DDD-USD", "quote_currency": "USD", "status": "delisted",
+             "trading_disabled": True},          # end of life -> NOT listed
+            {"id": "EEE-EUR", "quote_currency": "EUR", "status": "online"},
+        ]
+        with mock.patch.object(universe, "_get", return_value=payload):
+            listed = {p["id"] for p in universe.coinbase_products()}
+        self.assertEqual(listed, {"AAA-USD", "BBB-USD", "CCC-USD"})
+
+    def test_the_ranking_filter_survived_the_extraction(self):
+        """coinbase_products widened; rank_by_volume must NOT have. A halted or
+        limit_only pair entering the ranking would change the universe under an
+        unmoved UNIVERSE_VERSION."""
+        from engine import universe
+        payload = [
+            {"id": "AAA-USD", "quote_currency": "USD", "status": "online"},
+            {"id": "BBB-USD", "quote_currency": "USD", "status": "online",
+             "trading_disabled": True},
+            {"id": "CCC-USD", "quote_currency": "USD", "status": "online",
+             "limit_only": True},
+            {"id": "EEE-USD", "quote_currency": "USD", "status": "online",
+             "auction_mode": True},
+            {"id": "FFF-USD", "quote_currency": "USD", "status": "offline"},
+        ]
+        seen = []
+
+        def fake_get(path):
+            if path == "/products":
+                return payload
+            seen.append(path.split("/")[2])
+            return {"last": "1", "volume": "1"}
+
+        with mock.patch.object(universe, "_get", side_effect=fake_get):
+            universe.rank_by_volume()
+        self.assertEqual(set(seen), {"AAA-USD"})
+
+    def test_phemex_keeps_a_suspended_perp_and_drops_a_delisted_one(self):
+        """Phemex states the delisting: 101 Listed vs 772 Delisted on
+        2026-09-01, CRVUSDT among the latter. An unrecognised future status is
+        kept — doubt means listed."""
+        from engine import phemex
+        payload = {"data": {"perpProductsV2": [
+            {"symbol": "AAAUSDT", "status": "Listed",
+             "settleCurrency": "USDT", "quoteCurrency": "USDT"},
+            {"symbol": "BBBUSDT", "status": "Suspended",
+             "settleCurrency": "USDT", "quoteCurrency": "USDT"},
+            {"symbol": "CRVUSDT", "status": "Delisted",
+             "settleCurrency": "USDT", "quoteCurrency": "USDT"},
+            {"symbol": "DDDUSDT", "status": "SomethingNew",
+             "settleCurrency": "USDT", "quoteCurrency": "USDT"},
+            {"symbol": "EEEUSD", "status": "Listed",
+             "settleCurrency": "USD", "quoteCurrency": "USD"},
+        ]}}
+        with mock.patch.object(phemex, "_get", return_value=payload):
+            self.assertEqual(set(phemex.listed_symbols()),
+                             {"AAAUSDT", "BBBUSDT", "DDDUSDT"})
+
+    def test_kraken_keeps_a_halted_instrument_and_drops_an_expired_one(self):
+        from engine import kraken
+        payload = {"instruments": [
+            {"symbol": "PF_AAAUSD", "tradeable": True},
+            {"symbol": "PF_BBBUSD", "tradeable": False},   # halt -> LISTED
+            {"symbol": "PF_CCCUSD", "tradeable": False, "isExpired": True},
+            {"symbol": "FI_DDDUSD", "tradeable": True},    # not a perpetual
+        ]}
+        with mock.patch.object(kraken, "_get", return_value=payload):
+            self.assertEqual(set(kraken.listed_symbols()),
+                             {"PF_AAAUSD", "PF_BBBUSD"})
+
+    def test_every_source_names_a_real_venue_and_a_working_fetcher(self):
+        """SOURCES is patched wholesale by the sweep tests, so without this the
+        three fetchers and their venue keys are dead code under test."""
+        for key, fetch, source in listings.SOURCES:
+            self.assertTrue(venues.by_key(key), key)
+            self.assertTrue(source.startswith("/"), source)
+            self.assertTrue(callable(fetch))
+
+
+class TestWiringAndConstants(ListingCase):
+    def test_the_scan_cycle_actually_runs_the_sweep(self):
+        """Existing refresh_universe tests pass con=None, so the sweep dies in
+        RunRecorder and is swallowed — they pass identically if the call is
+        deleted, and the feature silently reverts to CRVUSDT blocking forever."""
+        import live
+        import inspect
+        source = inspect.getsource(live.refresh_universe)
+        self.assertIn("listings.sweep(con", source)
+        self.assertIn("beat=beat", source)
+
+    def test_the_freshness_window_outlives_several_missed_sweeps(self):
+        """The staleness argument is that the window covers missed hourly
+        sweeps. If either constant moves alone, nothing else notices."""
+        from engine import universe
+        self.assertGreater(listings.MAX_LISTING_AGE, universe.REFRESH_SECONDS * 2)
+
+    def test_the_sweep_beats_between_venues(self):
+        """~375s of stacked timeouts with all three venues black-holing, past
+        watchdog.SCANNER_DARK_AFTER_S — a silent sweep fires a false alarm."""
+        beats = []
+        with mock.patch.object(listings, "SOURCES",
+                               ((venues.PHEMEX_PERP.key, lambda: ["BTCUSDT"], "/t"),
+                                (venues.COINBASE_SPOT.key, lambda: ["BTC-USD"], "/t"))):
+            listings.sweep(self.con, now=1_000_000, beat=beats.append)
+        self.assertEqual(len(beats), 2)

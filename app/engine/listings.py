@@ -42,13 +42,29 @@ MAX_LISTING_AGE = 6 * 3600
 
 FACT_KIND = "venue_listing"
 
+# KNOWN COST, recorded rather than hidden. `market_time=now` is what makes
+# freshness real — a content-hash-identical sweep would otherwise dedupe into
+# the first row and `latest()` would report the age of an answer from days ago.
+# The price is that every sweep appends: 3 rows/hour, and Coinbase's ~400 ids
+# are ~5KB, so roughly 26k rows and tens of MB a year. `prune.DERIVED_KINDS`
+# cannot help — it retires SUPERSEDED VERSIONS of per-symbol derived facts, and
+# every row here is current under one version. Bounding this needs its own
+# retention rule (only the newest row per venue is ever read); it is not
+# urgent at this rate, and a wrong prune here would silently blind the audit.
 
+
+# LISTED, never "tradeable right now". Each adapter's `list_products` drops
+# anything not currently tradeable because it feeds a tradeable universe; a
+# maintenance halt or a cancel-only wind-down would then read as a DELISTING,
+# and this module's False answer would tell the operator a live market's
+# repairable candle holes are unrepairable. These three read the venue's
+# naming and nothing else.
 def _phemex_symbols() -> list[str]:
-    return [p["symbol"] for p in phemex.list_products()]
+    return phemex.listed_symbols()
 
 
 def _kraken_symbols() -> list[str]:
-    return [p["symbol"] for p in kraken.list_products()]
+    return kraken.listed_symbols()
 
 
 def _coinbase_symbols() -> list[str]:
@@ -65,7 +81,7 @@ SOURCES = (
 )
 
 
-def sweep(con, now: int | None = None) -> dict:
+def sweep(con, now: int | None = None, beat=None) -> dict:
     """Ask every venue what it lists and append one fact per venue.
 
     A FAILED venue still writes its fact, carrying `swept: false` and the
@@ -82,6 +98,12 @@ def sweep(con, now: int | None = None) -> dict:
     out: dict[str, dict] = {}
     with RunRecorder(con, "listings", LISTINGS_VERSION, "PORTFOLIO", "ALL") as rec:
         for key, fetch, source in SOURCES:
+            # Beat from INSIDE the loop, not around it. Three venues black-
+            # holing connections is ~375s of stacked timeouts and backoff,
+            # past watchdog.SCANNER_DARK_AFTER_S (300) — a silent sweep would
+            # fire "Scanner has stopped" at 3am while it was merely waiting.
+            if beat:
+                beat(f"listing sweep {key}")
             try:
                 symbols = sorted({str(s) for s in fetch()})
                 if not symbols:

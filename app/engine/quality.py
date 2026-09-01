@@ -65,7 +65,12 @@ CODE_RUNG = {
     # Same rung and reasoning as STALE_SERIES: a per-symbol finding on a market
     # that no longer exists to trade. HALT would hand the watchdog a restart
     # that cannot heal it (the 2026-08-08 loop) — no restart relists a market.
-    "RETIRED_SEQUENCE_GAPS":   "QUARANTINE",
+    # SERVE_FLAG, not QUARANTINE, for the same reason KNOWN_VENUE_GAPS is:
+    # a note, not a repair queue. The alternative is a DEGRADED warning per
+    # delisted (symbol, tf) that can NEVER be cleared — no action exists, the
+    # venue is gone — which is the 108-permanent-warnings shape the
+    # STALE_SERIES scoping and the v0.2 note both exist to prevent.
+    "RETIRED_SEQUENCE_GAPS":   "SERVE_FLAG",
     "KNOWN_VENUE_GAPS":        "SERVE_FLAG",   # documented, not corruption
     # AGGREGATION
     "AGGREGATE_PENDING":       "SERVE_FLAG",   # scheduling lag
@@ -212,34 +217,76 @@ def _live_symbols(con) -> set:
             if not venues.is_reference_key(r[0])}
 
 
-def _symbols_with_open_orders(con) -> set:
-    """Symbols holding an unresolved simulator order.
+def _symbols_that_must_keep_blocking(con) -> set:
+    """Symbols where an unexplained gap can still invent a fill.
 
-    These are the one population that must keep BLOCKING whatever the venue
-    did. `live.py` resolves pinned exits for symbols OUTSIDE the scan set, and
-    `assert_market_ready` — which stops only on BLOCKED — is the sole gate in
-    front of `execsim.run`. Its comment states the harm exactly: resolving an
-    exit across an unexplained candle gap "would invent which level hit first".
-    A delisting makes that WORSE, not better: the missing bars are never coming,
-    so the invented fill would be permanent. It would then enter the graded book
-    that decides whether live routing unlocks.
+    Three populations, and missing any one of them lets the simulator resolve
+    a trade across a hole. `assert_market_ready` — which stops only on BLOCKED
+    — is the sole gate in front of all three, and the harm is stated in
+    live.py's own comment: resolving an exit across an unexplained candle gap
+    "would invent which level hit first". A delisting makes that WORSE, not
+    better, because the missing bars are never coming, so the invented fill is
+    permanent and enters the graded book that decides whether live routing
+    unlocks.
 
-    Fails CLOSED — on any error every symbol is treated as holding an order, so
-    the demotion cannot fire on a store we could not read.
+      · an unresolved SIMULATOR order — live.py's pinned-exit path;
+      · an unresolved MANUAL intent — manual.run settles the operator's own
+        hand-armed trades by walking candles, on the same roster;
+      · anything still in the SCAN SET. `pinned` is computed once before the
+        audit loop, but pipeline runs setups and execsim immediately after
+        assert_market_ready passes, so a demoted symbol still being scanned
+        acquires a NEW order in the same pass — no order existed when we
+        looked. A delisted symbol normally leaves the scan set at the next
+        refresh, but `universe.refresh` keeps the previous members INDEFINITELY
+        when Coinbase rank coverage is low, while the /products call feeding
+        the listing sweep still succeeds. That window is not an hour.
+
+    Fails CLOSED — on any error every symbol is treated as unsafe to demote,
+    so the demotion cannot fire on a store we could not read.
     """
+    out: set = set()
     try:
-        from . import execsim
-        return {symbol for symbol, _tf in execsim.unresolved(con)}
-    except Exception:
+        from . import execsim, manual, universe
+        out |= {symbol for symbol, _tf in execsim.unresolved(con)}
+        out |= {str(key[0]) if isinstance(key, tuple) else str(key)
+                for key in manual.unresolved(con)}
+        out |= set(universe.scan_symbols(con))
+    except Exception as exc:
+        # Loud-fallback rule: the safe direction is still a degraded one, and
+        # a silent one looks exactly like "nothing is at risk".
+        from .runlog import get_logger
+        get_logger().warning(
+            f"quality: cannot read the open-order/scan set "
+            f"({type(exc).__name__}: {exc}) — no market will be treated as "
+            f"retired this audit; every gap keeps blocking")
         return _ALL_SYMBOLS
+    return out
 
 
 class _AllSymbols(frozenset):
-    """Contains everything — the fail-closed answer to 'which symbols hold an
-    open order' when the store could not be read."""
+    """Contains everything — the fail-closed answer when the store could not
+    be read.
+
+    Honest about it under every operation, not just `in`. As a bare frozenset
+    subclass it would report len 0 and falsey while containing everything, so
+    the next person to log `len(pinned)` prints "0 symbols pinned" at the exact
+    moment every symbol is.
+    """
 
     def __contains__(self, item) -> bool:
         return True
+
+    def __len__(self) -> int:
+        raise TypeError("_AllSymbols is unbounded — test membership, not size")
+
+    def __iter__(self):
+        raise TypeError("_AllSymbols is unbounded — test membership, not iteration")
+
+    def __bool__(self) -> bool:
+        return True
+
+    def __repr__(self) -> str:
+        return "<every symbol (fail-closed)>"
 
 
 _ALL_SYMBOLS = _AllSymbols()
@@ -409,7 +456,7 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
         _issue(checks, "DATA", "BLOCKED", "NO_CANDLES",
                "no market candles are available", symbol)
     live = _live_symbols(con)
-    pinned = _symbols_with_open_orders(con)
+    unsafe_to_retire = _symbols_that_must_keep_blocking(con)
 
     for sym, tf in series:
         sec = importer.TF_SECONDS.get(tf)
@@ -466,18 +513,29 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
                 # venue answered without naming the symbol; None keeps the
                 # blocker, so an outage cannot retire a book.
                 #
+                # LISTED, not tradeable-right-now: the sweep reads each
+                # venue's product naming, so a maintenance halt or a
+                # cancel-only wind-down still reads as listed. Calling a
+                # reversible halt a delisting would tell the operator a live
+                # market's repairable holes are unrepairable.
+                #
                 # Two deliberate narrowings on top of that:
-                #  · A symbol with an unresolved order keeps BLOCKING. That is
-                #    the population live.py resolves pinned exits for, and
-                #    inventing a fill there is worse on a delisted market than
-                #    a live one — the bars are never coming.
+                #  · Anything that could still resolve a trade across the hole
+                #    keeps BLOCKING — an open simulator order, an unresolved
+                #    manual intent, or simply still being in the scan set,
+                #    since the pipeline creates a new order moments after this
+                #    gate passes. See _symbols_that_must_keep_blocking.
                 #  · Only gaps demote. Malformed rows and developing candles
                 #    indict the STORE, which is live and repairable whatever
                 #    the venue did, so they keep blocking.
-                retired = (sym not in pinned
+                retired = (sym not in unsafe_to_retire
                            and listings.listed_on_venue(con, sym, now) is False)
                 if retired:
-                    _issue(checks, "DATA", "DEGRADED", "RETIRED_SEQUENCE_GAPS",
+                    # PASS puts this in `notes` rather than `warnings`:
+                    # recorded under its own name and count (rejections stay as
+                    # auditable as approvals), but not a standing alarm nobody
+                    # can answer. The market is gone; its data feeds nothing.
+                    _issue(checks, "DATA", "PASS", "RETIRED_SEQUENCE_GAPS",
                            f"{len(unexplained)} unexplained discontinuities in a "
                            f"market the venue no longer lists — retired history, "
                            f"unrepairable, not blocking", sym, tf)

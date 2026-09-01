@@ -120,6 +120,24 @@ def _get(path: str, retries: int = RANK_RETRIES):
     raise last
 
 
+def listed_symbols() -> list[str]:
+    """Every USD-quoted perpetual the venue NAMES, tradeable or not.
+
+    `list_products` skips anything not `tradeable` because it feeds a tradeable
+    universe. `tradeable: false` is a HALT and is kept here: a halted
+    instrument is still listed and still serves history, and reading a halt as
+    a delisting would call live, repairable candle holes unrepairable.
+    `isExpired` is the venue's end-of-life marker and is the one exclusion.
+    (On 2026-09-01 all 274 PF_ instruments were tradeable and unexpired, so the
+    distinction costs nothing today and exists for the day it does not.)
+    """
+    data = _get("/derivatives/api/v3/instruments") or {}
+    return [i["symbol"] for i in data.get("instruments") or []
+            if i.get("symbol", "").startswith("PF_")
+            and i.get("symbol", "").upper().endswith(QUOTE)
+            and not i.get("isExpired")]
+
+
 def list_products() -> list[dict]:
     """Tradeable USD-quoted perpetuals, normalised to the fields we care about.
 

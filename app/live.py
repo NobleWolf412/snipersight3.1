@@ -208,7 +208,7 @@ def refresh_universe(con, log, beat=None):
     # records swept=false rather than raising: the listing record is evidence
     # for the quality audit, never a precondition for scanning.
     try:
-        listings.sweep(con)
+        listings.sweep(con, beat=beat)
     except Exception as exc:
         log.warning(f"listing sweep failed: {type(exc).__name__}: {exc}")
     r = universe.refresh(con, progress=prog)

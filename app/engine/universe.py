@@ -154,10 +154,20 @@ def coinbase_products() -> list[dict]:
     "does this market exist", with no ranking judgement applied.
 
     Separate from `rank_by_volume`'s filter because the two answer different
-    questions and a caller that conflates them gets a live market wrong. A
-    `limit_only` or `auction_mode` pair is listed and serves history; it is
-    merely not rankable into a tradeable universe. A symbol whose /stats call
-    429s is absent from the ranking while fully listed.
+    questions, and a caller that conflates them calls a LIVE market delisted.
+    Listing is the venue naming the product at all; everything else here is a
+    tradeability judgement that can flip and flip back within an hour:
+
+      · `trading_disabled` / non-"online" status — a maintenance halt or the
+        cancel-only phase before a delist, both reversible and often long.
+      · `limit_only`, `auction_mode` — still listed, still serving history.
+      · a /stats call that 429s — absent from the ranking, fully listed.
+
+    So this excludes ONLY the venue's own end-of-life marker and keeps every
+    reversible state. Coinbase publishes it explicitly: of 487 USD products on
+    2026-09-01, 402 were "online" and 85 "delisted". A halted market must read
+    as LISTED, because the alternative is telling the operator that a live
+    market's repairable candle holes are unrepairable and can be ignored.
 
     RAISES on a failed fetch rather than returning []. An empty listing and an
     unreachable venue are opposite facts — one says "nothing is listed", the
@@ -165,8 +175,8 @@ def coinbase_products() -> list[dict]:
     whether a market was delisted must be able to tell them apart.
     """
     return [p for p in _get("/products")
-            if p.get("quote_currency") == "USD" and p.get("status") == "online"
-            and not p.get("trading_disabled")]
+            if p.get("quote_currency") == "USD"
+            and str(p.get("status", "")).lower() != "delisted"]
 
 
 def rank_by_volume(progress=None) -> list[tuple[str, float]]:
@@ -185,7 +195,8 @@ def rank_by_volume(progress=None) -> list[tuple[str, float]]:
     # must not be ranked into a tradeable universe. `coinbase_products` owns
     # the listing question; these three filters own the ranking question.
     usd = [p["id"] for p in prods
-           if not p.get("limit_only") and not p.get("auction_mode")
+           if p.get("status") == "online" and not p.get("trading_disabled")
+           and not p.get("limit_only") and not p.get("auction_mode")
            and not _is_stable(p["id"])]
     # /products is NOT volume-ordered, so we must stat every online USD pair to
     # rank correctly (missing a high-volume pair like SOL/XRP would silently
