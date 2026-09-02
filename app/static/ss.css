@@ -701,6 +701,65 @@ details.panel.floating > summary{padding-left:var(--lg)}
 .btn-red:hover{border-color:var(--red);color:var(--red)}
 
 /* ---------- metric tile ---------- */
+/* ── THE ACCOUNT, AT THE SIZE OF THE QUESTION ──
+
+   Two figures where four counts were. The pair is deliberately NOT a card
+   each: a border around both and a hairline between them says "one reading,
+   two halves" — balance and what today did to it — where two separate cards
+   would say "two unrelated facts", which is how the four tiles read.
+
+   The metric is set in the mono face at display size. These are numbers to be
+   compared against yesterday's, and tabular figures are what makes a digit
+   land in the same column each poll instead of the whole line shifting when a
+   1 becomes an 8. */
+.account-hero{display:grid;grid-template-columns:1fr 1fr;gap:1px;
+  margin-bottom:var(--lg);border:1px solid var(--border-soft);
+  border-radius:var(--r-lg);background:var(--border-soft);overflow:hidden}
+.hero-fig{display:flex;flex-direction:column;gap:5px;align-items:flex-start;
+  padding:var(--lg) var(--xl);background:var(--card);text-align:left;
+  border:0;font:inherit;color:inherit;min-width:0}
+.hero-metric{font:800 clamp(26px,4.4vw,38px)/1.05 var(--f-mono);
+  letter-spacing:-.02em;color:var(--fg);font-variant-numeric:tabular-nums}
+.hero-sub{font-size:var(--fs-2);color:var(--fg-4);min-height:1.2em}
+.hero-sub.is-up{color:var(--green)}
+.hero-sub.is-down{color:var(--red)}
+/* The day's figure carries its own sign in colour. `.is-flat` is the third
+   state and it is not a colour at all: nothing closed today is neither a win
+   nor a loss, and painting a $0.00 green would be the confident-looking zero
+   this file refuses everywhere else. */
+#mTodayTile.up .hero-metric{color:var(--green)}
+#mTodayTile.down .hero-metric{color:var(--red)}
+#mTodayTile .hero-metric.is-flat{color:var(--fg-3)}
+/* The chevron needs somewhere to sit that is not on top of the figure. */
+#mTodayTile{padding-right:calc(var(--xl) + 16px)}
+
+/* THE FUNNEL, DEMOTED. Still answerable — "why is nothing firing" is a fair
+   question on this surface — at the weight of a supporting fact rather than
+   of the account itself. One row, one rule above it, no cards. */
+.funnel-strip{display:flex;flex-wrap:wrap;gap:var(--md) var(--xl);
+  padding-top:var(--md);margin-bottom:var(--lg);
+  border-top:1px solid var(--border-soft);
+  font-size:var(--fs-2);color:var(--fg-4)}
+.funnel-strip>span{display:inline-flex;align-items:baseline;gap:6px;min-width:0}
+.funnel-strip b{font:700 var(--fs-4)/1 var(--f-mono);color:var(--fg-2);
+  font-variant-numeric:tabular-nums}
+.funnel-strip i{font-style:normal;color:var(--fg-4);min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* A budget cell that navigates is a button, so it needs the reset a button
+   does not get for free — and the chevron needs clearance, same as above. */
+.budget-cell.tappable{border:1px solid transparent;border-radius:var(--r-md);
+  font:inherit;color:inherit;text-align:left;padding-right:22px}
+
+@media(max-width:640px){
+  /* Stacked, not shrunk. Side by side at this width the figure drops below
+     the label's own size and stops being the headline it exists to be.
+     640 because that is one of this file's four sanctioned breakpoints — it
+     was rescued from twelve ad-hoc ones once, and the suite holds the line. */
+  .account-hero{grid-template-columns:1fr}
+  .hero-fig{padding:var(--md) var(--lg)}
+}
+
 .tile{background:var(--card);border:1px solid var(--border-soft);border-radius:var(--r-lg);
   padding:var(--md) 16px;display:flex;flex-direction:column;gap:6px}
 .tile .t-label{color:var(--fg-4)}

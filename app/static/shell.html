@@ -182,26 +182,49 @@
             <button class="btn" id="btnAuto" disabled
                     title="the scanner is running — this is automatic ORDER PLACEMENT, locked until the forward record earns it. Settings → Going live lists the four criteria.">Auto-trade: off</button>
           </div>
-          <div class="grid cols-4">
-            <!-- "Eligible markets", not "Tradeable now". A UI audit (2026-08-09)
-                 read "Tradeable now 14" above "Nothing to take right now" and
-                 called it a contradiction, which it is in plain English: this
-                 counts markets the risk authority is ALLOWED to size, not
-                 markets with a trade in them. The three funnel words are now
-                 distinct — eligible markets, setups ready, trade ready. -->
-            <div class="tile"><span class="t-label"><span class="term" data-t="universe">Eligible markets</span></span><span class="t-metric" id="mUniverse">—</span><span class="t-sub" id="mUniverseSub"></span></div>
+          <!-- THE ACCOUNT, FIRST. This slot held four counts off the scanner
+               funnel — eligible markets, setups ready, closed today, next
+               trade risk — and three of the four are technicals. The operator
+               opens this surface to answer "how is my account", and the two
+               numbers that answer it were not on it: equity lived only as a
+               chip in the top bar, and the day's result was one of four equal
+               tiles wearing the same weight as a market count.
+
+               Two numbers, at the size of the question they answer. The funnel
+               did not go away; it moved below, to the size it was worth. -->
+          <div class="account-hero">
+            <div class="hero-fig" id="mBalanceTile">
+              <span class="t-label">Balance</span>
+              <span class="hero-metric" id="mBalance">—</span>
+              <span class="hero-sub" id="mBalanceSub"></span>
+            </div>
+            <!-- The one tile on this surface that GOES somewhere. Pressing the
+                 day's result asks "which trades did that", and the journal is
+                 the answer — so it carries the chevron, and the chevron is
+                 reserved for exactly that promise. -->
+            <button type="button" class="hero-fig tappable" id="mTodayTile"
+                    data-goes="performance-ledger"
+                    aria-label="Today's profit and loss — open the journal">
+              <span class="t-label">Today</span>
+              <span class="hero-metric" id="mToday">—</span>
+              <span class="hero-sub" id="mTodaySub"></span>
+            </button>
+          </div>
+
+          <!-- The funnel, demoted rather than deleted: "why is nothing firing"
+               is still answered here, at the weight of a supporting fact. -->
+          <div class="funnel-strip">
+            <!-- "Eligible markets", not "Tradeable now". A UI audit
+                 (2026-08-09) read "Tradeable now 14" above "Nothing to take
+                 right now" and called it a contradiction, which it is in plain
+                 English: this counts markets the risk authority is ALLOWED to
+                 size, not markets with a trade in them. -->
+            <span><b id="mUniverse">—</b><span class="term" data-t="universe">Eligible markets</span><i id="mUniverseSub"></i></span>
             <!-- Counts what can still be acted on. It used to count the whole
                  deck payload including REJECTED and expired rows, which is why
-                 it read 3 above a deck that said "no setups right now". The
-                 refused ones are not hidden: they are named on the sub-line and
-                 listed under "Looked at, not taken" below. -->
-            <div class="tile"><span class="t-label"><span class="term" data-t="setup">Setups ready</span></span><span class="t-metric" id="mSetups">—</span><span class="t-sub" id="mSetupsSub"></span></div>
-            <!-- "Closed today" where the equity tile sat: equity already lives
-                 in the top bar on every surface, so this slot repeated a number
-                 four inches from itself while "how did today actually go" — the
-                 first thing a trader checks — appeared nowhere. -->
-            <div class="tile" id="mTodayTile"><span class="t-label">Closed today</span><span class="t-metric" id="mToday">—</span><span class="t-sub" id="mTodaySub"></span></div>
-            <div class="tile"><span class="t-label">Next trade risk</span><span class="t-metric" id="mRisk">—</span></div>
+                 it read 3 above a deck that said "no setups right now". -->
+            <span><b id="mSetups">—</b><span class="term" data-t="setup">Setups ready</span><i id="mSetupsSub"></i></span>
+            <span><b id="mRisk">—</b>next trade risk</span>
           </div>
         </div>
         <!-- The system pulse stood here: Scanner, Market data and Exposure,

@@ -177,6 +177,32 @@
       e.preventDefault(); go(a.dataset.route || a.dataset.s);
     }));
 
+  /* ONE HANDLER FOR EVERY CONTROL THAT GOES SOMEWHERE.
+
+     Delegated on purpose rather than bound per element: the budget cells are
+     rendered from a template string on every portfolio poll, so a handler
+     attached at load would be discarded on the first refresh and the control
+     would silently stop navigating while still looking exactly as clickable.
+     That is the worst shape this bug takes — the affordance survives and the
+     behaviour does not.
+
+     `data-goes` is the route. `data-goes-view` is the optional sub-view, as
+     `workspace:view`, and it writes BOTH the storage key and the live event
+     for the reason go() already documents at #performance-ledger: storage is
+     read once at load, so it alone is inert on a page that is already up. */
+  document.addEventListener('click', ev => {
+    const el = ev.target.closest('[data-goes]');
+    if(!el) return;
+    ev.preventDefault();
+    go(el.dataset.goes);
+    const target = el.dataset.goesView;
+    if(!target) return;
+    const [name, view] = target.split(':');
+    try{ sessionStorage.setItem(`ss:${name}-view`, view); }
+    catch(e){ /* private browsing denies storage; the live event still lands */ }
+    dispatchEvent(new CustomEvent('ss:workspace-request', {detail: {name, view}}));
+  });
+
   /* THE STRIP SAYS WHEN IT HAS MORE. Measured at 412px, Diagnostics sits at
      370-504px — off the edge, with two of the five surfaces undiscoverable.
      ss.css answers that with a slim always-visible scrollbar and argues,
@@ -2981,14 +3007,26 @@ weighed in. Name the facts you used.`;
     const lost = Math.max(0, -todayPnl);
     const lossCap = eq * (+cfg.daily_loss_pct || 0) / 100;
 
-    const cell = (label, used, cap, text) => {
+    /* `goes` is optional and only two of the three cells take it. Open risk
+       and today's losses are readings — there is nothing to open that says
+       more than the bar already does. Position slots is the one the operator
+       asked to be able to press, and where it lands is System's Risk panel:
+       the limits are read-only there and that is the honest answer, because
+       slots, risk per trade and the daily halt are fixed in R-multiples so
+       paper and live take the same trades and stop at the same point. A
+       control that opened an editor would promise otherwise. */
+    const cell = (label, used, cap, text, goes) => {
       const pct = cap > 0 ? Math.max(0, Math.min(100, (used / cap) * 100)) : 0;
       const tone = cap > 0 && used >= cap ? 'bad' : pct >= 70 ? 'warn' : '';
-      return `<div class="budget-cell">
+      const tag = goes ? 'button type="button"' : 'div';
+      const attrs = goes
+        ? ` class="budget-cell tappable" data-goes="system" data-goes-view="${goes}"`
+        : ' class="budget-cell"';
+      return `<${tag}${attrs}>
         <span class="t-label">${label}</span>
         <div class="budget-bar"><i class="${tone}" style="width:${pct.toFixed(0)}%"></i></div>
         <span class="budget-txt">${text}</span>
-      </div>`;
+      </${goes ? 'button' : 'div'}>`;
     };
 
     $('budget').innerHTML =
@@ -3000,7 +3038,7 @@ weighed in. Name the facts you used.`;
              ? (slots >= slotCap
                  ? `${slots} of ${slotCap} — full until one closes`
                  : `${slots} of ${slotCap} used`)
-             : 'no cap configured') +
+             : 'no cap configured', 'system:risk') +
       cell("Today's losses", lost, lossCap,
            lossCap <= 0 ? 'no halt configured'
              : lost > 0 ? `${money(lost)} of ${money(lossCap)} before trading halts`
@@ -3187,10 +3225,18 @@ weighed in. Name the facts you used.`;
     const tile = $('mTodayTile'), val = $('mToday'), sub = $('mTodaySub');
     if(!rows.length){
       tile.classList.remove('up', 'down');
-      val.textContent = '—';
-      sub.textContent = 'No trades closed yet today';
+      /* NOT an em-dash. Zero closed trades is a real answer to "how did today
+         go" and the operator can act on it; an em-dash reads as "this is
+         broken", which is what this tile actually WAS for months while the
+         renderer never ran. The empty-window rule the portfolio loader states
+         four times over: a count of no observations must not wear the
+         treatment of a result. */
+      val.textContent = signedMoney(0);
+      val.classList.add('is-flat');
+      sub.textContent = 'Nothing closed yet today';
       return;
     }
+    val.classList.remove('is-flat');
     const pnl = rows.reduce((s, j) => s + j.pnl_usd, 0);
     const wins = rows.filter(j => j.pnl_usd > 0).length;
     const losses = rows.length - wins;
@@ -3238,6 +3284,20 @@ weighed in. Name the facts you used.`;
     $('equityChip').title = `account equity (paper) — start ${money(p.start_equity)}, ` +
       `open risk ${money(p.open_risk_usd || 0)}`;
     $('rEquity').textContent = money(p.equity);
+
+    /* THE SAME FIELDS THE TOP BAR READS, through the SAME helpers. Equity is
+       rendered in three places now and `pct()` is why they agree — this file
+       already carries the scar of `p.return_pct + '%'` printing -5.84% forty
+       pixels above a card saying -5.8%. Nothing here re-derives; §6 rule 9. */
+    $('mBalance').textContent = money(p.equity);
+    const balSub = $('mBalanceSub');
+    if(balSub){
+      balSub.textContent = ruled
+        ? `${(up ? '+' : '') + pct(p.return_pct)} since ${money(p.start_equity)}`
+        : `started at ${money(p.start_equity)} · no trades ruled on yet`;
+      balSub.classList.toggle('is-up', ruled && up);
+      balSub.classList.toggle('is-down', ruled && !up);
+    }
 
     const journal = p.journal || [];
     renderJournal(journal, p.journal_total);
