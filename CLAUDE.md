@@ -66,8 +66,15 @@ Rules of thumb:
 - Skip the narration of what you tried. I care what is true now, and what it
   costs me to act on it.
 
-Length is not the goal — clarity is. A hard answer can be long, but every
-sentence has to earn its place, and the first one has to stand alone.
+**Default to SHORT.** A few sentences, or a handful of bullets. That covers
+almost everything. Go longer only when I ask for depth, or when leaving
+something out would cost me money or send me the wrong way — and then say why
+it needed the length.
+
+Length is not the goal — clarity is, and the first sentence has to stand alone.
+But when a long answer and a short one are equally clear, the short one wins.
+Asked for this on 2026-09-02, after several answers that were correct and too
+long to read.
 
 ## Run
 
