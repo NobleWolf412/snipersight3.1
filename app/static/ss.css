@@ -828,6 +828,71 @@ details.panel.floating > summary{padding-left:var(--lg)}
 .nav .nav-count{position:absolute;right:var(--lg);top:11px;font-size:var(--fs-1);color:var(--fg-4)}
 .nav a.on .nav-count{color:var(--accent)}
 .nav-sep{height:1px;background:var(--border-soft);margin:var(--md) var(--lg)}
+
+/* ── THE RAIL WEARS ITS MARKS ──
+
+   The bar was six text labels. On a phone that is 9px type in a 64px strip,
+   which is the single loudest "this is a web page" tell the shell had: every
+   app the operator switches from has icons there, and at 9px the words are
+   closer to texture than to reading. The marks carry the recognition and the
+   label stays underneath to name it — an icon-only bar trades one guessing
+   game for another.
+
+   Six marks, one idea each, and they do not borrow from one another. The
+   crosshair belongs to Setups and to nothing else: it is the product's own
+   mark, and a second circle-with-ticks anywhere in this set would stop it
+   meaning "a setup". `stroke:currentColor` throughout, so the active colour,
+   the hover colour and the focus ring all reach the mark without a second
+   palette to keep in step. */
+.nav-ico{flex:none;width:22px;height:22px;
+  /* The three knobs sit ON their track, so they need to punch through it.
+     Painting them --bg rather than leaving them hollow is what makes the
+     sliders read as sliders instead of as three lines and three rings. */
+  transition:transform .18s cubic-bezier(.2,.8,.3,1)}
+.nav a:hover .nav-ico,.nav .nav-spotter:hover .nav-ico{transform:scale(1.08)}
+.nav a.on .nav-ico{color:var(--accent)}
+.nav a,.nav .nav-spotter{flex-direction:row;align-items:center;gap:10px}
+
+/* ── CLICKABLE LOOKS CLICKABLE ──
+
+   The operator's words: "make clickable things look clickable". The shell had
+   panels, tiles and rows that navigate somewhere, styled identically to the
+   ones that do not — the only way to learn which was which was to press them
+   and find out. Border, fill and radius already say "separate object" on
+   every block here, so none of those three can carry the meaning; what is
+   left is what a finger expects — it lifts under the cursor, it presses down
+   under the touch, and it admits where it goes.
+
+   One class, so a surface added later inherits the affordance instead of
+   inventing a fourth dialect of it. */
+.tappable{cursor:pointer;position:relative;
+  transition:transform .16s cubic-bezier(.2,.8,.3,1),border-color .16s,background .16s,box-shadow .16s}
+.tappable:hover{transform:translateY(-2px);border-color:rgba(var(--accent-rgb),.45);
+  background:var(--card-2);box-shadow:0 6px 18px -10px rgba(0,0,0,.75)}
+/* The press has to land at rest, not at a third position, or the control
+   reads as sprung. */
+.tappable:active{transform:translateY(0);transition-duration:.05s}
+.tappable:focus-visible{border-color:rgba(var(--accent-rgb),.45)}
+
+/* THE CHEVRON IS THE PROMISE. A lift on hover says "I respond"; it does not
+   say "I go somewhere", and a pointer user learns the difference only by
+   clicking. Reserved for controls that NAVIGATE — anything that toggles or
+   expands in place must not wear it, or the mark stops being a promise. */
+.tappable[data-goes]::after{content:'';position:absolute;right:14px;top:50%;
+  width:7px;height:7px;border-right:1.6px solid var(--fg-4);
+  border-top:1.6px solid var(--fg-4);
+  transform:translateY(-50%) rotate(45deg);
+  transition:border-color .16s,right .16s cubic-bezier(.2,.8,.3,1)}
+.tappable[data-goes]:hover::after{border-color:var(--accent);right:10px}
+
+/* Motion is the affordance, so a viewer who has switched it off needs the
+   static half to still carry the meaning: the border and fill change stays,
+   only the travel goes. */
+@media (prefers-reduced-motion:reduce){
+  .tappable,.tappable[data-goes]::after,.nav-ico{transition:border-color .16s,background .16s}
+  .tappable:hover,.nav a:hover .nav-ico,.nav .nav-spotter:hover .nav-ico{transform:none}
+  .tappable[data-goes]:hover::after{right:14px}
+}
 /* Applied only after measuring actual overflow, so the hint never claims
    content is hidden when it fits. It is not selector-bound: the rail was the
    only strip wearing it, and the horizontal tab rails on Results, System and
@@ -1252,9 +1317,18 @@ details.panel.floating > summary{padding-left:var(--lg)}
      discover the assistant or capture control. */
   .nav{grid-row:3;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));
     overflow:visible;gap:0;padding:0 0 env(safe-area-inset-bottom,0px);border:0;border-top:1px solid var(--border-soft)}
-  .nav a,.nav .nav-spotter{min-width:0;min-height:64px;align-items:center;justify-content:center;
+  /* Mark OVER label here, not beside it: a 64px-tall cell one sixth of a
+     phone wide has no room for a row, and stacking is what every tab bar the
+     operator switches from does. The label can then shrink without becoming
+     the only thing carrying the meaning — the mark holds that. */
+  .nav a,.nav .nav-spotter{min-width:0;min-height:64px;flex-direction:column;
+    align-items:center;justify-content:center;gap:4px;
     padding:6px 2px;border-left:0;border-top:2px solid transparent;
     font-size:9px;letter-spacing:.02em;text-align:center;white-space:normal}
+  .nav-ico{width:23px;height:23px}
+  /* The whole cell is the target, so the press has to be visible on the cell
+     rather than on the 23px mark inside it. */
+  .nav a:active,.nav .nav-spotter:active{background:rgba(var(--accent-rgb),.07)}
   .nav .nav-spotter{width:auto;margin:0;border-right:0;border-bottom:0;background:transparent}
   .nav a.on,body.cp-open .nav .nav-spotter{border-left:0;border-top-color:var(--accent)}
   .nav a small,.nav .nav-spotter small,.nav .nav-count,.nav a[hidden]{display:none}

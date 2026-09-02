@@ -88,15 +88,15 @@
   </header>
 
   <!-- Five operator jobs. Old hashes remain router aliases, not navigation. -->
-  <nav class="nav">
-    <a href="#overview" class="on" data-route="overview" data-s="command"><span>Overview</span><span class="nav-count" id="nCommand"></span></a>
-    <a href="#opportunities" data-route="opportunities" data-s="opportunities"><span>Setups</span></a>
-    <a href="#trade" data-route="trade" data-s="chart"><span>Trade</span></a>
-    <a href="#performance" data-route="performance" data-s="results"><span>Results</span></a>
-    <a href="#system" data-route="system" data-s="settings"><span>System</span><span class="nav-count" id="nDiag"></span></a>
+  <nav class="nav" aria-label="Destinations">
+    <a href="#overview" class="on" data-route="overview" data-s="command"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16l4.2-4.2"/><circle cx="12" cy="16" r="1.3" fill="currentColor" stroke="none"/></svg><span>Overview</span><span class="nav-count" id="nCommand"></span></a>
+    <a href="#opportunities" data-route="opportunities" data-s="opportunities"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6.4"/><path d="M12 1.8v3.3M12 18.9v3.3M1.8 12h3.3M18.9 12h3.3"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg><span>Setups</span></a>
+    <a href="#trade" data-route="trade" data-s="chart"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.6v3.2M8 17.2v3.2M16 5.6v2.4M16 16v2.4"/><rect x="5.6" y="6.8" width="4.8" height="10.4" rx="1.2"/><rect x="13.6" y="8" width="4.8" height="8" rx="1.2"/></svg><span>Trade</span></a>
+    <a href="#performance" data-route="performance" data-s="results"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4.5v15h16"/><path d="M7.4 15.2l3.4-4.4 3 2.4 4.8-6"/><path d="M15.2 7.2h3.4v3.4"/></svg><span>Results</span></a>
+    <a href="#system" data-route="system" data-s="settings"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5h16M4 12h16M4 16.5h16"/><circle cx="15.5" cy="7.5" r="2.3" fill="var(--bg)"/><circle cx="9" cy="12" r="2.3" fill="var(--bg)"/><circle cx="14" cy="16.5" r="2.3" fill="var(--bg)"/></svg><span>System</span><span class="nav-count" id="nDiag"></span></a>
     <button type="button" class="nav-spotter" id="btnSpotter"
             title="open Spotter — observe the facts or capture a local session">
-      <span>Spotter</span>
+      <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.6 12S6 6.2 12 6.2 21.4 12 21.4 12 18 17.8 12 17.8 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.6"/></svg><span>Spotter</span>
     </button>
     <!-- Compatibility hooks for old bookmarks and contract tests. Hidden from
          users: Settings/Diagnostics and Ledger now live inside their parent. -->

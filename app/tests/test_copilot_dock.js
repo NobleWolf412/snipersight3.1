@@ -54,7 +54,12 @@ function ok(name, fn) {
 console.log('Spotter dock');
 
 ok('Spotter has one launcher in the sidebar, bound in one place', () => {
-  assert(/<nav class="nav">[\s\S]*id="btnSpotter"/.test(HTML), 'no Spotter sidebar button');
+  /* `[^>]*` rather than a literal `>`: the claim is that the launcher lives
+     inside the rail, and an attribute added to the rail — aria-label, a data
+     hook — is not that claim changing. Pinned literally, this failed the day
+     the nav was given a label. */
+  assert(/<nav class="nav"[^>]*>[\s\S]*id="btnSpotter"/.test(HTML),
+    'no Spotter sidebar button');
   assert(!/id="btnCopilot"/.test(HTML), 'the old topbar Copilot button still exists');
   assert(/getElementById\('btnSpotter'\)/.test(CP), 'copilot.js does not own the Spotter button');
   assert(!/btnSpotter/.test(CHART),
