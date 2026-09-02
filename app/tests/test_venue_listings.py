@@ -483,5 +483,59 @@ class TestTheSweepsFallbackIsAudible(ListingCase):
         self.assertIn("FAILED", said)
 
 
+class TestNothingActsOnAFactBeforeItWasKnowable(ListingCase):
+    """Constitution rule 3, applied to the listing record.
+
+    `confirmed_at` is when the engine could first have known. A reader that
+    ignores it can answer a question about one moment using evidence from a
+    later one, and here that evidence LIFTS a blocker.
+
+    No caller passes a past clock today, so these pin a property rather than
+    fix a live symptom — except the skew case, which the code could reach and
+    had no answer for.
+    """
+
+    def test_a_record_from_after_the_question_is_not_used(self):
+        self.record("phemex-perp", ["BTCUSDT"], at=1_000_000)
+        self.assertIsNone(listings.latest(self.con, "phemex-perp", 999_999))
+        self.assertIsNone(
+            listings.listed_on_venue(self.con, "CRVUSDT", 999_999))
+
+    def test_a_record_exactly_at_the_question_is_used(self):
+        """`confirmed_at` is the moment it BECAME knowable, so that moment
+        counts. An exclusive bound would drop a sweep from this same second."""
+        self.record("phemex-perp", ["BTCUSDT"], at=1_000_000)
+        self.assertIsNotNone(listings.latest(self.con, "phemex-perp", 1_000_000))
+
+    def test_an_older_record_is_still_reachable_behind_a_newer_one(self):
+        """The filter must narrow the candidates, not just reject the newest.
+        Taking the newest row and then discarding it would answer None while a
+        perfectly good earlier sweep sat right there."""
+        self.record("phemex-perp", ["BTCUSDT"], at=1_000_000)
+        self.record("phemex-perp", ["BTCUSDT", "ETHUSDT"], at=1_000_500)
+        payload = listings.latest(self.con, "phemex-perp", 1_000_100)
+        self.assertEqual(payload["symbols"], ["BTCUSDT"])
+
+    def test_a_backwards_clock_step_cannot_freeze_a_stale_record(self):
+        """THE REACHABLE ONE. An NTP correction, a VM restore or a DST bug
+        steps the host clock back. Rows written minutes ago are then dated
+        ahead of `now`, so `now - confirmed_at` goes NEGATIVE — younger than
+        any window, so the staleness check passes forever. Unfiltered, that is
+        the one condition under which a listing record never expires."""
+        self.record("phemex-perp", ["BTCUSDT"], at=2_000_000)
+        skewed = 2_000_000 - 86_400
+        self.assertIsNone(listings.latest(self.con, "phemex-perp", skewed))
+        self.assertIsNone(
+            listings.listed_on_venue(self.con, "CRVUSDT", skewed))
+
+    def test_the_demotion_does_not_fire_on_evidence_from_the_future(self):
+        """The behaviour that matters: unknowable evidence must not lift a
+        blocker. Checking `latest` alone would not prove the guard held."""
+        self.gapped("CRVUSDT")
+        self.record("phemex-perp", ["BTCUSDT"], at=1_000_000)
+        with mock.patch("engine.universe.scan_symbols", return_value=[]):
+            self.assertIn("SEQUENCE_GAPS", self.codes("CRVUSDT", now=999_999))
+
+
 if __name__ == "__main__":
     unittest.main()

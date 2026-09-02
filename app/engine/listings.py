@@ -139,23 +139,36 @@ def sweep(con, now: int | None = None, beat=None) -> dict:
 
 
 def latest(con, venue_key: str, now: int | None = None) -> dict | None:
-    """The most recent usable sweep record for one venue, or None.
+    """The most recent usable sweep record for one venue AS OF `now`, or None.
 
-    None covers every "cannot tell" case: no record, a record older than
-    MAX_LISTING_AGE, and a record whose sweep failed.
+    None covers every "cannot tell" case: no record, no record yet knowable at
+    `now`, a record older than MAX_LISTING_AGE, and a record whose sweep failed.
+
+    `confirmed_at <= now` is the constitution's third rule — confirmed_at is
+    when the engine could first have known, and nothing may act on a fact
+    before it was knowable. Every caller passes a live clock today, so this
+    excludes nothing in normal operation; it is not a new judgement and no
+    version moves for it. What it removes is a state the code could reach and
+    had no answer for: if the host clock steps BACKWARDS — an NTP correction, a
+    VM restore, a DST bug — rows written minutes ago are suddenly dated ahead
+    of `now`, and the staleness arithmetic below turns them into a NEGATIVE
+    age, which is younger than any window and so always passes. A skewed clock
+    would have been the one condition under which a stale listing record could
+    never expire. Filtered here instead, the same skew answers None, and None
+    keeps whatever guard the caller was considering lifting.
     """
+    now = int(time.time()) if now is None else int(now)
     row = con.execute(
         "SELECT payload, confirmed_at FROM facts WHERE kind=? AND algo_version=? "
-        "AND json_extract(payload,'$.venue')=? "
+        "AND json_extract(payload,'$.venue')=? AND confirmed_at<=? "
         "ORDER BY confirmed_at DESC, id DESC LIMIT 1",
-        (FACT_KIND, LISTINGS_VERSION, venue_key)).fetchone()
+        (FACT_KIND, LISTINGS_VERSION, venue_key, now)).fetchone()
     if not row:
         return None
     try:
         payload = json.loads(row[0])
     except ValueError:
         return None
-    now = int(time.time()) if now is None else int(now)
     if now - int(row[1]) > MAX_LISTING_AGE:
         return None
     if not payload.get("swept") or not payload.get("symbols"):
