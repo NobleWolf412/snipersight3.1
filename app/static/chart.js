@@ -1161,6 +1161,29 @@ window.SSChart = (() => {
        Invisible on loopback; most of the page weight on a phone. */
     const BARS = 1500;
     const q = k => api(`/api/facts?kind=${k}&symbol=${sym}&tf=${tf}&bars=${BARS}`);
+
+    /* THE THREE BELOW ARE STARTED HERE AND AWAITED WHERE THEY ALWAYS WERE.
+       They used to be issued one after another AFTER the ten-way Promise.all
+       had already settled — the draft, then the open positions, then the fee
+       config — so a symbol switch paid four sequential round trips instead of
+       one. None of the three reads the others' answers, and none reads the
+       ten; the only thing the old order bought was the order itself.
+
+       Only the STARTS move. Every await, seq guard, catch and assignment stays
+       exactly where it was, so the failure semantics are untouched: the draft
+       and the positions stay non-fatal, the fee config still keeps its
+       previous value rather than blanking, and a load that loses the race
+       still returns before the config is applied.
+
+       The bare `.catch(() => {})` on each is not error handling — the real
+       handlers are below. It marks the promise as having a handler so a
+       rejection that lands before its await does not surface as an unhandled
+       rejection in the console. */
+    const draftReq = api(`/api/draft?symbol=${encodeURIComponent(sym)}&tf=${tf}`);
+    const openReq = api(`/api/manual/open?symbol=${encodeURIComponent(sym)}&tf=${tf}`);
+    const cfgReq = api('/api/trade-config?symbol=' + encodeURIComponent(sym));
+    draftReq.catch(() => {}); openReq.catch(() => {}); cfgReq.catch(() => {});
+
     let res;
     try{
       res = await Promise.all([
@@ -1192,12 +1215,12 @@ window.SSChart = (() => {
       // the same wrong-market-under-the-right-name failure the catch block
       // below exists to prevent.
       try{
-        const dr = await api(`/api/draft?symbol=${encodeURIComponent(sym)}&tf=${tf}`);
+        const dr = await draftReq;
         if(seq === loadSeq) draftPlan = dr && dr.draft ? dr.draft : null;
       }catch(err){ if(seq === loadSeq) draftPlan = null; }
       // The operator's open trades here. Same seq guard, same reason.
       try{
-        const op = await api(`/api/manual/open?symbol=${encodeURIComponent(sym)}&tf=${tf}`);
+        const op = await openReq;
         if(seq === loadSeq){
           openPos = (op && op.open) || [];
           enginePos = (op && op.engine) || null;
@@ -1229,7 +1252,7 @@ window.SSChart = (() => {
     // Costs are per VENUE, so the config must be re-read per symbol. Spot fees
     // on a perp chart would flip the sign of the net-R decision.
     try{
-      cfg = await api('/api/trade-config?symbol=' + encodeURIComponent(sym));
+      cfg = await cfgReq;
       setLock();
     }catch(err){ /* keep whatever we had; the ticket labels its source */ }
     if(seq !== loadSeq){ noteStalledLoad(); return; }
