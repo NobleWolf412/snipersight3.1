@@ -12,6 +12,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from . import runlog
+
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "snipersight.db"
 
 # Ceiling the write-ahead log is truncated back to after a checkpoint. Large
@@ -189,6 +191,16 @@ def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
     # it removes the permanence of never getting one.
     con.execute(f"PRAGMA journal_size_limit={WAL_SIZE_LIMIT_BYTES}")
     con.executescript(SCHEMA)
+    # `engine_runs` belongs to the store's schema, not to whoever happens to
+    # write the first row. It was created lazily by RunRecorder.__enter__, so a
+    # store that had never completed an engine run did not have the table —
+    # and `/api/overview` queries it unconditionally. On a fresh install that
+    # is a 500 on the endpoint every cockpit surface polls, until the scanner
+    # finishes a cycle. Nobody saw it on a warm store, which is why it lasted:
+    # `tests/test_phone_front_door.py` reached it only because a test store is
+    # always cold. runlog stays the AUTHORITY for the definition — this asks it
+    # for the DDL rather than restating it, so the two cannot drift.
+    con.executescript(runlog.RUNS_SCHEMA)
     _migrate(con)
     return con
 
