@@ -3270,10 +3270,53 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
    window identifiers — and buried the answer under it. Normal-case body type,
    not the tracked mono the chrome uses, because this is the one line on the
    panel meant to be read as a sentence rather than scanned as a label. */
-.factor-verdict,#gateVerdict{margin:0 0 var(--md);max-width:78ch;
-  font:var(--fs-2)/1.5 var(--f-body);color:var(--fg-2)}
-.factor-verdict b,#gateVerdict{font-weight:650}
-.factor-verdict b{display:block;margin-top:2px;color:var(--amber)}
+#gateVerdict{margin:0 0 var(--md);max-width:78ch;
+  font:var(--fs-2)/1.5 var(--f-body);color:var(--fg-2);font-weight:650}
+
+/* ── THE VERDICT IS THE SCREEN ──
+
+   Same audit finding as #gateVerdict above, one step further. Leading with
+   the answer was right and was not enough: the answer was a body-copy
+   sentence sitting on top of two provenance lines, four scores, two notes and
+   an eight-column table of shrunk uplifts and adjusted q-values. Correct, and
+   unreadable — it answered "is this cohort significant after multiple-testing
+   correction" while the operator was asking "is any of this making me money".
+
+   Set at display size because it is the only thing on the panel that has to
+   be read from across the room, and in the body face rather than the tracked
+   mono the chrome uses: it is a sentence, not a label. */
+.factor-verdict{margin:0 0 var(--sm);max-width:24ch;
+  font:600 clamp(21px,3.2vw,29px)/1.2 var(--f-body);letter-spacing:-.015em;
+  color:var(--fg);text-wrap:balance}
+/* Green only when something actually passed. An UNPROVEN verdict is not a
+   failure and must not be red — nothing is wrong, the book simply has not
+   said anything yet, and colouring it as a fault would push the operator to
+   act on an absence of evidence. */
+.factor-verdict.has-passing{color:var(--green)}
+/* What it MEANS, which is the half the operator can act on: rule 7 in plain
+   English. Above the fold in both branches, never inside the disclosure —
+   the one conclusion nobody may draw from this panel is that a grade let a
+   trade through. */
+.factor-consequence{margin:0 0 var(--lg);max-width:62ch;
+  font:var(--fs-3)/1.6 var(--f-body);color:var(--fg-3)}
+
+/* THE WORKING-OUT, kept and folded away. A grade this codebase cannot defend
+   is worse than no grade, and the defence is exactly what is in here. */
+.factor-why{border-top:1px solid var(--border-soft)}
+.factor-why>summary{display:flex;align-items:center;gap:8px;min-height:44px;
+  cursor:pointer;font:650 var(--fs-1)/1 var(--f-mono);letter-spacing:.12em;
+  text-transform:uppercase;color:var(--accent);list-style:none}
+.factor-why>summary::-webkit-details-marker{display:none}
+.factor-why>summary::before{content:'';width:7px;height:7px;flex:none;
+  border-right:1.6px solid currentColor;border-top:1.6px solid currentColor;
+  transform:rotate(135deg) translate(-2px,2px);
+  transition:transform .18s cubic-bezier(.2,.8,.3,1)}
+.factor-why[open]>summary::before{transform:rotate(-45deg) translate(0,2px)}
+.factor-why>summary:hover{color:var(--fg)}
+.factor-why-body{padding-top:var(--sm)}
+@media (prefers-reduced-motion:reduce){
+  .factor-why>summary::before{transition:none}
+}
 /* --green, not --accent: in paper mode --accent IS --amber, so "met" and
    "blocked" would have rendered the same colour. The words differ either way
    — colour is never the only distinction here — but two verdicts sharing one

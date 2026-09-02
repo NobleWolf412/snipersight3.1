@@ -224,8 +224,23 @@ ok('Factors leads with its conclusion, not its population', () => {
   assert(v > 0 && p > 0 && v < p,
     'the population strip is back above the verdict — the screen leads with ' +
     'where the numbers came from instead of what they mean');
-  assert(/Do not use factor grades/.test(FACTOR),
+  /* Rule 7 — evidence is recorded, not filtered on, until it has been graded
+     — has to reach the operator in words, in BOTH branches, and it has to
+     stay above the disclosure. The one conclusion nobody may draw from this
+     panel is that a grade let a trade through. Pinned by meaning rather than
+     by the old sentence: the wording moved to plain English on purpose, and
+     an assertion on the phrasing would have blocked exactly that. */
+  const consequence = FACTOR.slice(FACTOR.indexOf('const consequence'),
+                                   FACTOR.indexOf('root.innerHTML'));
+  assert(consequence.length > 0, 'the consequence line is gone entirely');
+  assert(/cannot approve a trade|cannot approve/.test(consequence),
+    'the graded branch stopped saying a passing factor still cannot approve ' +
+    'or size a trade');
+  assert(/not picking or sizing|is picking or sizing/.test(consequence),
     'the ungraded branch no longer tells the operator what not to do with it');
+  assert(FACTOR.indexOf('factor-consequence') < FACTOR.indexOf('factor-why'),
+    'the consequence moved inside the disclosure — the one thing that must ' +
+    'never be optional reading on this panel');
 });
 
 ok('a warning carried by two payloads prints once', () => {

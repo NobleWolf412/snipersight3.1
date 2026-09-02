@@ -369,7 +369,14 @@ ok('performance reads its scoreboard and dimensions from server contracts', () =
   assert(SERVER.includes('CUMULATIVE_CURRENT_FACTORSTATS_VERSION'));
   assert(SERVER.includes('CUMULATIVE_CURRENT_AUTOMATION_VERSION'));
   for(const stage of ['PAPER','SHADOW','TESTNET','LIVE']) assert(COCKPIT.includes(`['${stage}'`));
-  assert(FACTORS.includes('Factor Stats cohorts'));
+  /* The cohort table moved behind "Show me why" and kept everything in it.
+     A grade this codebase cannot defend is worse than no grade, and the
+     defence IS the table — folded away, never dropped. */
+  assert(FACTORS.includes('factor-why') && FACTORS.includes('Show me why'),
+    'the disclosure that holds the working-out is gone')
+  assert(FACTORS.includes('factor-table') && FACTORS.includes('Adjusted q'),
+    'the cohort table was dropped rather than folded away — the verdict now ' +
+    'has no defence behind it');
   for(const field of ['shrunk_uplift_r', 'ci_lo', 'q_value', 'high_samples'])
     assert(FACTORS.includes(field), field + ' factor evidence is absent');
 });

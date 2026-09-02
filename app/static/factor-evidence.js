@@ -41,50 +41,73 @@
                                     ...(evidence.warnings || [])].map(plainWarning))];
       const warningHtml = warnings.map(w =>
         `<p class="op-warning">${esc(w)}</p>`).join('');
+      /* THE VERDICT IS THE SCREEN. Everything below "Show me why" is the
+         working-out, and it used to be the whole thing: shrunk uplift, 95%
+         intervals, adjusted q-values, chronological train/validation/forward
+         splits, two provenance lines and an eight-column table, all above the
+         fold. That answers "is this cohort significant after correcting for
+         multiple comparisons", which is a statistician's question. The
+         operator's question is "is anything here making me money" — and the
+         panel already computed that answer, on its own first line, under
+         everything else.
+
+         Nothing was deleted. A grade this codebase cannot defend is worse
+         than no grade, and the defence IS the working-out; it moved behind a
+         disclosure, it did not go away. */
+      const verdict = passing.length
+        ? `${passing.length} factor${passing.length === 1 ? ' has' : 's have'} proven useful`
+        : 'No factor has proven useful yet';
+      /* MEASURED_NOT_ENABLED in plain English, and it stays ABOVE the fold in
+         both branches. Rule 7: evidence is recorded, not filtered on, until it
+         has been graded — so the one thing the operator must never conclude
+         from this screen is that a grade let a trade through. */
+      const consequence = passing.length
+        ? 'They help rank what the scanner finds. They cannot approve a trade, ' +
+          'size one, or overrule a rejection — only the risk authority does that.'
+        : 'Nothing here is picking or sizing your trades, and that is the ' +
+          'design: a factor has to beat the book before it gets a vote.';
       root.innerHTML = `<section class="panel factor-panel">
         <div class="panel-head"><h2 class="t-section">Factor calibration</h2>
           <span class="chip">${esc(grade.grade === 'UNGRADED' || !grade.grade ? 'Not proven yet' : grade.grade)}</span></div>
         <div class="panel-body">
-          <p class="t-body factor-verdict">${passing.length
-            ? `${passing.length} factor cohort${passing.length === 1 ? ' has' : 's have'} proven useful.`
-            : 'No factor has proven useful yet.'}
-            <b>${passing.length
-              ? 'A grade still cannot approve or size a trade on its own.'
-              : 'Do not use factor grades to approve or size trades.'}</b></p>
-          <p class="population-note">Factor Stats scope · Population: ${esc(scope(evidence.population))} ·
-            Window: ${esc(scope(evidence.window))}</p>
-          <p class="population-note">FactorGrade scope · Population: ${esc(scope(grade.population))} ·
-            Window: ${esc(scope(grade.window))}</p>
-          <div class="factor-summary">
-            <div><span>Performance score</span><b>${esc(grade.score == null ? 'No reliable score yet' : grade.score)}</b></div>
-            <div><span>Confidence</span><b>${esc(grade.confidence === 'INSUFFICIENT_EVIDENCE' || !grade.confidence ? 'Not enough completed trades' : grade.confidence)}</b></div>
-            <div><span>Coverage</span><b>${esc(grade.coverage == null ? '—' : grade.coverage)}</b></div>
-            <div><span>Forward samples</span><b>${esc(grade.sample_size || 0)}</b></div>
-          </div>
-          <p class="t-note">Ranking aid only. A grade cannot approve or size a trade, or override
-            market conflict, stale data, costs, reward/risk, or a safety rejection.</p>
-          <p class="t-note">${passing.length} factor cohort${passing.length === 1 ? '' : 's'}
-            survived chronological validation, forward stability, confidence,
-            shrinkage, and multiple-testing correction.</p>
+          <p class="factor-verdict${passing.length ? ' has-passing' : ''}">${esc(verdict)}</p>
+          <p class="factor-consequence">${esc(consequence)}</p>
           ${warningHtml}
-          <details class="factor-record"><summary>Factor Stats cohorts (${rows.length})</summary>
-            <p class="t-note">${esc(evidence.closed_trades || 0)} closed trades · chronological
-              ${esc(Math.round((evidence.split || {}).train * 100 || 0))}% train,
-              ${esc(Math.round((evidence.split || {}).validation * 100 || 0))}% validation,
-              ${esc(Math.round((evidence.split || {}).forward * 100 || 0))}% forward ·
-              ${evidence.point_in_time ? 'point-in-time joins' : 'point-in-time status not reported'}</p>
-            <div class="dimension-scroll"><table class="factor-table"><thead><tr>
-              <th>Factor / cohort</th><th>Status</th><th>Forward sample</th><th>Coverage</th>
-              <th>Uplift</th><th>95% interval</th><th>Stable</th><th>Adjusted q</th></tr></thead><tbody>
-              ${rows.length ? rows.map(row => `<tr><td><b>${esc(row.factor)}</b><small>${esc(row.cohort_key)}</small></td>
-                <td>${row.passes_evidence ? 'Proven' : row.status === 'INSUFFICIENT_EVIDENCE' ? 'Too few trades' : esc(row.status)}</td>
-                <td>${esc((row.high_samples || {}).forward || 0)} high / ${esc((row.control_samples || {}).forward || 0)} control</td>
-                <td>${row.coverage == null ? 'Not reported' : esc((Number(row.coverage) * 100).toFixed(0) + '%')}</td>
-                <td>${row.shrunk_uplift_r == null ? 'Not established' : esc(Number(row.shrunk_uplift_r).toFixed(3) + 'R shrunk')}</td>
-                <td>${row.ci_lo == null || row.ci_hi == null ? 'Not computed' : esc(`[${Number(row.ci_lo).toFixed(3)}, ${Number(row.ci_hi).toFixed(3)}]R`)}</td>
-                <td>${row.stable ? 'YES' : 'NO'}</td><td>${row.q_value == null ? 'Not computed' : esc(Number(row.q_value).toFixed(3))}</td></tr>`).join('')
-                : '<tr><td colspan="8">No factor cohorts were reported.</td></tr>'}
-            </tbody></table></div>
+          <details class="factor-why">
+            <summary>Show me why</summary>
+            <div class="factor-why-body">
+              <p class="t-note">${passing.length} of ${rows.length} cohort${rows.length === 1 ? '' : 's'}
+                survived chronological validation, forward stability, confidence,
+                shrinkage, and multiple-testing correction — five filters, applied
+                in that order, each one able to end a cohort's case on its own.</p>
+              <div class="factor-summary">
+                <div><span>Performance score</span><b>${esc(grade.score == null ? 'No reliable score yet' : grade.score)}</b></div>
+                <div><span>Confidence</span><b>${esc(grade.confidence === 'INSUFFICIENT_EVIDENCE' || !grade.confidence ? 'Not enough completed trades' : grade.confidence)}</b></div>
+                <div><span>Coverage</span><b>${esc(grade.coverage == null ? '—' : grade.coverage)}</b></div>
+                <div><span>Forward samples</span><b>${esc(grade.sample_size || 0)}</b></div>
+              </div>
+              <p class="population-note">Factor Stats scope · Population: ${esc(scope(evidence.population))} ·
+                Window: ${esc(scope(evidence.window))}</p>
+              <p class="population-note">FactorGrade scope · Population: ${esc(scope(grade.population))} ·
+                Window: ${esc(scope(grade.window))}</p>
+              <p class="t-note">${esc(evidence.closed_trades || 0)} closed trades · chronological
+                ${esc(Math.round((evidence.split || {}).train * 100 || 0))}% train,
+                ${esc(Math.round((evidence.split || {}).validation * 100 || 0))}% validation,
+                ${esc(Math.round((evidence.split || {}).forward * 100 || 0))}% forward ·
+                ${evidence.point_in_time ? 'point-in-time joins' : 'point-in-time status not reported'}</p>
+              <div class="dimension-scroll"><table class="factor-table"><thead><tr>
+                <th>Factor / cohort</th><th>Status</th><th>Forward sample</th><th>Coverage</th>
+                <th>Uplift</th><th>95% interval</th><th>Stable</th><th>Adjusted q</th></tr></thead><tbody>
+                ${rows.length ? rows.map(row => `<tr><td><b>${esc(row.factor)}</b><small>${esc(row.cohort_key)}</small></td>
+                  <td>${row.passes_evidence ? 'Proven' : row.status === 'INSUFFICIENT_EVIDENCE' ? 'Too few trades' : esc(row.status)}</td>
+                  <td>${esc((row.high_samples || {}).forward || 0)} high / ${esc((row.control_samples || {}).forward || 0)} control</td>
+                  <td>${row.coverage == null ? 'Not reported' : esc((Number(row.coverage) * 100).toFixed(0) + '%')}</td>
+                  <td>${row.shrunk_uplift_r == null ? 'Not established' : esc(Number(row.shrunk_uplift_r).toFixed(3) + 'R shrunk')}</td>
+                  <td>${row.ci_lo == null || row.ci_hi == null ? 'Not computed' : esc(`[${Number(row.ci_lo).toFixed(3)}, ${Number(row.ci_hi).toFixed(3)}]R`)}</td>
+                  <td>${row.stable ? 'YES' : 'NO'}</td><td>${row.q_value == null ? 'Not computed' : esc(Number(row.q_value).toFixed(3))}</td></tr>`).join('')
+                  : '<tr><td colspan="8">No factor cohorts were reported.</td></tr>'}
+              </tbody></table></div>
+            </div>
           </details>
         </div></section>`;
     }catch(err){
