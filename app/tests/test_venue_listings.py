@@ -431,5 +431,57 @@ class TestTheDemotionSaysSoOutLoud(ListingCase):
         self.assertEqual((found["status"], found["rung"]), ("PASS", "SERVE_FLAG"))
 
 
+class TestTheOtherVenueActuallyWorks(ListingCase):
+    """Every demotion test above is Phemex. Coinbase reported 85 delisted USD
+    products against 402 online on 2026-09-01, so retired SPOT is the larger
+    production population and its spelling path — `BTC-USD`, not `BTCUSDT` —
+    was exercised nowhere.
+    """
+
+    def spot_gapped(self, sym):
+        for ts in (0, 7200):
+            self.con.execute(
+                "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (sym, "1H", ts, "100", "102", "98", "101", "1",
+                 "coinbase-spot", ts + 1))
+        self.con.commit()
+
+    def test_a_delisted_spot_pair_demotes(self):
+        self.spot_gapped("OLD-USD")
+        self.record("coinbase-spot", ["BTC-USD", "ETH-USD"])
+        with mock.patch("engine.universe.scan_symbols", return_value=[]):
+            self.assertIn("RETIRED_SEQUENCE_GAPS", self.codes("OLD-USD"))
+
+    def test_a_listed_spot_pair_still_blocks(self):
+        self.spot_gapped("BTC-USD")
+        self.record("coinbase-spot", ["BTC-USD", "ETH-USD"])
+        with mock.patch("engine.universe.scan_symbols", return_value=[]):
+            self.assertIn("SEQUENCE_GAPS", self.codes("BTC-USD"))
+
+    def test_a_perp_sweep_does_not_answer_for_a_spot_pair(self):
+        """Each venue answers only for its own symbols; the cross-venue
+        direction is pinned above, this is the mirror of it."""
+        self.spot_gapped("OLD-USD")
+        self.record("phemex-perp", ["BTCUSDT"])
+        with mock.patch("engine.universe.scan_symbols", return_value=[]):
+            self.assertIn("SEQUENCE_GAPS", self.codes("OLD-USD"))
+
+
+class TestTheSweepsFallbackIsAudible(ListingCase):
+    def test_a_failed_venue_says_so_in_the_log_as_well_as_the_fact(self):
+        """Loud-fallback rule. The fact carries swept=false, but a silent
+        failure in the log looks exactly like a clean sweep that happened to
+        list nothing — and nothing in the suite would have noticed it going
+        quiet."""
+        with mock.patch.object(listings, "SOURCES",
+                               ((venues.PHEMEX_PERP.key,
+                                 mock.Mock(side_effect=OSError("boom")), "/t"),)):
+            with self.assertLogs("snipersight", level="WARNING") as logs:
+                listings.sweep(self.con, now=1_000_000)
+        said = "\n".join(logs.output)
+        self.assertIn("phemex-perp", said)
+        self.assertIn("FAILED", said)
+
+
 if __name__ == "__main__":
     unittest.main()
