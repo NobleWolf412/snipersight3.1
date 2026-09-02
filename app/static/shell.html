@@ -398,11 +398,8 @@
       <div class="op-toolbar panel" aria-label="Opportunity filters">
         <div class="seg" id="opFilters" role="group" aria-label="Filter setup state">
           <button class="on" data-op-filter="ACTIVE" aria-pressed="true">Live <span data-op-count="ACTIVE">—</span></button>
-          <button data-op-filter="READY" aria-pressed="false">Ready <span data-op-count="READY">—</span></button>
-          <button data-op-filter="FORMING" aria-pressed="false"
-                  title="Approaching — the setup is built and price is walking toward the entry. These can become tradeable today.">Approaching <span data-op-count="FORMING">—</span></button>
-          <button data-op-filter="WATCHING" aria-pressed="false"
-                  title="Watching — the market is on the list but no setup has formed on it yet. Nothing here is close to an entry.">Watching <span data-op-count="WATCHING">—</span></button>
+          <button data-op-filter="WATCHLIST" aria-pressed="false"
+                  title="Nothing committed yet: setups that have validated, ones walking toward their entry, and markets still being watched. Each row says which.">Watchlist <span data-op-count="WATCHLIST">—</span></button>
           <button data-op-filter="HISTORY" aria-pressed="false">History <span data-op-count="HISTORY">—</span></button>
         </div>
         <p id="opStatus" class="t-note" role="status" aria-live="polite">Loading server-ranked setups…</p>
@@ -830,10 +827,9 @@
     <section class="surface" id="s-results" tabindex="-1">
       <div class="surface-head"><h1 class="t-page">Results</h1><p>Is the method earning trust?</p></div>
       <div class="workspace-tabs" id="performanceTabs" data-workspace-tabs="performance" aria-label="Performance views">
-        <button class="on" type="button" data-view="overview" aria-pressed="true">Overview</button>
+        <button class="on" type="button" data-view="overview" aria-pressed="true">Performance</button>
         <button type="button" data-view="strategies" aria-pressed="false">Strategies</button>
         <button type="button" data-view="factors" aria-pressed="false">Factors</button>
-        <button type="button" data-view="journal" aria-pressed="false">Journal</button>
         <button type="button" data-view="promotion" aria-pressed="false">Promotion</button>
       </div>
       <div class="performance-scope" id="performanceScope" aria-label="Performance evidence scope and filters">
@@ -985,7 +981,14 @@
           <p class="sr-only" id="progStatus" aria-live="polite"></p>
         </div>
       </div>
-      <div class="panel floating" data-performance-view="journal" hidden style="margin-bottom:var(--lg)">
+      <!-- THE JOURNAL LIVES WITH THE SUMMARY IT EXPLAINS. These were two tabs
+           answering one question from two angles: the scoreboard said the
+           method won 29% of seven trades, and the seven trades were one click
+           away behind a tab you had to know to press. A summary the reader
+           cannot drill into is a claim; with the rows under it, it is
+           evidence. The `overview` key is kept rather than renamed so a
+           session that stored it still resolves. -->
+      <div class="panel floating" id="journalPanel" data-performance-view="overview" style="margin-bottom:var(--lg)">
         <div class="panel floating-head"><h2 class="t-section">Trade Journal</h2>
           <span class="chip" id="jnlCount" style="margin-left:auto">—</span>
           <!-- The book was readable and not extractable. Anyone who wants to

@@ -119,9 +119,19 @@
        click, a hashchange, the 6 key — where the storage write alone changed
        nothing on screen and only took effect the next time the app booted. */
     if(route === 'performance-ledger'){
-      try{ sessionStorage.setItem('ss:performance-view', 'journal'); }catch(e){ /* optional */ }
+      /* The address outlived the tab. Journal merged into Performance, so
+         this now opens that view and SCROLLS to the rows — the destination
+         is still "the trades", and landing at the top of a summary the
+         operator did not ask for is not that. The stored key moves with it,
+         or a bookmark made today would resolve to a view that no longer
+         exists and fall back silently. */
+      try{ sessionStorage.setItem('ss:performance-view', 'overview'); }catch(e){ /* optional */ }
       dispatchEvent(new CustomEvent('ss:workspace-request',
-        {detail: {name: 'performance', view: 'journal'}}));
+        {detail: {name: 'performance', view: 'overview'}}));
+      requestAnimationFrame(() => {
+        const rows = document.getElementById('journalPanel');
+        if(rows) rows.scrollIntoView({behavior: 'smooth', block: 'start'});
+      });
     }
     document.body.dataset.route = route;
     document.querySelectorAll('.surface').forEach(s =>

@@ -148,21 +148,51 @@ ok('#performance-ledger opens the Journal after boot, not on the next boot', () 
   const SHELL = fs.readFileSync(path.join(STATIC, 'shell.js'), 'utf8');
   const at = SHELL.indexOf("route === 'performance-ledger'");
   assert(at > 0, 'the ledger route is gone — re-anchor this test');
-  const block = SHELL.slice(at, at + 500);
-  assert(/sessionStorage\.setItem\('ss:performance-view', 'journal'\)/.test(block),
-    'the cold-start half is gone: a bookmarked #performance-ledger opens Overview');
+  /* Wide enough for the block AND its reasoning. Sized at 500 this failed
+     against correct code the moment the branch gained a comment — a window
+     that tight is measuring how much prose the branch carries, not what it
+     does. */
+  const block = SHELL.slice(at, at + 1200);
+  /* The view is `overview` now, not `journal`: the two merged, because they
+     were answering one question from two angles — a scoreboard claiming a 29%
+     win rate over seven trades, and the seven trades one unpressed tab away.
+     The address survived the merge and so must both of its halves. */
+  assert(/sessionStorage\.setItem\('ss:performance-view', 'overview'\)/.test(block),
+    'the cold-start half is gone, or still names the retired `journal` view — ' +
+    'a bookmarked #performance-ledger then falls back silently');
   assert(/ss:workspace-request/.test(block),
     'the live half is gone: the route only takes effect on the next page load');
+  /* AND IT STILL LANDS ON THE TRADES. Merging the journal into a longer view
+     is what makes this necessary: without the scroll the address resolves to
+     the top of a summary the operator did not ask for, and "open the journal"
+     quietly becomes "open Results". */
+  assert(/getElementById\('journalPanel'\)/.test(block) &&
+         /scrollIntoView/.test(block),
+    'the route no longer scrolls to the rows — it now means "open Results", ' +
+    'not "open the journal"');
   assert(/addEventListener\('ss:workspace-request'/.test(WORKSPACES) &&
          /request\.name === name/.test(WORKSPACES),
     'nothing acts on a view request, so the router writes storage into a void');
 });
 
-ok('performance exposes five focused views and owns factor evidence', () => {
-  for (const view of ['overview', 'strategies', 'factors', 'journal', 'promotion']) {
+ok('performance exposes four focused views and owns factor evidence', () => {
+  for (const view of ['overview', 'strategies', 'factors', 'promotion']) {
     assert(HTML.includes(`data-view="${view}"`), view + ' tab is missing');
     assert(HTML.includes(`data-performance-view="${view}"`), view + ' panel is missing');
   }
+  /* Journal is a PANEL inside Performance now, not a tab beside it. Both
+     halves are pinned: the tab must be gone, and the rows must be under the
+     summary rather than orphaned into a view nothing can select. */
+  assert(!/data-view="journal"/.test(HTML),
+    'the Journal tab is back — the summary and the rows it summarises are ' +
+    'two tabs again');
+  const panel = HTML.slice(HTML.indexOf('id="journalPanel"'));
+  assert(/^[^>]*data-performance-view="overview"/.test(panel),
+    'the journal panel is not in the Performance view — with its tab gone ' +
+    'that makes the trade rows unreachable from anywhere');
+  assert(!/id="journalPanel"[^>]*\shidden/.test(HTML),
+    'the journal panel is still hidden by default; it was hidden because a ' +
+    'tab revealed it, and that tab no longer exists');
   assert.strictEqual((HTML.match(/id="factorEvidenceRoot"/g) || []).length, 1,
     'Factor evidence must have one mount and one screen owner');
   assert(HTML.includes('id="performanceLedger"'));
@@ -231,10 +261,29 @@ ok('opportunity disclosure keeps economics and hides unavailable grading', () =>
   assert(HTML.includes('data-op-count="ACTIVE"'));
   assert(HTML.includes('data-op-filter="ACTIVE" aria-pressed="true">Live'),
     'the active-order bucket must not imply it includes forming setups');
+  /* Live still means CAPITAL IS COMMITTED and nothing else. Ready, Forming
+     and Watching merged into one Watchlist bucket — the operator reported
+     never seeing any of the three lit, which is true and not a bug: a setup
+     walks all three inside one scan cycle and the deck shows only its current
+     state. Merging them into LIVE was the tempting move and would have made
+     the word lie, which is what this assertion has always been guarding. */
   assert(OPPORTUNITIES.includes("const ACTIVE = new Set(['POSITION_OPEN','ORDER_WORKING'])"),
-    'Live, Ready, Forming, Watching, and History must be disjoint buckets');
-  assert(OPPORTUNITIES.includes("['ACTIVE','READY','FORMING','WATCHING','HISTORY']"),
+    'Live has widened past committed capital — a watched market with nothing ' +
+    'on it would be sitting in a bucket named Live');
+  assert(OPPORTUNITIES.includes("const WATCHLIST = new Set(['READY','FORMING','WATCHING'])"),
+    'the three uncommitted states are not one bucket');
+  assert(OPPORTUNITIES.includes("['ACTIVE','WATCHLIST','HISTORY']"),
     'the first non-empty bucket should open instead of an empty Live view');
+  /* Every state still belongs somewhere. A state in none of the three sets
+     is a row that exists in the payload and can be reached by no tab. */
+  const inSets = OPPORTUNITIES.slice(OPPORTUNITIES.indexOf('const HISTORY = new Set'),
+                                     OPPORTUNITIES.indexOf('let payload'));
+  for (const state of ['POSITION_OPEN','ORDER_WORKING','READY','FORMING','WATCHING',
+                       'BLOCKED','REJECTED','EXPIRED','CANCELLED','CLOSED']) {
+    assert(new RegExp("'" + state + "'").test(inSets),
+      state + ' belongs to no bucket — rows in that state are unreachable ' +
+      'from every tab');
+  }
 });
 
 ok('entry presentation is plain, exact, and only shows real grades', () => {

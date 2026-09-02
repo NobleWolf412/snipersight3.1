@@ -15,6 +15,24 @@
   const label = window.SSOpportunityUI.label;
   const HISTORY = new Set(['BLOCKED','REJECTED','EXPIRED','CANCELLED','CLOSED']);
   const ACTIVE = new Set(['POSITION_OPEN','ORDER_WORKING']);
+  /* READY, FORMING and WATCHING were three tabs and the operator reported
+     never seeing any of them lit. They are not broken: a setup walks
+     WATCHING -> FORMING -> READY -> order placed inside a single scan cycle,
+     and the deck shows only each setup's CURRENT state, so the middle of that
+     walk is almost never what you catch. Three tabs for three states you
+     cannot see is three empty rooms.
+
+     Merged into one bucket rather than folded into Live, which was the
+     tempting move and the wrong one: Live means capital is committed —
+     a position open or an order working — and a WATCHING market has nothing
+     committed at all. Widening Live to hold it would make the word lie, and
+     the deck's own test already said so ("the active-order bucket must not
+     imply it includes forming setups").
+
+     Nothing is lost in the merge because every row already prints its own
+     state in .op-state, so READY and WATCHING stay distinguishable at the
+     row — which is where the distinction was always visible and useful. */
+  const WATCHLIST = new Set(['READY','FORMING','WATCHING']);
   const ORDER = ['POSITION_OPEN','ORDER_WORKING','READY','FORMING','WATCHING',
     'BLOCKED','REJECTED','EXPIRED','CANCELLED','CLOSED'];
   let payload = {items: [], summary: {narrative: 'No setup data yet.'}};
@@ -27,6 +45,7 @@
 
   function inFilter(key, row){
     if(key === 'ACTIVE') return ACTIVE.has(row.state);
+    if(key === 'WATCHLIST') return WATCHLIST.has(row.state);
     if(key === 'HISTORY') return HISTORY.has(row.state);
     return row.state === key;
   }
@@ -187,7 +206,7 @@
       const wanted = selectedId;
       payload = await api('/api/opportunities?include_history=true');
       if(!initializedFilter){
-        const priority = ['ACTIVE','READY','FORMING','WATCHING','HISTORY'];
+        const priority = ['ACTIVE','WATCHLIST','HISTORY'];
         setFilter(priority.find(key => payload.items.some(row => inFilter(key, row))) || 'ACTIVE');
         initializedFilter = true;
       }
