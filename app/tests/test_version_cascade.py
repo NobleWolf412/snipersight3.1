@@ -71,14 +71,19 @@ OPERATIONAL_EXPECTED = {
     # and a missing ladder reading never holds dispatch. v0.5: risk reasons
     # trader-readable; top-down independent of risk state.
     "opportunities": "opportunity-v0.6-draft",
+    # quality-v0.4: the v0.3 pin-list of everything that can still resolve a
+    # trade across the hole missed execution.monitor_paper's durable PAPER
+    # intents, so a delisted market carrying one reported PASS where it now
+    # reports BLOCKED. Same store, different verdict — a version, not an edit.
     # quality-v0.3: a market the VENUE no longer lists reports its unexplained
-    # gaps as RETIRED_SEQUENCE_GAPS (DEGRADED) rather than SEQUENCE_GAPS
-    # (BLOCKED) — the holes cannot be repaired once the market is gone, so
+    # gaps as RETIRED_SEQUENCE_GAPS — status PASS at rung SERVE_FLAG, so it
+    # lands in `notes` and NOT in `warnings` — rather than SEQUENCE_GAPS
+    # (BLOCKED). The holes cannot be repaired once the market is gone, so
     # blocking halted the store forever (CRVUSDT/Phemex). Reads `listings`,
     # never universe membership: `members` is the top_n slice, and keying on it
     # demoted 81 live perps (reverted, ba9d8fb). v0.2: acknowledged venue voids
     # are durable notes, not warnings; gaps on a LIVE market still block.
-    "quality": "quality-v0.3-draft",
+    "quality": "quality-v0.4-draft",
     # listings-v0.1: the venue product sweep, appended one fact per venue per
     # run. Locked from birth — quality's verdict now depends on it, and a
     # version nobody tracks until something reads it leaves its early facts

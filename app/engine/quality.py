@@ -12,9 +12,16 @@ from decimal import Decimal
 
 from . import aggregator, importer, listings, venues
 
-QUALITY_VERSION = "quality-v0.3-draft"
+QUALITY_VERSION = "quality-v0.4-draft"
+# v0.4: the v0.3 demotion held a list of everything that could still resolve a
+# trade across the hole, and that list was short by one — execution.monitor_paper
+# walks candles to settle durable PAPER intents and was never in it. A symbol
+# carrying one is now pinned, so the same delisted market can report BLOCKED
+# under v0.4 where v0.3 reported PASS. That is a different verdict for the same
+# store, which is a version, not an edit.
 # v0.3: a market its VENUE no longer lists reports RETIRED_SEQUENCE_GAPS
-# (DEGRADED) instead of SEQUENCE_GAPS (BLOCKED). Its holes cannot be repaired —
+# (PASS, at rung SERVE_FLAG — a note, NOT a warning) instead of SEQUENCE_GAPS
+# (BLOCKED). Its holes cannot be repaired —
 # no import can serve history for a market that does not exist — so blocking
 # halted the store forever with no action available to the operator (CRVUSDT,
 # delisted from Phemex, absent from /public/products and the 24h ticker while
@@ -220,16 +227,19 @@ def _live_symbols(con) -> set:
 def _symbols_that_must_keep_blocking(con) -> set:
     """Symbols where an unexplained gap can still invent a fill.
 
-    Three populations, and missing any one of them lets the simulator resolve
-    a trade across a hole. `assert_market_ready` — which stops only on BLOCKED
-    — is the sole gate in front of all three, and the harm is stated in
-    live.py's own comment: resolving an exit across an unexplained candle gap
-    "would invent which level hit first". A delisting makes that WORSE, not
-    better, because the missing bars are never coming, so the invented fill is
-    permanent and enters the graded book that decides whether live routing
-    unlocks.
+    The harm is stated in live.py's own comment: resolving an exit across an
+    unexplained candle gap "would invent which level hit first". A delisting
+    makes that WORSE, not better, because the missing bars are never coming, so
+    the invented fill is permanent and enters the graded book that decides
+    whether live routing unlocks.
 
-      · an unresolved SIMULATOR order — live.py's pinned-exit path;
+    Four populations walk candles to settle a trade:
+
+      · an unresolved SIMULATOR order — live.py's pinned-exit path, and the
+        one this gate actually protects: `assert_market_ready` runs at
+        pipeline.py before execsim, and stops on BLOCKED;
+      · a durable PAPER intent — execution.monitor_paper walks candles from
+        `intent.created_at` to fill, stop or target;
       · an unresolved MANUAL intent — manual.run settles the operator's own
         hand-armed trades by walking candles, on the same roster;
       · anything still in the SCAN SET. `pinned` is computed once before the
@@ -241,6 +251,16 @@ def _symbols_that_must_keep_blocking(con) -> set:
         when Coinbase rank coverage is low, while the /products call feeding
         the listing sweep still succeeds. That window is not an hour.
 
+    BE HONEST ABOUT THE REACH: `assert_market_ready` gates only the pipeline
+    (pipeline.py), the pinned-exit path (live.py) and backfill.py. It is NOT in
+    front of `manual.run` or `execution.monitor_paper` — live.py calls both
+    directly — so listing those two buys no protection TODAY. They are here
+    because completeness is this guard's whole value: the cost is one indexed
+    query each, and the alternative is that whoever puts a gate in front of
+    either inherits an enumeration that silently already missed them. An
+    earlier draft of this docstring claimed the gate covered manual.run; it
+    never did.
+
     Fails CLOSED — on any error every symbol is treated as unsafe to demote,
     so the demotion cannot fire on a store we could not read.
     """
@@ -250,6 +270,22 @@ def _symbols_that_must_keep_blocking(con) -> set:
         out |= {symbol for symbol, _tf in execsim.unresolved(con)}
         out |= {str(key[0]) if isinstance(key, tuple) else str(key)
                 for key in manual.unresolved(con)}
+        # Durable PAPER intents, straight off the outbox. monitor_paper reads
+        # exactly these two states and walks candles from intent.created_at, so
+        # the states are the roster — reading it here rather than through
+        # execution keeps this a single indexed query with no plan decoding.
+        #
+        # The table is created by execution._ensure on the first enqueue, so a
+        # store where nothing has ever been armed does not have it. That is an
+        # EMPTY population, not an unreadable one, and the difference matters:
+        # letting the missing table raise would reach the fail-closed handler
+        # below and pin every symbol on exactly the cold stores the demotion is
+        # supposed to work on. Absent table -> no paper intents exist.
+        if con.execute("SELECT count(*) FROM sqlite_master WHERE type='table' "
+                       "AND name='execution_outbox'").fetchone()[0]:
+            out |= {r[0] for r in con.execute(
+                "SELECT DISTINCT symbol FROM execution_outbox WHERE mode='PAPER' "
+                "AND state IN ('PAPER_ROUTED','PAPER_FILLED')").fetchall()}
         out |= set(universe.scan_symbols(con))
     except Exception as exc:
         # Loud-fallback rule: the safe direction is still a degraded one, and
@@ -456,7 +492,31 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
         _issue(checks, "DATA", "BLOCKED", "NO_CANDLES",
                "no market candles are available", symbol)
     live = _live_symbols(con)
-    unsafe_to_retire = _symbols_that_must_keep_blocking(con)
+
+    # LAZY, and memoised for this audit. `_symbols_that_must_keep_blocking` is
+    # dominated by `execsim.unresolved`, whose ROW_NUMBER window plus a join on
+    # an unindexed setup_id scales superlinearly with the CURRENT generation's
+    # order facts: measured 14 ms at 500 orders, 456 ms at 3,000, 1,726 ms at
+    # 6,000. `assert_market_ready` runs once per scan symbol, so computing it
+    # eagerly added that cost ~75x per cycle — 34s at 3,000 orders, over two
+    # minutes at 6,000 — and threw the answer away on every healthy symbol.
+    #
+    # That directly attacks the fixed-clock-snapshot rule: a cycle that takes
+    # minutes longer widens the gap between the snapshot import used and the
+    # clock the later engines judge against. Before this guard existed the cost
+    # was zero, so it had to go back to about zero.
+    #
+    # The set is identical for every symbol in a cycle, so one call per audit
+    # is enough — and the delisting check below is ordered cheap-first, so on a
+    # store with no positively-delisted gapped market it is never called at
+    # all. A list holds the memo rather than the set itself: `_ALL_SYMBOLS`
+    # refuses len() by design, and an `if not cached` on it would be a trap.
+    _unsafe_memo: list = []
+
+    def unsafe_to_retire():
+        if not _unsafe_memo:
+            _unsafe_memo.append(_symbols_that_must_keep_blocking(con))
+        return _unsafe_memo[0]
 
     for sym, tf in series:
         sec = importer.TF_SECONDS.get(tf)
@@ -528,9 +588,21 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
                 #  · Only gaps demote. Malformed rows and developing candles
                 #    indict the STORE, which is live and repairable whatever
                 #    the venue did, so they keep blocking.
-                retired = (sym not in unsafe_to_retire
-                           and listings.listed_on_venue(con, sym, now) is False)
+                retired = (listings.listed_on_venue(con, sym, now) is False
+                           and sym not in unsafe_to_retire())
                 if retired:
+                    # Loud-fallback rule. This is the only path in v0.3 that
+                    # LIFTS a blocker, and it was the only one that said
+                    # nothing: the store could go evaluation_allowed False ->
+                    # True between two cycles with no line in data/live.log
+                    # explaining why, leaving "why did it start sizing again"
+                    # answerable only by opening Diagnostics.
+                    from .runlog import get_logger
+                    get_logger().warning(
+                        f"quality: {sym} {tf} has {len(unexplained)} unexplained "
+                        f"candle gaps, but {venues.venue_for(sym).key} no longer "
+                        f"lists it — recorded RETIRED_SEQUENCE_GAPS and NOT "
+                        f"blocking; its history is retired, not broken")
                     # PASS puts this in `notes` rather than `warnings`:
                     # recorded under its own name and count (rejections stay as
                     # auditable as approvals), but not a standing alarm nobody

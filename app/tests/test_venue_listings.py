@@ -213,10 +213,6 @@ class TestGapDemotion(ListingCase):
         quality.assert_market_ready(self.con, "CRVUSDT", now=1_000_100)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestListingSourcesAreListingsNotTradeability(ListingCase):
     """The adapters' own product rosters drop anything not currently tradeable,
     because they feed a TRADEABLE universe. Reading those as the listing turns
@@ -336,3 +332,104 @@ class TestWiringAndConstants(ListingCase):
                                 (venues.COINBASE_SPOT.key, lambda: ["BTC-USD"], "/t"))):
             listings.sweep(self.con, now=1_000_000, beat=beats.append)
         self.assertEqual(len(beats), 2)
+
+
+class TestTheGuardIsCompleteAndCheap(ListingCase):
+    """The demotion turns a BLOCKED verdict into a PASS, so the set of things
+    that could still resolve a trade across the hole is the whole safety
+    argument — and it runs once per scan symbol, so its cost is the whole
+    performance argument.
+    """
+
+    def outbox(self, symbol, state="PAPER_FILLED", mode="PAPER"):
+        from engine import execution
+        execution._ensure(self.con)
+        self.con.execute(
+            "INSERT INTO execution_outbox(idempotency_key,intent_id,mode,setup_id,"
+            "symbol,payload,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (f"k-{symbol}-{state}", f"i-{symbol}-{state}", mode, "s1", symbol,
+             "{}", state, 1, 1))
+        self.con.commit()
+
+    def test_a_durable_paper_intent_still_blocks(self):
+        """execution.monitor_paper walks candles from intent.created_at to
+        fill, stop or target. It was missing from the guard entirely."""
+        self.gapped("CRVUSDT")
+        self.record("phemex-perp", ["BTCUSDT"])
+        self.outbox("CRVUSDT")
+        with mock.patch("engine.universe.scan_symbols", return_value=[]):
+            self.assertIn("SEQUENCE_GAPS", self.codes("CRVUSDT"))
+
+    def test_a_settled_paper_intent_does_not_block(self):
+        """Only the two states monitor_paper actually reads are the roster.
+        Pinning every historical intent would retire nothing, ever."""
+        self.gapped("CRVUSDT")
+        self.record("phemex-perp", ["BTCUSDT"])
+        self.outbox("CRVUSDT", state="PAPER_CLOSED")
+        with mock.patch("engine.universe.scan_symbols", return_value=[]):
+            self.assertIn("RETIRED_SEQUENCE_GAPS", self.codes("CRVUSDT"))
+
+    def test_a_missing_outbox_is_an_empty_population_not_an_unreadable_one(self):
+        """execution._ensure creates the table on the first arm, so a store
+        where nothing was ever armed does not have it. Letting that raise would
+        reach the fail-closed handler and pin every symbol on exactly the cold
+        stores this is supposed to work on."""
+        self.gapped("CRVUSDT")
+        self.record("phemex-perp", ["BTCUSDT"])
+        self.assertEqual(self.con.execute(
+            "SELECT count(*) FROM sqlite_master WHERE name='execution_outbox'"
+        ).fetchone()[0], 0)
+        with mock.patch("engine.universe.scan_symbols", return_value=[]):
+            self.assertIn("RETIRED_SEQUENCE_GAPS", self.codes("CRVUSDT"))
+
+    def test_the_expensive_guard_is_not_consulted_for_a_listed_market(self):
+        """THE PERFORMANCE REGRESSION. `execsim.unresolved` measured 14 ms at
+        500 current-generation order facts and 1,726 ms at 6,000; computing it
+        eagerly ran that once per scan symbol and discarded it on every healthy
+        one. Ordered cheap-first, a market the venue still lists never reaches
+        it at all."""
+        self.gapped("AAVEUSDT")
+        self.record("phemex-perp", ["BTCUSDT", "AAVEUSDT"])
+        with mock.patch.object(quality, "_symbols_that_must_keep_blocking") as guard:
+            self.assertIn("SEQUENCE_GAPS", self.codes("AAVEUSDT"))
+        guard.assert_not_called()
+
+    def test_the_guard_is_computed_once_per_audit_not_once_per_symbol(self):
+        """The set is identical for every symbol in a cycle."""
+        for sym in ("CRVUSDT", "OLDUSDT", "GONEUSDT"):
+            self.gapped(sym)
+        self.record("phemex-perp", ["BTCUSDT"])
+        with mock.patch.object(quality, "_symbols_that_must_keep_blocking",
+                               return_value=set()) as guard:
+            quality.audit_market_inputs(self.con, now=1_000_100)
+        self.assertEqual(guard.call_count, 1)
+
+
+class TestTheDemotionSaysSoOutLoud(ListingCase):
+    def test_lifting_the_blocker_is_logged(self):
+        """Loud-fallback rule: this is the only path in v0.3 that LIFTS a
+        blocker, and it was the only one that announced nothing. The store can
+        go evaluation_allowed False -> True between two cycles, and without
+        this data/live.log says nothing about why."""
+        self.gapped("CRVUSDT")
+        self.record("phemex-perp", ["BTCUSDT"])
+        with mock.patch("engine.universe.scan_symbols", return_value=[]):
+            with self.assertLogs("snipersight", level="WARNING") as logs:
+                self.codes("CRVUSDT")
+        said = "\n".join(logs.output)
+        self.assertIn("CRVUSDT", said)
+        self.assertIn("no longer", said)
+
+    def test_the_note_is_a_note_and_not_a_warning(self):
+        """The version note claimed DEGRADED; the code emits PASS at
+        SERVE_FLAG. An operator told 'degraded' looks in the warnings group,
+        and the UI splits notes from warnings — it is not there."""
+        self.gapped("CRVUSDT")
+        self.record("phemex-perp", ["BTCUSDT"])
+        with mock.patch("engine.universe.scan_symbols", return_value=[]):
+            found = self.codes("CRVUSDT")["RETIRED_SEQUENCE_GAPS"]
+        self.assertEqual((found["status"], found["rung"]), ("PASS", "SERVE_FLAG"))
+
+
+if __name__ == "__main__":
+    unittest.main()
