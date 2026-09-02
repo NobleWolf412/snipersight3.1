@@ -179,8 +179,6 @@
           <div class="command-tools">
             <span class="command-kicker">Scanner controls</span>
             <button class="btn" id="btnScan">Check now</button>
-            <button class="btn" id="btnDiagnoseCmd"
-                    title="run eight checks and say which one to fix first">Diagnose</button>
             <button class="btn" id="btnAuto" disabled
                     title="the scanner is running — this is automatic ORDER PLACEMENT, locked until the forward record earns it. Settings → Going live lists the four criteria.">Auto-trade: off</button>
           </div>
@@ -1381,10 +1379,24 @@
       <p class="disposition" id="diagState">
         <span class="skel skel-line" style="width:46%"></span>
       </p>
+      <!-- Diagnose sits at the TOP of this surface, not in a panel head four
+           screens down. It arrived on Command because an audit found the only
+           door to it was buried in "Why nothing fired" — on the surface that
+           looks like it is for engineers — and a newcomer would never reach
+           the most useful thing in the app. Command was the wrong fix for a
+           real problem: it put a diagnostic control on the account overview
+           and left the burial in place. Moving it here answers the audit
+           without that cost, so the Command copy could go.
+
+           Second, not first: the disposition line above already says what is
+           wrong. Copy report hands that over in one click and stays primary;
+           Diagnose is what you press when the sentence is not enough. -->
       <div class="diag-handover">
         <button class="btn btn-primary" id="btnCopyDiag"
                 title="put a plain-text summary of everything on this surface on the clipboard">
           Copy report</button>
+        <button class="btn" id="btnDiagnose"
+                title="run eight checks and say which one to fix first">Diagnose</button>
       </div>
       <!-- THE TWO STATUS READOUTS, PAIRED.
 
@@ -1445,8 +1457,7 @@
            this band. It gained 600px of measure when it stopped sharing a row,
            and lost 100px of height for it. -->
       <div class="panel" style="margin-bottom:var(--lg)">
-        <div class="panel-head"><h2 class="t-section">Why nothing fired</h2>
-          <button class="btn" id="btnDiagnose" style="margin-left:auto">Diagnose</button></div>
+        <div class="panel-head"><h2 class="t-section">Why nothing fired</h2></div>
         <div class="panel-body" id="dFunnel"><span class="skeleton" role="status" aria-label="loading">
         <span class="skel skel-line" style="width:70%"></span>
         <span class="skel skel-line" style="width:55%"></span></span></div>

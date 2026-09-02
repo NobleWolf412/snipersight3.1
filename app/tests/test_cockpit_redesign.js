@@ -362,4 +362,44 @@ ok('system names consequences and keeps one global apply bar', () => {
   assert(/#s-settings>\.dirty-banner\{position:fixed/.test(CSS));
 });
 
+/* Diagnose belongs to System, and the account overview is not a diagnostics
+   surface. It has moved twice — buried in a panel head, then duplicated onto
+   Command to fix the burial — so both halves are pinned: gone from Command,
+   and reachable at the TOP of System rather than four screens down it. */
+ok('Diagnose is not on the account overview', () => {
+  assert(!/btnDiagnoseCmd/.test(HTML),
+    'the Command copy of Diagnose is back — the overview answers "how is my ' +
+    'account", and a diagnostic control on it is the technicals leaking in');
+  const WIZARD = fs.readFileSync(path.join(STATIC, 'wizard.js'), 'utf8');
+  assert(!/btnDiagnoseCmd/.test(WIZARD),
+    'wizard.js still binds the Command id — a dead lookup that reads as wiring');
+});
+
+ok('Diagnose is reachable at the top of System', () => {
+  const at = HTML.indexOf('class="diag-handover"');
+  assert(at > 0, 'the handover row is gone — Diagnose has no home above the fold');
+  const row = HTML.slice(at, HTML.indexOf('</div>', at));
+  assert(/id="btnDiagnose"/.test(row),
+    'Diagnose is not in the handover row. Putting it back in a panel head ' +
+    'recreates the burial the Command button existed to work around: an ' +
+    'audit found nobody would ever reach it there');
+  /* The MARKUP, not the phrase: "Why nothing fired" also appears in two
+     comments above this point, and matching those had this assertion failing
+     against a correct page. */
+  const funnelAt = HTML.indexOf('<h2 class="t-section">Why nothing fired</h2>');
+  assert(funnelAt > 0 && at < funnelAt,
+    'the handover row now sits below the funnel — Diagnose is only above the ' +
+    'fold if the row it lives in is');
+});
+
+ok('Copy report stays the primary action on System', () => {
+  const at = HTML.indexOf('class="diag-handover"');
+  const row = HTML.slice(at, HTML.indexOf('</div>', at));
+  assert(/id="btnCopyDiag"[^>]*|btn-primary[^>]*id="btnCopyDiag"/.test(row)
+    && /btn-primary/.test(row.slice(0, row.indexOf('id="btnDiagnose"'))),
+    'Diagnose outranks Copy report. The disposition line above already says ' +
+    'what is wrong; handing that over in one click is the common path, and ' +
+    'Diagnose is for when the sentence is not enough');
+});
+
 console.log('\n  ' + passed + ' passed');

@@ -517,11 +517,18 @@
   });
   document.addEventListener('keydown', e => { if (open && e.key === 'Escape') close(); });
 
-  /* Two doors, one room. The Diagnostics one has always existed, buried in a
-     panel called "Why nothing fired" on the surface that looks like it is for
-     engineers; the audit found that a newcomer would never reach the single
-     most useful thing in the app. The Command one is the fix. */
-  for (const id of ['btnDiagnose', 'btnDiagnoseCmd']) {
+  /* One door, at the top of the surface it belongs to. It used to be buried
+     in a panel called "Why nothing fired", four screens down — the audit found
+     a newcomer would never reach the most useful thing in the app, and the fix
+     at the time was a SECOND button on Command. That answered discoverability
+     by putting a diagnostic control on the account overview and left the
+     burial untouched. The button now sits in the handover row at the top of
+     System instead, so there is one door and it is in plain sight.
+
+     The loop stays for the id list rather than for its current length: this
+     control has moved twice, and a hard-coded single lookup is what makes the
+     next move a silent no-op. `if (btn)` is the same insurance. */
+  for (const id of ['btnDiagnose']) {
     const btn = document.getElementById(id);
     if (btn) btn.addEventListener('click', openWizard);
   }
