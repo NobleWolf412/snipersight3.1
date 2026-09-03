@@ -18,6 +18,10 @@ M5_DAYS = 14
 # rather than simply where the venue's own history begins. Two bars absorbs
 # bucket alignment and the bar that was still forming when onboarding ran.
 HISTORY_SLACK_BARS = 2
+# Widest hole `reacknowledge_bucket` will close with ONE venue answer. Coinbase
+# serves 300 buckets per request, so anything under that is a single honest
+# answer; beyond it the repair is `repair_history`, not a stitched-together one.
+REACK_MAX_SPAN_BARS = 200
 # One roster, declared in `engine/pipeline.py`. This list used to be maintained
 # separately from `live.ENGINES` and had fallen six engines behind it, so a
 # symbol onboarded today received full history for the older engines and
@@ -149,6 +153,77 @@ def repair_history(con, symbol: str, tfs: list[str] | None = None,
         for tf in ("4H", "1W"):
             aggregator.aggregate(con, symbol, tf)
     return gained
+
+
+def reacknowledge_bucket(con, symbol: str, tf: str, open_ts: int,
+                         now: int | None = None) -> dict:
+    """Re-ask the venue about one bucket that sits unvouched between two
+    stored candles, so its answer lands in `import_log`.
+
+    The overlap is the whole method. The steady-state import requests from
+    the last stored bucket + 1, so a bucket the venue omitted at the head of
+    that window was never inside a served span and nothing acknowledged it
+    (importer-v0.7 stops that recurring; this repairs what it already left).
+    Asking for one bucket either side puts the hole INSIDE the served span,
+    where the importer's ordinary accounting records it as venue-quiet. The
+    row it writes is a real venue answer, and it is the entire audit trail —
+    `quality._known_gap_buckets` reads it directly, so nothing else is
+    written and no second authority is created. Facts are untouched.
+
+    Two checks, because the failure shape is quiet. The precondition — a
+    stored candle on each side — is asserted before asking: called on the
+    first bucket of a wider hole, the venue's answer starts one bucket later,
+    the accounting is correct and acknowledges nothing, and the return dict
+    is the only tell (auditor, 2026-09-02). Afterwards the row just written
+    is read back: if the bucket is not in its listed gaps the venue served
+    it, or served nothing at all, and either way this was not the repair the
+    caller thinks it was — say so, never pass it off as one.
+    """
+    gran = importer.TF_SECONDS[tf]
+    q = ("SELECT open_ts FROM candles WHERE symbol=? AND tf=? AND open_ts {} ? "
+         "AND source NOT LIKE 'agg:%' ORDER BY open_ts {} LIMIT 1")
+    if con.execute(q.format("=", "ASC"), (symbol, tf, open_ts)).fetchone():
+        raise ValueError(f"{symbol} {tf} open_ts={open_ts} is stored; nothing to acknowledge")
+    # Bracket with the nearest STORED candle each side, not the adjacent
+    # bucket. The first live run stopped on LIGHTER-USD 07:35Z: its neighbour
+    # 07:30Z was already an acknowledged quiet bucket, so the hole was a
+    # one-bucket hole to quality and a two-bucket one to an adjacency check.
+    # Asking from stored candle to stored candle puts every bucket between
+    # them inside the served span, and the venue's one answer lists them all
+    # — which is also the honest repair for a run of several.
+    before = con.execute(q.format("<", "DESC"), (symbol, tf, open_ts)).fetchone()
+    after = con.execute(q.format(">", "ASC"), (symbol, tf, open_ts)).fetchone()
+    if not (before and after):
+        raise ValueError(
+            f"{symbol} {tf} open_ts={open_ts} has no stored candle on "
+            f"{'both sides' if not (before or after) else 'one side'} — not a "
+            f"hole between candles; a short history is `repair_history`")
+    if after[0] - before[0] > REACK_MAX_SPAN_BARS * gran:
+        raise ValueError(
+            f"{symbol} {tf} open_ts={open_ts}: nearest stored candles are "
+            f"{(after[0] - before[0]) // gran} buckets apart — wider than this "
+            f"one-answer repair covers; that is `repair_history`")
+    r = importer.backfill(con, symbol, tf, before[0], after[0] + gran, as_of=now)
+    # Either outcome closes the hole: the venue lists it as quiet, or — the
+    # rarer one — it now serves the bar it omitted first time, and the bar
+    # is stored. Both are honest answers; only silence about it is not.
+    row = con.execute(
+        "SELECT gaps FROM import_log WHERE symbol=? AND tf=? "
+        "ORDER BY id DESC LIMIT 1", (symbol, tf)).fetchone()
+    import json
+    listed = bool(row) and open_ts in {int(t) for t in json.loads(row[0])}
+    filled = con.execute(
+        "SELECT 1 FROM candles WHERE symbol=? AND tf=? AND open_ts=? "
+        "AND source NOT LIKE 'agg:%'", (symbol, tf, open_ts)).fetchone() is not None
+    if not (listed or filled):
+        from .runlog import get_logger
+        get_logger().warning(
+            f"reacknowledge {symbol} {tf} open_ts={open_ts}: the venue's answer "
+            f"neither served the bar nor listed it as quiet (served "
+            f"{r['candles']} candle(s)) — NOT repaired; check the venue before "
+            f"trusting this series")
+    return {**r, "acknowledged": listed, "filled": filled,
+            "repaired": listed or filled}
 
 
 def backfill_history(con, symbol: str) -> dict:

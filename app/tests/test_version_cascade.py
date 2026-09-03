@@ -213,7 +213,10 @@ RETIRED_MANUAL = tuple(v for v in manual.MANUAL_VERSIONS
                        if v != manual.MANUAL_VERSION)
 
 EXPECTED = {
-    "importer": "importer-v0.6-draft",
+    # importer-v0.7, 2026-09-02: gap accounting only (a head-of-window quiet
+    # bucket is acknowledged once the market has listed). Stamped on no fact
+    # and no candle row, so no CONSUMERS entry — the same reasoning as v0.5.
+    "importer": "importer-v0.7-draft",
     # agg-v0.2 cascade, 2026-08-09 — wider than S53, and the first to start
     # from CANDLES rather than facts. The aggregator now builds a 4H/1W bucket
     # from the source candles that exist when every missing one is a bucket

@@ -19,7 +19,14 @@ from datetime import datetime, timezone
 from . import binance, kraken, phemex, venues
 
 API = "https://api.exchange.coinbase.com"
-IMPORTER_VERSION = "importer-v0.6-draft"
+IMPORTER_VERSION = "importer-v0.7-draft"
+# v0.7: a quiet bucket at the HEAD of a served window is acknowledged when the
+# market has already listed. v0.5 fixed the empty answer; a partial answer
+# that omitted only its first bucket still counted that bucket as pre-listing,
+# and `live.py` requests from `MAX(open_ts) + gran` with no overlap, so nothing
+# ever re-asked for it. Each such bucket was one unexplained hole: AERO-USD,
+# LIGHTER-USD and VET-USD carried 17 between them on 2026-09-02, the store sat
+# at HALT, and the supervisor killed the scanner mid-cycle on every audit.
 # v0.6: a caller may pin `as_of` to the scan's opening clock snapshot. The live
 # loop takes several minutes and used to pass its old `now` as the requested end
 # while this function silently replaced the safety boundary with a newer wall
@@ -246,12 +253,28 @@ def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int, *,
     # The span is defined by what the venue SERVED, not by what we kept. A bar
     # the venue returned and we REJECTED as malformed is a genuine hole — that
     # is the gap-honesty rule at the top of this module, and a test pins it.
-    # Only buckets the venue never returned at all are pre-listing.
+    # Buckets the venue never returned are pre-listing ONLY when nothing is
+    # stored before the window. Once the market has listed, an omitted bucket
+    # ahead of the first served one is the venue saying "no trades here" —
+    # the same statement it makes by omitting a bucket inside the span, and
+    # the same one the empty-answer branch below already records (v0.5).
+    # Counting it as pre-listing left it unvouched, and the steady-state
+    # import requests from the last stored bucket + 1 with no overlap, so the
+    # omitted bucket is ALWAYS at the head and nothing ever re-asked (v0.7).
+    prior = con.execute(
+        "SELECT 1 FROM candles WHERE symbol=? AND tf=? AND open_ts<? "
+        "AND source NOT LIKE 'agg:%' LIMIT 1",
+        (symbol, tf, start_ts)).fetchone()
     if served:
         first, last = min(served), max(served)
         expected = range(first, last + gran, gran)
         gaps = [t for t in expected if t not in seen]
-        pre_listing = len([t for t in range(start_ts, first, gran)])
+        head = list(range(start_ts, first, gran))
+        if prior:
+            gaps = head + gaps
+            pre_listing = 0
+        else:
+            pre_listing = len(head)
     else:
         # Nothing served at all. Two different absences, told apart by what
         # the store already knows:
@@ -272,10 +295,6 @@ def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int, *,
         # PRE-LISTING (no prior candles): nothing listed yet in this range,
         # not "no trades" — recording gaps would claim the venue lost data it
         # never had. Unchanged.
-        prior = con.execute(
-            "SELECT 1 FROM candles WHERE symbol=? AND tf=? AND open_ts<? "
-            "AND source NOT LIKE 'agg:%' LIMIT 1",
-            (symbol, tf, start_ts)).fetchone()
         if prior:
             gaps = list(range(start_ts, end_ts, gran))
             pre_listing = 0

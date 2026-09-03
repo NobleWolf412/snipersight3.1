@@ -73,12 +73,27 @@ QUARANTINE_CLIMB_TICKS = 3        # consecutive audits elevated-and-not-recoveri
 # (NO_CANDLES, OHLC_INVARIANT_FAILURE) CAN be healed by the scanner's next
 # import.
 #
+# `SEQUENCE_GAPS` is the second, for the mirror reason: a hole BETWEEN two
+# stored candles. The scanner's import watermark only walks forward from
+# `MAX(open_ts)` (`live.py`), so no restart ever re-requests the bucket. It
+# is not the process holding a stale reading this time; it is a process with
+# no path to the data at all. Measured 2026-09-02: 17 such buckets across
+# AERO-USD, LIGHTER-USD and VET-USD, and the scanner killed mid-cycle on every
+# audit for five days because the grace below was under the cycle time — the
+# audit ran, the kill landed, the next cycle started from the same watermark,
+# and the count could only grow (an interrupted import is a fresh head-of-
+# window omission). 360 starts in engine.log, one completed cycle in 34h.
+#
 # What this does NOT do is fix the underlying condition. The toast is the only
-# thing that will tell you, and the answer is almost always "restart the
+# thing that will tell you. For UNKNOWN_TIMEFRAME the answer is "restart the
 # supervisor", which `/api/system/restart` cannot do — it restarts the
-# children and refuses outright if the watchdog is down.
-UNHEALABLE_HALT_CODES = frozenset({"UNKNOWN_TIMEFRAME"})
-RESTART_GRACE_SEC = 420           # > the slowest cycle measured (347.1s)
+# children and refuses outright if the watchdog is down. For SEQUENCE_GAPS it
+# is `ingest.reacknowledge_bucket` per hole, from `app/`.
+UNHEALABLE_HALT_CODES = frozenset({"UNKNOWN_TIMEFRAME", "SEQUENCE_GAPS"})
+# > the slowest cycle measured. 347.1s on 2026-07-30 sized the first value
+# (420); by 2026-08-28 cycles ran 725-800s with 32 markets, and a grace under
+# the cycle time is what turned one HALT into a permanent restart loop.
+RESTART_GRACE_SEC = 900
 SERVER_PROBE_TIMEOUT = 15         # > /api/status measured at 6.9s under load
 SERVER_MISSES_BEFORE_TAKEOVER = 3 # one slow answer is not a disappearance
 ERR_LOG_CAP_BYTES = 8 * 1024 * 1024   # a diagnostic must not fill the disk
@@ -409,7 +424,8 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
         age = None if started is None else time.monotonic() - started
         if live_child.alive() and age is not None and age < RESTART_GRACE_SEC:
             log(f"audit: worst={worst} counts={counts} — {reason}, but "
-                f"live-scanner is {age:.0f}s old and a cycle needs ~296s; "
+                f"live-scanner is {age:.0f}s old and a cycle needs up to "
+                f"{RESTART_GRACE_SEC}s; "
                 f"deferring restart (codes={codes[:6]})")
             return {"counts": counts, "at": now_mono, "q_streak": streak}
         log(f"audit: worst={worst} counts={counts} — restart live ({reason}, "

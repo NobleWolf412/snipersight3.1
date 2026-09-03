@@ -12,6 +12,7 @@ The wasted requests were the small part. `/api/health` sums `n_gaps`, and
 `risk.py` halts on a BLOCKED data-health verdict — so a single cold symbol could
 poison the signal the risk authority trusts.
 """
+import json
 import tempfile
 import time
 import unittest
@@ -221,6 +222,113 @@ class RepairHistory(unittest.TestCase):
         with mock.patch.object(ingest.importer, "backfill", fake_backfill):
             ingest.repair_history(self.con, "PF_BBBUSD", ["1H"], self.now)
         self.assertEqual(seen["1H"], ingest.history_floor("1H", self.now))
+
+
+class ReacknowledgeBucket(unittest.TestCase):
+    """The one-bucket repair for a hole the steady-state import left unvouched
+    (importer-v0.7 stops new ones; this closes the 17 that already existed on
+    2026-09-02). Its only job is to ask with OVERLAP — one bucket either side —
+    so the hole falls inside a served span and the importer's own accounting
+    records it."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.con = store.connect(Path(tmp.name) / "r.db")
+        self.addCleanup(self.con.close)
+        # candles at 2700 and 3300 bracket a one-bucket hole at 3000
+        _warm(self.con, "AERO-USD", "5m", 300, 2700, 1, source="coinbase")
+        _warm(self.con, "AERO-USD", "5m", 300, 3300, 1, source="coinbase")
+
+    def _fake(self, gaps, candles=2):
+        def fake_backfill(con, symbol, tf, start_ts, end_ts, as_of=None):
+            self.seen = dict(symbol=symbol, tf=tf, start=start_ts, end=end_ts)
+            con.execute(
+                "INSERT INTO import_log (symbol, tf, range_start, range_end, "
+                "n_candles, n_gaps, gaps, source, run_at, n_bad) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (symbol, tf, start_ts, end_ts, candles, len(gaps),
+                 json.dumps(gaps), "coinbase", 0, 0))
+            con.commit()
+            return {"candles": candles, "gaps": len(gaps), "bad": 0,
+                    "pre_listing": 0}
+        return fake_backfill
+
+    def test_it_asks_one_bucket_either_side_of_the_hole(self):
+        with mock.patch.object(ingest.importer, "backfill", self._fake([3000])):
+            r = ingest.reacknowledge_bucket(self.con, "AERO-USD", "5m", 3000)
+        self.assertEqual(self.seen, {"symbol": "AERO-USD", "tf": "5m",
+                                     "start": 2700, "end": 3600})
+        self.assertTrue(r["acknowledged"])
+        self.assertTrue(r["repaired"])
+
+    def test_a_bar_served_after_all_is_a_repair_too(self):
+        """The venue can serve on the second ask what it omitted on the first.
+        The hole is then FILLED, not acknowledged — and it is closed either
+        way. Reporting that as a failure would send the operator chasing a
+        series that is now whole (Codex review, 2026-09-02)."""
+        def fake_backfill(con, symbol, tf, start_ts, end_ts, as_of=None):
+            _warm(con, symbol, tf, 300, 3000, 1, source="coinbase")
+            con.execute(
+                "INSERT INTO import_log (symbol, tf, range_start, range_end, "
+                "n_candles, n_gaps, gaps, source, run_at, n_bad) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (symbol, tf, start_ts, end_ts, 3, 0, "[]", "coinbase", 0, 0))
+            con.commit()
+            return {"candles": 3, "gaps": 0, "bad": 0, "pre_listing": 0}
+
+        with mock.patch.object(ingest.importer, "backfill", fake_backfill), \
+             mock.patch("engine.runlog.get_logger") as gl:
+            r = ingest.reacknowledge_bucket(self.con, "AERO-USD", "5m", 3000)
+        self.assertFalse(r["acknowledged"])
+        self.assertTrue(r["filled"])
+        self.assertTrue(r["repaired"])
+        gl.return_value.warning.assert_not_called()
+
+    def test_an_answer_that_does_not_list_the_hole_is_loud(self):
+        """Two candles bracket the hole, so a venue that now serves nothing —
+        or serves the bucket after all — did not make the repair the caller
+        thinks it did. Loud-fallback rule: say so, never pass it off as one."""
+        with mock.patch.object(ingest.importer, "backfill",
+                               self._fake([], candles=0)), \
+             mock.patch("engine.runlog.get_logger") as gl:
+            r = ingest.reacknowledge_bucket(self.con, "AERO-USD", "5m", 3000)
+        self.assertFalse(r["repaired"])
+        gl.return_value.warning.assert_called_once()
+        self.assertIn("NOT repaired", gl.return_value.warning.call_args[0][0])
+
+    def test_it_brackets_with_the_nearest_stored_candles_not_the_neighbours(self):
+        """First live run, LIGHTER-USD 07:35Z: the neighbour 07:30Z was already
+        an acknowledged quiet bucket. To quality that is a one-bucket hole; to
+        an adjacency check it was two, and the repair refused. Bracketing with
+        the nearest STORED candle each side asks one window that the venue's
+        one answer covers entirely."""
+        self.con.execute("DELETE FROM candles WHERE open_ts=3300")
+        _warm(self.con, "AERO-USD", "5m", 300, 3600, 1, source="coinbase")
+        self.con.commit()
+        with mock.patch.object(ingest.importer, "backfill",
+                               self._fake([3000, 3300])):
+            r = ingest.reacknowledge_bucket(self.con, "AERO-USD", "5m", 3000)
+        self.assertEqual((self.seen["start"], self.seen["end"]), (2700, 3900))
+        self.assertTrue(r["repaired"])
+
+    def test_it_refuses_what_is_not_a_hole_between_candles(self):
+        """Called on the FIRST bucket of a hole with no stored candle after it,
+        the venue's answer starts wherever it starts, the accounting is
+        correct and acknowledges nothing, and the only tell is the return
+        value (auditor, 2026-09-02). So the precondition is asserted."""
+        self.con.execute("DELETE FROM candles WHERE open_ts=3300")
+        self.con.commit()
+        with mock.patch.object(ingest.importer, "backfill", self._fake([3000])):
+            with self.assertRaises(ValueError):       # nothing stored after
+                ingest.reacknowledge_bucket(self.con, "AERO-USD", "5m", 3000)
+            with self.assertRaises(ValueError):       # stored: nothing to do
+                ingest.reacknowledge_bucket(self.con, "AERO-USD", "5m", 2700)
+            _warm(self.con, "AERO-USD", "5m", 300,
+                  2700 + 300 * (ingest.REACK_MAX_SPAN_BARS + 1), 1, source="coinbase")
+            with self.assertRaises(ValueError):       # too wide for one answer
+                ingest.reacknowledge_bucket(self.con, "AERO-USD", "5m", 3000)
+        self.assertFalse(hasattr(self, "seen"), "it asked the venue anyway")
 
 
 class OnboardingPathIsCallable(unittest.TestCase):

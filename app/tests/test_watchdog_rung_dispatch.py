@@ -77,6 +77,27 @@ class TestWatchdogRungDispatch(unittest.TestCase):
         child.proc.terminate.assert_not_called()
         toast.assert_called_once()             # still noisy — not silenced
 
+    def test_sequence_gaps_halt_does_not_restart(self):
+        """The 2026-09-02 loop, same shape as above. A SEQUENCE_GAPS blocker
+        is a hole between two stored candles; the scanner's import watermark
+        only walks forward from MAX(open_ts), so no restart re-requests it.
+        Killing the scanner over it did worse than nothing: each kill landed
+        mid-import and left a fresh head-of-window omission, so the count grew
+        under the very action meant to clear it (1 -> 4 findings, 360 starts,
+        one completed cycle in 34 hours)."""
+        report = {"worst_rung": "HALT",
+                  "rung_counts": {"HALT": 4, "SERVE_FLAG": 166,
+                                   "QUARANTINE": 0, "AUTO_DISABLE": 0,
+                                   "SERVE": 0},
+                  "blockers": [{"code": "SEQUENCE_GAPS", "rung": "HALT",
+                                "symbol": s, "tf": "5m"}
+                               for s in ("AERO-USD", "LIGHTER-USD",
+                                         "VET-USD", "LIGHTER-USD")],
+                  "warnings": []}
+        _, child, toast = self._run(report)
+        child.proc.terminate.assert_not_called()
+        toast.assert_called_once()             # still noisy — not silenced
+
     def test_mixed_halt_including_healable_code_still_restarts(self):
         """The exemption is narrow. If any HALT finding names a code the
         scanner CAN heal (a NO_CANDLES the next import will fill, a stale
@@ -686,8 +707,10 @@ class TestTakeoverHysteresis(unittest.TestCase):
                       "takeover still fires on a single missed probe")
 
     def test_grace_covers_the_slowest_measured_cycle(self):
-        # 347.1s observed 2026-07-30; the constant was first sized from 295.8s
-        self.assertGreater(watchdog.RESTART_GRACE_SEC, 347,
+        # 800.6s observed 2026-08-28 (32 markets); 347.1s on 2026-07-30 sized
+        # the first value, and a grace under the cycle time is what turned one
+        # HALT into a five-day restart loop.
+        self.assertGreater(watchdog.RESTART_GRACE_SEC, 800,
                            "the grace window is under a cycle time already seen")
 
 

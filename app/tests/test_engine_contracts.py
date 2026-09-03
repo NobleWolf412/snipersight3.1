@@ -266,6 +266,41 @@ class TestImporter(EngineStoreCase):
         self.assertEqual(r["gaps"], 0)
         self.assertEqual(r["pre_listing"], 1)
 
+    def test_served_window_with_omitted_head_after_listing_acknowledges_the_head(self):
+        """importer-v0.7. The v0.5 sibling above covers an EMPTY answer; a
+        PARTIAL answer that omits only its first bucket fell through to the
+        served branch, which counted everything before the first served bucket
+        as pre-listing. `live.py` requests from `MAX(open_ts) + gran` with no
+        overlap, so the omitted bucket is always at the head and nothing ever
+        re-asked for it. AERO-USD / LIGHTER-USD / VET-USD, 2026-09-02: 17 such
+        buckets, every one a SEQUENCE_GAPS blocker no restart could clear."""
+        insert_candle(self.con, "1H", 0)             # the market has listed
+        with patch("engine.importer._fetch",
+                   return_value=[(7200, 98, 102, 100, 100, 1)]), \
+             patch("engine.importer.time.time", return_value=20000), \
+             patch("engine.importer.time.sleep"):
+            r = importer.backfill(self.con, "BTC-USD", "1H", 3600, 10800)
+        self.assertEqual(r["candles"], 1)
+        self.assertEqual(r["gaps"], 1, "the head bucket went unvouched again")
+        self.assertEqual(r["pre_listing"], 0)
+        listed = self.con.execute(
+            "SELECT gaps FROM import_log ORDER BY id DESC LIMIT 1").fetchone()[0]
+        self.assertEqual(json.loads(listed), [3600])
+
+    def test_served_window_with_omitted_head_before_listing_stays_pre_listing(self):
+        # The guard for the cold-start class of defect: with nothing stored
+        # before the window, a late first bucket is where the venue's history
+        # begins, not a hole. Acknowledging it would inflate n_gaps and let
+        # the aggregator build a first 4H from one hour of trade.
+        with patch("engine.importer._fetch",
+                   return_value=[(7200, 98, 102, 100, 100, 1)]), \
+             patch("engine.importer.time.time", return_value=20000), \
+             patch("engine.importer.time.sleep"):
+            r = importer.backfill(self.con, "BTC-USD", "1H", 3600, 10800)
+        self.assertEqual(r["candles"], 1)
+        self.assertEqual(r["gaps"], 0)
+        self.assertEqual(r["pre_listing"], 1)
+
     def test_malformed_candle_is_rejected_and_logged_as_gap(self):
         # Coinbase response order: time, low, high, open, close, volume.
         rows = [[0, Decimal("110"), Decimal("100"), Decimal("105"),

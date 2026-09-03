@@ -2764,9 +2764,14 @@ QUALITY_PLAIN = {
     "SEQUENCE_GAPS": (
         "The price record has holes the exchange never accounted for — bars "
         "that should exist and do not.",
-        "The importer keeps retrying on every scan; the market stays "
-        "untradeable until each hole fills or the venue confirms it served "
-        "nothing there. Hours of no progress is worth a Copy report."),
+        # Until 2026-09-02 this said the importer "keeps retrying on every
+        # scan". It never did: the scan only asks forward from the last
+        # stored bar, so a hole behind it is never asked about again, and
+        # the supervisor no longer restarts the scanner over one either
+        # (watchdog.UNHEALABLE_HALT_CODES). Each hole is a one-command
+        # repair by whoever maintains the bot; nothing here clears itself.
+        "The bot will not trade until each hole is re-checked against the "
+        "exchange — it does not retry this on its own. " + _PLAIN_HANDOVER),
     "RETIRED_SEQUENCE_GAPS": (
         "This market has holes in its stored history, but the exchange has "
         "stopped offering it — so the missing bars can never be fetched.",
