@@ -30,7 +30,7 @@ from engine import (aggregator, basis, bias, breakout, cooldowns, cycles,
                     execsim, venues, liquidity, ma, manual, momentum, ranges,
                     regime, risk, scalein, sessions, setups, structure, swings,
                     importer, volatility, volume, zones, trend, regimeread,
-                    htfread)
+                    htfread, chartread)
 from engine import (automation, autotrader, contracts, execution, lifecycle,
                     stockcalendar, stockdemo, stocks, stockstore)
 from engine import (apexbridge, listings, livegate, phemex_private, positions,
@@ -195,6 +195,10 @@ LOCKED = {
     # them; nothing consumes THEM yet.
     "regimeread": regimeread.REGIMEREAD_VERSION,
     "htfread": htfread.HTFREAD_VERSION,
+    # The chart-eye read: a fixed window of closed candles, the pivots
+    # visible in it, the sequence they make. Reads candles only, so its
+    # producer is the aggregator (4H/1W series) and nothing else.
+    "chartread": chartread.CHARTREAD_VERSION,
     "venues": venues.VENUES_VERSION,
     # Reads two candle series nothing else pairs (execution venue vs the
     # reference feed) and writes one fact stream nothing reads. Locked from
@@ -396,6 +400,10 @@ EXPECTED = {
     # recording bump yet.
     "regimeread": "regimeread-v0.1-draft",
     "htfread": "htfread-v0.1-draft",
+    # 2026-09-04: the window read the operator described (§26/§27). Locked
+    # from birth; graded at analysis time and against the golden labels
+    # before any playbook reads it.
+    "chartread": "chartread-v0.1-draft",
     # venues-v0.3: the REFERENCE contract — a per-symbol pointer to the
     # deepest venue's candle series (operator ruling 2026-08-09), stored under
     # '@'-keys that venue_for REFUSES, which is the enforcement keeping every
@@ -500,7 +508,7 @@ CONSUMERS = {
     # is a separate open decision, flagged 2026-08-09).
     "agg": ("swing", "structure", "ranges", "ma", "momentum", "volatility",
             "volume", "liquidity", "setup", "exec", "scale", "breakout",
-            "trend"),
+            "trend", "chartread"),
     # CODE-level coupling, not fact-level, and it counts the same. momentum,
     # volatility and volume import `ma.ema` / `ma.sma` / `ma.sig` directly, so a
     # change to the EMA formula changes THEIR facts without touching a line of

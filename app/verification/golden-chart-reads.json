@@ -1,0 +1,308 @@
+{
+ "description": "Golden chart reads (constitution \u00a727). Each entry is one chart window: open <symbol> on <tf>, scroll so the LAST closed candle is at <as_of> (window_start is the first of the 120), and write what YOU see into `expected`: UP / DOWN / RANGE / CHOP. `reader_says` is what engine/chartread.py called it \u2014 confirm or correct; a note on a miss is worth more than the label. Score with: python -m engine.chartread --golden verification/golden-chart-reads.json",
+ "version": "chartread-v0.1-draft",
+ "labelled_by": null,
+ "labelled_on": null,
+ "labels": [
+  {
+   "symbol": "VET-USD",
+   "tf": "4H",
+   "as_of": "2026-08-05T16:00Z",
+   "window_start": "2026-07-16T16:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.0272",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_BICOUSD",
+   "tf": "4H",
+   "as_of": "2026-04-19T16:00Z",
+   "window_start": "2026-03-30T16:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.1339",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "HFT-USD",
+   "tf": "1D",
+   "as_of": "2026-03-18T00:00Z",
+   "window_start": "2025-11-18T00:00Z",
+   "reader_says": "CHOP",
+   "efficiency": "0.1653",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_AAVEUSD",
+   "tf": "1H",
+   "as_of": "2026-02-14T17:00Z",
+   "window_start": "2026-02-09T17:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.1758",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "ONDO-USD",
+   "tf": "4H",
+   "as_of": "2026-07-01T08:00Z",
+   "window_start": "2026-06-11T08:00Z",
+   "reader_says": "CHOP",
+   "efficiency": "0.0711",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_XAUTUSD",
+   "tf": "4H",
+   "as_of": "2026-08-10T20:00Z",
+   "window_start": "2026-07-21T20:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.2061",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_DOGEUSD",
+   "tf": "1D",
+   "as_of": "2026-08-20T00:00Z",
+   "window_start": "2026-04-22T00:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.1192",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_SUIUSD",
+   "tf": "1H",
+   "as_of": "2026-08-12T17:00Z",
+   "window_start": "2026-08-07T17:00Z",
+   "reader_says": "CHOP",
+   "efficiency": "0.0544",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "BICO-USD",
+   "tf": "1H",
+   "as_of": "2026-08-12T22:00Z",
+   "window_start": "2026-08-07T22:00Z",
+   "reader_says": "DOWN",
+   "efficiency": "0.1126",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "KORUUSDT",
+   "tf": "1H",
+   "as_of": "2026-07-28T14:00Z",
+   "window_start": "2026-07-23T14:00Z",
+   "reader_says": "DOWN",
+   "efficiency": "0.2719",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "WLFI-USD",
+   "tf": "1D",
+   "as_of": "2026-07-24T00:00Z",
+   "window_start": "2026-03-26T00:00Z",
+   "reader_says": "CHOP",
+   "efficiency": "0.2232",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "LINKUSDT",
+   "tf": "4H",
+   "as_of": "2026-08-23T08:00Z",
+   "window_start": "2026-08-03T08:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.2875",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "EDENUSDT",
+   "tf": "1D",
+   "as_of": "2026-07-11T00:00Z",
+   "window_start": "2026-03-13T00:00Z",
+   "reader_says": "CHOP",
+   "efficiency": "0.0025",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "BNBUSDT",
+   "tf": "4H",
+   "as_of": "2026-07-10T00:00Z",
+   "window_start": "2026-06-20T00:00Z",
+   "reader_says": "DOWN",
+   "efficiency": "0.0280",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "SOL-USD",
+   "tf": "1D",
+   "as_of": "2025-09-11T00:00Z",
+   "window_start": "2025-05-14T00:00Z",
+   "reader_says": "CHOP",
+   "efficiency": "0.0779",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "EUL-USD",
+   "tf": "1D",
+   "as_of": "2026-06-30T00:00Z",
+   "window_start": "2026-03-02T00:00Z",
+   "reader_says": "DOWN",
+   "efficiency": "0.0159",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_TRUMPUSD",
+   "tf": "1D",
+   "as_of": "2026-09-02T00:00Z",
+   "window_start": "2026-05-05T00:00Z",
+   "reader_says": "CHOP",
+   "efficiency": "0.0131",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_FETUSD",
+   "tf": "1H",
+   "as_of": "2026-07-26T03:00Z",
+   "window_start": "2026-07-21T03:00Z",
+   "reader_says": "CHOP",
+   "efficiency": "0.0455",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_PAXGUSD",
+   "tf": "1D",
+   "as_of": "2024-02-05T00:00Z",
+   "window_start": "2023-10-08T00:00Z",
+   "reader_says": "CHOP",
+   "efficiency": "0.1413",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_HYPEUSD",
+   "tf": "1H",
+   "as_of": "2026-07-18T10:00Z",
+   "window_start": "2026-07-13T10:00Z",
+   "reader_says": "DOWN",
+   "efficiency": "0.1494",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_PAXGUSD",
+   "tf": "1D",
+   "as_of": "2026-02-14T00:00Z",
+   "window_start": "2025-10-17T00:00Z",
+   "reader_says": "CHOP",
+   "efficiency": "0.1363",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "AAVEUSDT",
+   "tf": "4H",
+   "as_of": "2026-04-01T20:00Z",
+   "window_start": "2026-03-12T20:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.0909",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "DOGE-USD",
+   "tf": "1D",
+   "as_of": "2023-07-13T00:00Z",
+   "window_start": "2023-03-15T00:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.0240",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "ONDO-USD",
+   "tf": "1D",
+   "as_of": "2025-05-25T00:00Z",
+   "window_start": "2025-01-25T00:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.0951",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "BCHUSDT",
+   "tf": "4H",
+   "as_of": "2026-03-26T04:00Z",
+   "window_start": "2026-03-06T04:00Z",
+   "reader_says": "CHOP",
+   "efficiency": "0.0345",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PEPE-USD",
+   "tf": "1H",
+   "as_of": "2026-04-12T08:00Z",
+   "window_start": "2026-04-07T08:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.0523",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "ONDOUSDT",
+   "tf": "1D",
+   "as_of": "2025-04-02T00:00Z",
+   "window_start": "2024-12-03T00:00Z",
+   "reader_says": "DOWN",
+   "efficiency": "0.1107",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_HFTUSD",
+   "tf": "4H",
+   "as_of": "2026-03-29T00:00Z",
+   "window_start": "2026-03-09T00:00Z",
+   "reader_says": "DOWN",
+   "efficiency": "0.1121",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_FARTCOINUSD",
+   "tf": "1H",
+   "as_of": "2026-05-30T04:00Z",
+   "window_start": "2026-05-25T04:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.1433",
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_FARTCOINUSD",
+   "tf": "1H",
+   "as_of": "2026-03-15T10:00Z",
+   "window_start": "2026-03-10T10:00Z",
+   "reader_says": "UP",
+   "efficiency": "0.0594",
+   "expected": null,
+   "note": ""
+  }
+ ]
+}
