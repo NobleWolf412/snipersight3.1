@@ -146,6 +146,21 @@ class AnnotateOnAStore(unittest.TestCase):
         self.assertNotIn("phase", early["payload"], "unknowable must stay MISSING")
         self.assertEqual(rr.factor_extractors(early["payload"]), {})
 
+        # A setup-v0.20 fact carries the reading the GATE saw. The grade
+        # scores that, not a recomputation — and says when the two differ.
+        recorded = {"payload": {"symbol": "BTCUSDT", "tf": "1H", "direction": "SHORT",
+                                "phase": "DRIFT_UP", "htf_phase": None,
+                                "permitted": "BOTH", "agrees": True,
+                                "context": {"action": "ALLOW"}},
+                    "confirmed_at": 39 * 3600 + 3600, "r": -1.0}
+        rr.annotate(con, [recorded])
+        self.assertEqual(recorded["payload"]["phase"], "DRIFT_UP",
+                         "the recorded reading was overwritten by a recomputation")
+        self.assertEqual(recorded["payload"]["recomputed"]["phase"], "IMPULSE_UP")
+        self.assertTrue(recorded["payload"]["reading_mismatch"])
+        self.assertEqual(rr.factor_extractors(recorded["payload"])["fades_impulse"], 0.0,
+                         "flags must follow the recorded phase")
+
 
 if __name__ == "__main__":
     unittest.main()

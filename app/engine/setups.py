@@ -21,8 +21,9 @@ Every setup carries a plain-language WHY assembled from the facts it used (§8).
 import json
 from decimal import Decimal
 
-from . import bias, registry, store
+from . import bias, registry, regimeread, store
 from .bias import LADDER as HTF_LADDER      # noqa: F401  (re-export; see below)
+from .regimeread import REGIMEREAD_VERSION
 from .swings import compute_atr, quote_ticks, SWING_VERSION
 from .zones import ZONE_VERSION
 from .liquidity import LIQ_VERSION
@@ -30,7 +31,18 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.19-draft"
+SETUP_VERSION = "setup-v0.20-draft"
+# v0.20: VALIDATED setups record the market's PHASE on their own timeframe and
+# one rung up (regimeread), the direction that reading PERMITS (bias.permitted)
+# and whether the trade agrees — and carry PULLBACK_CONTEXT_POLICY, a gate
+# keyed on `permitted` that ships ALLOW everywhere. Graded 2026-09-03 over
+# 1,391 trades before this bump: PULLBACK with no direction asserted one rung
+# up ran +0.297R (n=121, 42% win), the book's only clearly positive cell;
+# PULLBACK inside a permitted UP/DOWN ran -0.43R / -0.68R (n=148). The
+# opposite gate — refuse trades AGAINST the permitted direction — was the one
+# pre-registered, and it inverted (-0.088R refused vs -0.143R kept), so it is
+# not here. Recording is what lets the policy be graded on trades AFTER this
+# date before a value moves; no trade differs under v0.20.
 # v0.19: input cascade from agg-v0.2 — acknowledged-partial 4H/1W buckets
 # reach this engine through every producer it reads (swing-v0.10,
 # structure-v0.13, zone-v0.14, liq-v0.12, regime-v0.13) and through its own
@@ -188,6 +200,9 @@ REJECTION_REASONS = frozenset({
     # operator as a raw enum the first time it fires, which is the worst
     # possible moment to discover it.
     bias.BLOCK_REASON,
+    # The context gate (PULLBACK_CONTEXT_POLICY). Same reasoning, same state:
+    # inert while every value is ALLOW, named before it can fire.
+    "CONTEXT_BLOCKED",
 })
 MIN_RR = Decimal("1.5")
 GOOD_RR = Decimal("2.5")
@@ -302,6 +317,73 @@ BIAS_POLICY = bias.validate_policy({
     "FLAT": "ALLOW",
     "UNKNOWN": "ALLOW",
 }, who="setups.BIAS_POLICY")
+
+#: THE CONTEXT GATE — keyed on the direction the market one rung up PERMITS
+#: (bias.permitted: the rung-above phase from regimeread, then the ladder).
+#: It exists because of one cell, graded 2026-09-03 over 1,391 paper trades
+#: BEFORE this constant was written:
+#:
+#:     PULLBACK, permitted BOTH (nothing above trending)  +0.297R  n=121  42%
+#:     PULLBACK, permitted UP                              -0.432R  n= 67  22%
+#:     PULLBACK, permitted DOWN                            -0.679R  n= 81  15%
+#:
+#: A pullback entry works when the bigger picture asserts no direction and
+#: fails inside one — the "trend" this system can see is a trend that has
+#: already run, and a dip inside it is late. The obvious gate (refuse trades
+#: AGAINST the permitted side) was pre-registered first and INVERTED, like
+#: the BTC-alignment grade and the ladder before it; it is recorded in
+#: regimeread's grade and it is not here.
+#:
+#: THE GATE IS BUILT AND ARMED NOWHERE. Every value is ALLOW: v0.20 records
+#: `permitted` on every VALIDATED fact so this policy can be graded on trades
+#: confirmed AFTER 2026-09-03 — the +0.297R cell was read from the same book
+#: that suggested it, and a rule graded on its teacher flatters itself.
+#: Flipping UP/DOWN to BLOCK is one edit, a version bump, and a measurement
+#: on data this table has not seen. Keyed on PULLBACK only: REVERSAL's cells
+#: do not separate the same way, and one policy per playbook is the bias.py
+#: precedent.
+PULLBACK_CONTEXT_POLICY = {"BOTH": "ALLOW", "UP": "ALLOW", "DOWN": "ALLOW",
+                           "NONE": "ALLOW"}
+CONTEXT_STATES = ("BOTH", "UP", "DOWN", "NONE")
+CONTEXT_BLOCK_REASON = "CONTEXT_BLOCKED"
+
+
+def validate_context_policy(policy: dict, who: str = "policy") -> dict:
+    """Every permitted state answered, every answer a known word. Loud at
+    import, not at trade time — the bias.validate_policy shape."""
+    missing = [s for s in CONTEXT_STATES if s not in policy]
+    if missing:
+        raise ValueError(f"{who}: no action for permitted state(s) {missing}")
+    bad = {k: v for k, v in policy.items()
+           if k not in CONTEXT_STATES or v not in ("ALLOW", "BLOCK")}
+    if bad:
+        raise ValueError(f"{who}: unknown state or action {bad}")
+    return dict(policy)
+
+
+PULLBACK_CONTEXT_POLICY = validate_context_policy(PULLBACK_CONTEXT_POLICY,
+                                                  who="setups.PULLBACK_CONTEXT_POLICY")
+
+
+def context_verdict(strategy: str, permitted: str | None, policy=None) -> dict:
+    """Pure: what the context policy says about this trade. `permitted` None
+    (no reading) resolves to ALLOW — an unmeasured context is not a hostile
+    one, the same rule UNKNOWN follows everywhere in this codebase."""
+    policy = PULLBACK_CONTEXT_POLICY if policy is None else policy
+    if strategy != "PULLBACK" or permitted is None:
+        return {"applies": strategy == "PULLBACK", "permitted": permitted,
+                "action": "ALLOW", "policy": "PULLBACK_CONTEXT_POLICY"}
+    return {"applies": True, "permitted": permitted,
+            "action": policy.get(permitted, "ALLOW"),
+            "policy": "PULLBACK_CONTEXT_POLICY"}
+
+
+def context_blocked(verdict: dict) -> bool:
+    """The one place the question is asked (bias.blocked's rule; test_bias
+    scans this module for an inline spelling and must not find one)."""
+    return verdict.get("action") in ("BLOCK",)
+
+
 # D2 — HTF composite. `factorstats` measured htf_regime_aligned,
 # htf_align_strength and htf_regime_conviction as one cluster (r up to 0.93):
 # three names for "what is the higher timeframe doing". They are collapsed to a
@@ -570,8 +652,10 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             "enabled_strategies": sorted(enabled),
             "cost_profile": profile.payload(),
             "bias_policy": dict(BIAS_POLICY),
+            "pullback_context_policy": dict(PULLBACK_CONTEXT_POLICY),
             "inputs": {"swing": SWING_VERSION, "zone": ZONE_VERSION,
                        "liquidity": LIQ_VERSION, "regime": REGIME_VERSION,
+                       "regimeread": REGIMEREAD_VERSION,
                        **bias.inputs()},
         }
         manifest_hash = store.record_manifest(con, "strategy", strategy_manifest)
@@ -586,6 +670,15 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         # `entrystats` pins, and replacing it in the same change that
         # introduces its rival would leave nothing to compare against.
         bias_src = bias.load(con, symbol, tf)
+        # The phase on this timeframe and one rung up, loaded once. This
+        # timeframe's reading reuses the candles already in memory; the rung
+        # above reads its own (R3/R4 in the 2026-09-03 architect brief: never
+        # per zone, never per touch).
+        phase_src = regimeread.load(con, symbol, tf, tf_seconds, candles)
+        _rung = HTF_LADDER.get(tf)
+        from .importer import TF_SECONDS as _TFS
+        htf_phase_src = (regimeread.load(con, symbol, _rung, _TFS[_rung])
+                         if _rung in _TFS else None)
 
         regimes = []
         for r in store.get_facts(con, symbol, tf, "regime", REGIME_VERSION):
@@ -1184,6 +1277,23 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                        {"bias": bias_block, "strategy": strategy,
                         "direction": direction})
                 continue
+            # THE CONTEXT READING, as-of the same confirming close, and the
+            # gate keyed on it. Recorded on every VALIDATED fact; refuses
+            # only when PULLBACK_CONTEXT_POLICY says BLOCK, which it does not.
+            _phase = phase_src.at(bct)
+            _htf = htf_phase_src.at(bct) if htf_phase_src else None
+            _htf_phase = _htf["phase"] if _htf and _htf["regime"] is not None else None
+            _permitted = bias.permitted(bias_block.get("composite"), _htf_phase)
+            _agrees = bias.agrees(direction, _permitted)
+            _ctx = context_verdict(strategy, _permitted)
+            if context_blocked(_ctx):
+                reject(zone_id,
+                       {"market_time": cb["open_ts"], "confirmed_at": bct},
+                       "CONTEXT_BLOCKED",
+                       {"context": _ctx, "phase": _phase["phase"],
+                        "htf_phase": _htf_phase, "strategy": strategy,
+                        "direction": direction})
+                continue
             _armed = armed_by_id.get(setup_id)
             _inherited = False
             if _armed and _armed.get("size_units") is not None:
@@ -1220,6 +1330,19 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                        # earlier and its reading can differ, so carrying one
                        # there would record a bias no decision was ever made on.
                        "bias": bias_block,
+                       # v0.20 — the context reading and the gate's answer,
+                       # as-of the same close. `phase` is this timeframe's,
+                       # `htf_phase` one rung up; `permitted` folds the rung
+                       # above's phase with the ladder; `agrees` says whether
+                       # this trade sits inside it. All recorded, none acted
+                       # on while the policy is ALLOW.
+                       "phase": _phase["phase"],
+                       "htf_phase": _htf_phase,
+                       "displacement_atr": (_phase["last_break"] or {}).get("displacement_atr"),
+                       "label_age_bars": _phase["label_age_bars"],
+                       "permitted": _permitted,
+                       "agrees": _agrees,
+                       "context": _ctx,
                        "reversal_evidence": rev_ev,
                        "manifest_hash": manifest_hash,
                        "cost_manifest_hash": cost_manifest_hash,

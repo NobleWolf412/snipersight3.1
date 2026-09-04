@@ -163,6 +163,15 @@
              'record says trend-following and counter-move strategies want ' +
              'opposite answers.',
       cta: DIAG_SURFACE },
+    CONTEXT_BLOCKED: {
+      plain: 'the bigger picture was already trending, and this playbook only buys dips when it is not',
+      means: 'A pullback entry works when the timeframe above asserts no ' +
+             'direction and fails inside one — by the time this bot can see ' +
+             'a trend, the move has already run, and a dip inside it is late. ' +
+             'The trace names the direction the bigger picture permitted. ' +
+             'This rule ships switched OFF: it records the reading on every ' +
+             'setup so it can be judged on trades it has not already seen.',
+      cta: DIAG_SURFACE },
 
     /* `cooldown(sl,12.0h)` has been rendering raw and lowercased on the deck
        and in the order ticket with no glossary entry and no card here, while

@@ -28,7 +28,10 @@ from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.17-draft"
+SCALE_VERSION = "scale-v0.18-draft"
+# v0.18: cascade from setup-v0.20/exec-v0.24/risk-v0.25 (the context reading
+# upstream) — adds only join positions the simulator says are open. No rule
+# change.
 # v0.17: input cascade from agg-v0.2 via setup-v0.19/exec-v0.23/risk-v0.23 —
 # adds only join positions the simulator says are open. No rule change.
 # v0.16: cascade from setup-v0.18 / exec-v0.22 / risk-v0.22 (R-denominated

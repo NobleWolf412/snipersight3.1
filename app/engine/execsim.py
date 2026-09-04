@@ -27,7 +27,10 @@ from .setups import SETUP_VERSION
 from .swings import compute_atr
 from .runlog import RunRecorder
 
-EXEC_VERSION = "exec-v0.23-draft"
+EXEC_VERSION = "exec-v0.24-draft"
+# v0.24: cascade from setup-v0.20 (VALIDATED facts carry the context reading
+# and an inert PULLBACK_CONTEXT_POLICY). No fill, cost or exit rule changed;
+# setup_id is version-scoped, so a new setup generation is a new order flow.
 # v0.23: input cascade from agg-v0.2 via setup-v0.19 — and directly: fills
 # simulate against the candle series, and a 4H setup now meets partial 4H
 # bars. No fill, cost or exit rule changed.

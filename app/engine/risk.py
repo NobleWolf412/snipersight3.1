@@ -24,7 +24,10 @@ from .execsim import EXEC_VERSION, plan_versions as execsim_plan_versions
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.24-draft"
+RISK_VERSION = "risk-v0.25-draft"
+# v0.25: cascade from setup-v0.20 / exec-v0.24 (the context reading upstream).
+# No sizing or gate rule changed; risk replays the account from exec facts,
+# and those are a new generation.
 # v0.24: SAME_SIDE_HALT — a per-side, per-UTC-day loss governor, operator-set
 # (`settings.same_side_session_losses`, OPERATIONAL, default 2). Once N
 # entries on one side have closed at a loss in a day, every further intent on

@@ -231,23 +231,42 @@ def annotate(con, candidates) -> int:
         r = reading(symbol, tf).at(c["confirmed_at"])
         if r["regime"] is None:
             continue
-        p["phase"] = r["phase"]
-        p["phase_side"] = phase_side(r["phase"])
-        p["label_age_bars"] = r["label_age_bars"]
-        p["break_bars_since"] = (r["last_break"] or {}).get("bars_since")
-        p["displacement_atr"] = (r["last_break"] or {}).get("displacement_atr")
-        p["vol_atr_regime"] = r["vol"]["atr_regime"]
-        p["squeeze"] = r["vol"]["squeeze"]
         # The rung above, read the same way, and the direction it permits
         # (bias.permitted — the ladder composite the setup already recorded,
         # plus the rung-above phase, which is the term the ladder lacked).
         rung = bias.LADDER.get(tf)
         htf = reading(symbol, rung).at(c["confirmed_at"]) if rung in tfs else None
-        p["htf_phase"] = htf["phase"] if htf and htf["regime"] is not None else None
+        htf_phase = htf["phase"] if htf and htf["regime"] is not None else None
         comp = (p.get("bias") or {}).get("composite")
-        if comp is not None or p["htf_phase"] is not None:
-            p["permitted"] = bias.permitted(comp, p["htf_phase"])
-            p["agrees"] = bias.agrees(p["direction"], p["permitted"]) if p.get("direction") else None
+        permitted = agrees = None
+        if comp is not None or htf_phase is not None:
+            permitted = bias.permitted(comp, htf_phase)
+            agrees = bias.agrees(p["direction"], permitted) if p.get("direction") else None
+        fresh = {"phase": r["phase"], "htf_phase": htf_phase,
+                 "permitted": permitted, "agrees": agrees}
+
+        # THE RECORDED READING IS THE AUTHORITY where one exists. From
+        # setup-v0.20 the engine stamps its own reading on every VALIDATED
+        # fact (the `context` key is the marker), and that is what the gate
+        # saw. A grade that recomputed over those facts would score a
+        # DIFFERENT number under the same name — a later threshold or an HTF
+        # backfill would relabel the very cohort the gate is to be judged on
+        # (audit 2026-09-03, finding 1). So a recorded fact keeps its fields;
+        # the recomputation is stamped beside it and any disagreement is
+        # counted, never silently resolved. Older facts have nothing recorded
+        # and take the recomputation, which is the only reading they can have.
+        recorded = "context" in p and p.get("phase") is not None
+        if recorded:
+            p["recomputed"] = fresh
+            p["reading_mismatch"] = any(p.get(k) != v for k, v in fresh.items())
+        else:
+            p.update(fresh)
+        p["phase_side"] = phase_side(p["phase"])
+        p.setdefault("label_age_bars", r["label_age_bars"])
+        p.setdefault("displacement_atr", (r["last_break"] or {}).get("displacement_atr"))
+        p["break_bars_since"] = (r["last_break"] or {}).get("bars_since")
+        p["vol_atr_regime"] = r["vol"]["atr_regime"]
+        p["squeeze"] = r["vol"]["squeeze"]
         n += 1
     return n
 
@@ -320,10 +339,16 @@ def grade(con, *, setup_version=None, exec_version=None) -> dict:
         cell["mean_r"] = round(cell["sum_r"] / cell["n"], 3)
         cell["win_rate"] = round(cell["wins"] / cell["n"], 3)
         cell["sum_r"] = round(cell["sum_r"], 2)
+    recorded = [c for c in candidates if "recomputed" in c["payload"]]
+    mismatched = [c for c in recorded if c["payload"].get("reading_mismatch")]
     return {"version": REGIMEREAD_VERSION, "derived_at_analysis_time": True,
             "constants": {"FRESH_BARS": FRESH_BARS, "IMPULSE_ATR": str(IMPULSE_ATR),
                           "EXTENDED_ATR": str(EXTENDED_ATR)},
             "candidates": len(candidates), "annotated": n_annotated,
+            # setup-v0.20+ facts carry the engine's own reading; those are
+            # scored AS RECORDED, and this says how many the recomputation
+            # would have labelled differently.
+            "recorded": len(recorded), "recorded_mismatch": len(mismatched),
             "closed": len(closed), "cells": cells, "permitted_cells": perm,
             "splits": splits, "warnings": warnings}
 
@@ -347,6 +372,8 @@ def main(argv=None):
         return 0
     print(f"regime reading {rep['version']} — {rep['annotated']}/{rep['candidates']} "
           f"annotated, {rep['closed']} closed; constants {rep['constants']}")
+    print(f"  {rep['recorded']} facts carry the engine's own reading (setup-v0.20+) and are "
+          f"scored as recorded; recomputation disagrees on {rep['recorded_mismatch']}")
     print(f"\n{'phase x playbook direction':44s} {'n':>5} {'mean R':>8} {'sum R':>8} {'win':>5}")
     for k, c in sorted(rep["cells"].items(), key=lambda kv: -kv[1]["n"]):
         if c["n"] >= 10:
