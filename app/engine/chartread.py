@@ -78,7 +78,13 @@ from . import store
 from .swings import compute_atr
 from .zones import ZONE_ATR
 
-CHARTREAD_VERSION = "chartread-v0.1-draft"
+CHARTREAD_VERSION = "chartread-v0.2-draft"
+# v0.2: RANGE is equal highs over equal lows within LEVEL_ATR — v0.1 shipped
+# with twice that tolerance in the code and "a level's width" in the prose,
+# and its first draft asked every pivot in the window to sit in one band,
+# which never fired. Both corrected the day v0.1 landed, before any label or
+# fact existed under it; the tag moves anyway, because a read that changed
+# under one name is the defect this file's own docstring forbids.
 
 #: Bars in the window — chart.js VISIBLE_BARS, what a chart opens showing.
 WINDOW_BARS = 120

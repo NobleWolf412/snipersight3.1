@@ -403,7 +403,7 @@ EXPECTED = {
     # 2026-09-04: the window read the operator described (§26/§27). Locked
     # from birth; graded at analysis time and against the golden labels
     # before any playbook reads it.
-    "chartread": "chartread-v0.1-draft",
+    "chartread": "chartread-v0.2-draft",
     # venues-v0.3: the REFERENCE contract — a per-symbol pointer to the
     # deepest venue's candle series (operator ruling 2026-08-09), stored under
     # '@'-keys that venue_for REFUSES, which is the enforcement keeping every
