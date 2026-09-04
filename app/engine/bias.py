@@ -307,6 +307,56 @@ def composite(sides) -> str:
     return trending.pop()
 
 
+#: Phases one rung up that PERMIT only their own side. A market in impulse or
+#: trend on the timeframe above is a market whose direction is known now,
+#: whatever the ladder's older structural labels say about it.
+_DIRECTIONAL_PHASES = ("IMPULSE_", "TREND_")
+
+
+def permitted(comp: str | None, htf_phase: str | None = None) -> str:
+    """The ONE tradeable direction for this market at this moment, or none.
+
+        UP / DOWN   only that side may be traded
+        BOTH        no direction is asserted: reversals may be taken either way
+        NONE        the rungs disagree: stand aside
+
+    Pre-registered v1, fixed 2026-09-03 before its first grade. The rung
+    above's PHASE (regimeread) is consulted first: an IMPULSE or TREND one
+    timeframe up permits only its side. This is the term the ladder lacked —
+    on 2026-09-03 the ladder read FLAT for LINK on a day it was up 7%,
+    because "FLAT" is what a lagging structural label says about a vertical
+    move; the 1H phase that afternoon was IMPULSE_UP. Then the ladder:
+    UP/DOWN permit that side; MIXED is NONE; FLAT permits BOTH. UNKNOWN also
+    permits BOTH, for the reason `validate_policy` enforces on policies — an
+    unmeasured ladder is not a bearish one — and a test pins it.
+
+    This is a reading, not a gate. `setups.py` records it; a playbook refuses
+    on it only through DIRECTION_POLICY, which ships ALLOW and moves on a
+    measurement.
+    """
+    if htf_phase and htf_phase.startswith(_DIRECTIONAL_PHASES):
+        for s in ("UP", "DOWN"):
+            if f"_{s}" in htf_phase:
+                return s
+    if comp in ("UP", "DOWN"):
+        return comp
+    if comp == "MIXED":
+        return "NONE"
+    return "BOTH"
+
+
+def agrees(direction: str, perm: str) -> bool:
+    """Does a trade in `direction` sit inside what `permitted` allows?"""
+    if perm == "NONE":
+        return False
+    if perm == "BOTH":
+        return True
+    want = _WANT_SIDE.get(direction)
+    if want is None:
+        raise ValueError(f"unknown direction {direction!r} — LONG or SHORT")
+    return perm == want
+
+
 def alignment(comp: str, direction: str) -> str:
     """Where a trade in `direction` stands against the composite.
 

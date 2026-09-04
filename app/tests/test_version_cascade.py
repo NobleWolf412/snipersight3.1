@@ -29,7 +29,8 @@ import live
 from engine import (aggregator, basis, bias, breakout, cooldowns, cycles,
                     execsim, venues, liquidity, ma, manual, momentum, ranges,
                     regime, risk, scalein, sessions, setups, structure, swings,
-                    importer, volatility, volume, zones, trend)
+                    importer, volatility, volume, zones, trend, regimeread,
+                    htfread)
 from engine import (automation, autotrader, contracts, execution, lifecycle,
                     stockcalendar, stockdemo, stocks, stockstore)
 from engine import (apexbridge, listings, livegate, phemex_private, positions,
@@ -185,6 +186,15 @@ LOCKED = {
     # every version constant they import stays put. That is the cascade in its
     # most invisible form and it is exactly what this file exists to catch.
     "bias": bias.BIAS_VERSION,
+    # Two analysis-time READERS, locked from birth on the `bias` argument:
+    # they write no facts today, and the day a setups version records their
+    # reading the coupling becomes fact-level — this file must already know
+    # them by then. regimeread folds regime + structure + volatility + candles
+    # into a phase; htfread reads the rungs above for zones and pools, and the
+    # own timeframe's ranges. Their CONSUMERS entries say which producers move
+    # them; nothing consumes THEM yet.
+    "regimeread": regimeread.REGIMEREAD_VERSION,
+    "htfread": htfread.HTFREAD_VERSION,
     "venues": venues.VENUES_VERSION,
     # Reads two candle series nothing else pairs (execution venue vs the
     # reference feed) and writes one fact stream nothing reads. Locked from
@@ -372,6 +382,15 @@ EXPECTED = {
     # `regime` and `structure` facts and writes none of its own, so it is
     # downstream of both and upstream of every playbook that records it.
     "bias": "bias-v0.2-draft",
+    # 2026-09-03: the two readers behind the direction-first rebuild. Graded
+    # over the existing book before anything records them (rule 7):
+    # regimeread's IMPULSE/TURN/DRIFT phases separate REVERSAL cells by
+    # -0.245R (IMPULSE_DOWN x REVERSAL LONG) to +0.092R (DRIFT_DOWN x REVERSAL
+    # LONG); htfread's has_htf_zone graded WORSE for reversals (-0.17R vs
+    # -0.09R) and its target_alt no better, so neither of those earns a
+    # recording bump yet.
+    "regimeread": "regimeread-v0.1-draft",
+    "htfread": "htfread-v0.1-draft",
     # venues-v0.3: the REFERENCE contract — a per-symbol pointer to the
     # deepest venue's candle series (operator ruling 2026-08-09), stored under
     # '@'-keys that venue_for REFUSES, which is the enforcement keeping every
@@ -494,10 +513,17 @@ CONSUMERS = {
     # structure: setup and breakout both read structure facts.
     "swing": ("structure", "zone", "liquidity", "ranges", "momentum",
               "setup", "breakout", "trend"),
-    "structure": ("regime", "scale", "setup", "breakout", "bias"),
-    "zone": ("setup",),
-    "liquidity": ("setup",),
-    "regime": ("setup", "bias"),
+    "structure": ("regime", "scale", "setup", "breakout", "bias", "regimeread"),
+    "zone": ("setup", "htfread"),
+    "liquidity": ("setup", "htfread"),
+    "ranges": ("htfread",),
+    # THE WIDENING. volatility had no consumers by design; regimeread reads its
+    # ATR_REGIME and SQUEEZE facts into the phase. Today that costs nothing —
+    # nothing records the phase — but the day a setups version does, every
+    # volatility bump cascades through setup/exec/risk/scale/cooldown. Stated
+    # here before it is paid.
+    "volatility": ("regimeread",),
+    "regime": ("setup", "bias", "regimeread"),
     # The bias layer's consumers are the playbooks that RECORD its reading.
     # `setup` is listed on CODE-level terms only for now — it imports the
     # ladder constant, and identical values mean its facts did not change —
@@ -546,11 +572,13 @@ class VersionLockfile(unittest.TestCase):
         if it starts reading a new one, the map has to say so."""
         import inspect
         sources = {"exec": execsim, "risk": risk, "scale": scalein,
-                   "regime": regime, "setup": setups, "momentum": momentum}
+                   "regime": regime, "setup": setups, "momentum": momentum,
+                   "regimeread": regimeread, "htfread": htfread}
         pins = {"setup": "SETUP_VERSION", "exec": "EXEC_VERSION",
                 "structure": "STRUCTURE_VERSION", "zone": "ZONE_VERSION",
                 "liquidity": "LIQ_VERSION", "regime": "REGIME_VERSION",
-                "swing": "SWING_VERSION"}
+                "swing": "SWING_VERSION", "volatility": "VOLATILITY_VERSION",
+                "ranges": "RANGES_VERSION"}
         for producer, consumers in CONSUMERS.items():
             const = pins.get(producer)
             if not const:
