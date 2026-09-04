@@ -101,6 +101,10 @@ class DrawdownGuardTest(unittest.TestCase):
         operator is penalised for becoming more careful."""
         self.assertEqual(settings.SPEC["max_drawdown_pct"][0], "OPERATIONAL")
         self.assertEqual(settings.SPEC["halt_on_data_blocked"][0], "OPERATIONAL")
+        # The same-side governor is a portfolio control like the two above:
+        # it changes WHEN entries stop, never what counts as a valid trade.
+        self.assertEqual(settings.SPEC["same_side_session_losses"][0], "OPERATIONAL")
+        self.assertEqual(settings.SPEC["same_side_session_losses"][2], 2)
 
     def test_drawdown_default_is_a_real_limit(self):
         pct = settings.SPEC["max_drawdown_pct"][2]

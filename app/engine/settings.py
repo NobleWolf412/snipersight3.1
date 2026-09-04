@@ -85,6 +85,24 @@ SPEC = {
                              "Refuse new entries while the pipeline audit is "
                              "BLOCKED. Trading on data known to be broken "
                              "produces a record that proves nothing."),
+    # The trader's own rule — "I've been stopped twice shorting today; I stop
+    # shorting today" — as a portfolio control. Counted per UTC day and per
+    # SIDE across every market, because two same-side losses in a session are
+    # the market saying which way it is going, and this system's playbooks
+    # both fade. 2026-09-03: three REVERSAL shorts in one afternoon into a +5%
+    # BTC day, each sized after the previous one had stopped. Replayed on the
+    # research book (n=1,391, sequential — a refused entry's loss never lands)
+    # at 2: refuses 41% of entries averaging -0.22R; at 3: 29% averaging
+    # -0.20R. On the funded book at 2 it refuses exactly the two trades that
+    # were the third same-side loss of their day. In-sample, and said so.
+    # Keyed on realised direction, NOT on a regime or ladder label — the
+    # ladder read FLAT for the third short that day on a market up 7%, and a
+    # governor keyed on it would have refused nothing. 0 disables.
+    "same_side_session_losses": ("OPERATIONAL", int, 2,
+                                 "After this many losing trades on one side "
+                                 "(long or short) in a UTC day, take no more "
+                                 "entries on that side until the next day. "
+                                 "0 turns it off."),
     "halted": ("OPERATIONAL", bool, False,
                "Operator halt. No new entries are sized while set. Open "
                "positions still settle — refusing to close is not safety."),

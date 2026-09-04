@@ -24,7 +24,18 @@ from .execsim import EXEC_VERSION, plan_versions as execsim_plan_versions
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.23-draft"
+RISK_VERSION = "risk-v0.24-draft"
+# v0.24: SAME_SIDE_HALT — a per-side, per-UTC-day loss governor, operator-set
+# (`settings.same_side_session_losses`, OPERATIONAL, default 2). Once N
+# entries on one side have closed at a loss in a day, every further intent on
+# that side that day is REJECTED with the count in the reason, and the trip is
+# a PORTFOLIO fact so the day explains itself. Derived inside the replay from
+# the exits it already settles — no live state, so a re-run at any cursor
+# reaches the verdict the live pass did. 2026-09-03: three REVERSAL shorts in
+# one afternoon into a +5% BTC day, each funded after the previous stop; on
+# the research book (n=1,391, replayed sequentially so a refused entry's loss
+# never lands) N=2 refuses 41% of entries averaging -0.22R. A new refusal
+# reason is a new DECISION generation, hence the tag.
 # v0.23: input cascade from agg-v0.2 via setup-v0.19/exec-v0.23 — risk replays
 # the account from exec facts and rules on version-scoped setup_ids. No sizing
 # or gate rule changed.
@@ -360,6 +371,11 @@ def run(con) -> dict:
         daily_pnl: dict[str, Decimal] = {}
         day_start_equity: dict[str, Decimal] = {}
         halted: set[str] = set()
+        # Losing exits per (UTC day, side). The same-side governor reads this;
+        # it is filled by settle() as exits land, so it is point-in-time by
+        # construction and never sees an exit the intent could not have.
+        side_losses: dict[tuple, int] = {}
+        side_halted: set[tuple] = set()
         curve: list[dict] = []
         n = {"APPROVED": 0, "REDUCED": 0, "REJECTED": 0, "KILL": 0}
         n_new_facts = 0
@@ -387,6 +403,40 @@ def run(con) -> dict:
                 daily_pnl[d] = daily_pnl.get(d, Decimal(0)) + pnl
                 curve.append({"ts": p["exit_ts"], "equity": str(equity)})
                 open_pos.remove(p)
+                # Same-side governor. A loss is r_net < 0 (a TIMEOUT that
+                # closed under water counts: the side was wrong, however it
+                # ended), size-agnostic so a REDUCED entry counts once like
+                # any other. An |ADD is not a position — CONCURRENT_LIMIT
+                # already says so — so a scale-in stopping at its parent's
+                # entry is one idea being wrong once, not twice (audit
+                # 2026-09-03, finding 2). Trips once per (day, side) and
+                # records it — the KILL_SWITCH shape — so "why did nothing
+                # fire after 17:15" is answerable from the store. The trip
+                # payload carries no equity, deliberately: equity at the trip
+                # moves between replays as earlier trades settle, and a
+                # replay-varying field is how KILL_SWITCH came to hold three
+                # records of one event.
+                if (p.get("direction") and p["r_net"] < 0
+                        and "|ADD" not in p["setup_id"]):
+                    k = (d, p["direction"])
+                    side_losses[k] = side_losses.get(k, 0) + 1
+                    if (same_side_limit > 0 and k not in side_halted
+                            and side_losses[k] >= same_side_limit):
+                        side_halted.add(k)
+                        if store.insert_fact(
+                                con, symbol="PORTFOLIO", tf="ALL", kind="risk",
+                                market_time=p["exit_ts"], confirmed_at=p["exit_ts"],
+                                algo_version=RISK_VERSION,
+                                payload={"event": "SAME_SIDE_HALT", "day": d,
+                                         "side": p["direction"],
+                                         "losses": side_losses[k],
+                                         "limit": same_side_limit,
+                                         "baseline_id": baseline["id"],
+                                         "reason": f"{side_losses[k]} losing "
+                                                   f"{p['direction']} trades today "
+                                                   f"— no more {p['direction']} "
+                                                   f"entries until tomorrow"}):
+                            n_new_facts += 1
                 # Total-drawdown guardrail. The daily halt catches a bad DAY;
                 # this catches a bad month that never trips it — a slow bleed of
                 # small losses can drain the account without any single day
@@ -440,6 +490,9 @@ def run(con) -> dict:
         # because refusing to close a position is not a safety feature.
         from . import settings as _settings
         opcfg = _settings.all_settings(con)
+        # Read once, like the halt: a mid-run edit must not govern half the
+        # day under one limit and half under another. 0 disables.
+        same_side_limit = int(opcfg.get("same_side_session_losses") or 0)
         # Cooldowns are loaded ONCE and evaluated in memory. `active_at` runs a
         # query; calling it per intent inside the loop below would issue two
         # round-trips per candidate across hundreds of intents, on the hot path
@@ -512,6 +565,16 @@ def run(con) -> dict:
                 reasons = [f"COOLDOWN({_cd['outcome']},{_cd['hours']}h)"]
             elif _day(ts) in halted:
                 decision, reasons = "REJECTED", ["DAILY_LOSS_HALT"]
+            elif (same_side_limit > 0
+                  and side_losses.get((_day(ts), it["direction"]), 0) >= same_side_limit):
+                # The side has been wrong N times today. Sits with the other
+                # portfolio controls, before eligibility: a market that would
+                # otherwise qualify is refused on the DAY's evidence, and the
+                # reason carries the side and the count so the funnel can say
+                # "two losing shorts already today" rather than a bare enum.
+                decision, reasons = "REJECTED", [
+                    f"SAME_SIDE_HALT({it['direction']},"
+                    f"{side_losses[(_day(ts), it['direction'])]})"]
             elif not it["universe_eligible"]:
                 decision, reasons = "REJECTED", ["NOT_IN_POINT_IN_TIME_UNIVERSE"]
             elif stop_dist <= 0:
@@ -608,6 +671,7 @@ def run(con) -> dict:
                 payload["fill_outcome"] = ex["outcome"] if ex else "PENDING"
                 if ex is None or ex["outcome"] != "MISSED":
                     open_pos.append({"setup_id": it["setup_id"], "risk_usd": risk_usd,
+                                     "direction": it.get("direction"),
                                      "exit_ts": ex["exit_ts"] if ex else None,
                                      "r_net": ex["r_net"] if ex else Decimal(0)})
             n[decision] += 1

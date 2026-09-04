@@ -114,6 +114,18 @@
       means: 'The setup was valid, but the strategy that produced it is ' +
              'disabled in Rules.',
       cta: SETUP_SURFACE },
+    SAME_SIDE_HALT: {
+      plain: 'that side had already lost enough times today',
+      means: 'After a set number of losing trades on one side — long or ' +
+             'short — in a single day, the bot takes no more entries on that ' +
+             'side until the next day. The brackets name the side and how ' +
+             'many had lost. Two stop-outs on the same side in one session ' +
+             'is usually the market saying which way it is going. ' +
+             'The limit is yours to set under Risk. ' +
+             'This is a rule of thumb replayed on the paper book, not a ' +
+             'proven improvement: it refused about four in ten entries ' +
+             'there, and those entries averaged a loss.',
+      cta: SETUP_SURFACE },
     DAILY_LOSS_HALT: {
       plain: "the day's loss limit had already been hit",
       means: 'No new entries open until the next day. This is the automatic ' +

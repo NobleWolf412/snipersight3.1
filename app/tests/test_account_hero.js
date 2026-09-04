@@ -117,8 +117,10 @@ ok('the guardrails you can set are on Risk, beside the caps you cannot', () => {
   const next = HTML.indexOf('data-system-view=', ri + 10);
   assert(ri > 0 && gi > ri && gi < next,
     'the guardrail inputs are not inside the Risk panel');
-  assert(/GUARDRAIL_SETTINGS\s*=\s*new Set\(\['max_drawdown_pct',\s*'halt_on_data_blocked'\]\)/
-    .test(SHELL), 'the guardrail split no longer names both settings');
+  const gs = SHELL.match(/GUARDRAIL_SETTINGS\s*=\s*new Set\(\[([\s\S]*?)\]\)/);
+  assert(gs, 'the guardrail split is gone');
+  for (const name of ['max_drawdown_pct', 'halt_on_data_blocked', 'same_side_session_losses'])
+    assert(gs[1].includes(`'${name}'`), `${name} is no longer filed under Risk`);
   const bi = SHELL.indexOf('function buildSettings(');
   const body = SHELL.slice(bi, SHELL.indexOf('function settingRows(', bi));
   assert(/settingRows\(/.test(body) && (body.match(/settingRows\(/g) || []).length === 2,

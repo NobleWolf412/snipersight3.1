@@ -241,6 +241,11 @@ def _risk_reason_summary(code: str, symbol: str, decision: str = "REJECTED") -> 
                 "a recent trade.")
     if base == "DAILY_LOSS_HALT":
         return "Trade skipped — the daily loss limit had already been reached."
+    if base == "SAME_SIDE_HALT":
+        side, _, n = argument.partition(",")
+        word = {"LONG": "long", "SHORT": "short"}.get(side, "that side")
+        return (f"Trade skipped — {n or 'enough'} {word} trades had already lost "
+                f"today, so no more {word} entries until tomorrow.")
     if base == "INVALID_STOP_DISTANCE":
         return "Trade skipped — the stop was too close to the entry to size safely."
     if base == "SHORT_UNSUPPORTED_COINBASE_SPOT":

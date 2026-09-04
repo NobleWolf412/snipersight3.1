@@ -147,6 +147,8 @@ def explain_risk(setup: dict, risk_fact: dict | None) -> list[dict]:
             meta = ("RISK.019", "the setup playbook is enabled", "enabled", raw_reason, "CONFIG_CONTROL")
         elif base == "COOLDOWN":
             meta = ("RISK.020", "the symbol and direction are outside their re-entry cooldown", "cooldown clear", raw_reason, "REENTRY_CONTROL")
+        elif base == "SAME_SIDE_HALT":
+            meta = ("RISK.021", "losing trades on this side today are under the same-side limit", "under the limit", raw_reason, "PORTFOLIO_CONTROL")
         else:
             meta = catalog.get(base, ("RISK.UNMAPPED", None, "registered reason code", raw_reason, "MISSING_EVIDENCE"))
         rule_id, expression, expected, actual, category = meta

@@ -334,7 +334,11 @@ EXPECTED = {
     # file. CONSUMERS["risk"] now names the coupling so the EXPECTED diff a
     # risk bump forces has the answer in view — the map informs the human
     # gate; it does not mechanically fail on an incomplete cascade.
-    "risk": "risk-v0.23-draft",
+    # risk-v0.24, 2026-09-03: SAME_SIDE_HALT, a per-side per-day loss governor
+    # (operator-set, OPERATIONAL). A new refusal reason is a new DECISION
+    # generation. Nothing else moves: CONSUMERS["risk"] is size_order(), which
+    # is untouched, so setups' FORMING payloads are byte-identical.
+    "risk": "risk-v0.24-draft",
     "scale": "scale-v0.17-draft",
     "cooldown": "cooldown-v0.11-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on

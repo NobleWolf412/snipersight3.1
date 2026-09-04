@@ -298,6 +298,11 @@ class TestRiskVenueContract(TempStore):
         self.assertEqual(second["REJECTED"], 1)
 
     def test_daily_halt_uses_start_of_day_equity(self):
+        # Four same-side losses in one day would trip the same-side governor
+        # (risk-v0.24) at the third intent and the daily halt would never be
+        # reached. This test is about the daily halt; switch the governor off.
+        from engine import settings as _settings
+        _settings.set_many(self.con, {"same_side_session_losses": 0}, note="test")
         candle(self.con, "BTC-USD", "1D", 0, 100, 101, 99, 100)
         day = 86400
         # The halt is 4R of paper's 2% R (8% of day-start equity, $800 here).

@@ -806,6 +806,7 @@
     CONCURRENT_LIMIT: 'slots full',
     EXPOSURE_LIMIT: 'risk budget',
     DAILY_LOSS_HALT: 'daily halt',
+    SAME_SIDE_HALT: 'side halted today',
     DRAWDOWN_HALT: 'drawdown halt',
     COOLDOWN: 'cooling off',
     LEVERAGE_CAP: 'leverage cap',
@@ -3932,6 +3933,7 @@ weighed in. Name the facts you used.`;
     strategy_range_fade: 'Range-fade playbook',
     max_drawdown_pct: 'Halt if equity falls this far below its peak',
     halt_on_data_blocked: 'Halt when the data audit is BLOCKED',
+    same_side_session_losses: 'Losing trades on one side before that side halts for the day',
     halted: 'Operator halt',
   };
   const settingLabel = name => SETTING_LABELS[name] || name.replaceAll('_', ' ');
@@ -3994,7 +3996,8 @@ weighed in. Name the facts you used.`;
      input that sets it sat on another tab, so the panel taught that nothing
      here could be changed. Rendered by the same builder into a second host, so
      there is still one row shape, one dirty test and one Apply. */
-  const GUARDRAIL_SETTINGS = new Set(['max_drawdown_pct', 'halt_on_data_blocked']);
+  const GUARDRAIL_SETTINGS = new Set(['max_drawdown_pct', 'halt_on_data_blocked',
+                                      'same_side_session_losses']);
 
   function buildSettings(){
     const visible = setSpec.filter(s => !BUTTON_OWNED.has(s.name) && !HIDDEN_SETTINGS.has(s.name));
