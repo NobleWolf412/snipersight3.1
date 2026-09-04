@@ -80,23 +80,61 @@ ok('a sub-view request writes storage AND fires the live event', () => {
     'the navigation down with it');
 });
 
-ok('position slots goes to the read-only limits, not an editor', () => {
+ok('position slots offers a real button, and it points at Risk', () => {
   /* Slots, risk per trade and the daily halt are fixed in R-multiples so that
-     paper and live take the same trades and stop at the same point. A control
-     that opened an editor would promise something the risk authority does not
-     offer. */
+     paper and live take the same trades and stop at the same point. The panel
+     it opens carries those caps read-only AND the two guardrails that are the
+     operator's, which is why the control is labelled for the destination
+     rather than for the metric it sits under. */
   const at = SHELL.indexOf("cell('Position slots'");
   assert(at > 0, 'the slots cell is gone');
-  const call = SHELL.slice(at, SHELL.indexOf('+', SHELL.indexOf('no cap configured', at)));
-  assert(/'system:risk'/.test(call),
-    'the slots cell does not point at System/Risk');
+  const call = SHELL.slice(at, SHELL.indexOf("cell(\"Today's losses\"", at));
+  assert(/'system:risk'/.test(call), 'the slots cell does not point at System/Risk');
+  assert(/label:\s*'[^']+'/.test(call), 'the action has no label — an unlabelled button');
   const cellFn = SHELL.slice(SHELL.indexOf('const cell = ('), at);
-  assert(/data-goes-view=/.test(cellFn) && /button type="button"/.test(cellFn),
-    'a navigating budget cell is not rendered as a button');
-  assert(/const tag = goes \?/.test(cellFn) || /goes \?/.test(cellFn),
-    'every budget cell is now a button — open risk and today\'s losses are ' +
-    'readings with nothing to open, and a control that goes nowhere is the ' +
-    'affordance lying');
+  assert(/class="btn budget-act"/.test(cellFn),
+    'the action is not an ordinary .btn — it was a whole cell with a ' +
+    'transparent border, which only announced itself on hover');
+  assert(/data-goes-view="\$\{act\.goes\}"/.test(cellFn),
+    'the action does not carry the delegated route');
+  assert(!/button type="button"[\s\S]{0,200}budget-bar/.test(cellFn),
+    'the button wraps the progress bar again — a <div> inside a <button> is ' +
+    'not phrasing content');
+  assert(/\$\{act \?/.test(cellFn),
+    'every budget cell has an action again — open risk and today\'s losses ' +
+    'are readings with nothing to open, and a control that goes nowhere is ' +
+    'the affordance lying');
+});
+
+ok('the guardrails you can set are on Risk, beside the caps you cannot', () => {
+  /* The defect: Risk PRINTED the drawdown ceiling read-only while the input
+     that sets it lived under "Strategies and markets" — so the one surface an
+     operator opens to change a risk limit taught that nothing here could be
+     changed, and Position slots landed them on it. */
+  assert(/id="guardFields"/.test(HTML), 'the Risk panel has no editable guardrails');
+  const gi = HTML.indexOf('id="guardFields"');
+  const ri = HTML.indexOf('data-system-view="risk"');
+  const next = HTML.indexOf('data-system-view=', ri + 10);
+  assert(ri > 0 && gi > ri && gi < next,
+    'the guardrail inputs are not inside the Risk panel');
+  assert(/GUARDRAIL_SETTINGS\s*=\s*new Set\(\['max_drawdown_pct',\s*'halt_on_data_blocked'\]\)/
+    .test(SHELL), 'the guardrail split no longer names both settings');
+  const bi = SHELL.indexOf('function buildSettings(');
+  const body = SHELL.slice(bi, SHELL.indexOf('function settingRows(', bi));
+  assert(/settingRows\(/.test(body) && (body.match(/settingRows\(/g) || []).length === 2,
+    'the two hosts no longer share one row builder — two shapes, two dirty ' +
+    'tests and two Applies is how the panels came to disagree in the first place');
+  /* ONE READING PER VALUE. The read-only rows for these two are gone: an input
+     showing 20 three lines under a row saying "20% from peak" is the same
+     duplicate-reading defect #guardRows was cut down for once already. */
+  const gr = SHELL.indexOf("$('guardRows').innerHTML");
+  const rows = SHELL.slice(gr, SHELL.indexOf(';', gr));
+  for (const dup of ['drawdown', 'data-health'])
+    assert(!rows.includes(dup),
+      `"${dup}" is printed read-only as well as by its own input`);
+  assert(/operator halt/.test(rows),
+    'the operator halt row went too — its control is a button, so nothing ' +
+    'else on the panel states it');
 });
 
 ok('nothing closed today is a result, not a broken tile', () => {

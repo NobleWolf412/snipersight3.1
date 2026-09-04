@@ -746,10 +746,17 @@ details.panel.floating > summary{padding-left:var(--lg)}
 .funnel-strip i{font-style:normal;color:var(--fg-4);min-width:0;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-/* A budget cell that navigates is a button, so it needs the reset a button
-   does not get for free — and the chevron needs clearance, same as above. */
-.budget-cell.tappable{border:1px solid transparent;border-radius:var(--r-md);
-  font:inherit;color:inherit;text-align:left;padding-right:22px}
+/* THE ACTION UNDER A BUDGET CELL. The cell used to BE the button, with a
+   transparent border — so standing still it was indistinguishable from the two
+   readings beside it, and only a hover disclosed that it went anywhere. A
+   navigation affordance that appears on hover does not exist on a touch screen
+   and is invisible on a desktop until the pointer happens to cross it. This is
+   an ordinary .btn, so it reads as pressable at rest and inherits the focus,
+   disabled and hover language every other control in the app already uses.
+   `margin-top:auto` pins it to the bottom of its cell, so a row of cells with
+   different text lengths still lines its buttons up. */
+.budget-act{align-self:flex-start;margin-top:auto;min-height:30px;
+  padding:5px 11px;font-size:var(--fs-1)}
 
 @media(max-width:640px){
   /* Stacked, not shrunk. Side by side at this width the figure drops below

@@ -1303,6 +1303,23 @@
             <div class="tk-out" id="riskNow"></div>
             <div class="system-fact-grid" id="riskUsage" role="status"></div>
             <div class="tk-out" id="guardRows" style="margin-top:var(--md)"></div>
+            <!-- THE HALF THE OPERATOR CAN ACTUALLY MOVE, on the panel that
+                 already prints the half they cannot. Until 2026-09-02 the
+                 drawdown ceiling and the data-health halt were READ-ONLY rows
+                 here and editable inputs under "Strategies and markets" — a
+                 heading nobody looking for a risk limit would open. So the
+                 one control on this subject that does exist was invisible,
+                 and Position slots landed the operator on a panel where
+                 nothing at all could be changed. Their reason for living on
+                 a settings surface at all is that they are OPERATIONAL:
+                 tightening a guardrail must not reset the forward window
+                 (engine/settings.py), which is exactly what makes them safe
+                 to put beside caps that are fixed. -->
+            <h3 class="t-label" style="margin:var(--lg) 0 var(--sm)">Yours to set</h3>
+            <p class="t-note" style="margin:0 0 var(--md)">These two do not touch
+              how a trade is sized or chosen, so changing one does not start a new
+              forward record — tightening a guardrail costs you nothing.</p>
+            <div id="guardFields"></div>
             <!-- B7 — one line, then a disclosure. This was a nine-line essay
                  standing between the operator and the numbers above it. The
                  reasoning is worth keeping; it is not worth reading on every

@@ -3017,26 +3017,32 @@ weighed in. Name the facts you used.`;
     const lost = Math.max(0, -todayPnl);
     const lossCap = eq * (+cfg.daily_loss_pct || 0) / 100;
 
-    /* `goes` is optional and only two of the three cells take it. Open risk
+    /* `act` is optional and only one of the three cells takes it. Open risk
        and today's losses are readings — there is nothing to open that says
        more than the bar already does. Position slots is the one the operator
-       asked to be able to press, and where it lands is System's Risk panel:
-       the limits are read-only there and that is the honest answer, because
-       slots, risk per trade and the daily halt are fixed in R-multiples so
-       paper and live take the same trades and stop at the same point. A
-       control that opened an editor would promise otherwise. */
-    const cell = (label, used, cap, text, goes) => {
+       asked to be able to press, and it lands on System's Risk panel.
+
+       THE WHOLE CELL WAS THE BUTTON until 2026-09-02, and it wore its border
+       as `transparent` — so at rest it was identical to the two readings
+       beside it and only hover disclosed it did anything ("the slots button
+       looks like crap. maybe look like a button?"). It was also a <button>
+       wrapping a <div> progress bar, which is not phrasing content. Now the
+       meter matches its siblings and the action is a real .btn under it: the
+       affordance is visible standing still, which is the only time it is
+       being read. The destination is honest either way — the caps are fixed
+       in R-multiples so paper and live take the same trades and stop at the
+       same point, and the panel now also carries the two guardrails that ARE
+       the operator's, which is why the label says guardrails, not slots. */
+    const cell = (label, used, cap, text, act) => {
       const pct = cap > 0 ? Math.max(0, Math.min(100, (used / cap) * 100)) : 0;
       const tone = cap > 0 && used >= cap ? 'bad' : pct >= 70 ? 'warn' : '';
-      const tag = goes ? 'button type="button"' : 'div';
-      const attrs = goes
-        ? ` class="budget-cell tappable" data-goes="system" data-goes-view="${goes}"`
-        : ' class="budget-cell"';
-      return `<${tag}${attrs}>
+      return `<div class="budget-cell">
         <span class="t-label">${label}</span>
         <div class="budget-bar"><i class="${tone}" style="width:${pct.toFixed(0)}%"></i></div>
         <span class="budget-txt">${text}</span>
-      </${goes ? 'button' : 'div'}>`;
+        ${act ? `<button type="button" class="btn budget-act" data-goes="system"
+          data-goes-view="${act.goes}" title="${escHtml(act.title)}">${act.label}</button>` : ''}
+      </div>`;
     };
 
     $('budget').innerHTML =
@@ -3048,7 +3054,11 @@ weighed in. Name the facts you used.`;
              ? (slots >= slotCap
                  ? `${slots} of ${slotCap} — full until one closes`
                  : `${slots} of ${slotCap} used`)
-             : 'no cap configured', 'system:risk') +
+             : 'no cap configured',
+           { goes: 'system:risk', label: 'Guardrails',
+             title: 'Slots, risk per trade and the daily halt are fixed by the '
+                  + 'engine so paper and live behave identically. The drawdown '
+                  + 'ceiling and the data-health halt are yours to set.' }) +
       cell("Today's losses", lost, lossCap,
            lossCap <= 0 ? 'no halt configured'
              : lost > 0 ? `${money(lost)} of ${money(lossCap)} before trading halts`
@@ -3976,8 +3986,27 @@ weighed in. Name the facts you used.`;
                                    'strategy_liquidity_sweep_reversal',
                                    'strategy_compression_release']);
 
+  /* THE TWO THAT BELONG ON RISK, NOT UNDER "STRATEGIES AND MARKETS". Both are
+     OPERATIONAL — they change WHEN trading stops, never what counts as a valid
+     trade — so neither resets the forward window, and both answer the question
+     the Risk panel is opened to ask. Filed under a strategy heading they were
+     unfindable: the Risk panel PRINTED the drawdown ceiling read-only while the
+     input that sets it sat on another tab, so the panel taught that nothing
+     here could be changed. Rendered by the same builder into a second host, so
+     there is still one row shape, one dirty test and one Apply. */
+  const GUARDRAIL_SETTINGS = new Set(['max_drawdown_pct', 'halt_on_data_blocked']);
+
   function buildSettings(){
-    $('setFields').innerHTML = setSpec.filter(s => !BUTTON_OWNED.has(s.name) && !HIDDEN_SETTINGS.has(s.name)).map(s => {
+    const visible = setSpec.filter(s => !BUTTON_OWNED.has(s.name) && !HIDDEN_SETTINGS.has(s.name));
+    const guards = $('guardFields');
+    $('setFields').innerHTML = settingRows(
+      visible.filter(s => !guards || !GUARDRAIL_SETTINGS.has(s.name)));
+    if(guards) guards.innerHTML = settingRows(
+      visible.filter(s => GUARDRAIL_SETTINGS.has(s.name)));
+  }
+
+  function settingRows(spec){
+    return spec.map(s => {
       const v = (s.name in setPending) ? setPending[s.name] : setValues[s.name];
       const ctl = s.type === 'bool'
         ? `<input type="checkbox" data-set="${s.name}" ${v ? 'checked' : ''}>`
@@ -4009,6 +4038,7 @@ weighed in. Name the facts you used.`;
       </label>`;
     }).join('');
   }
+
 
   /* Everything that can change without the control itself changing: the dirty
      ring on a row, the Apply/Discard buttons, the new-forward-window warning.
@@ -4071,20 +4101,20 @@ weighed in. Name the facts you used.`;
        and a cap the engine does not send now reads as absent rather than as
        somebody's guess.
 
-       These three rows survive because nothing else prints them: whether the
-       operator has pulled the halt, the drawdown ceiling, and whether a
-       blocked data audit stops trading. All three are settings, not caps. */
+       These rows survive because nothing else prints them.
+
+       Down to ONE from three on 2026-09-02, for that same reason inverted: the
+       drawdown ceiling and the data-health halt now have their own inputs on
+       this panel (#guardFields), and a read-only row printing the value an
+       input three lines below is already showing is the duplicate-reading
+       defect this comment was written about, in miniature. The operator halt
+       keeps its row because its control is a BUTTON, not a settings input —
+       nothing else on the panel states it. */
     const gr = (k, v, cls) => `<div><span class="k">${k}</span>` +
       `<span class="v ${cls || ''}">${v}</span></div>`;
-    const ddPct = setValues.max_drawdown_pct;
     $('guardRows').innerHTML =
       gr('operator halt', setValues.halted ? 'ENGAGED' : 'armed',
-         setValues.halted ? 'bad' : 'good') +
-      // No fallback. An absent ceiling is not a 20% ceiling.
-      gr('total drawdown halt', ddPct == null ? 'not set' : ddPct + '% from peak',
-         ddPct == null ? 'warn' : 'good') +
-      gr('data-health halt', setValues.halt_on_data_blocked ? 'armed' : 'DISABLED',
-         setValues.halt_on_data_blocked ? 'good' : 'warn');
+         setValues.halted ? 'bad' : 'good');
     $('guardChip').textContent = setValues.halted ? 'halted' : 'armed';
     $('guardChip').className = 'chip ' + (setValues.halted ? 'chip-red' : 'chip-green');
 
