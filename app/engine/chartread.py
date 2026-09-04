@@ -188,7 +188,10 @@ def read_window(candles, atr_at_end) -> dict:
         # 120-bar window ever satisfied (RANGE fired 0 times in 811 reads on
         # the first grade, and every sideways window fell into CHOP). A
         # definition that cannot fire is not a definition.
-        band = LEVEL_ATR * atr * 2 if atr else Decimal(0)
+        # ONE definition of "the same level": the tolerance cluster_levels
+        # uses, LEVEL_ATR. The first commit widened this to twice that and
+        # the prose still said "a level's width" — two numbers for one idea.
+        band = LEVEL_ATR * atr if atr else Decimal(0)
         hi_band = abs(h2 - h1) <= band
         lo_band = abs(l2 - l1) <= band
         out["read"] = "RANGE" if (hi_band and lo_band) else "CHOP"
@@ -341,10 +344,17 @@ def factor_extractors(payload) -> dict:
     }
     reg = payload.get("regime")
     if reg is not None:
-        # regime.py says trend and the chart says sideways, or vice versa
-        reg_trend = reg in ("BULL_TREND", "BEAR_TREND", "WEAKENING_BULL", "WEAKENING_BEAR")
-        chart_trend = payload["chart_read"] in ("UP", "DOWN")
-        out["disagrees_with_regime"] = 1.0 if reg_trend != chart_trend else 0.0
+        # Two different disagreements, kept apart because they mean different
+        # things: TRENDING — regime.py says trend and the chart says sideways
+        # or vice versa; DIRECTION — both say trend and they point opposite
+        # ways (BULL_TREND over a window that reads DOWN), which is the label
+        # arriving after the move it describes has finished.
+        reg_side = {"BULL_TREND": "UP", "WEAKENING_BULL": "UP",
+                    "BEAR_TREND": "DOWN", "WEAKENING_BEAR": "DOWN"}.get(reg)
+        chart_side = payload["chart_read"] if payload["chart_read"] in ("UP", "DOWN") else None
+        out["disagrees_on_trending"] = 1.0 if (reg_side is None) != (chart_side is None) else 0.0
+        out["disagrees_on_direction"] = (1.0 if reg_side and chart_side and reg_side != chart_side
+                                         else 0.0)
     return out
 
 
@@ -384,7 +394,8 @@ def grade(con, *, setup_version=None, exec_version=None) -> dict:
             agree[k] = agree.get(k, 0) + 1
     splits = {name: factorstats.outcome_split(candidates, name, factors=factor_extractors)
               for name in ("in_chop", "in_range", "aligned_trend", "rides_pullback_against_htf",
-                           "fades_pullback_with_htf", "disagrees_with_regime")}
+                           "fades_pullback_with_htf", "disagrees_on_trending",
+                           "disagrees_on_direction")}
     return {"version": CHARTREAD_VERSION, "derived_at_analysis_time": True,
             "constants": {"WINDOW_BARS": WINDOW_BARS, "FRACTAL_WING": FRACTAL_WING,
                           "LEVEL_ATR": str(LEVEL_ATR), "MIN_PIVOTS": MIN_PIVOTS},
