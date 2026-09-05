@@ -21,8 +21,9 @@ Every setup carries a plain-language WHY assembled from the facts it used (§8).
 import json
 from decimal import Decimal
 
-from . import bias, registry, regimeread, store
+from . import bias, chartread, registry, regimeread, store
 from .bias import LADDER as HTF_LADDER      # noqa: F401  (re-export; see below)
+from .chartread import CHARTREAD_VERSION
 from .regimeread import REGIMEREAD_VERSION
 from .swings import compute_atr, quote_ticks, SWING_VERSION
 from .zones import ZONE_VERSION
@@ -31,7 +32,20 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.20-draft"
+SETUP_VERSION = "setup-v0.21-draft"
+# v0.21: VALIDATED setups record the CHART READ — the regime a trader sees in
+# the window a chart opens with (chartread-v0.5: read, bias, location,
+# structure_state, false_breaks on the trade's timeframe; the rung above's
+# read; the top-down call) — and carry WINDOW_POLICY, four situations keyed
+# on the read against the trade, every value ALLOW. The reader earned the
+# recording on 2026-09-04/05: two ten-window pilots against the operator's
+# own eye (7/10, 8/10), never a wrong direction; and over 826 closed trades
+# the split between "the slow label and the chart agree it is trending" and
+# "they disagree" was +0.137R against -0.207R. The four situations are the
+# cells with the most behind them: REVERSAL short in an UP window -0.396R
+# (n=124), PULLBACK short in CHOP -0.734R (n=50); their mirrors are recorded
+# for symmetry and have no evidence yet. Recording is what lets each be
+# judged on trades after this date; no trade differs under v0.21.
 # v0.20: VALIDATED setups record the market's PHASE on their own timeframe and
 # one rung up (regimeread), the direction that reading PERMITS (bias.permitted)
 # and whether the trade agrees — and carry PULLBACK_CONTEXT_POLICY, a gate
@@ -203,6 +217,8 @@ REJECTION_REASONS = frozenset({
     # The context gate (PULLBACK_CONTEXT_POLICY). Same reasoning, same state:
     # inert while every value is ALLOW, named before it can fire.
     "CONTEXT_BLOCKED",
+    # The window gate (WINDOW_POLICY, v0.21). Same again.
+    "WINDOW_BLOCKED",
 })
 MIN_RR = Decimal("1.5")
 GOOD_RR = Decimal("2.5")
@@ -381,6 +397,70 @@ def context_verdict(strategy: str, permitted: str | None, policy=None) -> dict:
 def context_blocked(verdict: dict) -> bool:
     """The one place the question is asked (bias.blocked's rule; test_bias
     scans this module for an inline spelling and must not find one)."""
+    return verdict.get("action") in ("BLOCK",)
+
+
+#: THE WINDOW GATE — keyed on the chart-eye read of the trade's OWN timeframe
+#: (chartread) against the trade. Four situations, each its own value, so
+#: the asymmetry in the evidence is kept rather than averaged away:
+#:
+#:     REVERSAL_SHORT_IN_UP     shorting a window that reads UP    -0.396R n=124
+#:     REVERSAL_LONG_IN_DOWN    buying a window that reads DOWN    +0.002R n=144
+#:     PULLBACK_SHORT_IN_CHOP   pullback short in CHOP             -0.734R n= 50
+#:     PULLBACK_LONG_IN_CHOP    pullback long in CHOP              +0.053R n= 75
+#:
+#: (826 closed trades, 2026-09-05, the v0.20 recompute still filling in.)
+#: Two of the four have evidence; the mirrors are here so the grade can say
+#: whether the rule is about direction or about the side. THE GATE IS BUILT
+#: AND ARMED NOWHERE: every value is ALLOW, v0.21 records the situation on
+#: every VALIDATED fact, and a value moves only on trades confirmed after
+#: this date. Flipping one is one edit and a version bump.
+WINDOW_POLICY = {"REVERSAL_SHORT_IN_UP": "ALLOW", "REVERSAL_LONG_IN_DOWN": "ALLOW",
+                 "PULLBACK_SHORT_IN_CHOP": "ALLOW", "PULLBACK_LONG_IN_CHOP": "ALLOW"}
+WINDOW_SITUATIONS = tuple(WINDOW_POLICY)
+WINDOW_BLOCK_REASON = "WINDOW_BLOCKED"
+
+
+def validate_window_policy(policy: dict, who: str = "policy") -> dict:
+    missing = [s for s in WINDOW_SITUATIONS if s not in policy]
+    if missing:
+        raise ValueError(f"{who}: no action for situation(s) {missing}")
+    bad = {k: v for k, v in policy.items()
+           if k not in WINDOW_SITUATIONS or v not in ("ALLOW", "BLOCK")}
+    if bad:
+        raise ValueError(f"{who}: unknown situation or action {bad}")
+    return dict(policy)
+
+
+WINDOW_POLICY = validate_window_policy(WINDOW_POLICY, who="setups.WINDOW_POLICY")
+
+
+def window_situation(strategy: str, direction: str, read: str | None) -> str | None:
+    """Which of the four situations this trade is in, or None (not one of them)."""
+    if read is None:
+        return None
+    if strategy == "REVERSAL":
+        if direction == "SHORT" and read == "UP":
+            return "REVERSAL_SHORT_IN_UP"
+        if direction == "LONG" and read == "DOWN":
+            return "REVERSAL_LONG_IN_DOWN"
+    if strategy == "PULLBACK" and read == "CHOP":
+        return "PULLBACK_SHORT_IN_CHOP" if direction == "SHORT" else "PULLBACK_LONG_IN_CHOP"
+    return None
+
+
+def window_verdict(strategy: str, direction: str, read: str | None, policy=None) -> dict:
+    """Pure. No reading, or a trade outside the four situations, is ALLOW —
+    an unmeasured window is not a hostile one."""
+    policy = WINDOW_POLICY if policy is None else policy
+    sit = window_situation(strategy, direction, read)
+    return {"situation": sit, "read": read,
+            "action": policy.get(sit, "ALLOW") if sit else "ALLOW",
+            "policy": "WINDOW_POLICY"}
+
+
+def window_blocked(verdict: dict) -> bool:
+    """One place the question is asked."""
     return verdict.get("action") in ("BLOCK",)
 
 
@@ -653,9 +733,11 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             "cost_profile": profile.payload(),
             "bias_policy": dict(BIAS_POLICY),
             "pullback_context_policy": dict(PULLBACK_CONTEXT_POLICY),
+            "window_policy": dict(WINDOW_POLICY),
             "inputs": {"swing": SWING_VERSION, "zone": ZONE_VERSION,
                        "liquidity": LIQ_VERSION, "regime": REGIME_VERSION,
                        "regimeread": REGIMEREAD_VERSION,
+                       "chartread": CHARTREAD_VERSION,
                        **bias.inputs()},
         }
         manifest_hash = store.record_manifest(con, "strategy", strategy_manifest)
@@ -679,6 +761,12 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
         from .importer import TF_SECONDS as _TFS
         htf_phase_src = (regimeread.load(con, symbol, _rung, _TFS[_rung])
                          if _rung in _TFS else None)
+        # The chart-eye read, this timeframe and the rung above, loaded once
+        # (v0.21). Same discipline: the window is read as-of the confirming
+        # close from closed bars only, never per zone.
+        _charts = {(symbol, tf): chartread.load(con, symbol, tf, tf_seconds, candles, atr)}
+        if _rung in _TFS:
+            _charts[(symbol, _rung)] = chartread.load(con, symbol, _rung, _TFS[_rung])
 
         regimes = []
         for r in store.get_facts(con, symbol, tf, "regime", REGIME_VERSION):
@@ -1294,6 +1382,28 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                         "htf_phase": _htf_phase, "strategy": strategy,
                         "direction": direction})
                 continue
+            # THE WINDOW READ and its gate (v0.21). `chart` is what a trader
+            # would see in the chart's own window at this close; the verdict
+            # is inert while WINDOW_POLICY is ALLOW everywhere.
+            _cc = chartread.context(_charts, symbol, tf, bct, _TFS, HTF_LADDER)
+            _own = _cc["own"]
+            _chart = {"read": _cc["read"], "bias": _own.get("bias"),
+                      "location": _own.get("location"),
+                      "structure_state": _own.get("structure_state"),
+                      "false_breaks": _own.get("false_breaks"),
+                      "efficiency": _cc["efficiency"],
+                      "up_steps": _own.get("up_steps"), "down_steps": _own.get("down_steps"),
+                      "net_atr": _own.get("net_atr"),
+                      "htf_tf": _cc["htf_tf"], "htf_read": _cc["htf_read"],
+                      "call": _cc["call"], "version": CHARTREAD_VERSION}
+            _wv = window_verdict(strategy, direction, _cc["read"] if _cc["read"] != "UNKNOWN" else None)
+            _chart["situation"], _chart["action"] = _wv["situation"], _wv["action"]
+            if window_blocked(_wv):
+                reject(zone_id,
+                       {"market_time": cb["open_ts"], "confirmed_at": bct},
+                       "WINDOW_BLOCKED",
+                       {"chart": _chart, "strategy": strategy, "direction": direction})
+                continue
             _armed = armed_by_id.get(setup_id)
             _inherited = False
             if _armed and _armed.get("size_units") is not None:
@@ -1343,6 +1453,9 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                        "permitted": _permitted,
                        "agrees": _agrees,
                        "context": _ctx,
+                       # v0.21 — the chart-eye read and the window gate's
+                       # answer, as-of the same close.
+                       "chart": _chart,
                        "reversal_evidence": rev_ev,
                        "manifest_hash": manifest_hash,
                        "cost_manifest_hash": cost_manifest_hash,

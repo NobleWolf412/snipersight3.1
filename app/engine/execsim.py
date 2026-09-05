@@ -27,7 +27,9 @@ from .setups import SETUP_VERSION
 from .swings import compute_atr
 from .runlog import RunRecorder
 
-EXEC_VERSION = "exec-v0.24-draft"
+EXEC_VERSION = "exec-v0.25-draft"
+# v0.25: cascade from setup-v0.21 (VALIDATED facts carry the chart-eye read
+# and an inert WINDOW_POLICY). No fill, cost or exit rule changed.
 # v0.24: cascade from setup-v0.20 (VALIDATED facts carry the context reading
 # and an inert PULLBACK_CONTEXT_POLICY). No fill, cost or exit rule changed;
 # setup_id is version-scoped, so a new setup generation is a new order flow.

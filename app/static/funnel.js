@@ -163,6 +163,16 @@
              'record says trend-following and counter-move strategies want ' +
              'opposite answers.',
       cta: DIAG_SURFACE },
+    WINDOW_BLOCKED: {
+      plain: 'the chart itself was pointing the other way',
+      means: 'The bot now reads the last hundred-odd candles the way you ' +
+             'would — higher highs and lows, lower highs and lows, a range, ' +
+             'or chop — and this playbook has a rule about trading against ' +
+             'that read: shorting a window that is stepping up, or taking a ' +
+             'pullback trade in chop. The trace names the read. ' +
+             'This rule ships switched OFF: it records the read on every ' +
+             'setup so it can be judged on trades it has not already seen.',
+      cta: DIAG_SURFACE },
     CONTEXT_BLOCKED: {
       plain: 'the bigger picture was already trending, and this playbook only buys dips when it is not',
       means: 'A pullback entry works when the timeframe above asserts no ' +

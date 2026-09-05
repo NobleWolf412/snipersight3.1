@@ -24,7 +24,9 @@ from .execsim import EXEC_VERSION, plan_versions as execsim_plan_versions
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.25-draft"
+RISK_VERSION = "risk-v0.26-draft"
+# v0.26: cascade from setup-v0.21 / exec-v0.25 (the chart-eye read upstream).
+# No sizing or gate rule changed.
 # v0.25: cascade from setup-v0.20 / exec-v0.24 (the context reading upstream).
 # No sizing or gate rule changed; risk replays the account from exec facts,
 # and those are a new generation.

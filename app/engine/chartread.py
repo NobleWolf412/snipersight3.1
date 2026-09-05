@@ -1,5 +1,8 @@
 """Chart read — the regime a trader SEES in the window a chart opens with.
-A LIBRARY, not an engine: writes no facts, has no run(). READ-ONLY.
+A LIBRARY, not an engine: it has no run() and writes no facts of its OWN.
+Since setup-v0.21 `setups.run` records its reading on every VALIDATED fact
+and WINDOW_POLICY keys on it, so a rule change here is a setups payload
+change — the cascade lockfile names the coupling (CONSUMERS["chartread"]).
 
 THE OPERATOR'S PICTURE, 2026-09-04, verbatim in substance: "I open the 4H
 chart. It shows X candles. I can see all the highs and lows, draw the
@@ -60,9 +63,11 @@ FRACTAL_WING bars have closed after it (rule 3), and the read at `as_of` is
 the read a trader could have made at `as_of`, three bars slower than their
 eye. That is the one place this picture and the constitution disagree.
 
-NOTHING GATES ON THIS. It is stamped at analysis time by `annotate()` and
-graded by `factorstats.outcome_split` (rule 7); the golden loop (§27) is how
-the operator's own calls calibrate it before any playbook reads it.
+NOTHING GATES ON THIS YET. `setups.run` records it (v0.21) and WINDOW_POLICY
+ships ALLOW on every value; `annotate()` stamps it at analysis time over
+older generations and `factorstats.outcome_split` grades it (rule 7). The
+golden loop (§27) is how the operator's own calls calibrate it, and a
+policy value moves only on trades confirmed after the recording began.
 
 Usage (from app/):
   python -m engine.chartread                       # grade against the book
@@ -373,11 +378,13 @@ def structure_state(read: str, bias: str) -> str:
 class Chart:
     """One symbol/timeframe's candle series, read as-of any moment."""
 
-    def __init__(self, tf, tf_seconds, candles):
+    def __init__(self, tf, tf_seconds, candles, atr=None):
         self.tf, self.tf_seconds = tf, tf_seconds
         self.candles = candles
         self.opens = [c["open_ts"] for c in candles]
-        self.atr = compute_atr(candles) if candles else []
+        # A caller that already holds the series' ATR (setups.run does) passes
+        # it; recomputing it was 6-24 ms per series for nothing (audit).
+        self.atr = atr if atr is not None else (compute_atr(candles) if candles else [])
 
     def window(self, as_of):
         """The last WINDOW_BARS bars CLOSED at as_of, minus the FRACTAL_WING
@@ -400,10 +407,10 @@ class Chart:
         return r
 
 
-def load(con, symbol, tf, tf_seconds, candles=None) -> Chart:
+def load(con, symbol, tf, tf_seconds, candles=None, atr=None) -> Chart:
     if candles is None:
         candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
-    return Chart(tf, tf_seconds, candles)
+    return Chart(tf, tf_seconds, candles, atr)
 
 
 def reconcile(own: str, htf: str | None) -> str:

@@ -325,7 +325,10 @@ EXPECTED = {
     # and carry PULLBACK_CONTEXT_POLICY, ALLOW everywhere. No trade differs.
     # CONSUMERS["setup"] is ("exec", "risk", "scale") and CONSUMERS["exec"]
     # adds "cooldown": all five move together, as every setups bump has.
-    "setup": "setup-v0.20-draft",
+    # setup-v0.21, 2026-09-05: VALIDATED facts record the chart-eye read
+    # (chartread) and carry WINDOW_POLICY, ALLOW everywhere. Same five-tag
+    # cascade as v0.20, for the same reason.
+    "setup": "setup-v0.21-draft",
     # S50 cascade. exec-v0.13 -> v0.14 corrected the MAKER_THEN_MARKET crossing
     # leg, which booked a market fill at the PLAN's price — two bars stale, and
     # outside the fill bar's own [low, high] on 78 of 95 crossed orders, never
@@ -343,7 +346,7 @@ EXPECTED = {
     # are derived purely from recorded exits. All four move together.
     # scale ALSO changed on its own account — its economics gate now prices the
     # add on the add's own venue instead of the process-wide Coinbase default.
-    "exec": "exec-v0.24-draft",
+    "exec": "exec-v0.25-draft",
     # risk-v0.22: the envelope restated in R, sized by mode (paper/shadow 2%,
     # testnet/live 0.25%), gates identical everywhere; DECISIONs record their
     # pct. The v0.21 note above this line claimed "no cascade follows risk" —
@@ -357,9 +360,9 @@ EXPECTED = {
     # (operator-set, OPERATIONAL). A new refusal reason is a new DECISION
     # generation. Nothing else moves: CONSUMERS["risk"] is size_order(), which
     # is untouched, so setups' FORMING payloads are byte-identical.
-    "risk": "risk-v0.25-draft",
-    "scale": "scale-v0.18-draft",
-    "cooldown": "cooldown-v0.12-draft",
+    "risk": "risk-v0.26-draft",
+    "scale": "scale-v0.19-draft",
+    "cooldown": "cooldown-v0.13-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
     # every setup they emit. No rule changed in either and no trade differs —
     # both policies are ALLOW everywhere — but the payload does, and a payload
@@ -539,6 +542,8 @@ CONSUMERS = {
     "regime": ("setup", "bias", "regimeread"),
     # Fact-level from setup-v0.20: VALIDATED payloads carry the phase.
     "regimeread": ("setup",),
+    # Fact-level from setup-v0.21: VALIDATED payloads carry the chart read.
+    "chartread": ("setup",),
     # The bias layer's consumers are the playbooks that RECORD its reading.
     # `setup` is listed on CODE-level terms only for now — it imports the
     # ladder constant, and identical values mean its facts did not change —
@@ -593,7 +598,8 @@ class VersionLockfile(unittest.TestCase):
                 "structure": "STRUCTURE_VERSION", "zone": "ZONE_VERSION",
                 "liquidity": "LIQ_VERSION", "regime": "REGIME_VERSION",
                 "swing": "SWING_VERSION", "volatility": "VOLATILITY_VERSION",
-                "ranges": "RANGES_VERSION", "regimeread": "REGIMEREAD_VERSION"}
+                "ranges": "RANGES_VERSION", "regimeread": "REGIMEREAD_VERSION",
+                "chartread": "CHARTREAD_VERSION"}
         for producer, consumers in CONSUMERS.items():
             const = pins.get(producer)
             if not const:
