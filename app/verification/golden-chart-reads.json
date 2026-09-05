@@ -1,88 +1,88 @@
 {
- "description": "Golden chart reads, pilot of 10 (constitution §27). For each entry open <symbol> on <tf> in the app and scroll so the LAST CLOSED candle is at <as_of>; the window is the ~120 candles back to <window_start>. Write what YOU see into `expected`: UP / DOWN / RANGE / CHOP. The reader's own call is deliberately not shown here, so your label is not anchored by it. Score with: python -m engine.chartread --golden verification/golden-chart-reads.json",
- "version": "chartread-v0.2-draft",
- "labelled_by": "GPT-5.6 Sol",
- "labelled_on": "2026-09-04",
- "labels": [
-  {
-   "symbol": "ETHUSDT",
-   "tf": "4H",
-   "as_of": "2026-08-30T00:00Z",
-   "window_start": "2026-08-10T00:00Z",
-   "expected": "UP",
-   "note": ""
-  },
-  {
-   "symbol": "BTCUSDT",
-   "tf": "4H",
-   "as_of": "2026-08-10T20:00Z",
-   "window_start": "2026-07-21T20:00Z",
-   "expected": "RANGE",
-   "note": "Borderline RANGE/CHOP: broad sideways structure with a sharp late-July dip and recovery rather than a clean directional trend."
-  },
-  {
-   "symbol": "PF_ARBUSD",
-   "tf": "1H",
-   "as_of": "2026-03-15T18:00Z",
-   "window_start": "2026-03-10T18:00Z",
-   "expected": "UP",
-   "note": "Borderline: advance is uneven and includes pullbacks, but the window finishes materially above its start with improving short-term structure."
-  },
-  {
-   "symbol": "PF_BNBUSD",
-   "tf": "4H",
-   "as_of": "2026-05-18T00:00Z",
-   "window_start": "2026-04-28T00:00Z",
-   "expected": "UP",
-   "note": "Some late-window giveback after the mid-May push, but the dominant move across the full window is still upward."
-  },
-  {
-   "symbol": "WLD-USD",
-   "tf": "4H",
-   "as_of": "2026-03-29T20:00Z",
-   "window_start": "2026-03-09T20:00Z",
-   "expected": "DOWN",
-   "note": ""
-  },
-  {
-   "symbol": "ADA-USD",
-   "tf": "1H",
-   "as_of": "2026-07-02T14:00Z",
-   "window_start": "2026-06-27T14:00Z",
-   "expected": "UP",
-   "note": "Strong late-window acceleration makes this directional despite earlier consolidation."
-  },
-  {
-   "symbol": "ALGO-USD",
-   "tf": "1H",
-   "as_of": "2026-03-01T08:00Z",
-   "window_start": "2026-02-24T08:00Z",
-   "expected": "CHOP",
-   "note": "Borderline CHOP/RANGE: price ends near the starting area after a sharp spike and reversal, with noisy two-way movement dominating."
-  },
-  {
-   "symbol": "HFT-USD",
-   "tf": "1D",
-   "as_of": "2024-05-23T00:00Z",
-   "window_start": "2024-01-24T00:00Z",
-   "expected": "CHOP",
-   "note": "Borderline and unusually volatile: large swings and failed directional legs dominate the multi-month window, so CHOP fits better than a clean trend label."
-  },
-  {
-   "symbol": "PAXG-USD",
-   "tf": "1H",
-   "as_of": "2026-04-16T05:00Z",
-   "window_start": "2026-04-11T05:00Z",
-   "expected": "UP",
-   "note": "Borderline: early weakness is followed by a strong recovery to higher levels; directional bias is up but the path is not clean."
-  },
-  {
-   "symbol": "KAITOUSDT",
-   "tf": "4H",
-   "as_of": "2026-05-10T16:00Z",
-   "window_start": "2026-04-20T16:00Z",
-   "expected": "UP",
-   "note": "Volatile start, then a clearer sequence of higher prices into the end of the window."
-  }
- ]
+  "description": "Golden chart reads, pilot of 10 (constitution §27). For each entry open <symbol> on <tf> in the app and scroll so the LAST CLOSED candle is at <as_of>; the window is the ~120 candles back to <window_start>. Write what YOU see into `expected`: UP / DOWN / RANGE / CHOP. The reader's own call is deliberately not shown here, so your label is not anchored by it. Score with: python -m engine.chartread --golden verification/golden-chart-reads.json",
+  "version": "chartread-v0.2-draft",
+  "labelled_by": "GPT-5.6 Sol",
+  "labelled_on": "2026-09-04",
+  "labels": [
+    {
+      "symbol": "ETHUSDT",
+      "tf": "4H",
+      "as_of": "2026-08-30T00:00Z",
+      "window_start": "2026-08-10T00:00Z",
+      "expected": "RANGE",
+      "note": "Defined trading range; late buy-side liquidity sweep/rejection is a bearish rotation inside the broader range, not a full DOWN regime."
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tf": "4H",
+      "as_of": "2026-08-11T00:00Z",
+      "window_start": "2026-07-15T00:00Z",
+      "expected": "RANGE",
+      "note": "Screenshot shows broad horizontal auction with repeated rotations around roughly 62k support and 65-66k resistance; screenshot itself was displayed on 1H, so dates are approximate for regime alignment."
+    },
+    {
+      "symbol": "PF_ARBUSD",
+      "tf": "1H",
+      "as_of": "2026-03-15T00:00Z",
+      "window_start": "2026-03-10T00:00Z",
+      "expected": "UP",
+      "note": "Overall higher-low/higher-high progression with a strong expansion to a new swing high; substantial late retracement makes it borderline but does not erase the broader upward structure."
+    },
+    {
+      "symbol": "PF_BNBUSD",
+      "tf": "4H",
+      "as_of": "2026-06-18T00:00Z",
+      "window_start": "2026-05-29T00:00Z",
+      "expected": "DOWN",
+      "note": "Strong bearish displacement from the late-May high followed by weaker consolidation/retracement and renewed downside pressure; screenshot boundary dates are approximate by a candle or two."
+    },
+    {
+      "symbol": "WLD-USD",
+      "tf": "4H",
+      "as_of": "2026-03-29T20:00Z",
+      "window_start": "2026-03-09T20:00Z",
+      "expected": "DOWN",
+      "note": "Persistent lower-high/lower-low structure with repeated bearish continuation and major downside displacement."
+    },
+    {
+      "symbol": "ADA-USD",
+      "tf": "1H",
+      "as_of": "2026-06-03T00:00Z",
+      "window_start": "2026-05-29T00:00Z",
+      "expected": "DOWN",
+      "note": "Gradual but persistent bearish staircase with lower highs/lows and repeated downside BOS; screenshot boundary dates are approximate by a candle or two."
+    },
+    {
+      "symbol": "ALGO-USD",
+      "tf": "1H",
+      "as_of": "2026-03-05T00:00Z",
+      "window_start": "2026-02-22T00:00Z",
+      "expected": "RANGE",
+      "note": "Well-defined horizontal balance with repeated reversals and little net directional progress; range is clearer than random CHOP."
+    },
+    {
+      "symbol": "HFT-USD",
+      "tf": "1D",
+      "as_of": "2024-03-20T00:00Z",
+      "window_start": "2024-02-01T00:00Z",
+      "expected": "UP",
+      "note": "Visible daily structure advances from roughly 0.29 toward 0.53 with higher highs/higher lows before a late pullback; screenshot boundary dates are approximate."
+    },
+    {
+      "symbol": "PAXG-USD",
+      "tf": "1H",
+      "as_of": "2026-04-17T18:00Z",
+      "window_start": "2026-04-11T00:00Z",
+      "expected": "UP",
+      "note": "Bullish structural progression from the Apr 12 low with higher highs and higher lows despite intermediate consolidation; screenshot boundary is approximate."
+    },
+    {
+      "symbol": "KAITOUSDT",
+      "tf": "4H",
+      "as_of": "2026-05-19T00:00Z",
+      "window_start": "2026-04-22T00:00Z",
+      "expected": "UP",
+      "note": "Dominant visible move is a sustained bullish BOS/HL/HH progression into the May 9-10 high; later pullback/reversal makes the ending mixed but the full screenshot window remains upward overall."
+    }
+  ]
 }
