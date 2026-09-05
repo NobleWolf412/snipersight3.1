@@ -78,7 +78,21 @@ from . import store
 from .swings import compute_atr
 from .zones import ZONE_ATR
 
-CHARTREAD_VERSION = "chartread-v0.3-draft"
+CHARTREAD_VERSION = "chartread-v0.4-draft"
+# v0.4: the window is sized to the timeframe's job, not one number for all.
+# 120 weekly candles is 2.3 years and 120 five-minute candles is ten hours;
+# "UP" cannot mean the same thing across both. WINDOW_BY_TF: 1W 78 (a year
+# and a half — the anchor, enough macro structure without dragging 2023 into
+# a scalp), 5m 200 (an execution context), everything else the chart's
+# 120. Two readings added beside `read` and `bias`, both composed from what
+# the window already holds: `location` — where the last close sits between
+# the window's extremes, the premium/discount arithmetic setups.py already
+# records (D1), 0-100 with DISCOUNT below 40 and PREMIUM above 60 — and
+# `structure_state`, the pair of regime and bias in one word (RECOVERY is a
+# DOWN window rotating UP; PULLBACK is UP rotating DOWN). No confidence
+# number: §25 forbids an uncalibrated score, and the evidence a reader can
+# check — steps, net move, touches — is on the fact instead. Window sizes
+# are pre-registered guesses to be validated by the golden loop, not gospel.
 # v0.3: CLASSIFY THE WINDOW, NOT THE LAST LEG. v0.2 read the last two highs
 # and the last two lows, which is a statement about the final swing — ARB
 # rising for five days then retracing read DOWN; BNB collapsing then bouncing
@@ -100,6 +114,16 @@ CHARTREAD_VERSION = "chartread-v0.3-draft"
 
 #: Bars in the window — chart.js VISIBLE_BARS, what a chart opens showing.
 WINDOW_BARS = 120
+#: Per-timeframe windows where one number would mislead (see the v0.4 note).
+#: Anything not listed uses WINDOW_BARS.
+WINDOW_BY_TF = {"1W": 78, "5m": 200}
+#: `location`: below this percentile of the window's height is DISCOUNT,
+#: above (100 - it) is PREMIUM, between is EQUILIBRIUM.
+DISCOUNT_BELOW = 40
+
+
+def window_bars(tf: str) -> int:
+    return WINDOW_BY_TF.get(tf, WINDOW_BARS)
 #: Bars each side that must be lower (higher) for a high (low) to be a pivot.
 FRACTAL_WING = 3
 #: Two swing highs (lows) within this many ATR of each other are one level.
@@ -265,7 +289,31 @@ def read_window(candles, atr_at_end) -> dict:
     out["bias"] = ("UP" if (h2 > h1 and l2 > l1) else
                    "DOWN" if (h2 < h1 and l2 < l1) else "NEUTRAL")
     out["hh"], out["hl"], out["lh"], out["ll"] = h2 > h1, l2 > l1, h2 < h1, l2 < l1
+    # WHERE in the window the last close sits, 0 at the low and 100 at the
+    # high — setups.premium_discount's arithmetic over the window's extremes.
+    pct = int(max(0, min(100, (closes[-1] - _d(out["window_low"])) / height * 100))) if height else None
+    out["location_pct"] = pct
+    out["location"] = (None if pct is None else "DISCOUNT" if pct < DISCOUNT_BELOW
+                       else "PREMIUM" if pct > 100 - DISCOUNT_BELOW else "EQUILIBRIUM")
+    out["structure_state"] = structure_state(out["read"], out["bias"])
     return out
+
+
+def structure_state(read: str, bias: str) -> str:
+    """Regime and last leg in one word — the pair, not a third opinion.
+
+        CONTINUATION   trend, last leg the same way
+        PULLBACK       UP window, last leg DOWN (or NEUTRAL)
+        RECOVERY       DOWN window, last leg UP (or NEUTRAL)
+        ROTATION       RANGE or CHOP, whichever way the last leg went
+    """
+    if read == "UP":
+        return "CONTINUATION" if bias == "UP" else "PULLBACK"
+    if read == "DOWN":
+        return "CONTINUATION" if bias == "DOWN" else "RECOVERY"
+    if read in ("RANGE", "CHOP"):
+        return "ROTATION"
+    return "UNKNOWN"
 
 
 class Chart:
@@ -283,7 +331,7 @@ class Chart:
         inside the wing is simply not emitted, and the bars still carry
         closes for the efficiency ratio."""
         end = bisect.bisect_right(self.opens, as_of - self.tf_seconds)
-        start = max(0, end - WINDOW_BARS)
+        start = max(0, end - window_bars(self.tf))
         return start, end
 
     def at(self, as_of) -> dict:
@@ -378,6 +426,8 @@ def annotate(con, candidates) -> int:
             continue
         p["chart_read"] = ctx["read"]
         p["chart_bias"] = ctx["own"].get("bias")
+        p["chart_location"] = ctx["own"].get("location")
+        p["chart_structure_state"] = ctx["own"].get("structure_state")
         p["chart_htf_read"] = ctx["htf_read"]
         p["chart_call"] = ctx["call"]
         p["chart_efficiency"] = ctx["efficiency"]
@@ -464,9 +514,10 @@ def grade(con, *, setup_version=None, exec_version=None) -> dict:
                            "fades_pullback_with_htf", "disagrees_on_trending",
                            "disagrees_on_direction")}
     return {"version": CHARTREAD_VERSION, "derived_at_analysis_time": True,
-            "constants": {"WINDOW_BARS": WINDOW_BARS, "FRACTAL_WING": FRACTAL_WING,
-                          "LEVEL_ATR": str(LEVEL_ATR), "MIN_PIVOTS": MIN_PIVOTS,
-                          "DOMINANCE": str(DOMINANCE), "RANGE_MIN_TOUCHES": RANGE_MIN_TOUCHES},
+            "constants": {"WINDOW_BARS": WINDOW_BARS, "WINDOW_BY_TF": WINDOW_BY_TF,
+                          "FRACTAL_WING": FRACTAL_WING, "LEVEL_ATR": str(LEVEL_ATR),
+                          "MIN_PIVOTS": MIN_PIVOTS, "DOMINANCE": str(DOMINANCE),
+                          "RANGE_MIN_TOUCHES": RANGE_MIN_TOUCHES, "DISCOUNT_BELOW": DISCOUNT_BELOW},
             "candidates": len(candidates), "annotated": n, "closed": len(closed),
             "by_call": by_call, "by_read": by_read, "regime_vs_chart": agree,
             "splits": splits, "warnings": warnings}
@@ -523,9 +574,9 @@ def propose(con, n=20, seed=17) -> list[dict]:
         tf = rng.choice(["1H", "4H", "1D"])
         rows = con.execute("SELECT open_ts FROM candles WHERE symbol=? AND tf=? ORDER BY open_ts",
                            (sym, tf)).fetchall()
-        if len(rows) < WINDOW_BARS + 20:
+        if len(rows) < window_bars(tf) + 20:
             continue
-        i = rng.randrange(WINDOW_BARS, len(rows))
+        i = rng.randrange(window_bars(tf), len(rows))
         as_of = rows[i][0] + TF_SECONDS[tf]
         got = load(con, sym, tf, TF_SECONDS[tf]).at(as_of)
         if got["read"] == "UNKNOWN":

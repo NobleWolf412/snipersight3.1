@@ -141,6 +141,29 @@ class AsOf(unittest.TestCase):
         self.assertEqual(end, 50, "the forming bar must not be in the window")
         self.assertEqual(end - start, min(50, cr.WINDOW_BARS))
 
+    def test_the_window_is_sized_to_the_timeframes_job(self):
+        """One number for every timeframe misleads: 120 weekly bars is 2.3
+        years, 120 five-minute bars is ten hours. The anchor is shorter, the
+        execution context longer, and the rest is the chart's own window."""
+        self.assertEqual(cr.window_bars("1W"), 78)
+        self.assertEqual(cr.window_bars("5m"), 200)
+        for tf in ("15m", "1H", "4H", "1D"):
+            self.assertEqual(cr.window_bars(tf), cr.WINDOW_BARS)
+        bars = _zigzag([100, 110, 104, 116, 109, 122, 114] * 20)
+        weekly = cr.Chart("1W", 604800, bars)
+        s, e = weekly.window(bars[-1]["open_ts"] + 604800)
+        self.assertEqual(e - s, 78)
+
+    def test_location_and_structure_state_are_composed_not_invented(self):
+        r = cr.read_window(_zigzag([100, 110, 104, 116, 109, 122, 103, 112]), Decimal("2"))
+        self.assertEqual(r["read"], "UP")
+        self.assertEqual(r["structure_state"], "PULLBACK")
+        self.assertIn(r["location"], ("DISCOUNT", "EQUILIBRIUM", "PREMIUM"))
+        self.assertEqual(cr.structure_state("DOWN", "UP"), "RECOVERY")
+        self.assertEqual(cr.structure_state("DOWN", "DOWN"), "CONTINUATION")
+        self.assertEqual(cr.structure_state("RANGE", "DOWN"), "ROTATION")
+        self.assertEqual(cr.structure_state("UNKNOWN", "UP"), "UNKNOWN")
+
     def test_the_window_is_the_charts_own(self):
         chart_js = (pathlib.Path(__file__).parents[1] / "static" / "chart.js").read_text(encoding="utf-8")
         m = re.search(r"const VISIBLE_BARS = (\d+);", chart_js)
