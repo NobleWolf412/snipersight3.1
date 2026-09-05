@@ -78,7 +78,17 @@ from . import store
 from .swings import compute_atr
 from .zones import ZONE_ATR
 
-CHARTREAD_VERSION = "chartread-v0.4-draft"
+CHARTREAD_VERSION = "chartread-v0.5-draft"
+# v0.5: RANGE against CHOP is decided by FALSE BREAKS. Two blind pilots
+# (20 windows, 2026-09-04/05) agreed on every direction the reader asserted
+# and disagreed three times on RANGE versus CHOP, each time the same way:
+# the operator called CHOP where a boundary had been broken and reversed —
+# "falsely broke out and dumped back", "false breakouts" — and the reader
+# had counted those excursions as touches. A range whose edges do not hold
+# is not a range. A false break is a close beyond a boundary by more than a
+# level's width that returns inside within FALSE_BREAK_BARS; one or more and
+# the window is CHOP, none and it is RANGE. The count is recorded on every
+# read. Written from the operator's notes; the third pilot judges it.
 # v0.4: the window is sized to the timeframe's job, not one number for all.
 # 120 weekly candles is 2.3 years and 120 five-minute candles is ten hours;
 # "UP" cannot mean the same thing across both. WINDOW_BY_TF: 1W 78 (a year
@@ -117,6 +127,9 @@ WINDOW_BARS = 120
 #: Per-timeframe windows where one number would mislead (see the v0.4 note).
 #: Anything not listed uses WINDOW_BARS.
 WINDOW_BY_TF = {"1W": 78, "5m": 200}
+#: A close beyond a boundary that is back inside within this many bars is a
+#: FALSE break — the boundary did not hold and did not give way either.
+FALSE_BREAK_BARS = 5
 #: `location`: below this percentile of the window's height is DISCOUNT,
 #: above (100 - it) is PREMIUM, between is EQUILIBRIUM.
 DISCOUNT_BELOW = 40
@@ -234,6 +247,43 @@ def local_swings(pv, atr):
     return merged
 
 
+def false_breaks(candles, res, sup, atr, max_bars=FALSE_BREAK_BARS) -> int:
+    """Closes beyond a twice-touched boundary (by more than a level's width)
+    that were back inside within `max_bars`. Each excursion counts once."""
+    if not atr:
+        return 0
+    tol = LEVEL_ATR * atr
+    closes = [_d(c["close"]) for c in candles]
+    n = 0
+    for lv in [l for l in res if l["touches"] >= RANGE_MIN_TOUCHES]:
+        line = lv["price"] + tol
+        i = 0
+        while i < len(closes):
+            if closes[i] > line:
+                back = next((j for j in range(i + 1, min(i + 1 + max_bars, len(closes)))
+                             if closes[j] <= lv["price"]), None)
+                if back is not None:
+                    n += 1
+                    i = back
+                    continue
+                break            # held above: a real break, not a false one
+            i += 1
+    for lv in [l for l in sup if l["touches"] >= RANGE_MIN_TOUCHES]:
+        line = lv["price"] - tol
+        i = 0
+        while i < len(closes):
+            if closes[i] < line:
+                back = next((j for j in range(i + 1, min(i + 1 + max_bars, len(closes)))
+                             if closes[j] >= lv["price"]), None)
+                if back is not None:
+                    n += 1
+                    i = back
+                    continue
+                break
+            i += 1
+    return n
+
+
 def read_window(candles, atr_at_end) -> dict:
     """The read of ONE window of closed bars. Pure."""
     pv = local_swings(pivots(candles), atr_at_end)
@@ -275,12 +325,16 @@ def read_window(candles, atr_at_end) -> dict:
         out["read"] = "DOWN"
     elif (any(l["touches"] >= RANGE_MIN_TOUCHES for l in res)
           and any(l["touches"] >= RANGE_MIN_TOUCHES for l in sup)):
-        # RANGE is boundaries that were each visited at least twice, once no
-        # side dominates. Levels share one tolerance with cluster_levels
-        # (LEVEL_ATR) — one definition of "the same".
-        out["read"] = "RANGE"
+        # RANGE is boundaries that were each visited at least twice AND held:
+        # a boundary that was closed through and reversed is a false break,
+        # and a range whose edges do not hold is CHOP (v0.5). Levels share
+        # one tolerance with cluster_levels (LEVEL_ATR).
+        fb = false_breaks(candles, res, sup, atr)
+        out["false_breaks"] = fb
+        out["read"] = "RANGE" if fb == 0 else "CHOP"
     else:
         out["read"] = "CHOP"
+    out.setdefault("false_breaks", None)
 
     # THE LAST LEG, kept as its own fact. The window can be UP while the last
     # swing is down — that is a pullback, and a playbook wants to know both.
@@ -517,7 +571,8 @@ def grade(con, *, setup_version=None, exec_version=None) -> dict:
             "constants": {"WINDOW_BARS": WINDOW_BARS, "WINDOW_BY_TF": WINDOW_BY_TF,
                           "FRACTAL_WING": FRACTAL_WING, "LEVEL_ATR": str(LEVEL_ATR),
                           "MIN_PIVOTS": MIN_PIVOTS, "DOMINANCE": str(DOMINANCE),
-                          "RANGE_MIN_TOUCHES": RANGE_MIN_TOUCHES, "DISCOUNT_BELOW": DISCOUNT_BELOW},
+                          "RANGE_MIN_TOUCHES": RANGE_MIN_TOUCHES, "DISCOUNT_BELOW": DISCOUNT_BELOW,
+                          "FALSE_BREAK_BARS": FALSE_BREAK_BARS},
             "candidates": len(candidates), "annotated": n, "closed": len(closed),
             "by_call": by_call, "by_read": by_read, "regime_vs_chart": agree,
             "splits": splits, "warnings": warnings}
@@ -550,6 +605,7 @@ def golden_score(con, labels: list[dict]) -> dict:
         hits += hit
         rows.append({**{k: lab.get(k) for k in ("symbol", "tf", "as_of", "expected", "note")},
                      "got": got["read"], "bias": got.get("bias"),
+                     "false_breaks": got.get("false_breaks"),
                      "efficiency": got["efficiency"], "n_pivots": got["n_pivots"],
                      "up_steps": got.get("up_steps"), "down_steps": got.get("down_steps"),
                      "net_atr": got.get("net_atr"), "hit": hit})
@@ -615,7 +671,7 @@ def main(argv=None):
             for r in rep["rows"]:
                 mark = "ok  " if r["hit"] else "MISS"
                 print(f"  {mark} {r['symbol']:10s} {r['tf']:3s} {r['as_of']}  you: {r['expected']:5s}"
-                      f"  reader: {r['got']:5s} (bias {r['bias']})  steps up/down={r['up_steps']}/{r['down_steps']}"
+                      f"  reader: {r['got']:5s} (bias {r['bias']}, false breaks {r['false_breaks']})  steps up/down={r['up_steps']}/{r['down_steps']}"
                       f"  net={r['net_atr']} ATR  er={r['efficiency']}"
                       + (f"  — {r['note'][:90]}" if r.get("note") else ""))
             return 0

@@ -98,6 +98,26 @@ class ReadWindow(unittest.TestCase):
         self.assertGreaterEqual(max(l["touches"] for l in r["resistance"]), 2)
         self.assertGreaterEqual(max(l["touches"] for l in r["support"]), 2)
 
+    def test_a_range_whose_edge_was_broken_and_reversed_is_chop(self):
+        """The operator's CHOP, from two blind pilots: "falsely broke out and
+        dumped back". Same boundaries, same touches — one excursion that
+        closes through the top and is back inside within a few bars, and the
+        window is CHOP, not RANGE. The count is on the read."""
+        bars = _zigzag([100, 110, 101, 111, 100, 110, 101, 110, 100, 110, 101, 110])
+        r = cr.read_window(bars, Decimal("2"))
+        self.assertEqual(r["read"], "RANGE")
+        self.assertEqual(r["false_breaks"], 0)
+        # a false break: right after the first touch of the top, three bars
+        # close well through it, then price is back inside within five bars.
+        # The other touches of the top survive, so the boundaries still exist —
+        # the only thing that changed is that one of them failed to hold.
+        broken = [dict(b) for b in bars]
+        for k in range(5, 8):
+            broken[k] = {**broken[k], "high": "116", "close": "115"}
+        r = cr.read_window(broken, Decimal("2"))
+        self.assertGreaterEqual(r["false_breaks"], 1)
+        self.assertEqual(r["read"], "CHOP")
+
     def test_small_swings_inside_a_big_move_do_not_count_as_structure(self):
         """The house rule from swings.py: a pivot is a LOCAL swing only if the
         reversal to the next opposite pivot is at least LOCAL_ATR_MULT x ATR.
