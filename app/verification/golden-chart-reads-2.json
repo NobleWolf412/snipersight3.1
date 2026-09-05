@@ -1,8 +1,8 @@
 {
  "description": "Golden chart reads, pilot 2 (constitution §27) — BLIND: judged on the exact store windows in the labelling page, reader's call hidden. Score with: python -m engine.chartread --golden verification/golden-chart-reads-2.json",
  "version": "golden-chart-reads-pilot-2",
- "labelled_by": null,
- "labelled_on": null,
+ "labelled_by": "operator (NobleWolf412), blind, on the exact store windows via the labelling page",
+ "labelled_on": "2026-09-05",
  "labels": [
   {
    "symbol": "BTCUSDT",
@@ -10,8 +10,8 @@
    "as_of": "2026-03-16T00:00Z",
    "window_start": "2024-09-16T00:00Z",
    "window_bars": 78,
-   "expected": null,
-   "note": ""
+   "expected": "UP",
+   "note": "macro higher lows based on this window. but because its the weekly, it appears that theres been a macro break of structure to the bearish regime as it broke structure around 97-98k"
   },
   {
    "symbol": "ETHUSDT",
@@ -19,8 +19,8 @@
    "as_of": "2025-10-23T00:00Z",
    "window_start": "2025-06-25T00:00Z",
    "window_bars": 120,
-   "expected": null,
-   "note": ""
+   "expected": "UP",
+   "note": "Up then started chopping sideways. broke trend half way through the window, started making lower highs and lower lows"
   },
   {
    "symbol": "BTCUSDT",
@@ -28,7 +28,7 @@
    "as_of": "2026-07-27T09:15Z",
    "window_start": "2026-07-26T03:15Z",
    "window_bars": 120,
-   "expected": null,
+   "expected": "UP",
    "note": ""
   },
   {
@@ -37,7 +37,7 @@
    "as_of": "2026-07-17T00:00Z",
    "window_start": "2026-06-27T00:00Z",
    "window_bars": 120,
-   "expected": null,
+   "expected": "UP",
    "note": ""
   },
   {
@@ -46,7 +46,7 @@
    "as_of": "2026-05-30T20:00Z",
    "window_start": "2026-05-10T20:00Z",
    "window_bars": 120,
-   "expected": null,
+   "expected": "DOWN",
    "note": ""
   },
   {
@@ -55,8 +55,8 @@
    "as_of": "2026-06-23T12:00Z",
    "window_start": "2026-06-03T12:00Z",
    "window_bars": 120,
-   "expected": null,
-   "note": ""
+   "expected": "CHOP",
+   "note": "rallied in an upward trend, then falsly broke out and dumped back to original prices.  attempting a breakouk toward the end, but keeps bouncing off resistance"
   },
   {
    "symbol": "PF_AAVEUSD",
@@ -64,8 +64,8 @@
    "as_of": "2024-05-14T00:00Z",
    "window_start": "2024-01-15T00:00Z",
    "window_bars": 120,
-   "expected": null,
-   "note": ""
+   "expected": "DOWN",
+   "note": "choppy down regime, false breakouts"
   },
   {
    "symbol": "PF_POLUSD",
@@ -73,8 +73,8 @@
    "as_of": "2025-01-28T00:00Z",
    "window_start": "2024-09-30T00:00Z",
    "window_bars": 120,
-   "expected": null,
-   "note": ""
+   "expected": "CHOP",
+   "note": "looked like an up trend half way through, and broke down with a hard red candle, struggled to recover and now weakening with low volume and lower highs, lower lows."
   },
   {
    "symbol": "NEARUSDT",
@@ -82,7 +82,7 @@
    "as_of": "2023-05-30T00:00Z",
    "window_start": "2023-01-30T00:00Z",
    "window_bars": 120,
-   "expected": null,
+   "expected": "DOWN",
    "note": ""
   },
   {
@@ -91,8 +91,10 @@
    "as_of": "2026-07-02T14:00Z",
    "window_start": "2026-06-27T14:00Z",
    "window_bars": 120,
-   "expected": null,
+   "expected": "UP",
    "note": ""
   }
- ]
+ ],
+ "scored_with": "chartread-v0.4-draft",
+ "operator_remark": "some of these were hard to read because there were definitely times it pumped, but the rally didn't last."
 }
