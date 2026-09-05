@@ -79,6 +79,35 @@ class ReadWindow(unittest.TestCase):
         r = cr.read_window(_zigzag([100, 112, 96, 104, 90, 118, 102]), Decimal("2"))
         self.assertEqual(r["read"], "CHOP")
 
+    def test_a_trend_with_a_late_retracement_is_still_the_trend(self):
+        """The operator's rule and the first pilot's five misses: classify the
+        window, not the last leg. Five days up then a deep retrace is UP with
+        a DOWN bias — two facts, two fields."""
+        r = cr.read_window(_zigzag([100, 110, 104, 116, 109, 122, 103, 112]), Decimal("2"))
+        self.assertEqual(r["read"], "UP")
+        self.assertNotEqual(r["bias"], "UP", "the last leg is down; the bias must say so")
+        r = cr.read_window(_zigzag([130, 118, 125, 112, 120, 105, 124, 114]), Decimal("2"))
+        self.assertEqual(r["read"], "DOWN")
+        self.assertNotEqual(r["bias"], "DOWN")
+
+    def test_range_is_boundaries_each_touched_twice_with_no_dominant_sequence(self):
+        # highs at ~111, lows at ~100, three visits each — two lines, rotation.
+        # The extra leg at the end gives the last low its right-hand wing.
+        r = cr.read_window(_zigzag([100, 110, 101, 111, 100, 110, 101, 110]), Decimal("2"))
+        self.assertEqual(r["read"], "RANGE")
+        self.assertGreaterEqual(max(l["touches"] for l in r["resistance"]), 2)
+        self.assertGreaterEqual(max(l["touches"] for l in r["support"]), 2)
+
+    def test_small_swings_inside_a_big_move_do_not_count_as_structure(self):
+        """The house rule from swings.py: a pivot is a LOCAL swing only if the
+        reversal to the next opposite pivot is at least LOCAL_ATR_MULT x ATR.
+        Without it, a 1H retracement full of one-ATR wiggles out-votes the
+        five-day advance it sits inside (ARB, first pilot)."""
+        big = [100, 130, 110, 140, 120, 150]
+        wiggles = [128, 126, 128, 126, 128, 126, 128]   # < 0.75 ATR at atr=4
+        r = cr.read_window(_zigzag(big + wiggles), Decimal("4"))
+        self.assertEqual(r["read"], "UP")
+
     def test_too_few_pivots_is_unknown_not_a_guess(self):
         r = cr.read_window(_zigzag([100, 110]), Decimal("2"))
         self.assertEqual(r["read"], "UNKNOWN")

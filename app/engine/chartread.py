@@ -78,7 +78,19 @@ from . import store
 from .swings import compute_atr
 from .zones import ZONE_ATR
 
-CHARTREAD_VERSION = "chartread-v0.2-draft"
+CHARTREAD_VERSION = "chartread-v0.3-draft"
+# v0.3: CLASSIFY THE WINDOW, NOT THE LAST LEG. v0.2 read the last two highs
+# and the last two lows, which is a statement about the final swing — ARB
+# rising for five days then retracing read DOWN; BNB collapsing then bouncing
+# read UP. The first golden pilot (10 windows, 2026-09-04) missed 5 of 10 and
+# every miss was that. The regime is now the DOMINANT sequence over every
+# pivot in the window plus net displacement (`regime`), and the last-leg
+# read survives as its own field (`bias`) — "RANGE with a bearish bias" is
+# two facts, and one field cannot hold both. RANGE is boundaries that were
+# each touched at least twice with little net progress, which is what a
+# trader means by it; v0.2's "last two highs equal" fired on 7 of 811.
+# Rules written from the operator's own definition BEFORE re-scoring, not
+# fitted to the ten labels; the ten are re-scored, and the next ten decide.
 # v0.2: RANGE is equal highs over equal lows within LEVEL_ATR — v0.1 shipped
 # with twice that tolerance in the code and "a level's width" in the prose,
 # and its first draft asked every pivot in the window to sit in one band,
@@ -94,6 +106,15 @@ FRACTAL_WING = 3
 LEVEL_ATR = ZONE_ATR
 #: Fewer visible pivots than this and the window cannot be read.
 MIN_PIVOTS = 4
+#: A trend needs this share of the window's swing steps going its way
+#: (HH and HL count for UP; LH and LL for DOWN) AND net displacement on the
+#: same side. 0.6: three steps of five. A retracement at the end is one or
+#: two steps against four or five with, and stays a trend.
+DOMINANCE = Decimal("0.6")
+#: RANGE: a resistance and a support each touched at least this many times,
+#: once neither side's sequence dominates. No net-move clause: a range can end
+#: at either of its boundaries, and that is still a range (BTC, first pilot).
+RANGE_MIN_TOUCHES = 2
 Q2 = Decimal("0.01")
 Q4 = Decimal("0.0001")
 
@@ -160,9 +181,38 @@ def cluster_levels(prices, atr):
     return levels
 
 
+def local_swings(pv, atr):
+    """Keep the pivots whose reversal to the next opposite pivot is at least
+    swings.LOCAL_ATR_MULT x ATR — the house definition of a LOCAL swing,
+    reused rather than re-numbered. Small wiggles inside a big leg are not
+    structure; counted as steps they out-vote the leg they sit in. Re-merged
+    so the result still alternates."""
+    from .swings import LOCAL_ATR_MULT
+    if not atr or len(pv) < 2:
+        return pv
+    floor = LOCAL_ATR_MULT * atr
+    kept = []
+    for a, b in zip(pv, pv[1:]):
+        if abs(b["price"] - a["price"]) >= floor:
+            kept.append(a)
+    if pv and (not kept or kept[-1] is not pv[-1]):
+        if len(pv) >= 2 and abs(pv[-1]["price"] - pv[-2]["price"]) >= floor:
+            kept.append(pv[-1])
+    merged = []
+    for p in kept:
+        if merged and merged[-1]["type"] == p["type"]:
+            keep = ((p["price"] > merged[-1]["price"]) if p["type"] == "HIGH"
+                    else (p["price"] < merged[-1]["price"]))
+            if keep:
+                merged[-1] = p
+            continue
+        merged.append(p)
+    return merged
+
+
 def read_window(candles, atr_at_end) -> dict:
     """The read of ONE window of closed bars. Pure."""
-    pv = pivots(candles)
+    pv = local_swings(pivots(candles), atr_at_end)
     closes = [_d(c["close"]) for c in candles]
     er = efficiency(closes)
     highs = [p for p in pv if p["type"] == "HIGH"]
@@ -176,35 +226,45 @@ def read_window(candles, atr_at_end) -> dict:
     if len(pv) < MIN_PIVOTS or len(highs) < 2 or len(lows) < 2:
         return out
     atr = atr_at_end
-    out["resistance"] = [{"price": str(l["price"]), "touches": l["touches"]}
-                         for l in cluster_levels([p["price"] for p in highs], atr)]
-    out["support"] = [{"price": str(l["price"]), "touches": l["touches"]}
-                      for l in cluster_levels([p["price"] for p in lows], atr)]
+    res = cluster_levels([p["price"] for p in highs], atr)
+    sup = cluster_levels([p["price"] for p in lows], atr)
+    out["resistance"] = [{"price": str(l["price"]), "touches": l["touches"]} for l in res]
+    out["support"] = [{"price": str(l["price"]), "touches": l["touches"]} for l in sup]
+
+    # THE WINDOW'S SKELETON: every step between consecutive highs and between
+    # consecutive lows, counted for the side it favours. v0.2 read only the
+    # last step of each, which is the last leg, not the window.
+    up_steps = (sum(1 for a, b in zip(highs, highs[1:]) if b["price"] > a["price"])
+                + sum(1 for a, b in zip(lows, lows[1:]) if b["price"] > a["price"]))
+    down_steps = (sum(1 for a, b in zip(highs, highs[1:]) if b["price"] < a["price"])
+                  + sum(1 for a, b in zip(lows, lows[1:]) if b["price"] < a["price"]))
+    steps = up_steps + down_steps
+    net = closes[-1] - closes[0]
+    height = _d(out["window_high"]) - _d(out["window_low"])
+    out["up_steps"], out["down_steps"] = up_steps, down_steps
+    out["net_atr"] = str((net / atr).quantize(Q2)) if atr else None
+    out["net_fraction"] = str((abs(net) / height).quantize(Q4)) if height else None
+
+    if steps and Decimal(up_steps) / steps >= DOMINANCE and net > 0:
+        out["read"] = "UP"
+    elif steps and Decimal(down_steps) / steps >= DOMINANCE and net < 0:
+        out["read"] = "DOWN"
+    elif (any(l["touches"] >= RANGE_MIN_TOUCHES for l in res)
+          and any(l["touches"] >= RANGE_MIN_TOUCHES for l in sup)):
+        # RANGE is boundaries that were each visited at least twice, once no
+        # side dominates. Levels share one tolerance with cluster_levels
+        # (LEVEL_ATR) — one definition of "the same".
+        out["read"] = "RANGE"
+    else:
+        out["read"] = "CHOP"
+
+    # THE LAST LEG, kept as its own fact. The window can be UP while the last
+    # swing is down — that is a pullback, and a playbook wants to know both.
     h1, h2 = highs[-2]["price"], highs[-1]["price"]
     l1, l2 = lows[-2]["price"], lows[-1]["price"]
-    if h2 > h1 and l2 > l1:
-        out["read"] = "UP"
-    elif h2 < h1 and l2 < l1:
-        out["read"] = "DOWN"
-    else:
-        # RANGE is two lines you could draw through the RECENT pivots: the
-        # last two highs within a level's width of each other and the last
-        # two lows likewise — equal highs over equal lows. The first draft
-        # asked every pivot in the window to sit inside one band, which no
-        # 120-bar window ever satisfied (RANGE fired 0 times in 811 reads on
-        # the first grade, and every sideways window fell into CHOP). A
-        # definition that cannot fire is not a definition.
-        # ONE definition of "the same level": the tolerance cluster_levels
-        # uses, LEVEL_ATR. The first commit widened this to twice that and
-        # the prose still said "a level's width" — two numbers for one idea.
-        band = LEVEL_ATR * atr if atr else Decimal(0)
-        hi_band = abs(h2 - h1) <= band
-        lo_band = abs(l2 - l1) <= band
-        out["read"] = "RANGE" if (hi_band and lo_band) else "CHOP"
-    out["hh"] = h2 > h1
-    out["hl"] = l2 > l1
-    out["lh"] = h2 < h1
-    out["ll"] = l2 < l1
+    out["bias"] = ("UP" if (h2 > h1 and l2 > l1) else
+                   "DOWN" if (h2 < h1 and l2 < l1) else "NEUTRAL")
+    out["hh"], out["hl"], out["lh"], out["ll"] = h2 > h1, l2 > l1, h2 < h1, l2 < l1
     return out
 
 
@@ -317,6 +377,7 @@ def annotate(con, candidates) -> int:
         if ctx["read"] == "UNKNOWN":
             continue
         p["chart_read"] = ctx["read"]
+        p["chart_bias"] = ctx["own"].get("bias")
         p["chart_htf_read"] = ctx["htf_read"]
         p["chart_call"] = ctx["call"]
         p["chart_efficiency"] = ctx["efficiency"]
@@ -404,7 +465,8 @@ def grade(con, *, setup_version=None, exec_version=None) -> dict:
                            "disagrees_on_direction")}
     return {"version": CHARTREAD_VERSION, "derived_at_analysis_time": True,
             "constants": {"WINDOW_BARS": WINDOW_BARS, "FRACTAL_WING": FRACTAL_WING,
-                          "LEVEL_ATR": str(LEVEL_ATR), "MIN_PIVOTS": MIN_PIVOTS},
+                          "LEVEL_ATR": str(LEVEL_ATR), "MIN_PIVOTS": MIN_PIVOTS,
+                          "DOMINANCE": str(DOMINANCE), "RANGE_MIN_TOUCHES": RANGE_MIN_TOUCHES},
             "candidates": len(candidates), "annotated": n, "closed": len(closed),
             "by_call": by_call, "by_read": by_read, "regime_vs_chart": agree,
             "splits": splits, "warnings": warnings}
@@ -436,8 +498,10 @@ def golden_score(con, labels: list[dict]) -> dict:
         hit = got["read"] == lab["expected"]
         hits += hit
         rows.append({**{k: lab.get(k) for k in ("symbol", "tf", "as_of", "expected", "note")},
-                     "got": got["read"], "efficiency": got["efficiency"],
-                     "n_pivots": got["n_pivots"], "hit": hit})
+                     "got": got["read"], "bias": got.get("bias"),
+                     "efficiency": got["efficiency"], "n_pivots": got["n_pivots"],
+                     "up_steps": got.get("up_steps"), "down_steps": got.get("down_steps"),
+                     "net_atr": got.get("net_atr"), "hit": hit})
     return {"version": CHARTREAD_VERSION, "n": len(rows), "hits": hits,
             "agreement": round(hits / len(rows), 3) if rows else None, "rows": rows}
 
@@ -500,8 +564,9 @@ def main(argv=None):
             for r in rep["rows"]:
                 mark = "ok  " if r["hit"] else "MISS"
                 print(f"  {mark} {r['symbol']:10s} {r['tf']:3s} {r['as_of']}  you: {r['expected']:5s}"
-                      f"  reader: {r['got']:5s}  er={r['efficiency']}  pivots={r['n_pivots']}"
-                      + (f"  — {r['note']}" if r.get("note") else ""))
+                      f"  reader: {r['got']:5s} (bias {r['bias']})  steps up/down={r['up_steps']}/{r['down_steps']}"
+                      f"  net={r['net_atr']} ATR  er={r['efficiency']}"
+                      + (f"  — {r['note'][:90]}" if r.get("note") else ""))
             return 0
         rep = grade(con)
     finally:
