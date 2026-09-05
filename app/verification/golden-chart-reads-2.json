@@ -1,0 +1,98 @@
+{
+ "description": "Golden chart reads, pilot 2 (constitution §27) — BLIND: judged on the exact store windows in the labelling page, reader's call hidden. Score with: python -m engine.chartread --golden verification/golden-chart-reads-2.json",
+ "version": "golden-chart-reads-pilot-2",
+ "labelled_by": null,
+ "labelled_on": null,
+ "labels": [
+  {
+   "symbol": "BTCUSDT",
+   "tf": "1W",
+   "as_of": "2026-03-16T00:00Z",
+   "window_start": "2024-09-16T00:00Z",
+   "window_bars": 78,
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "ETHUSDT",
+   "tf": "1D",
+   "as_of": "2025-10-23T00:00Z",
+   "window_start": "2025-06-25T00:00Z",
+   "window_bars": 120,
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "BTCUSDT",
+   "tf": "15m",
+   "as_of": "2026-07-27T09:15Z",
+   "window_start": "2026-07-26T03:15Z",
+   "window_bars": 120,
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "ETHUSDT",
+   "tf": "4H",
+   "as_of": "2026-07-17T00:00Z",
+   "window_start": "2026-06-27T00:00Z",
+   "window_bars": 120,
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_PEPEUSD",
+   "tf": "4H",
+   "as_of": "2026-05-30T20:00Z",
+   "window_start": "2026-05-10T20:00Z",
+   "window_bars": 120,
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "GWEI-USD",
+   "tf": "4H",
+   "as_of": "2026-06-23T12:00Z",
+   "window_start": "2026-06-03T12:00Z",
+   "window_bars": 120,
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_AAVEUSD",
+   "tf": "1D",
+   "as_of": "2024-05-14T00:00Z",
+   "window_start": "2024-01-15T00:00Z",
+   "window_bars": 120,
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "PF_POLUSD",
+   "tf": "1D",
+   "as_of": "2025-01-28T00:00Z",
+   "window_start": "2024-09-30T00:00Z",
+   "window_bars": 120,
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "NEARUSDT",
+   "tf": "1D",
+   "as_of": "2023-05-30T00:00Z",
+   "window_start": "2023-01-30T00:00Z",
+   "window_bars": 120,
+   "expected": null,
+   "note": ""
+  },
+  {
+   "symbol": "u1000SHIBUSDT",
+   "tf": "1H",
+   "as_of": "2026-07-02T14:00Z",
+   "window_start": "2026-06-27T14:00Z",
+   "window_bars": 120,
+   "expected": null,
+   "note": ""
+  }
+ ]
+}
