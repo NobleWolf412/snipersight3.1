@@ -3302,9 +3302,30 @@ weighed in. Name the facts you used.`;
        comment names the ancestor: "$193 / $195 / 194.68 / $194". */
     $('equityRet').textContent = ruled
       ? '  ' + (up ? '+' : '') + pct(p.return_pct) : '';
+    /* THE REBUILD, where the number is read. `p.rebuild` is the server's one
+       reading of engine_runs: how many market/timeframe pairs the scanner has
+       re-derived under the current setup generation against the set it
+       scans. While that is short of complete, the equity and return are
+       replayed off a book that is still filling in and move with no trade
+       closing — which is what the operator saw as a slow loss on 2026-09-05.
+       Said here, in the chip's title and on Results, and nowhere re-derived. */
+    const rb = p.rebuild || {};
+    const rebuilding = !!rb.active;
     $('equityChip').title = `account equity (paper) — start ${money(p.start_equity)}, ` +
-      `open risk ${money(p.open_risk_usd || 0)}`;
+      `open risk ${money(p.open_risk_usd || 0)}` +
+      (rebuilding ? ` — PROVISIONAL: the book is being rebuilt under ${rb.version} ` +
+                    `(${rb.done} of ${rb.total} market/timeframes done)` : '');
     $('rEquity').textContent = money(p.equity);
+    const note = $('rebuildNote');
+    if(note){
+      note.hidden = !rebuilding;
+      if(rebuilding){
+        note.textContent = `Rebuilding the record under ${rb.version}: ${rb.done} of ${rb.total} ` +
+          `market/timeframes re-derived. Equity and return are provisional until this ` +
+          `finishes — they are replayed from the simulated exits every scan and move ` +
+          `with no trade closing.`;
+      }
+    }
 
     /* THE SAME FIELDS THE TOP BAR READS, through the SAME helpers. Equity is
        rendered in three places now and `pct()` is why they agree — this file
@@ -3315,6 +3336,7 @@ weighed in. Name the facts you used.`;
     if(balSub){
       balSub.textContent = ruled
         ? `${(up ? '+' : '') + pct(p.return_pct)} since ${money(p.start_equity)}`
+          + (rebuilding ? ' · provisional, record rebuilding' : '')
         : `started at ${money(p.start_equity)} · no trades ruled on yet`;
       balSub.classList.toggle('is-up', ruled && up);
       balSub.classList.toggle('is-down', ruled && !up);

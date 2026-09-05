@@ -252,6 +252,14 @@
         </div>
       </div>
 
+      <div class="panel macro-brief" id="macroBrief" aria-label="Economic events">
+        <div class="panel-body">
+          <h2 class="t-section">Economic events</h2>
+          <p id="macroHeadline" role="status">Checking calendar…</p>
+          <details><summary>Sources &amp; dates</summary><div id="macroDetails"></div></details>
+        </div>
+      </div>
+
       <!-- YOUR trades — the operator's own book, which had no surface at all.
            `Arm` writes to /api/manual/book; Command, the risk budget, the
            journal and every figure on Results read /api/portfolio, which is the
@@ -906,6 +914,15 @@
         <div class="tile"><span class="t-label">Max <span class="term" data-t="drawdown">drawdown</span></span><span class="t-metric" id="rDD">—</span></div>
         <div class="tile"><span class="t-label"><span class="term" data-t="killSwitch">Halt</span> days</span><span class="t-metric" id="rHalt">—</span></div>
       </div>
+      <!-- THE REBUILD IS VISIBLE. A version bump makes the scanner re-derive
+           every setup and every simulated exit under the new label, over
+           several hours of scan cycles, and the account is REPLAYED from
+           those exits on every cycle — so the equity and return above move
+           with no trade closing until the rebuild completes. On 2026-09-05
+           that read as a slow loss to the operator, who had not been told a
+           rebuild was underway. Loud-fallback rule: a degraded reading must
+           say so where it is read. Hidden the moment the rebuild is done. -->
+      <div class="tk-warn" id="rebuildNote" role="status" hidden style="margin-bottom:var(--lg)"></div>
       <!-- THE SCOREBOARD. This surface asks "Is this actually working?" and
            could not answer it: equity and drawdown say what happened to the
            money, not whether the method works. Win rate, average R and the
@@ -1817,6 +1834,7 @@
 <script defer src="/static/weather.js?v=20"></script>
 <script defer src="/static/tracer.js?v=20"></script>
 <script defer src="/static/copilot.js?v=20"></script>
+<script defer src="/static/macro-calendar.js?v=20"></script>
 <script defer src="/static/wizard.js?v=20"></script>
 <script defer src="/static/edgeview.js?v=20"></script>
 <script defer src="/static/factor-evidence.js?v=20"></script>

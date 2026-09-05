@@ -1083,9 +1083,16 @@ def portfolio():
                 "decision": sized.get("decision")})
         journal.sort(key=lambda j: -j["ts"])
         eq = float(acct["final_equity"]) if acct else float(risk.START_EQUITY)
+        from engine import rebuild as _rebuild
         return {"baseline": baseline,
                 "start_equity": float(risk.START_EQUITY), "equity": round(eq, 2),
                 "return_pct": float(acct["return_pct"]) if acct else 0.0,
+                # Whether the numbers above are provisional: the scanner is
+                # re-deriving the record under a new setup generation and the
+                # account is replayed off a book still filling in. One reading
+                # of engine_runs; the UI says it beside the equity, nowhere
+                # re-derived (2026-09-05, a rebuild read as a slow loss).
+                "rebuild": _rebuild.status(con),
                 "max_drawdown_pct": acct.get("max_drawdown_pct") if acct else None,
                 "decisions": acct["decisions"] if acct else {},
                 "kill_switch_days": kills,
@@ -3783,6 +3790,7 @@ def copilot_health():
     debugging."""
     import shutil
     import subprocess
+    from engine.analyst_context import ANALYST_CONTEXT_VERSION
     exe = shutil.which("claude")
     if not exe:
         return {"ok": False, "error": "the `claude` CLI is not on PATH"}
@@ -3794,7 +3802,16 @@ def copilot_health():
     if r.returncode != 0:
         return {"ok": False,
                 "error": (r.stderr or r.stdout or "CLI failed").strip()[:200]}
-    return {"ok": True, "version": (r.stdout or "").strip()[:80]}
+    return {"ok": True, "version": (r.stdout or "").strip()[:80],
+            "evidence_version": ANALYST_CONTEXT_VERSION,
+            "evidence_refresh": "every_turn", "observer_only": True}
+
+
+@app.get("/api/macro-calendar")
+def macro_calendar_snapshot():
+    """Cached official calendar reads only; no store or trading writes."""
+    from engine import macro_calendar
+    return macro_calendar.current()
 
 
 @app.post("/api/copilot")
@@ -3803,8 +3820,8 @@ def copilot_chat(payload: dict):
 
     Runs on the operator's Claude subscription through the local `claude` CLI
     (print mode) — no API key, no per-token bill. The context pack is
-    assembled server-side from the fact store and sent once per conversation;
-    resumed turns ride the CLI session. Tools are disabled in the spawned
+    assembled server-side from the fact store on every turn, including resumes.
+    Tools are disabled in the spawned
     session; even if they were not, its working directory is an empty scratch
     folder.
     """
@@ -3817,30 +3834,25 @@ def copilot_chat(payload: dict):
     session_id = payload.get("session_id") or None
     model = str(payload.get("model") or copilot.DEFAULT_MODEL)
     context = str(payload.get("context") or "chart")
-    pack = None
-    if not session_id:
-        con = store.connect()
-        try:
-            if context == "diagnostics":
-                # the code-diagnosis pack: faults, gates, quality, log tail —
-                # no symbol needed, the machine itself is the subject
-                pack = copilot.build_diag_pack(con)
-            else:
-                if not symbol:
-                    raise HTTPException(400, "symbol required on the first turn")
-                if tf not in VALID_TFS:
-                    raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
-                # The engine position on this chart, if the operator is in
-                # one. Looked up HERE rather than inside build_pack, so
-                # engine/ never has to import server to know what the
-                # portfolio holds.
-                sid = payload.get("setup_id") or None
-                pos = next((p for p in portfolio().get("active_positions", [])
-                            if p["symbol"] == symbol and p["tf"] == tf
-                            and (not sid or p["setup_id"] == sid)), None)
-                pack = copilot.build_pack(con, symbol, tf, sid, position=pos)
-        finally:
-            con.close()
+    if context != "diagnostics":
+        if not symbol:
+            raise HTTPException(400, "symbol required on every chart turn")
+        if tf not in VALID_TFS:
+            raise HTTPException(400, f"tf must be one of {sorted(VALID_TFS)}")
+    con = store.connect()
+    try:
+        if context == "diagnostics":
+            pack = copilot.build_diag_pack(con)
+        else:
+            # Resolve the current engine position anew, even in a resumed chat.
+            sid = payload.get("setup_id") or None
+            pos = next((p for p in portfolio().get("active_positions", [])
+                        if p["symbol"] == symbol and p["tf"] == tf
+                        and (not sid or p["setup_id"] == sid)), None)
+            pack = copilot.build_pack(con, symbol, tf, sid, position=pos,
+                                      macro=macro_calendar_snapshot())
+    finally:
+        con.close()
     out = copilot.ask(message, pack=pack, session_id=session_id, model=model)
     if not out.get("ok"):
         raise HTTPException(502, out.get("error", "copilot failed"))
