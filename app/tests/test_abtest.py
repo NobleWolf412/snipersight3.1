@@ -26,6 +26,7 @@ APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP))
 
 from engine import abtest, costs, execsim, store, venues  # noqa: E402
+from engine import universe as abtest_universe  # noqa: E402
 from engine.universe import all_tracked_symbols   # noqa: E402
 
 
@@ -64,6 +65,80 @@ PROFILE = costs.CostProfile(version="test", venue="test", fee_tier="test",
 
 class SimulatorConventions(unittest.TestCase):
     """Rules that decide whether a backtest flatters itself."""
+
+    def trail_sim(self, spec, long=True, managed=False):
+        c = _bars(spec)
+        return abtest._simulate(c, [Decimal(10)] * len(c), 0, Decimal(100),
+                               Decimal(90 if long else 110), Decimal(200 if long else 0),
+                               long, "1D", PROFILE, managed, True,
+                               symbol="BTC-USD", tf_seconds=86400, trail=True)
+
+    def test_trail_cannot_turn_original_stop_out_into_a_win(self):
+        for long, bar in [(True, (100, 130, 80, 110)),
+                          (False, (100, 120, 70, 90))]:
+            for managed in (False, True):
+                with self.subTest(long=long, managed=managed):
+                    out = self.trail_sim([bar], long, managed)
+                    self.assertEqual(out["r"], Decimal(-1))
+                    self.assertEqual(out["outcome"], "SL")
+                    self.assertEqual(out["partials"], [])
+
+    def test_ratchet_does_not_execute_against_the_bar_that_established_it(self):
+        self.assertIsNone(self.trail_sim([(100, 130, 95, 128)]))
+        self.assertIsNone(self.trail_sim([(100, 105, 70, 72)], long=False))
+
+    def test_ratchet_applies_to_next_bar_on_both_sides(self):
+        out = self.trail_sim([(100, 130, 95, 128), (128, 129, 120, 122)])
+        self.assertEqual(out["r"], Decimal("2.5"))
+        self.assertEqual(out["bars_held"], 1)
+        out = self.trail_sim([(100, 105, 70, 72), (72, 80, 71, 78)], long=False)
+        self.assertEqual(out["r"], Decimal("2.5"))
+        self.assertEqual(out["bars_held"], 1)
+
+    def test_gap_through_new_stop_does_not_fill_at_unreachable_price(self):
+        out = self.trail_sim([(100, 130, 95, 110), (110, 115, 105, 112)])
+        self.assertEqual(out["r"], Decimal("1"))
+        out = self.trail_sim([(100, 105, 70, 90), (90, 95, 85, 88)], long=False)
+        self.assertEqual(out["r"], Decimal("1"))
+
+    def hold_sim(self, spec, long=True):
+        """The baseline cell: every managed switch off, so `_simulate` hands
+        the walk to execsim. `trail_sim` above cannot reach this path — it
+        hard-codes trail=True, which is a managed cell whatever `managed` is."""
+        c = _bars(spec)
+        return abtest._simulate(c, [Decimal(10)] * len(c), 0, Decimal(100),
+                                Decimal(90 if long else 110),
+                                Decimal(200 if long else 0),
+                                long, "1D", PROFILE, False, True,
+                                symbol="BTC-USD", tf_seconds=86400)
+
+    def test_hold_and_trail_settle_a_gapped_stop_the_same_way(self):
+        """The pair is only clean if BOTH cells price a gap identically.
+
+        v0.4 gave the managed cells a gapped-stop fill and left the hold cell
+        on execsim's unchanged walk, so these two returned -1.50 R and -1.00 R
+        for the same stop at the same level — a 0.50 R bias against trailing,
+        inside the delta whose whole purpose is to isolate the exit rule. The
+        trail cannot arm on either case below (MFE is 0.2 R against a 1.5 R
+        TRAIL_ACTIVATE_R), so any difference here is the convention alone."""
+        for long, spec in [(True, [(100, 102, 95, 98), (85, 88, 80, 82)]),
+                           (False, [(100, 105, 98, 102), (115, 120, 112, 118)])]:
+            with self.subTest(long=long):
+                hold, trail = self.hold_sim(spec, long), self.trail_sim(spec, long)
+                self.assertEqual(hold["outcome"], "SL")
+                self.assertEqual(trail["outcome"], "SL")
+                self.assertEqual(hold["r"], Decimal("-1.5"))
+                self.assertEqual(trail["r"] - hold["r"], Decimal(0),
+                                 "paired delta must be the exit rule, not the fill")
+
+    def test_research_version_names_the_new_execution_convention(self):
+        self.assertEqual(abtest.ABTEST_VERSION, "abtest-v0.6")
+        # The convention itself lives in the ENGINE now, so the harness tag
+        # alone no longer identifies it. abtest-v0.5 and exec-v0.26 moved
+        # together FOR THAT. v0.6 then moved alone, for calibration scoping,
+        # and the replay arithmetic did not change — so this pin records the
+        # pairing rather than demanding the two always move in step.
+        self.assertEqual(execsim.EXEC_VERSION, "exec-v0.26-draft")
 
     def test_same_bar_stop_and_target_counts_as_the_stop(self):
         """The metric this whole version moves is the same-bar stop-out rate.
@@ -207,11 +282,15 @@ class Summary(unittest.TestCase):
         self.assertEqual(s["warnings"], ["cross slippage NOT applied"])
 
     def test_standalone_report_surfaces_each_degraded_replay_cell(self):
+        # symbol/tf are not decoration: `report` scopes its cells to the pairs
+        # calibration certifies, and every real `run_variant` row carries them.
         result = {"filled": True, "r": Decimal("0.5"), "same_bar": False,
+                  "symbol": "TESTUSDT", "tf": "1H",
                   "bars_held": 2, "outcome": "TIMEOUT", "partials": [],
                   "warnings": ["cross slippage NOT applied"]}
         with patch.object(abtest, "calibrate",
-                          return_value={"trustworthy": False}), \
+                          return_value={"trustworthy": False}),              patch.object(abtest, "certified_pairs",
+                          return_value={("TESTUSDT", "1H")}), \
              patch.object(abtest, "run_variant", return_value=[result]):
             report = abtest.report(object(), symbols=["TESTUSDT"], tfs=("1H",))
         self.assertEqual(len(report["replay_degradations"]), len(abtest.CELLS))
@@ -229,6 +308,8 @@ class Summary(unittest.TestCase):
                   "bars_held": 2, "outcome": "TP", "partials": [],
                   "warnings": ["cross slippage NOT applied"]}
         with patch.object(abtest.store, "get_facts", return_value=[fact]), \
+             patch.object(abtest, "certified_pairs",
+                          return_value={("TESTUSDT", "1H")}), \
              patch.object(abtest, "run_variant", return_value=[replay]):
             cal = abtest.calibrate(object(), ["TESTUSDT"], ("1H",))
         self.assertEqual(cal["status"], "OK")
@@ -446,6 +527,237 @@ class CalibrationAgainstTheLiveStore(unittest.TestCase):
             f"one that drifted; if the entry model no longer crosses, say so "
             f"deliberately rather than letting this pin go quiet.")
 
+
+def _replay_row(sid, symbol, tf, r="0.5"):
+    """One `run_variant` result, shaped as the real replay shapes them."""
+    return {"setup_id": sid, "symbol": symbol, "tf": tf, "filled": True,
+            "r": Decimal(r), "same_bar": False, "bars_held": 2,
+            "outcome": "TP", "partials": [], "warnings": []}
+
+
+class CalibrationScopesToWhatTheRecordCanHold(unittest.TestCase):
+    """A version bump does not reach a market that has left the universe.
+
+    `execsim` only runs for pairs the scanner still visits, so an exec bump
+    re-derives the live scan set and strands everything else on the old
+    version. The replay walks any symbol with stored candles, so those
+    stranded markets arrived as `unmatched_replayed` — and calibration then
+    sat red forever, because no amount of waiting produces a settlement for a
+    market nobody is scanning. Measured 8 Sep 2026 at exec-v0.26-draft: 140
+    such trades across 47 pairs.
+
+    The danger in fixing it is a pin that no longer bites, so these pin BOTH
+    directions: set aside what the engine cannot be asked, keep failing on
+    what it can.
+    """
+
+    RECORDED_SID = "A|1H|PULLBACK|setup-v0.19-draft"
+    STRANDED_SID = "B|4H|REVERSAL|setup-v0.19-draft"
+
+    def _fact(self, sid):
+        return {"payload": json.dumps({
+            "setup_id": sid, "strategy": "PULLBACK", "outcome": "TP",
+            "r_multiple": "0.5"})}
+
+    def _calibrate(self, replayed, certified):
+        with (patch.object(abtest.store, "get_facts",
+                           return_value=[self._fact(self.RECORDED_SID)]),
+              patch.object(abtest, "certified_pairs", return_value=certified),
+              patch.object(abtest, "run_variant", return_value=replayed)):
+            return abtest.calibrate(object(), ["A"], ("1H",))
+
+    def _both(self):
+        return [_replay_row(self.RECORDED_SID, "A", "1H"),
+                _replay_row(self.STRANDED_SID, "B", "4H")]
+
+    def test_a_market_the_record_cannot_hold_is_set_aside_not_failed(self):
+        cal = self._calibrate(self._both(), {("A", "1H")})
+        self.assertEqual(cal["unmatched_replayed"], 0,
+                         "a market the simulator has not been asked about "
+                         "cannot be evidence that the simulator is wrong")
+        self.assertEqual(cal["not_resimulated"], 1)
+        self.assertEqual(cal["not_resimulated_pairs"], 1)
+        self.assertTrue(cal["trustworthy"])
+
+    def test_the_set_aside_is_counted_in_the_sentence_not_just_the_dict(self):
+        """`set_aside` keeps this contract for the scale-in adds and this must
+        keep it too: a calibration certifying less than the whole book has to
+        say how much less, or green quietly stops meaning what it did."""
+        cal = self._calibrate(self._both(), {("A", "1H")})
+        self.assertIn("NOT CERTIFIED", cal["detail"])
+        self.assertIn("1 trades across 1 pairs", cal["detail"])
+        clean = self._calibrate([_replay_row(self.RECORDED_SID, "A", "1H")],
+                                {("A", "1H")})
+        self.assertNotIn("NOT CERTIFIED", clean["detail"],
+                         "a book with nothing set aside must not imply it has")
+
+    def test_a_market_the_record_CAN_hold_still_fails_unmatched(self):
+        """The teeth. A pair the record can hold a settlement for owes an
+        answer for every trade in it, and silence there is still a defect."""
+        cal = self._calibrate(self._both(), {("A", "1H"), ("B", "4H")})
+        self.assertEqual(cal["unmatched_replayed"], 1)
+        self.assertEqual(cal["not_resimulated"], 0)
+        self.assertFalse(cal["trustworthy"])
+
+    def test_a_divergence_is_never_hidden_by_the_set_aside(self):
+        """Scoping removes trades from the comparison. It must never remove
+        one the record DOES hold and prices differently — that is the failure
+        the whole harness exists to report."""
+        replayed = [_replay_row(self.RECORDED_SID, "A", "1H", r="9.0"),
+                    _replay_row(self.STRANDED_SID, "B", "4H")]
+        cal = self._calibrate(replayed, {("A", "1H")})
+        self.assertEqual(cal["diverged_n"], 1)
+        self.assertFalse(cal["trustworthy"])
+        self.assertIn("set aside", cal["detail"],
+                      "the diverged sentence must still say how much of the "
+                      "book it declined to check")
+
+    def test_the_set_aside_does_not_inflate_the_drift_aggregates(self):
+        """`drift_n` divides the replay's count by the recorded book's. Left
+        in, a stranded trade reports drift that is pure population — the exact
+        confusion between a simulation defect and a coverage gap this harness
+        was rewritten to end."""
+        replayed = [_replay_row(self.RECORDED_SID, "A", "1H"),
+                    _replay_row(self.STRANDED_SID, "B", "4H", r="9.0")]
+        cal = self._calibrate(replayed, {("A", "1H")})
+        self.assertEqual(cal["replayed"]["n"], 1)
+        self.assertEqual(cal["drift_n"], 0.0)
+
+
+class CertifiedPairsReadsDurableAuthorities(unittest.TestCase):
+    """The real query, unpatched.
+
+    Every test above stubs `certified_pairs`, which proves calibration USES
+    the rule and nothing about whether the rule is right. `engine_runs` is the
+    obvious discriminator and separates the same markets exactly, but it is
+    telemetry under a retention sweep — a pair the engine ran and wrote
+    nothing for would read as a defect until the sweep, then be excused. Both
+    halves here outlive a sweep, and that property is what these pin.
+    """
+
+    def setUp(self):
+        self.con = sqlite3.connect(":memory:")
+        self.con.row_factory = sqlite3.Row
+        self.con.executescript(store.SCHEMA)
+
+    def tearDown(self):
+        self.con.close()
+
+    def _exec_fact(self, symbol, tf, version, sid=None):
+        store.insert_fact(self.con, symbol=symbol, tf=tf, kind="exec",
+                          market_time=0, confirmed_at=3600,
+                          algo_version=version,
+                          payload={"setup_id": sid or f"{symbol}|{tf}",
+                                   "outcome": "TP", "r_multiple": "0.5",
+                                   "strategy": "PULLBACK"})
+
+    def test_a_pair_with_a_fact_under_this_version_qualifies(self):
+        self._exec_fact("A", "1H", execsim.EXEC_VERSION)
+        with patch.object(abtest_universe, "scan_symbols", return_value=[]):
+            pairs = abtest.certified_pairs(self.con, ("1H", "4H"))
+        self.assertIn(("A", "1H"), pairs)
+
+    def test_a_fact_under_an_OLDER_version_does_not_qualify(self):
+        """The whole point. A market stranded on the previous version has
+        facts — just not ones this version could be compared against."""
+        self._exec_fact("B", "4H", "exec-v0.1-draft")
+        with patch.object(abtest_universe, "scan_symbols", return_value=[]):
+            pairs = abtest.certified_pairs(self.con, ("1H", "4H"))
+        self.assertNotIn(("B", "4H"), pairs)
+
+    def test_a_scanned_symbol_qualifies_on_every_timeframe_with_no_facts(self):
+        """The second half, and the one that keeps the teeth: the engine will
+        reach this market, so producing nothing for it is a defect, not an
+        excuse."""
+        with patch.object(abtest_universe, "scan_symbols", return_value=["C"]):
+            pairs = abtest.certified_pairs(self.con, ("1H", "4H"))
+        self.assertEqual({("C", "1H"), ("C", "4H")}, pairs)
+
+    def test_the_two_halves_meet_inside_calibrate_unstubbed(self):
+        """The union, with the real rule wired to the real join.
+
+        Every test in the class above stubs `certified_pairs`, which proves
+        calibration USES a rule and nothing about whether that rule is right;
+        the tests above this one call the rule and never reach `calibrate`.
+        This is the only one where both halves decide a verdict: a pair
+        certified by its own FACT, a pair certified by the SCAN SET, and a
+        pair certified by neither, joined in one pass.
+        """
+        self._exec_fact("A", "1H", execsim.EXEC_VERSION,
+                        sid="A|1H|PULLBACK|setup-v0.19-draft")
+        replayed = [
+            # matched: the record holds it
+            _replay_row("A|1H|PULLBACK|setup-v0.19-draft", "A", "1H"),
+            # scanned but unsettled — a real gap, and it must stay red
+            _replay_row("C|4H|REVERSAL|setup-v0.19-draft", "C", "4H"),
+            # stranded on an older version — set aside, not a failure
+            _replay_row("B|4H|REVERSAL|setup-v0.19-draft", "B", "4H"),
+        ]
+        with (patch.object(abtest_universe, "scan_symbols",
+                           return_value=["A", "C"]),
+              patch.object(abtest, "run_variant", return_value=replayed)):
+            cal = abtest.calibrate(self.con, ["A"], ("1H", "4H"))
+        self.assertEqual(cal["unmatched_replayed"], 1,
+                         "a SCANNED pair the engine has not settled is a gap "
+                         "the pin must still report")
+        self.assertEqual(cal["not_resimulated"], 1,
+                         "a pair stranded on an older version is set aside")
+        self.assertFalse(cal["trustworthy"])
+
+
+class TheGradeCoversTheBookTheCertificateCovers(unittest.TestCase):
+    """`by_strategy` replays and `calibrate` certifies. They must not describe
+    different books.
+
+    Before the calibration was scoped this could not be seen: the flag was
+    permanently False, so nothing published and the mismatch had no
+    consequence. The moment the flag could go green, every trade the
+    certificate declined to check would have ridden into a published verdict
+    under it. Fixing one surface without the other is what turns a stuck red
+    light into a confident wrong one.
+    """
+
+    def setUp(self):
+        self.con = sqlite3.connect(":memory:")
+        self.con.row_factory = sqlite3.Row
+        self.con.executescript(store.SCHEMA)
+
+    def tearDown(self):
+        self.con.close()
+
+    def test_an_uncertified_trade_is_graded_by_nobody_and_counted_once(self):
+        replayed = [_replay_row("A|1H|PULLBACK|setup-v0.19-draft", "A", "1H"),
+                    _replay_row("B|4H|PULLBACK|setup-v0.19-draft", "B", "4H")]
+        with (patch.object(abtest, "certified_pairs",
+                           return_value={("A", "1H")}),
+              patch.object(abtest, "recorded_entry_model",
+                           return_value="MAKER_THEN_MARKET"),
+              patch.object(abtest, "run_variant", return_value=replayed),
+              patch.object(abtest, "calibrate", return_value={})):
+            rep = abtest.by_strategy(self.con, ["A", "B"], ("1H", "4H"),
+                                     versions=("setup-v0.19-draft",))
+        graded = sum(v["n"] for v in rep["strategies"].values())
+        self.assertEqual(graded, 1, "the uncertified trade must not be graded")
+        self.assertEqual(rep["uncertified_trades"], 1)
+
+    def test_the_remainder_is_counted_the_same_way_calibration_counts_it(self):
+        """`uncertified` sat before the `filled` check and calibration's
+        counterpart after it, so an unfilled replay row on a stranded pair
+        made the two surfaces publish different sizes for one set-aside.
+        They read the same today only because this book has no such row."""
+        missed = _replay_row("B|4H|PULLBACK|setup-v0.19-draft", "B", "4H")
+        missed["filled"] = False
+        with (patch.object(abtest, "certified_pairs",
+                           return_value={("A", "1H")}),
+              patch.object(abtest, "recorded_entry_model",
+                           return_value="MAKER_THEN_MARKET"),
+              patch.object(abtest, "run_variant", return_value=[missed]),
+              patch.object(abtest, "calibrate", return_value={})):
+            rep = abtest.by_strategy(self.con, ["A", "B"], ("1H", "4H"),
+                                     versions=("setup-v0.19-draft",))
+        self.assertEqual(rep["uncertified_trades"], 0,
+                         "an unfilled row is not a trade either surface "
+                         "counts, and the two remainders must agree")
 
 if __name__ == "__main__":
     unittest.main()

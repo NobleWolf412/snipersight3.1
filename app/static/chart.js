@@ -1134,6 +1134,7 @@ window.SSChart = (() => {
     paintSymBtn();
     window.SSChartCtx = {symbol: sym, tf};
     if(preferredSetupId) window.SSChartCtx.setup_id = preferredSetupId;
+    dispatchEvent(new CustomEvent('ss:chart-context', {detail: {...window.SSChartCtx}}));
     // The live suffix is per-symbol and the ticker only corrects it every 5s —
     // long enough for BTC's tick to sit beside LINK's closed price, which is
     // the wrong-market-under-the-right-name failure with a $55k tell. Hide it
@@ -3411,6 +3412,7 @@ window.SSChart = (() => {
     paintSymBtn();
     window.SSChartCtx = {symbol: sym, tf};
     if(preferredSetupId) window.SSChartCtx.setup_id = preferredSetupId;
+    dispatchEvent(new CustomEvent('ss:chart-context', {detail: {...window.SSChartCtx}}));
     // Run before the router exposes Trade: new evidence must never sit beside
     // the previous market while onShow() awaits equity or candles.
     if(painted !== sym + '|' + tf || previousSetupId !== preferredSetupId ||

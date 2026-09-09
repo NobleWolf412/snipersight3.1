@@ -74,7 +74,7 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
   }
 
   function renderEvidence(){
-    evidence.innerHTML = selectionError ? window.SSOpportunityUI.missing(selectedSetupId)
+    document.getElementById('tradeSetupEvidence').innerHTML = selectionError ? window.SSOpportunityUI.missing(selectedSetupId)
       : window.SSOpportunityUI.tradeEvidence(row);
     renderState();
   }
@@ -123,6 +123,10 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
     if(event.key === 'Escape' && sheet){ closeSheet(); return; }
   });
   if(scrim) scrim.addEventListener('click', closeSheet);
+  document.querySelectorAll('[data-trade-close]').forEach(button => button.addEventListener('click', closeSheet));
+  addEventListener('ss:route-change', event => {
+    if(event.detail.route !== 'trade'){ sheet = null; syncSheet(); }
+  });
   addEventListener('hashchange', () => { if(location.hash !== '#trade'){ sheet = null; syncSheet(); } });
   mobile.addEventListener('change', () => { if(!mobile.matches) sheet = null; syncSheet(); });
 
@@ -164,6 +168,7 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
   refreshAuthority();
   setInterval(() => { if(location.hash === '#trade') refreshAuthority(); }, 15000);
   addEventListener('hashchange', refreshAuthority);
+  addEventListener('ss:route-change', refreshAuthority);
   addEventListener('ss:market-change', event => {
     if(event.detail && event.detail.market === 'crypto') refreshAuthority();
   });

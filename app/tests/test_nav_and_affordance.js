@@ -28,11 +28,11 @@ console.log('nav marks and affordance');
 const NAV = HTML.slice(HTML.indexOf('<nav class="nav"'), HTML.indexOf('</nav>'));
 
 ok('every destination carries a mark', () => {
-  /* Five routes plus Spotter. A count is the only thing that catches the
+  /* Five routes; Spotter is a header action. A count catches the
      failure where one anchor is edited and its neighbours are not. */
   const marks = NAV.match(/class="nav-ico"/g) || [];
-  assert.strictEqual(marks.length, 6,
-    `expected 6 marks in the rail, found ${marks.length} — a destination is ` +
+  assert.strictEqual(marks.length, 5,
+    `expected 5 marks in the rail, found ${marks.length} — a destination is ` +
     'wearing a blank cell, which renders as nothing rather than as an error');
 });
 
@@ -75,10 +75,12 @@ ok('the crosshair belongs to Setups alone', () => {
 ok('labels survive beside the marks', () => {
   /* An icon-only bar trades "what is this word" for "what is this picture".
      The mark carries recognition; the word carries the meaning. */
-  for (const word of ['Overview', 'Setups', 'Trade', 'Results', 'System', 'Spotter']) {
+  for (const word of ['Overview', 'Setups', 'Trade', 'Results', 'Settings']) {
     assert(new RegExp('<span>' + word + '</span>').test(NAV),
       `${word} lost its text label — the mark alone is a guessing game`);
   }
+  assert(!NAV.includes('id="btnSpotter"'));
+  assert(HTML.slice(0, HTML.indexOf('</header>')).includes('aria-label="Open Spotter assistant"'));
 });
 
 ok('the phone rail stacks the mark over the label', () => {

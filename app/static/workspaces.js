@@ -20,13 +20,19 @@
 
     const show = requested => {
       const view = allowed.has(requested) ? requested : fallback;
+      const from = document.activeElement;
+      const fromTabs = name === 'system' && tabs.contains(from);
       buttons.forEach(button => {
         const active = button.dataset.view === view;
         button.classList.toggle('on', active);
         button.setAttribute('aria-pressed', String(active));
       });
-      panels.forEach(panel => { panel.hidden = panel.dataset[`${name}View`] !== view; });
+      panels.forEach(panel => { panel.hidden = !panel.dataset[`${name}View`].split(' ').includes(view); });
       surface.dataset.activeView = view;
+      if(fromTabs && !from.getClientRects().length){
+        const target = buttons.find(button => button.dataset.view === (view === 'home' ? 'venues' : 'home'));
+        if(target) target.focus({preventScroll:true});
+      }
       save(name, view);
       requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
       dispatchEvent(new CustomEvent('ss:workspace-view', {detail: {name, view}}));
@@ -47,19 +53,20 @@
     });
     tabs.addEventListener('keydown', event => {
       if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
-      const current = buttons.indexOf(document.activeElement);
+      const visible = buttons.filter(button => button.getClientRects().length);
+      const current = visible.indexOf(document.activeElement);
       if(current < 0) return;
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
-        : (current + (event.key === 'ArrowLeft' ? -1 : 1) + buttons.length) % buttons.length;
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? visible.length - 1
+        : (current + (event.key === 'ArrowLeft' ? -1 : 1) + visible.length) % visible.length;
       event.preventDefault();
-      buttons[next].focus();
-      show(buttons[next].dataset.view);
+      visible[next].focus();
+      if(name !== 'system') show(visible[next].dataset.view);
     });
     show(getSaved(name, fallback));
   }
 
   bind('performance', 's-results', 'overview');
-  bind('system', 's-settings', 'automation');
+  bind('system', 's-settings', 'home');
 
   document.querySelectorAll('[data-system-target]').forEach(link => {
     link.addEventListener('click', () => {

@@ -28,7 +28,10 @@ from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.19-draft"
+SCALE_VERSION = "scale-v0.20-draft"
+# v0.20: cascade from exec-v0.26/risk-v0.27 (the corrected gapped-stop fill).
+# No rule change: an add only ever attaches to a position the simulator says
+# is open, and that set is a new generation.
 # v0.19: cascade from setup-v0.21/exec-v0.25/risk-v0.26 (the chart-eye read
 # upstream). No rule change.
 # v0.18: cascade from setup-v0.20/exec-v0.24/risk-v0.25 (the context reading

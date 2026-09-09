@@ -115,16 +115,26 @@ from .swings import compute_atr
 from .runlog import RunRecorder
 # Imported, never restated. If the house fill model changes, this book changes
 # with it — that is the point of the two books differing only in the plan.
-from .execsim import MAX_BARS, MAX_ENTRY_BARS, FUNDING_RATE_PER_SETTLEMENT
+from .execsim import (MAX_BARS, MAX_ENTRY_BARS, FUNDING_RATE_PER_SETTLEMENT,
+                      stop_gap_fill)
 
-MANUAL_VERSION = "manual-v0.4-draft"
+MANUAL_VERSION = "manual-v0.5-draft"
+# v0.5: a stop the bar GAPPED THROUGH now fills at that bar's open, not at the
+# stop price — `execsim.stop_gap_fill`, shared rather than restated, under
+# exec-v0.26-draft. This book was left on the old convention when the engine
+# moved, which is the drift the module docstring's FILL MODEL paragraph exists
+# to forbid: the operator's book would have booked -1.53 R where the engine
+# booked -1.83 R on the same fill, and "did my judgement beat the engine?"
+# would have been answered partly by the fill model. It matters MORE here than
+# there, because this walk trails: a trailed stop sits near price and gaps
+# through on 15.6% of settlements against 1.5% for an untouched one.
 #: Every version this book has EVER written, oldest first. Reads filter on this
 #: tuple; writes only ever carry `MANUAL_VERSION`. The distinction is the whole
 #: migration: a bump that moved both would strand every intent still open under
 #: the old tag, because `unresolved` — the resolver's work list — finds work by
 #: version and would simply stop seeing them. See the module docstring.
 MANUAL_VERSIONS = ("manual-v0.1-draft", "manual-v0.2-draft",
-                   "manual-v0.3-draft", MANUAL_VERSION)
+                   "manual-v0.3-draft", "manual-v0.4-draft", MANUAL_VERSION)
 Q2 = Decimal("0.01")
 
 #: Scale-out bounds. The cap is not a capacity limit — it is a statement about
@@ -1396,9 +1406,14 @@ def _exit_walk(p: dict, candles: list, start_i: int, fill_i: int,
         hit_tp = hi >= tp if long else lo <= tp
         touched = [r for r in pending if lo <= r["price"] <= hi]
         if hit_stop:                          # stop wins ties, house rule
+            # A bar that OPENED through the stop skipped it: the protective
+            # order fills at that open. execsim's rule, called not restated —
+            # never on the fill bar, whose open precedes the entry.
+            px = (stop_gap_fill(stop, Decimal(candles[j]["open"]), long)
+                  if j > fill_i else stop)
             return {"phase": "EXIT",
                     "outcome": "TRAIL_STOP" if trailed else "SL",
-                    "exit_price": stop, "exit_i": j, "fill_i": fill_i,
+                    "exit_price": px, "exit_i": j, "fill_i": fill_i,
                     "order_i": order_i, "partials": taken,
                     "ambiguous": bool(hit_tp or touched), "final_stop": stop}
         for r in touched:

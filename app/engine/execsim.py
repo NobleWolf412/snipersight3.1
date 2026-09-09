@@ -27,7 +27,21 @@ from .setups import SETUP_VERSION
 from .swings import compute_atr
 from .runlog import RunRecorder
 
-EXEC_VERSION = "exec-v0.25-draft"
+EXEC_VERSION = "exec-v0.26-draft"
+# v0.26: THE STOP NO LONGER FILLS AT A PRICE THE BAR NEVER TRADED. v0.14 fixed
+#   this for the ENTRY cross and the exit leg was never asked the same
+#   question. A bar that opens already through the stop now settles at that
+#   OPEN (`stop_gap_fill`); a resting TP limit gapped past still fills at its
+#   own price, because that order was in the book at that level. Measured on
+#   the v0.25 record before the bump (7 Sep 2026, 903 facts): 1 of 605
+#   stop-outs was booked outside
+#   its own bar — TRUMP-USD 15m REVERSAL, stop 1.4284474340 against an open of
+#   1.42 — restating -1.53 R to about -1.83 R, and the book by -0.297 R gross
+#   (-0.0003 R per fact). Cascades to risk / scale / cooldown, which read exec
+#   facts directly. It is a small book effect and it is not why the rule
+#   moved: the same flattered fill is worth up to +0.044 R per trade in the
+#   exit research (`abtest`), where trailed stops gap through 15.6% of the
+#   time against 1.5% for an untouched stop.
 # v0.25: cascade from setup-v0.21 (VALIDATED facts carry the chart-eye read
 # and an inert WINDOW_POLICY). No fill, cost or exit rule changed.
 # v0.24: cascade from setup-v0.20 (VALIDATED facts carry the context reading
@@ -210,6 +224,47 @@ def unresolved(con) -> dict[tuple[str, str], list[dict]]:
 # rather than read from the plan that recorded it); they happened to agree on
 # this book. "Agrees today" is not a convention.
 
+def stop_gap_fill(stop, bar_open, long):
+    """The price a protective stop actually gets, and the ONE definition.
+
+    A market stop cannot fill at a price the market skipped. When a bar opens
+    already through the stop, the fill is that OPEN, not the stop level. This
+    is `cross_fill`'s rule — "a simulated fill must be a price the bar
+    actually traded", the title of test_cross_fill_honesty.py — carried into
+    the exit leg, where it had never been applied.
+
+    Cost of applying it to the recorded book, measured before the bump on
+    7 Sep 2026 — the scanner keeps adding to this book, so the DENOMINATORS
+    move and the finding is what to read, not the totals: of 903 exec facts
+    and 605 stop-outs, exactly ONE was booked at a price its bar
+    never traded — TRUMP-USD 15m REVERSAL, stop 1.4284474340 against an exit
+    bar opening at 1.42, recorded -1.53 R and restating to about -1.83 R. The
+    whole-book effect is -0.297 R gross, -0.0003 R per fact. Small, but it is
+    a flattered fill, and this file's history is four instances of a flattered
+    fill costing more than it looked like it would.
+
+    ONLY the protective stop. A resting TP limit that the market gaps PAST
+    still fills at its own price — the order was in the book at that level and
+    would have been taken. The store has one of those too (PF_DASHUSD 1H, TP
+    30.097 on a bar topping at 29.964) and booking the limit there is correct
+    order modelling, not padding. So the invariant this file now guards is
+    one-sided: an exit may never be priced BETTER than its bar traded.
+
+    Found from the other end. `abtest-v0.4` grew this rule locally for its
+    MANAGED cells while its hold cell ran `walk_exit` unchanged, so a gapped
+    stop was booked half a risk unit worse for managed than for hold AT THE
+    IDENTICAL LEVEL — a bias inside the paired delta whose only job is to
+    isolate the exit rule. Trailed stops gap through far more often than
+    original ones (1,692 of 10,867 trail settlements, 15.6%, against 127 of
+    8,688 for hold, 1.5%), so the convention was worth more than the effect
+    being measured: trail-minus-hold reads +0.0208 R with the rule on one
+    side, +0.0232 R with it on both, and +0.0670 R with it off both — the
+    last of those being what "just make the two cells match" would have
+    produced, and nearly triple the honest figure.
+    """
+    return min(stop, bar_open) if long else max(stop, bar_open)
+
+
 def walk_exit(candles, i, sl, tp, long, max_bars=MAX_BARS):
     """Walk forward from the fill bar to a terminal outcome.
 
@@ -219,6 +274,10 @@ def walk_exit(candles, i, sl, tp, long, max_bars=MAX_BARS):
     happened. A bar that reaches BOTH levels settles as the STOP, flagged
     ambiguous — sub-bar sequencing needs LTF data we do not have, and
     flattering an ambiguous bar is how a backtest lies.
+
+    A stop the bar gapped through settles at that bar's OPEN, not the stop
+    price — see `stop_gap_fill`. Never on the fill bar itself: its open
+    precedes the entry and is not a post-entry gap.
     """
     for j in range(i, min(i + max_bars, len(candles))):
         c = candles[j]
@@ -226,8 +285,11 @@ def walk_exit(candles, i, sl, tp, long, max_bars=MAX_BARS):
         hit_sl = lo <= sl if long else hi >= sl
         hit_tp = hi >= tp if long else lo <= tp
         if hit_sl or hit_tp:
+            px = sl if hit_sl else tp
+            if hit_sl and j > i:
+                px = stop_gap_fill(sl, Decimal(c["open"]), long)
             return ("SL" if hit_sl else "TP",
-                    sl if hit_sl else tp, j, hit_sl and hit_tp)
+                    px, j, hit_sl and hit_tp)
     if i + max_bars <= len(candles):        # full window elapsed unresolved
         j = i + max_bars - 1
         return "TIMEOUT", Decimal(candles[j]["close"]), j, False

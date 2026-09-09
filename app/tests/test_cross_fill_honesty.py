@@ -153,6 +153,60 @@ class RecordedFillsLieWithinTheirBar(unittest.TestCase):
             f"they filled on — the simulator is inventing prices. "
             f"First few: {bad[:5]}"))
 
+    def test_no_exit_is_priced_better_than_its_own_bar_traded(self):
+        """The same question, asked of the EXIT leg — which nobody asked until
+        exec-v0.26, eleven versions after v0.14 asked it of the entry.
+
+        ONE-SIDED, and the asymmetry is the whole content of the test. A stop
+        is a MARKET order: if the bar gapped through it, the fill is the open
+        and booking the stop price claims a price the market skipped. A target
+        is a RESTING LIMIT: if the bar gapped past it, the order was sitting in
+        the book at that level and filling there is correct — so an exit priced
+        WORSE than the bar's range is not a defect and must not be flagged.
+
+        Under exec-v0.25 this found one: TRUMP-USD 15m REVERSAL, stop
+        1.4284474340, exit bar opening 1.42. Under v0.26 it finds none.
+        """
+        bad, checked = [], 0
+        # `confirmed_at` IS the exit timestamp — execsim records the exec fact
+        # at the moment the walk terminated. There is no exit_ts in the
+        # payload, and reading one would silently skip every row.
+        rows = self.con.execute(
+            "SELECT symbol, tf, payload, confirmed_at FROM facts "
+            "WHERE kind='exec' AND algo_version=?",
+            (execsim.EXEC_VERSION,)).fetchall()
+        if not rows:
+            self.skipTest(f"no {execsim.EXEC_VERSION} facts yet — "
+                          f"re-run the simulator to populate them")
+        for sym, tf, raw, xt in rows:
+            p = json.loads(raw)
+            xp = p.get("exit_price")
+            if xt is None or xp is None:
+                continue
+            bar = self.con.execute(
+                "SELECT high, low FROM candles WHERE symbol=? AND tf=? "
+                "AND open_ts=?", (sym, tf, int(xt) - TF_SECONDS[tf])).fetchone()
+            if not bar:
+                continue
+            checked += 1
+            px = Decimal(xp)
+            hi, lo = Decimal(bar[0]), Decimal(bar[1])
+            long = (p.get("direction") or "").upper() in ("LONG", "BUY")
+            # "Better" is direction-relative: a long exits by selling, so a
+            # price ABOVE the bar's high is the flattered one.
+            if (px > hi) if long else (px < lo):
+                bad.append((sym, tf, p.get("outcome"), str(px), f"{lo}-{hi}"))
+        # Without this, every row can fall out through `if not bar: continue`
+        # and the test passes having checked nothing — which is how a store
+        # invariant quietly stops being one. The timestamp arithmetic above
+        # (confirmed_at IS the exit time) is the part most likely to drift.
+        self.assertTrue(checked, "resolved no exit bars at all — the exit-bar "
+                                 "timestamp arithmetic no longer holds")
+        self.assertFalse(bad, (
+            f"{len(bad)} of {checked} recorded exits are priced BETTER than "
+            f"their own exit bar traded — the simulator is flattering the "
+            f"book. First few: {bad[:5]}"))
+
 
 if __name__ == "__main__":
     unittest.main()

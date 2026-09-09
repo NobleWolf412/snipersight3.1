@@ -12,6 +12,7 @@
     LIVE: 'ENABLE LIVE TRADING WITH REAL FUNDS'
   };
   let current = null;
+  controls.querySelectorAll('button').forEach(button => button.disabled = true);
 
   async function read(){
     if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
@@ -78,6 +79,14 @@
   });
   addEventListener('hashchange', () => {
     if(location.hash === '#system') read().catch(() => {});
+  });
+  // The app router uses replaceState; native hashchange does not fire for a tab click.
+  addEventListener('ss:route-change', event => {
+    if(event.detail.route === 'system') read().catch(err => {
+      current = null;
+      explanation.textContent = `Operating mode unavailable: ${err.message}`;
+      controls.querySelectorAll('button').forEach(button => button.disabled = true);
+    });
   });
   addEventListener('ss:market-change', event => {
     if(event.detail && event.detail.market === 'crypto') read().catch(() => {});

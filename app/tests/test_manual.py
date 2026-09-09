@@ -1985,5 +1985,58 @@ class FinestTimeframeCase(unittest.TestCase):
             manual.cancel_intent(self.con, intent["intent_id"])
 
 
+
+class GappedStopFillsAtTheOpen(unittest.TestCase):
+    """The operator's book settles a gapped stop the way the engine does.
+
+    manual-v0.5 / exec-v0.26. `_exit_walk` is the walk behind BOTH /api/manual
+    /arm and /api/positions/adopt, and it was left on the old convention when
+    execsim moved — so the same fill would have booked -1.53 R here and -1.83 R
+    in the graded book, and "did my judgement beat the engine?" would have been
+    answered partly by the fill model. The module docstring's FILL MODEL
+    paragraph forbids exactly that drift; this pins it.
+    """
+
+    @staticmethod
+    def _bars(spec):
+        return [{"open_ts": i * 3600, "open": Decimal(o), "high": Decimal(h),
+                 "low": Decimal(l), "close": Decimal(c)}
+                for i, (o, h, l, c) in enumerate(spec)]
+
+    def _plan(self, direction, entry, sl, tp):
+        return {"direction": direction, "entry": str(entry), "sl": str(sl),
+                "tp": str(tp), "partials": []}
+
+    def test_a_stop_the_bar_opened_through_fills_at_that_open(self):
+        for direction, spec, sl, tp, want in [
+                ("LONG", [(100, 102, 95, 98), (85, 88, 80, 82)], 90, 200, 85),
+                ("SHORT", [(100, 105, 98, 102), (115, 120, 112, 118)], 110, 1, 115)]:
+            with self.subTest(direction=direction):
+                out = manual._exit_walk(self._plan(direction, 100, sl, tp),
+                                        self._bars(spec), 0, 0, 0)
+                self.assertEqual(out["phase"], "EXIT")
+                self.assertEqual(out["exit_price"], Decimal(want),
+                                 "the gapped stop must fill at the bar's open")
+                self.assertEqual(out["final_stop"], Decimal(sl),
+                                 "final_stop is the LEVEL, not the fill")
+
+    def test_the_fill_bars_own_open_is_never_a_gap(self):
+        """Same guard as execsim's `j > i`: that open precedes the entry."""
+        out = manual._exit_walk(self._plan("LONG", 100, 90, 200),
+                                self._bars([(85, 102, 80, 88)] * 2), 0, 0, 0)
+        self.assertEqual(out["exit_price"], Decimal(90),
+                         "the fill bar's own open must not price the stop")
+
+    def test_a_gapped_target_still_fills_at_the_limit(self):
+        """One-sided, for the same reason it is in execsim: a resting limit
+        was in the book at its level."""
+        out = manual._exit_walk(self._plan("LONG", 100, 90, 120),
+                                self._bars([(100, 102, 98, 101),
+                                            (130, 140, 128, 135)]), 0, 0, 0)
+        self.assertEqual((out["outcome"], out["exit_price"]),
+                         ("TP", Decimal(120)))
+
+
+
 if __name__ == "__main__":
     unittest.main()

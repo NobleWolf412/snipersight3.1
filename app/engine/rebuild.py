@@ -19,6 +19,7 @@ recorded, and a fact count would call it unfinished forever.
 """
 import time
 
+from .execsim import EXEC_VERSION
 from .setups import SETUP_VERSION
 
 #: A pair the scanner has not visited in this long has left the scan set.
@@ -41,3 +42,61 @@ def status(con, *, engine: str = "setup", version: str = SETUP_VERSION,
     return {"active": bool(total) and done < total, "engine": engine, "version": version,
             "done": int(done), "total": int(total),
             "last_run_at": None if last is None else int(last)}
+
+
+#: The engines the ACCOUNT is replayed from, in the order a rebuild reaches
+#: them. `setups` decides which trades exist; `execsim` decides how they
+#: settled, and `risk` replays equity, the daily halt and the same-side
+#: governor off those settlements.
+#:
+#: These are RUNLOG labels, not module names, and the two differ: execsim
+#: records its runs as "execsim" while its facts and version are tagged "exec".
+#: Writing "exec" here is not an error anything raises — `status()` finds no
+#: runs, reports total=0, and therefore active=False, so the notice stays
+#: silent in exactly the case it exists for. Caught in testing on 2026-09-07;
+#: `test_rebuild_status.py` now pins every label against engine_runs.
+ACCOUNT_ENGINES = (("setup", lambda: SETUP_VERSION),
+                   ("execsim", lambda: EXEC_VERSION))
+
+
+def account_status(con, *, window_s: int = SCAN_SET_WINDOW_S, now=None) -> dict:
+    """The one reading behind the provisional-equity notice.
+
+    `status()` defaults to the SETUP engine, and that default was the whole
+    notice until 2026-09-07: an exec-only version bump rebuilt 879 settlements
+    with the screen saying the record was complete. Same failure the module was
+    written for on 2026-09-05, one engine over — which is the argument for
+    asking about every engine the account is replayed from rather than the one
+    that happened to bump first.
+
+    Returns the ACTIVE rebuild if there is one, preferring the engine furthest
+    upstream, because that is the one whose completion the others are waiting
+    on. With nothing rebuilding it returns the setup reading, so the shape the
+    UI reads is always present.
+
+    A SECOND WAY THE BOOK IS EMPTY, which `status()` alone reports as calm:
+    `total` counts only runs inside the scan-set window, so if the version is
+    bumped while the scanner is down — or it stays down past the window — then
+    total is 0, `active` is False, and the notice hides for precisely the state
+    it exists to announce. So an engine with NO runs under the current version
+    but runs under some earlier one is provisional too: its facts are a
+    generation the account cannot read yet, whether or not anything is
+    currently working on them.
+    """
+    readings = []
+    for engine, version_of in ACCOUNT_ENGINES:
+        version = version_of()
+        r = status(con, engine=engine, version=version,
+                   window_s=window_s, now=now)
+        if not r["active"] and r["done"] == 0:
+            had = con.execute(
+                "SELECT 1 FROM engine_runs WHERE engine=? AND algo_version<>? "
+                "LIMIT 1", (engine, version)).fetchone()
+            if had:
+                # `total` stays as measured — it is the honest count of the
+                # live scan set, which may genuinely be 0 while the scanner is
+                # down. The UI renders "0 of 0"; the sentence beside it is what
+                # carries the meaning, and the alternative is silence.
+                r = {**r, "active": True, "idle": True}
+        readings.append(r)
+    return next((r for r in readings if r["active"]), readings[0])

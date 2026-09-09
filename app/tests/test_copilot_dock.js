@@ -34,6 +34,7 @@ const FUNNEL = S('static/funnel.js');
 const SHELL = S('static/shell.js');
 const HTML = S('static/shell.html');
 const CSS = S('static/ss.css');
+const APP_CSS = S('static/app-mobile.css');
 const SERVER = S('server.py');
 const ENGINE = S('engine/copilot.py');
 
@@ -53,29 +54,30 @@ function ok(name, fn) {
 
 console.log('Spotter dock');
 
-ok('Spotter has one launcher in the sidebar, bound in one place', () => {
+ok('Spotter has one launcher in the header, bound in one place', () => {
   /* `[^>]*` rather than a literal `>`: the claim is that the launcher lives
      inside the rail, and an attribute added to the rail — aria-label, a data
      hook — is not that claim changing. Pinned literally, this failed the day
      the nav was given a label. */
-  assert(/<nav class="nav"[^>]*>[\s\S]*id="btnSpotter"/.test(HTML),
-    'no Spotter sidebar button');
+  assert(HTML.slice(0, HTML.indexOf('</header>')).includes('id="btnSpotter"'),
+    'no Spotter header button');
+  assert.strictEqual((HTML.match(/id="btnSpotter"/g) || []).length, 1);
   assert(!/id="btnCopilot"/.test(HTML), 'the old topbar Copilot button still exists');
   assert(/getElementById\('btnSpotter'\)/.test(CP), 'copilot.js does not own the Spotter button');
   assert(!/btnSpotter/.test(CHART),
     'chart.js still binds the button — the dock is an app feature, not a chart feature');
 });
 
-ok('Spotter survives a phone as the sixth bottom-rail control', () => {
-  const rules = CSS.replace(BLOCK_COMMENT, '');
+ok('Spotter survives a phone outside the five-tab bottom rail', () => {
+  const rules = (CSS + APP_CSS).replace(BLOCK_COMMENT, '');
   for (let at = rules.indexOf('#btnSpotter'); at !== -1;
        at = rules.indexOf('#btnSpotter', at + 1)) {
     const block = rules.slice(at, rules.indexOf('}', at));
     assert(!/display\s*:\s*none/.test(block),
       'a CSS rule hides #btnSpotter; phones need a non-keyboard way in');
   }
-  assert(/grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/.test(rules),
-    'the mobile rail does not reserve a sixth slot for Spotter');
+  assert(/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/.test(APP_CSS),
+    'the mobile rail must leave five generous destinations');
 });
 
 ok('a dock, not a modal', () => {

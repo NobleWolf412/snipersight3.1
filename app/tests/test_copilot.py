@@ -6,6 +6,8 @@ about edge state, and safe when a chart has nothing on it.
 """
 import tempfile
 import unittest
+from unittest.mock import patch, Mock
+from decimal import Decimal
 from pathlib import Path
 
 from engine import copilot, manual, store
@@ -36,7 +38,8 @@ class PackCase(unittest.TestCase):
         self.assertIn("phemex-perp", pack)
         self.assertIn("No engine setup exists", pack)
         self.assertIn("STRUCTURE DRAFT: none", pack)
-        self.assertIn("NO strategy currently clears zero", pack)
+        self.assertIn("EDGE STATE: NOT_SUPPLIED", pack)
+        self.assertNotIn("+0.15R", pack)
 
     def test_pack_carries_venue_economics_and_the_edge_caveat(self):
         pack = copilot.build_pack(self.con, "BTC-USD", "1D")
@@ -95,12 +98,69 @@ class PackCase(unittest.TestCase):
         self.assertIn("OPERATOR'S OPEN TRADE HERE", pack)
         self.assertIn("marked to last CLOSED bar", pack)
 
-    def test_preamble_forbids_the_indicators_this_system_does_not_compute(self):
-        """The single likeliest hallucination for a trading copilot is citing
-        RSI on a platform that has never computed one."""
+    def test_preamble_requires_dated_evidence_for_indicators_and_macro(self):
         self.assertIn("RSI", copilot.PREAMBLE)
-        self.assertIn("does NOT compute", copilot.PREAMBLE)
+        self.assertIn("an old event is not a current indicator reading", copilot.PREAMBLE)
+        self.assertIn("Macro NOT_CONNECTED means unknown", copilot.PREAMBLE)
         self.assertIn("observer", copilot.PREAMBLE.lower())
+
+    def test_position_mark_excludes_the_developing_bar(self):
+        self.load([(100, 101, 99, 100), (100, 900, 99, 800)])
+        self.assertEqual(copilot._last_close(self.con, "BTCUSDT", "1H", as_of=TF),
+                         Decimal("100"))
+
+    def test_recorded_entry_chart_is_distinct_from_current_observations(self):
+        from engine.setups import SETUP_VERSION
+        store.insert_fact(self.con, symbol="BTCUSDT", tf="1H", kind="setup",
+                          market_time=0, confirmed_at=TF, algo_version=SETUP_VERSION,
+                          payload={"setup_id": "S1", "state": "VALIDATED",
+                                   "chart": {"read": "DOWN", "action": "ALLOW"},
+                                   "phase": "TURN_DOWN"})
+        pack = copilot.build_pack(self.con, "BTCUSDT", "1H", "S1")
+        self.assertIn('"action": "ALLOW"', pack)
+        self.assertIn("RECORDED AT SETUP (not current chart readings)", pack)
+
+    def test_resumed_model_turn_receives_new_evidence_and_guards(self):
+        result = Mock(returncode=0, stdout='{"result":"answer","session_id":"s"}')
+        with patch.object(copilot, "CWD", Path(self.tmp.name)), \
+             patch.object(copilot, "_cli", return_value="stub-claude"), \
+             patch.object(copilot.subprocess, "run", return_value=result) as run:
+            out = copilot.ask("What changed?", pack="NEW FACTS", session_id="s")
+        self.assertTrue(out["ok"])
+        self.assertIn("NEW FACTS", run.call_args.kwargs["input"])
+        self.assertIn("--resume", run.call_args.args[0])
+        self.assertIn(copilot.PREAMBLE, run.call_args.args[0])
+        self.assertIn(",".join(copilot.DENY_TOOLS), run.call_args.args[0])
+        args = run.call_args.args[0]
+        self.assertEqual(args[args.index("--tools") + 1], "")
+        self.assertIn("--strict-mcp-config", args)
+        self.assertEqual(args[args.index("--mcp-config") + 1], '{"mcpServers":{}}')
+        self.assertIn("--no-chrome", args)
+
+    def test_resumed_route_rebuilds_pack_and_resolves_current_position(self):
+        import server
+        con = Mock()
+        with patch.object(server.store, "connect", return_value=con), \
+             patch.object(server, "portfolio", return_value={"active_positions": []}), \
+             patch.object(server, "macro_calendar_snapshot", return_value={"status": "PARTIAL"}), \
+             patch.object(copilot, "build_pack", return_value="FRESH") as build, \
+             patch.object(copilot, "ask", return_value={"ok": True}) as ask:
+            server.copilot_chat({"message": "Now?", "symbol": "BTCUSDT", "tf": "1H",
+                                 "session_id": "old"})
+        build.assert_called_once_with(con, "BTCUSDT", "1H", None, position=None,
+                                      macro={"status": "PARTIAL"})
+        self.assertEqual(ask.call_args.kwargs["pack"], "FRESH")
+        con.close.assert_called_once()
+
+    def test_health_exposes_loaded_evidence_contract_without_a_model_request(self):
+        import server
+        with patch("shutil.which", return_value="stub-claude"), \
+             patch("subprocess.run", return_value=Mock(returncode=0, stdout="test-cli")) as run:
+            health = server.copilot_health()
+        self.assertEqual(health["evidence_version"], "analyst-context-v0.2-draft")
+        self.assertEqual(health["evidence_refresh"], "every_turn")
+        self.assertTrue(health["observer_only"])
+        self.assertEqual(run.call_args.args[0], ["stub-claude", "--version"])
 
     def test_tool_denial_covers_the_dangerous_ones(self):
         for t in ("Bash", "Edit", "Write", "WebFetch"):

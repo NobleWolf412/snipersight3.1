@@ -16,7 +16,14 @@ this cohort's own trades.
 WHAT IS COMPARED, and why it is a clean pair. Both cells replay the SAME
 trend-v setups through `abtest.run_variant` under the entry model their facts
 recorded, so the fills are identical by determinism and every difference in R
-is the exit and nothing else:
+is the exit and nothing else. That property is not free, and it was briefly
+lost: abtest-v0.4 gave the managed cells a gapped-stop fill the hold cell did
+not have, putting a bias INTO the delta this pair exists to isolate. The fix
+was not to match the two cells but to move the rule into the ENGINE
+(`execsim.stop_gap_fill`, exec-v0.26-draft) — matching them by REMOVING the
+fill would have read +0.0670 R instead of +0.0232 R, because a trailed stop
+gaps through 15.6% of the time against 1.5% for an untouched one, and the
+subsidy lands almost entirely on the cell under audition:
 
     hold    managed=False                      — execsim's own walk, SL/TP
     trail   partials=False, trail=True,        — breakeven at BE_TRIGGER_R,
@@ -29,8 +36,13 @@ audition asks whether the REJECTED exit works HERE, not whether a re-tuned one
 would — a re-tuned trail graded on the sample that tuned it is driftfade's
 in-sample confession all over again. `_simulate` already isolates each
 managed-exit component behind its own switch ("a bundle verdict is not a
-component verdict"), so nothing in abtest changes and the recorded 2x2 cells
-are untouched.
+component verdict"). Reports name the replay version: abtest-v0.4 corrected
+same-bar ratchets and stop-gap fills, and v0.5 moved that fill into the engine
+under exec-v0.26-draft, so managed-exit measurements under either earlier tag
+must be rerun. This enables no trail. It DOES change recorded execsim facts,
+which is new for this module — the exit convention it audits turned out to be
+wrong in the engine as well, and correcting it there was the only way to keep
+the harness measuring a world the engine can actually execute.
 
 THE PRE-REGISTERED FLOOR, fixed before the first run: trail-only must BEAT the
 hold baseline on the same cohort (paired per-trade delta, its clustered
@@ -53,7 +65,7 @@ import json
 import sqlite3
 
 from . import store
-from .abtest import recorded_entry_model, run_variant
+from .abtest import ABTEST_VERSION, recorded_entry_model, run_variant
 from .importer import TF_SECONDS
 from .trend import TREND_VERSION
 # One cell shape across the continuation auditions: trendslice owns the
@@ -134,6 +146,7 @@ def grade(con, symbols=None, tfs=None, resamples: int = RESAMPLES) -> dict:
     return {
         "derived_at_analysis_time": True,    # no fact written, no gate armed
         "setup_version": TREND_VERSION,
+        "replay_version": ABTEST_VERSION,
         "entry_model": model,
         "cells": {"hold": hold_cell, "trail_only": trail_cell},
         "paired_delta": delta_cell,
@@ -173,7 +186,7 @@ def main(argv=None) -> int:
         print(json.dumps(rep, indent=2, default=str))
         return 0
     print(f"trail-only exit vs hold — {rep['setup_version']}, entry model "
-          f"{rep['entry_model']}")
+          f"{rep['entry_model']}, replay {rep['replay_version']}")
     for name, c in rep["cells"].items():
         _print_cell("  ", name, c)
     _print_cell("  ", "delta", rep["paired_delta"])

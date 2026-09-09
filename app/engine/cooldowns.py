@@ -33,7 +33,9 @@ caller supplies, so a replay reaches the same verdict as the live pass did.
 from . import store
 from .runlog import RunRecorder
 
-COOLDOWN_VERSION = "cooldown-v0.13-draft"
+COOLDOWN_VERSION = "cooldown-v0.14-draft"
+# v0.14: cascade from exec-v0.26 — a gapped stop now fills at the bar's open,
+# so the exits these are derived from are a new generation. No rule change.
 # v0.13: cascade from exec-v0.25 — derived purely from recorded exits, and
 # the exits are a new generation. No rule change.
 # v0.12: cascade from exec-v0.24 — cooldowns are derived purely from recorded

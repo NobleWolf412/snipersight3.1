@@ -181,10 +181,14 @@
     const stage = document.querySelector('.stage');
     if(stage) stage.scrollTop = 0;
     markStrips();
+    dispatchEvent(new CustomEvent('ss:route-change', {detail: {route}}));
   }
   document.querySelectorAll('.nav a').forEach(a =>
     a.addEventListener('click', e => {
-      e.preventDefault(); go(a.dataset.route || a.dataset.s);
+      e.preventDefault();
+      if(a.dataset.route === 'system') dispatchEvent(new CustomEvent('ss:workspace-request',
+        {detail: {name:'system', view:'home'}}));
+      go(a.dataset.route || a.dataset.s);
     }));
 
   /* ONE HANDLER FOR EVERY CONTROL THAT GOES SOMEWHERE.
@@ -325,6 +329,7 @@
     document.getElementById('frGo').addEventListener('click', () => {
       dismiss(); location.hash = 'opportunities';
     });
+    document.getElementById('frDismiss')?.addEventListener('click', dismiss);
     document.getElementById('frDiag').addEventListener('click', () => {
       dismiss();
       try{ sessionStorage.setItem('ss:system-view', 'automation'); }catch(e){ /* optional */ }
@@ -3323,7 +3328,9 @@ weighed in. Name the facts you used.`;
         note.textContent = `Rebuilding the record under ${rb.version}: ${rb.done} of ${rb.total} ` +
           `market/timeframes re-derived. Equity and return are provisional until this ` +
           `finishes — they are replayed from the simulated exits every scan and move ` +
-          `with no trade closing.`;
+          `with no trade closing. The daily-loss and same-side governors are replayed ` +
+          `from that same book, so they are counting an incomplete set of today's ` +
+          `losses and may not have tripped when they otherwise would.`;
       }
     }
 
@@ -4921,7 +4928,7 @@ weighed in. Name the facts you used.`;
       const seen = f.rejected_candidates + f.validated;
       if(seen) said.push(`${f.rejected_candidates} of ${seen} candidates never became a setup.`);
     }
-    el.textContent = said.join(' ');
+    el.textContent = t && t.diagnostic_status ? t.diagnostic_status.headline : said.join(' ');
 
     /* THE ENGINE BUILD TAGS ARE NOT ON SCREEN ANY MORE.
        "zone-v0.11 · setups-v0.9" is the answer to a question only whoever
@@ -4963,10 +4970,14 @@ weighed in. Name the facts you used.`;
     (h.blockers || []).forEach(x => L.push(pad('BLOCKER', x.code || x)));
 
     const faults = (t.engine_faults || []), gates = (t.data_gates || []);
-    L.push('', `FAILING NOW (${faults.length + gates.length})`);
+    if(window.SSDiagnosticStatus){
+      L.push('', 'DATED OPERATIONAL EVIDENCE', ...window.SSDiagnosticStatus.lines(t.diagnostic_status));
+      L.push('', 'RECOVERED / HISTORICAL', ...window.SSDiagnosticStatus.historyText(t.diagnostic_status));
+    }
+    L.push('', `UNRESOLVED RECORDS (${faults.length + gates.length})`);
     if(!faults.length && !gates.length) L.push('  nothing');
-    faults.forEach(x => L.push(`  ${x.symbol} ${x.tf} ${x.engine}: ${x.error}`));
-    gates.forEach(x => L.push(`  ${x.symbol} ${x.tf} ${x.gate}: ${x.detail}`));
+    faults.forEach(x => L.push(`  ${x.symbol} ${x.tf} ${x.engine}: ${x.error} · first ${new Date(x.since * 1000).toISOString()} · last ${new Date(x.last_seen * 1000).toISOString()}`));
+    gates.forEach(x => L.push(`  ${x.symbol} ${x.tf} ${x.gate}: ${x.detail} · first ${new Date(x.since * 1000).toISOString()} (not a last-observed timestamp)`));
 
     const f = t.funnel || {};
     if(Object.keys(f).length){

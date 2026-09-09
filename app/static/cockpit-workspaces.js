@@ -282,6 +282,7 @@ if(typeof window !== 'undefined') window.SSPerformanceScopeMapping = performance
      performance dimensions, edge statistics, credentials, and playbooks. */
   routeLoad();
   addEventListener('hashchange', routeLoad);
+  addEventListener('ss:route-change', routeLoad);
   setInterval(() => {
     const route = location.hash.slice(1);
     if(route === 'system') loadSystemWorkspace();

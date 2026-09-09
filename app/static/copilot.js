@@ -526,10 +526,11 @@
      own question (a Failing-now row knows its exact fault; a held trade knows
      its own levels), because that is the one nobody could retype. */
   const STARTERS = {
-    chart: ["Where does this setup stand right now?",
+    chart: ["Read this chart from the top down.",
+            "What upcoming events should I know about?",
+            "Which playbook fits—and why wait?",
             "What would prove this thesis wrong?",
-            "Is the stop in a sensible place?",
-            "What does this cost to hold?"],
+            "Is the stop in a sensible place?"],
     diagnostics: ["What should I fix first?",
                   "Why did nothing fire today?",
                   "Is the data healthy enough to trade on?"],

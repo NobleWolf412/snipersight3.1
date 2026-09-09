@@ -69,7 +69,7 @@ ok('the View by control only appears where it changes something', () => {
     'the View by dropdown is back in the always-on scope strip. It only ' +
     'drives the Strategies dimension tables — everywhere else it is a live ' +
     'control that changes nothing, which reads as a broken one');
-  assert(WORKSPACES.includes('panel.hidden = panel.dataset[`${name}View`] !== view'),
+  assert(WORKSPACES.includes("panel.hidden = !panel.dataset[`${name}View`].split(' ').includes(view)"),
     'the view switcher no longer hides panels by data-*-view, so the ' +
     'attribute above stopped scoping anything');
 });
@@ -214,12 +214,13 @@ ok('performance exposes four focused views and owns factor evidence', () => {
   }
 });
 
-ok('system separates automation, risk, venues, strategies, and diagnostics', () => {
-  for (const view of ['automation', 'risk', 'venues', 'strategies']) {
+ok('settings groups controls without removing legacy categories', () => {
+  for (const view of ['home', 'automation', 'risk', 'venues', 'assistant', 'help']) {
     assert(HTML.includes(`data-system-view="${view}"`), view + ' system panel is missing');
   }
   assert(HTML.includes('href="#system-diagnostics"'));
-  assert(WORKSPACES.includes("bind('system', 's-settings', 'automation')"));
+  assert(HTML.includes('data-system-view="automation strategies"'));
+  assert(WORKSPACES.includes("bind('system', 's-settings', 'home')"));
 });
 
 ok('focused views retain keyboard-sized controls and responsive trade order', () => {
@@ -259,7 +260,7 @@ ok('opportunity disclosure keeps economics and hides unavailable grading', () =>
   assert(OPPORTUNITIES.includes("event.key === 'Escape'"));
   assert(OPPORTUNITIES.includes("['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End']"));
   assert(HTML.includes('data-op-count="ACTIVE"'));
-  assert(HTML.includes('data-op-filter="ACTIVE" aria-pressed="true">Live'),
+  assert(HTML.includes('data-op-filter="ACTIVE" aria-pressed="true">Active'),
     'the active-order bucket must not imply it includes forming setups');
   /* Live still means CAPITAL IS COMMITTED and nothing else. Ready, Forming
      and Watching merged into one Watchlist bucket — the operator reported

@@ -127,8 +127,16 @@
     $('venueNote').textContent = data.venue === 'PHEMEX_USDT_PERPETUAL'
       ? 'Phemex · perpetual futures' : (data.venue || 'Venue unknown');
     $('riskChip').textContent = `Risk ${usd(a.total_risk_remaining_usd || 0)} free`;
+    /* The daily-halt figure is summed from the journal, which is replayed from
+       the simulated exits. While the record is rebuilding that book is still
+       filling in, so today's losses are under-counted and this reads HIGHER
+       than the room actually left. Said here rather than only on Results,
+       because this is the chip that states the governor's own number. */
     $('riskChip').title = `${a.risk_per_trade_pct || '—'}% per trade · ` +
-      `${usd(a.daily_loss_remaining_usd || 0)} left before the UTC daily halt`;
+      `${usd(a.daily_loss_remaining_usd || 0)} left before the UTC daily halt` +
+      (a.book_rebuilding ? ' — PROVISIONAL: the record is rebuilding, so today\'s'
+                         + ' losses are under-counted and this figure is too high'
+                         : '');
     $('exposureChip').textContent = `Positions ${a.open_positions || 0} · ` +
       `Orders ${a.working_orders || 0}`;
     const opportunities = data.opportunities || {};

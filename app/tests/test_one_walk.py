@@ -154,21 +154,77 @@ class WalkCase(unittest.TestCase):
     """The extracted walk, held to the conventions the inline code enforced."""
 
     def test_ambiguous_bar_is_the_stop(self):
-        c = [{"open_ts": i, "high": Decimal(130), "low": Decimal(70),
-              "close": Decimal(100)} for i in range(3)]
+        c = [{"open_ts": i, "open": Decimal(100), "high": Decimal(130),
+              "low": Decimal(70), "close": Decimal(100)} for i in range(3)]
         out = execsim.walk_exit(c, 0, Decimal(90), Decimal(120), True)
         self.assertEqual((out[0], out[3]), ("SL", True),
                          "a bar reaching both levels must settle as the stop")
 
     def test_open_is_none_never_zero(self):
-        c = [{"open_ts": i, "high": Decimal(101), "low": Decimal(99),
-              "close": Decimal(100)} for i in range(3)]
+        c = [{"open_ts": i, "open": Decimal(100), "high": Decimal(101),
+              "low": Decimal(99), "close": Decimal(100)} for i in range(3)]
         self.assertIsNone(execsim.walk_exit(c, 0, Decimal(90), Decimal(120), True),
                           "running out of data is OPEN, not a result")
 
+    def test_a_gapped_stop_fills_at_the_open_not_the_stop(self):
+        """exec-v0.26. Both directions, and the R difference is the point."""
+        c = [{"open_ts": 0, "open": Decimal(100), "high": Decimal(102),
+              "low": Decimal(95), "close": Decimal(98)},
+             {"open_ts": 1, "open": Decimal(85), "high": Decimal(88),
+              "low": Decimal(80), "close": Decimal(82)}]
+        out = execsim.walk_exit(c, 0, Decimal(90), Decimal(200), True)
+        self.assertEqual((out[0], out[1]), ("SL", Decimal(85)),
+                         "a long stop the bar opened through fills at the open")
+        c = [{"open_ts": 0, "open": Decimal(100), "high": Decimal(105),
+              "low": Decimal(98), "close": Decimal(102)},
+             {"open_ts": 1, "open": Decimal(115), "high": Decimal(120),
+              "low": Decimal(112), "close": Decimal(118)}]
+        out = execsim.walk_exit(c, 0, Decimal(110), Decimal(1), False)
+        self.assertEqual((out[0], out[1]), ("SL", Decimal(115)),
+                         "a short stop the bar opened through fills at the open")
+
+    def test_the_fill_bars_own_open_is_never_a_gap(self):
+        """The `j > i` guard, which nothing else in the suite distinguishes.
+
+        The fill bar's open PRECEDES the entry — the limit filled intrabar on
+        the touch — so using it as a post-entry gap price books an exit at a
+        price that came before the trade existed. That is the exact stale-open
+        class exec-v0.14 exists to prevent, one leg over. Relaxing the guard to
+        `j >= i` leaves the rest of the suite green, so it is pinned here."""
+        c = [{"open_ts": 0, "open": Decimal(85), "high": Decimal(102),
+              "low": Decimal(80), "close": Decimal(88)}] * 2
+        out = execsim.walk_exit(c, 0, Decimal(90), Decimal(200), True)
+        self.assertEqual(out[1], Decimal(90),
+                         "the fill bar's own open must not price the stop")
+
+    def test_a_gapped_target_still_fills_at_the_limit(self):
+        """The invariant is ONE-SIDED, and this is the half that says so.
+
+        A stop is a market order and cannot fill at a skipped price; a target
+        is a RESTING LIMIT that was already in the book at its level, so a bar
+        gapping past it fills there. Booking the open instead would be the
+        flattering reading, and it stays inside the bar's range — so the
+        store-level "never better than the bar traded" check cannot see it.
+        Without this test that change passes the whole suite."""
+        c = [{"open_ts": 0, "open": Decimal(100), "high": Decimal(102),
+              "low": Decimal(98), "close": Decimal(101)},
+             {"open_ts": 1, "open": Decimal(130), "high": Decimal(140),
+              "low": Decimal(128), "close": Decimal(135)}]
+        out = execsim.walk_exit(c, 0, Decimal(90), Decimal(120), True)
+        self.assertEqual((out[0], out[1]), ("TP", Decimal(120)),
+                         "a resting limit gapped past fills at the limit")
+        c = [{"open_ts": 0, "open": Decimal(100), "high": Decimal(102),
+              "low": Decimal(98), "close": Decimal(99)},
+             {"open_ts": 1, "open": Decimal(70), "high": Decimal(72),
+              "low": Decimal(60), "close": Decimal(65)}]
+        out = execsim.walk_exit(c, 0, Decimal(110), Decimal(80), False)
+        self.assertEqual((out[0], out[1]), ("TP", Decimal(80)),
+                         "the short mirror fills at the limit too")
+
     def test_timeout_exits_at_the_window_close(self):
-        c = [{"open_ts": i, "high": Decimal(101), "low": Decimal(99),
-              "close": Decimal("100.5")} for i in range(execsim.MAX_BARS + 5)]
+        c = [{"open_ts": i, "open": Decimal(100), "high": Decimal(101),
+              "low": Decimal(99), "close": Decimal("100.5")}
+             for i in range(execsim.MAX_BARS + 5)]
         out = execsim.walk_exit(c, 0, Decimal(90), Decimal(120), True)
         self.assertEqual(out[0], "TIMEOUT")
         self.assertEqual(out[2], execsim.MAX_BARS - 1)

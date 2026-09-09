@@ -180,6 +180,18 @@ def maybe_run(con, now: int, log=None, beat=None) -> dict | None:
             log.info(f"REGRADE {name}: n={g['n']} "
                      f"exp={g['expectancy_r']:+.4f}R {interval} "
                      f"clears_zero={g['clears_zero']}")
+        # A grade computed over less than the whole replay must SAY so where
+        # the grade is read. `abtest` sets aside markets the record cannot
+        # hold a settlement for; without this line the operator sees `n=` and
+        # has no way to know what was removed before it was counted.
+        dropped = rep.get("uncertified_trades") or 0
+        if dropped:
+            cal = rep.get("calibration") or {}
+            log.warning(
+                f"REGRADE scope: {dropped} replayed trades across "
+                f"{cal.get('not_resimulated_pairs', 0)} pairs excluded from "
+                f"every n above — no settlement recorded under the current "
+                f"execution version, so nothing certified them")
         if not rep.get("trustworthy"):
             log.warning("REGRADE untrustworthy: calibration failed or entry "
                         "models conflicted — numbers recorded, not believable")

@@ -2,14 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>SniperSight</title>
-<meta name="theme-color" content="#11120e">
+<meta name="theme-color" content="#0b0e11">
 <!-- The favicon was the 1080x410 wordmark: 349KB, drawn 26px tall, the single
      heaviest thing the page downloaded. icon-192 is 9KB. -->
 <link rel="icon" href="/static/assets/icon-192.png">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="stylesheet" href="/static/ss.css?v=20">
+<link rel="stylesheet" href="/static/app-mobile.css?v=1">
 </head>
 <!-- `unknown` until /api/portfolio answers. Shipping "idle" here painted
      the shell green on every launch — the accent that means "nothing of
@@ -24,13 +25,13 @@
      aria-labelledby="marketGateTitle" hidden>
   <div class="market-gate-card">
     <span class="market-eyebrow">Scout workspace</span>
-    <h1 id="marketGateTitle">Which market are you working?</h1>
+    <h1 id="marketGateTitle">Choose your market</h1>
     <p>Each workspace keeps its own scanner, evidence, positions and results.</p>
     <div class="market-choices">
       <button type="button" class="market-choice crypto" data-market-choice="crypto">
         <span class="market-choice-icon">24/7</span>
         <strong>Crypto</strong>
-        <small>The existing live scanner, setup radar and crypto paper book.</small>
+        <small>Round-the-clock scanning, chart setups and paper trading.</small>
       </button>
       <button type="button" class="market-choice stocks" data-market-choice="stocks">
         <span class="market-choice-icon">NYSE</span>
@@ -83,6 +84,9 @@
 
     <span class="t-mono" id="clock" aria-hidden="true">—</span>
     <div class="topbar-actions">
+      <button type="button" class="btn nav-spotter" id="btnSpotter" aria-label="Open Spotter assistant" title="Open Spotter assistant">
+        <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.6 12S6 6.2 12 6.2 21.4 12 21.4 12 18 17.8 12 17.8 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.6"/></svg><span>Spotter</span>
+      </button>
       <button class="btn btn-red" id="btnHalt" title="stop sizing new entries">HALT</button>
     </div>
   </header>
@@ -93,11 +97,7 @@
     <a href="#opportunities" data-route="opportunities" data-s="opportunities"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6.4"/><path d="M12 1.8v3.3M12 18.9v3.3M1.8 12h3.3M18.9 12h3.3"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg><span>Setups</span></a>
     <a href="#trade" data-route="trade" data-s="chart"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.6v3.2M8 17.2v3.2M16 5.6v2.4M16 16v2.4"/><rect x="5.6" y="6.8" width="4.8" height="10.4" rx="1.2"/><rect x="13.6" y="8" width="4.8" height="8" rx="1.2"/></svg><span>Trade</span></a>
     <a href="#performance" data-route="performance" data-s="results"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4.5v15h16"/><path d="M7.4 15.2l3.4-4.4 3 2.4 4.8-6"/><path d="M15.2 7.2h3.4v3.4"/></svg><span>Results</span></a>
-    <a href="#system" data-route="system" data-s="settings"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5h16M4 12h16M4 16.5h16"/><circle cx="15.5" cy="7.5" r="2.3" fill="var(--bg)"/><circle cx="9" cy="12" r="2.3" fill="var(--bg)"/><circle cx="14" cy="16.5" r="2.3" fill="var(--bg)"/></svg><span>System</span><span class="nav-count" id="nDiag"></span></a>
-    <button type="button" class="nav-spotter" id="btnSpotter"
-            title="open Spotter — observe the facts or capture a local session">
-      <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.6 12S6 6.2 12 6.2 21.4 12 21.4 12 18 17.8 12 17.8 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.6"/></svg><span>Spotter</span>
-    </button>
+    <a href="#system" data-route="system" data-s="settings"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5h16M4 12h16M4 16.5h16"/><circle cx="15.5" cy="7.5" r="2.3" fill="var(--bg)"/><circle cx="9" cy="12" r="2.3" fill="var(--bg)"/><circle cx="14" cy="16.5" r="2.3" fill="var(--bg)"/></svg><span>Settings</span><span class="nav-count" id="nDiag"></span></a>
     <!-- Compatibility hooks for old bookmarks and contract tests. Hidden from
          users: Settings/Diagnostics and Ledger now live inside their parent. -->
     <a hidden href="#settings" data-s="settings">Settings</a>
@@ -116,7 +116,7 @@
     <section class="surface on" id="s-command" tabindex="-1">
       <div class="surface-head">
         <h1 class="t-page">Overview</h1>
-        <p>What is the bot doing now?</p>
+        <p>Your account, activity and next step.</p>
       </div>
 
       <!-- THE ANSWER, ABOVE THE EVIDENCE.
@@ -145,12 +145,13 @@
            onboarding text on a trading app is the Learn tab all over again. -->
       <div class="panel firstrun" id="firstRun" hidden>
         <div class="panel-body">
-          <div class="fr-head"><span class="op-state">First deployment</span>
-            <h2 class="t-section">Paper training is safe</h2>
-            <p>Start with one setup. Shadow is the next record-only step and sends no orders.</p></div>
+          <div class="fr-head"><span class="op-state">Start here</span>
+            <h2 class="t-section">Welcome to SniperSight</h2>
+            <p>Follow a setup from chart to result. Paper trades use simulated funds; live trading stays locked.</p></div>
           <div class="fr-acts">
             <button class="btn btn-primary" id="frGo">Open Setups</button>
             <button class="btn" id="frDiag">See operating modes</button>
+            <button class="btn btn-quiet" id="frDismiss">Got it</button>
           </div>
         </div>
       </div>
@@ -167,7 +168,7 @@
         </div>
         <div class="panel-body">
           <p class="next-action-summary" id="nextActionSummary">Checking exposure, setups, and system health.</p>
-          <div class="next-action-bot"><span>Bot handling</span><strong id="nextActionBot">Reading...</strong></div>
+          <div class="next-action-bot"><span>What happens automatically</span><strong id="nextActionBot">Reading...</strong></div>
           <div class="next-action-controls">
             <button class="btn btn-primary" id="nextActionPrimary" disabled>Loading</button>
             <button class="btn" id="nextActionSecondary" disabled>Loading</button>
@@ -401,11 +402,11 @@
     <section class="surface" id="s-opportunities" tabindex="-1">
       <div class="surface-head">
         <h1 class="t-page">Setups</h1>
-        <p>What deserves attention?</p>
+        <p>Qualified opportunities and why they matter.</p>
       </div>
       <div class="op-toolbar panel" aria-label="Opportunity filters">
         <div class="seg" id="opFilters" role="group" aria-label="Filter setup state">
-          <button class="on" data-op-filter="ACTIVE" aria-pressed="true">Live <span data-op-count="ACTIVE">—</span></button>
+          <button class="on" data-op-filter="ACTIVE" aria-pressed="true">Active <span data-op-count="ACTIVE">—</span></button>
           <button data-op-filter="WATCHLIST" aria-pressed="false"
                   title="Nothing committed yet: setups that have validated, ones walking toward their entry, and markets still being watched. Each row says which.">Watchlist <span data-op-count="WATCHLIST">—</span></button>
           <button data-op-filter="HISTORY" aria-pressed="false">History <span data-op-count="HISTORY">—</span></button>
@@ -551,9 +552,13 @@
 
       <div class="chart-main">
         <aside class="panel trade-evidence" id="tradeEvidence" aria-label="Selected setup evidence">
+          <button class="btn sheet-close" type="button" data-trade-close>Close evidence</button>
+          <div id="chartInsight" class="chart-insight" role="region" aria-label="What the bot sees" aria-live="polite"></div>
+          <div id="tradeSetupEvidence">
           <div class="trade-evidence-empty"><span class="op-state">No setup selected</span>
-            <h2>Chart inspection</h2><p>Open a setup to see why the bot likes it, on the chart and in the ticket.</p>
+            <h2>Recorded setup</h2><p>Choose a setup to review its recorded decision and planned levels.</p>
             <a class="btn btn-primary" href="#opportunities">Open Setups</a></div>
+          </div>
         </aside>
         <div class="panel chart-pane" id="chartPane">
           <div id="chartBox"></div>
@@ -569,6 +574,7 @@
 
         <!-- order ticket: the only surface that turns a setup into a decision -->
         <aside class="panel ticket" id="ticket">
+          <button class="btn sheet-close" type="button" data-trade-close>Close order</button>
           <!-- The heading is the MODE. Managing a live position and planning
                a new one are different jobs with different consequences, and
                the only thing distinguishing them used to be a small chip and
@@ -576,7 +582,7 @@
                as a new-trade form and could not understand why it refused a
                profit-locking stop. -->
           <div class="panel-head">
-            <h2 class="t-section" id="tkMode">Order Ticket</h2>
+            <h2 class="t-section" id="tkMode">Order ticket</h2>
             <span class="chip" id="tkSrc" style="margin-left:auto">engine</span>
           </div>
           <!-- Nine controls, a nine-row cost breakdown and the rationale were
@@ -1215,13 +1221,28 @@
 
     <!-- ─── SCANNER SETUP ─── -->
     <section class="surface" id="s-settings" tabindex="-1">
-      <div class="surface-head"><h1 class="t-page">System</h1><p>What can run, and why?</p></div>
-      <div class="workspace-tabs" id="systemTabs" data-workspace-tabs="system" aria-label="System views">
-        <button class="on" type="button" data-view="automation" aria-pressed="true">Automation</button>
-        <button type="button" data-view="risk" aria-pressed="false">Risk</button>
-        <button type="button" data-view="venues" aria-pressed="false">Venues</button>
-        <button type="button" data-view="strategies" aria-pressed="false">Strategies</button>
-        <a href="#system-diagnostics">Diagnostics</a>
+      <div class="surface-head"><h1 class="t-page">Settings</h1><p>Your workspace, connected services and trading controls.</p></div>
+      <div class="settings-intro" data-system-view="home"><span class="op-state">Make it yours</span><h2>Everything in its place.</h2><p>Trading and risk changes keep their existing safety checks. Your assistant preference saves on this device.</p></div>
+      <div class="workspace-tabs settings-index" id="systemTabs" data-workspace-tabs="system" aria-label="Settings categories">
+        <button type="button" data-view="home" aria-pressed="true">← All settings</button>
+        <button type="button" data-view="venues" aria-pressed="false"><span>01</span><strong>Connections</strong><small>Exchanges, credentials and Citadel recovery</small></button>
+        <button type="button" data-view="automation" aria-pressed="false"><span>02</span><strong>Trading</strong><small>Operating mode, strategies and markets</small></button>
+        <button type="button" data-view="risk" aria-pressed="false"><span>03</span><strong>Risk limits</strong><small>Position sizing, loss limits and safety stops</small></button>
+        <button type="button" data-view="assistant" aria-pressed="false"><span>04</span><strong>Assistant</strong><small>Spotter model and connection test</small></button>
+        <button type="button" data-view="help" aria-pressed="false"><span>05</span><strong>App &amp; help</strong><small>Install on your phone and learn the essentials</small></button>
+        <a href="#system-diagnostics"><span>06</span><strong>Diagnostics</strong><small>System health, data warnings and error reports</small></a>
+        <button type="button" data-view="strategies" hidden aria-pressed="false">Strategies</button>
+      </div>
+      <div class="panel" data-system-view="help" hidden>
+        <div class="panel-head"><h2 class="t-section">Your trading companion</h2></div>
+        <div class="panel-body settings-help">
+          <h3>Install on your phone</h3><p>Open your secure app address. Android: browser menu → Install app or Add to Home screen. iPhone: Safari → Share → Add to Home Screen.</p>
+          <p>Your computer and private network must stay available. Backend off? Open <a href="#system" data-system-target="venues">Connections → Citadel</a>.</p>
+          <h3>Follow a setup</h3><p><a href="#opportunities">Setups</a>: what qualifies. <a href="#trade">Trade</a>: chart and recorded evidence. <a href="#performance">Results</a>: outcomes, including provisional figures.</p>
+          <h3>Trading modes</h3><p>Paper simulates orders. Shadow records intent without sending orders. Testnet uses test funds where supported. Live uses real funds and stays build-locked. See <a href="#system" data-system-target="automation">Trading</a> for restrictions.</p>
+          <h3>Useful terms</h3><p>Tap underlined terms for help. “R” is one trade’s risk. A stop limits planned loss but cannot guarantee the fill price.</p>
+          <h3>Build &amp; support</h3><p>SniperSight 3.1 · Same backend and account in the browser and installed app. Engine versions and reports: <a href="#system-diagnostics">Diagnostics</a>.</p>
+        </div>
       </div>
 
       <!-- The "How the scanner works" essay lived here. Operator ruling: this
@@ -1249,8 +1270,8 @@
         </div>
       </div>
 
-      <div class="panel recovery-panel" data-system-view="automation" style="margin-bottom:var(--lg)">
-        <div class="panel-head"><h2 class="t-section">Phone recovery</h2>
+      <div class="panel recovery-panel" data-system-view="venues" style="margin-bottom:var(--lg)" hidden>
+        <div class="panel-head"><h2 class="t-section">Citadel recovery</h2>
           <span class="chip" id="citadelState">READING</span></div>
         <div class="panel-body">
           <p class="system-consequence" id="citadelSummary">Checking Citadel...</p>
@@ -1332,10 +1353,8 @@
                  tightening a guardrail must not reset the forward window
                  (engine/settings.py), which is exactly what makes them safe
                  to put beside caps that are fixed. -->
-            <h3 class="t-label" style="margin:var(--lg) 0 var(--sm)">Yours to set</h3>
-            <p class="t-note" style="margin:0 0 var(--md)">These two do not touch
-              how a trade is sized or chosen, so changing one does not start a new
-              forward record — tightening a guardrail costs you nothing.</p>
+            <h3 class="t-label" style="margin:var(--lg) 0 var(--sm)">Adjustable guardrails</h3>
+            <p class="t-note" style="margin:0 0 var(--md)">These limits can block new entries without resetting your forward record. Review each control’s consequences before applying changes.</p>
             <div id="guardFields"></div>
             <!-- B7 — one line, then a disclosure. This was a nine-line essay
                  standing between the operator and the numbers above it. The
@@ -1344,7 +1363,7 @@
             <!-- the "why not editable" essay lives on the chip's hover now -->
           </div>
         </div>
-        <div class="panel" data-system-view="strategies" hidden>
+        <div class="panel" data-system-view="automation strategies" hidden>
           <div class="panel-head"><h2 class="t-section">Strategies and markets</h2>
             <span class="chip" id="setDirty" style="margin-left:auto" hidden>unsaved</span></div>
           <div class="panel-body">
@@ -1363,8 +1382,8 @@
                  confirm dialog, which is the last thing read before acting. -->
           </div>
         </div>
-        <div class="panel" data-system-view="automation">
-          <div class="panel-head"><h2 class="t-section">Claude</h2>
+        <div class="panel" data-system-view="assistant" hidden>
+          <div class="panel-head"><h2 class="t-section">Spotter assistant</h2>
             <span class="chip" id="cpHealth" style="margin-left:auto">—</span></div>
           <div class="panel-body">
             <label class="set-row"><span>Spotter model</span>
@@ -1411,12 +1430,9 @@
 
     <!-- ─── DIAGNOSTICS ─── -->
     <section class="surface" id="s-diagnostics" tabindex="-1">
-      <div class="surface-head"><h1 class="t-page">System</h1><p>What is failing, and why?</p></div>
+      <div class="surface-head"><h1 class="t-page">Diagnostics</h1><p>System health, data quality and recovery.</p></div>
       <div class="workspace-tabs" aria-label="System views">
-        <a href="#system" data-system-target="automation">Automation</a>
-        <a href="#system" data-system-target="risk">Risk</a>
-        <a href="#system" data-system-target="venues">Venues</a>
-        <a href="#system" data-system-target="strategies">Strategies</a>
+        <a href="#system" data-system-target="home">← All settings</a>
         <a class="on" href="#system-diagnostics" aria-current="page">Diagnostics</a>
       </div>
 
@@ -1480,9 +1496,11 @@
            traded a stretched box for an empty column. -->
       <div class="diag-status-row" style="margin-bottom:var(--lg)">
         <div class="panel" id="failingPanel">
-          <div class="panel-head"><h2 class="t-section">Failing now</h2>
+          <div class="panel-head"><h2 class="t-section">Happening now</h2>
             <span class="chip" id="failingChip" style="margin-left:auto">—</span></div>
+          <div id="diagEvidence" class="panel-body" aria-live="polite"></div>
           <div id="failingRoot"><div class="empty">reading…</div></div>
+          <div id="diagHistory" class="panel-body"></div>
         </div>
         <div class="panel">
           <div class="panel-head"><h2 class="t-section">Pipeline</h2>
@@ -1815,7 +1833,8 @@
      document order, so with shell.js ahead of it the deck and the
      not-taken blocks painted raw engine codes until the next 30s refresh
      happened to land after funnel.js had run. -->
-<script defer src="/static/funnel.js?v=20"></script>
+<script defer src="/static/diagnostic-status.js?v=1"></script>
+<script defer src="/static/funnel.js?v=21"></script>
 <!-- Before shell.js, which wires the mission wheel the moment it parses.
      `defer` scripts execute in document order, so this ordering IS the
      dependency declaration. -->
@@ -1826,6 +1845,7 @@
 <script defer src="/static/mode-control.js?v=20"></script>
 <script defer src="/static/opportunities.js?v=20"></script>
 <script defer src="/static/trade-workspace.js?v=20"></script>
+<script defer src="/static/chart-insight.js?v=1"></script>
 <script defer src="/static/workspaces.js?v=20"></script>
 <script defer src="/static/cockpit-workspaces.js?v=20"></script>
 <!-- Each module owns exactly one mount point and boots itself. Kept separate so

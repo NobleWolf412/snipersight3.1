@@ -3467,6 +3467,13 @@ body.is-halted .t-page::after{content:' · HALTED';color:var(--red);font-size:.5
     font:600 var(--fs-1)/1.2 var(--f-mono);text-transform:uppercase}
 }
 
+.macro-brief{margin-bottom:var(--lg)}
+.macro-brief h2{margin-bottom:var(--sm)}
+.macro-brief p{margin:var(--sm) 0;overflow-wrap:anywhere}
+.macro-brief summary{cursor:pointer;min-height:44px;padding-block:12px;color:var(--fg-3)}
+.macro-brief a{color:var(--accent);text-decoration:underline;margin-left:.4em}
+.macro-note{color:var(--fg-3);font-size:var(--fs-1)}
+
 @media(max-width:640px){
   :root{--topbar-h:82px}
   .topbar{grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:40px 36px;

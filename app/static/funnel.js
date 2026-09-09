@@ -32,7 +32,7 @@
     const link = document.createElement('link');
     link.id = 'dx-css';
     link.rel = 'stylesheet';
-    link.href = '/static/diagnostics-ui.css?v=3';
+    link.href = '/static/diagnostics-ui.css?v=4';
     document.head.appendChild(link);
   }
 
@@ -449,6 +449,7 @@
     for (const r of rows) if (r.drop > 0 && (!bottleneck || r.drop > bottleneck.drop)) bottleneck = r;
 
     return { counts, rows, reasons, exact, bottleneck, inSample,
+             diagnosticStatus: tel.diagnostic_status,
              ovErr, baseline: tel.baseline, total: counts.candidates,
              gates: tel.data_gates || [],
              faults: tel.engine_faults || [],
@@ -493,17 +494,17 @@
     const root = document.getElementById('failingRoot');
     const chip = document.getElementById('failingChip');
     if (!root) return;
-    const since = ts => new Date(ts * 1000)
-      .toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    window.SSDiagnosticStatus?.render(m.diagnosticStatus);
+    const since = ts => new Date(ts * 1000).toLocaleString(undefined, {timeZoneName: 'short'});
     const rows = [];
     for (const f of (m.faults || [])) {
       rows.push(`<div class="fail-row">
         <span class="fail-kind">engine</span>
         <span class="fail-what"><b>${esc(f.engine)}</b> ${esc(String(f.symbol).replace('-USD',''))} ${esc(f.tf)}</span>
         <span class="fail-err" title="${esc(f.error)}">${esc(f.error)}</span>
-        <span class="fail-meta">${f.times}× · since ${since(f.since)}</span>
+        <span class="fail-meta">${f.times}× · first ${since(f.since)} · last ${since(f.last_seen)}</span>
         <button class="btn fail-diag" data-diag="${esc(
-          `Why is the ${f.engine} engine failing on ${f.symbol} ${f.tf}? Error: ${f.error}`
+          `Check current evidence for ${f.engine} on ${f.symbol} ${f.tf}. Last recorded ${since(f.last_seen)}: ${f.error}. Is it still unresolved? Separate confirmed facts from possible causes and give the next read-only check.`
         )}">Diagnose</button>
       </div>`);
     }
@@ -512,7 +513,10 @@
         <span class="fail-kind">data</span>
         <span class="fail-what"><b>${esc(String(g.symbol).replace('-USD',''))}</b> ${esc(g.tf === '*' ? 'all TFs' : g.tf)}</span>
         <span class="fail-err">${esc(GATE_LABELS[g.gate] || g.gate)}</span>
-        <span class="fail-meta">since ${since(g.since)}</span>
+        <span class="fail-meta">first recorded ${since(g.since)} · unresolved</span>
+        <button class="btn fail-diag" data-diag="${esc(
+          `Review the current ${g.gate} record for ${g.symbol} ${g.tf}: ${g.detail}. Is action needed, or is the bot handling it? Use dated evidence, separate facts from inference, and propose a read-only next check.`
+        )}">Review</button>
       </div>`);
     }
     for (const u of (m.unlabelled || [])) {
@@ -523,10 +527,10 @@
         <span class="fail-meta"></span>
       </div>`);
     }
-    chip.textContent = rows.length ? rows.length + ' failing' : 'all clear';
-    chip.className = 'chip ' + (rows.length ? 'chip-amber' : 'chip-green');
+    chip.textContent = rows.length ? rows.length + ' to review' : 'no recorded issues';
+    chip.className = 'chip ' + (rows.length ? 'chip-amber' : '');
     root.innerHTML = rows.join('') ||
-      '<div class="empty">nothing failing — engines clean, data flowing</div>';
+      '<div class="empty">No unresolved engine faults or data gates recorded. Check freshness above.</div>';
   }
 
   function renderGates(m) {

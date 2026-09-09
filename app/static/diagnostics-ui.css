@@ -761,7 +761,12 @@ body.dx-funnel-live #dFunnel { display: none; }
 .fail-err{font-family:var(--f-mono);color:var(--red-2);overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
 .fail-row.dim .fail-err{color:var(--fg-3)}
-.fail-meta{font-family:var(--f-mono);font-size:var(--fs-1);color:var(--fg-4);white-space:nowrap}
+.fail-meta{font-family:var(--f-mono);font-size:var(--fs-1);color:var(--fg-3);white-space:normal}
+.diag-evidence-line,.diag-history-event p{overflow-wrap:anywhere;line-height:1.5;margin:0 0 10px}
+.diag-evidence-line.dim{color:var(--fg-3);font-size:var(--fs-2)}
+#diagHistory summary{cursor:pointer;min-height:44px;padding:10px 0}
+.diag-history-event{border-top:1px solid var(--border);padding:14px 0;font-size:var(--fs-2)}
+.diag-history-event h3{font-size:var(--fs-2);margin:0 0 8px}
 /* Five columns with a 52 + 200 floor plus four gaps and two gutters — about
    328px before the error text gets a pixel, and .fail-err is nowrap with an
    ellipsis, so on a phone the row degrades to a kind, a truncated subject and

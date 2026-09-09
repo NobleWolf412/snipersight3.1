@@ -59,7 +59,36 @@ from .swings import compute_atr
 # recorded. The verdict this harness reports therefore changed meaning, and a
 # stored result labelled v0.1 was produced by a different question — which is
 # the whole reason a research harness carries a version at all.
-ABTEST_VERSION = "abtest-v0.3"
+# v0.6: CALIBRATION SCOPED TO THE BOOK THE RECORD CAN HOLD, and the strategy
+#   grade scoped with it. `execsim` never re-settles a market that has left
+#   the universe, so an exec bump strands it on the old version and the replay
+#   — which walks any symbol with stored candles — reported it as a trade the
+#   record was missing. 140 such trades across 47 pairs on 8 Sep 2026, and
+#   calibration could not go green by waiting for a rebuild that would never
+#   reach them. See `certified_pairs`.
+#   THE REPLAY ARITHMETIC IS UNCHANGED: a v0.5 number and a v0.6 number over
+#   the same trades are identical, and the corrected trail-minus-hold reading
+#   of +0.0232 R does not move. The label moves because the VERDICT does.
+#   `strategy_regrades` is append-only and stores `abtest_version` beside
+#   `trustworthy`, and the store already held `abtest-v0.5 trustworthy=0`
+#   (2026-09-07) for this same book; writing `abtest-v0.5 trustworthy=1` over
+#   it would put two opposite verdicts under one label in the one table whose
+#   whole reason for carrying the version is that a grade cannot be quoted
+#   without knowing which generation produced it.
+# v0.5: the gapped-stop fill v0.4 added HERE is now the engine's own rule
+# (`execsim.stop_gap_fill`, exec-v0.26-draft), so both cells of every pair get
+# it from the same place and the hold cell is once again the engine unmodified.
+# v0.4 applied it to one side of its own comparison: a gapped stop was booked
+# half a risk unit worse for managed than for hold at the identical level, and
+# trailed stops gap through 15.6% of the time against 1.5% for an untouched
+# one, so the convention outweighed the effect. Trail-minus-hold reads +0.0208
+# R under v0.4, +0.0232 R now, and +0.0670 R if the fill were simply removed
+# from both cells — which is why "make the two sides match" was not the fix.
+# A v0.4 managed reading is not a v0.5 reading; rerun before quoting one.
+# v0.4: existing protection resolves before a closed bar can ratchet the stop.
+# Managed stop gaps fill at the adverse open, not an unreachable stop price.
+# Research results using managed/trail exits under earlier tags need rerunning.
+ABTEST_VERSION = "abtest-v0.6"
 
 # A cluster is a symbol, and eight is the floor for saying anything about the
 # spread between them. Below that the resample keeps drawing the same two or
@@ -253,22 +282,6 @@ def _simulate(candles, atr, i_fill, entry, sl, tp, long, tf, profile, managed,
                 pos.sl = entry
                 pos.be_moved = True
 
-        if use_trail:
-            if not pos.be_moved:
-                r_now = pos.r_at(hi if long else lo)
-                if r_now >= BE_TRIGGER_R:
-                    pos.sl = entry
-                    pos.be_moved = True
-
-            pos.extreme = max(pos.extreme, hi) if long else min(pos.extreme, lo)
-            ext_r = pos.r_at(pos.extreme)
-            if ext_r >= TRAIL_ACTIVATE_R:
-                pos.trailing = True
-            if pos.trailing:
-                trail = (pos.extreme - TRAIL_DISTANCE_R * risk) if long \
-                    else (pos.extreme + TRAIL_DISTANCE_R * risk)
-                pos.sl = max(pos.sl, trail) if long else min(pos.sl, trail)
-
         hit_sl = (lo <= pos.sl) if long else (hi >= pos.sl)
         hit_tp = (hi >= pos.tp) if long else (lo <= pos.tp)
         if hit_sl or hit_tp:
@@ -276,6 +289,12 @@ def _simulate(candles, atr, i_fill, entry, sl, tp, long, tf, profile, managed,
                 same_bar = True
             outcome = "SL" if hit_sl else "TP"
             px = pos.sl if hit_sl else pos.tp
+            if hit_sl and j > i_fill:
+                # A new closed-bar trail may already be crossed at the next
+                # open. The fill candle's own open precedes the entry and must
+                # not be used as a post-entry gap price. Shared with the hold
+                # cell above, which is the point: see `execsim.stop_gap_fill`.
+                px = execsim.stop_gap_fill(px, Decimal(c["open"]), long)
             taker_out = hit_sl
             leg_r = _leg_r(profile, symbol, entry, px, risk, long, taker_in,
                            taker_out, atr[j], bars_held, tf_seconds)
@@ -284,6 +303,22 @@ def _simulate(candles, atr, i_fill, entry, sl, tp, long, tf, profile, managed,
                     "same_bar": same_bar, "mfe_r": mfe, "mae_r": mae,
                     "partials": pos.partials,
                     "r_if_held": None}
+
+        if use_trail:
+            # Only a surviving bar may update protection for the NEXT bar.
+            # Updating before the hit test assumes its favourable extreme
+            # preceded its low/high, and can turn an original stop-out into
+            # a winner. This is closed-bar management, not intrabar trailing.
+            if not pos.be_moved and pos.r_at(hi if long else lo) >= BE_TRIGGER_R:
+                pos.sl = entry
+                pos.be_moved = True
+            pos.extreme = max(pos.extreme, hi) if long else min(pos.extreme, lo)
+            if pos.r_at(pos.extreme) >= TRAIL_ACTIVATE_R:
+                pos.trailing = True
+            if pos.trailing:
+                next_stop = (pos.extreme - TRAIL_DISTANCE_R * risk) if long \
+                    else (pos.extreme + TRAIL_DISTANCE_R * risk)
+                pos.sl = max(pos.sl, next_stop) if long else min(pos.sl, next_stop)
 
         if use_timestop and bars_held >= max_hold:
             # Adaptive time stop, with the floor guard: never time-stop a trade
@@ -564,6 +599,17 @@ def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000,
                     p = json.loads(r["payload"])
                     strategies[(version, p["setup_id"])] = p.get("strategy")
 
+    # THE GRADE AND ITS CERTIFICATE MUST COVER THE SAME BOOK. `calibrate()`
+    # sets aside markets the record cannot hold a settlement for; graded here
+    # anyway, those trades would ride into a published verdict under a
+    # `trustworthy` flag that never checked them. Before the calibration was
+    # scoped this was invisible, because the flag was permanently False and
+    # nothing published at all — fixing one without the other is what turns a
+    # stuck red light into a confident wrong one. Measured 8 Sep 2026: 140 of
+    # 939 filled trades came from pairs calibration had declined to check.
+    certified = certified_pairs(con, tfs)
+    uncertified = 0
+
     groups: dict[str, list[dict]] = {}
     missed: dict[str, int] = {}
     model_conflicts = {}
@@ -584,6 +630,12 @@ def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000,
                 replay_degradations.append({
                     "version": version, "setup_id": r["setup_id"],
                     "symbol": r["symbol"], "tf": r["tf"], "note": note})
+            if (r["symbol"], r["tf"]) not in certified:
+                # `filled` only, because that is what calibration counts. Two
+                # published remainders for one set-aside that disagree about
+                # its size is the kind of near-miss nobody reconciles.
+                uncertified += 1 if r.get("filled") else 0
+                continue
             name = strategies.get((version, r["setup_id"])) or "UNATTRIBUTED"
             if not r.get("filled"):
                 missed[name] = missed.get(name, 0) + 1
@@ -623,9 +675,12 @@ def by_strategy(con, symbols, tfs, versions=None, *, resamples=10000,
             "clears_zero": bool(cb and cb["ci_lo"] > 0),
             "sample_ok": cb is not None,
         }
-    cal = calibrate(con, symbols, tfs, beat=beat)
+    cal = calibrate(con, symbols, tfs, beat=beat, certified=certified)
     return {"version": ABTEST_VERSION,
             "calibration": cal,
+            # Named next to the grades it is absent from, so a reader can see
+            # how much of the replay this verdict declines to speak for.
+            "uncertified_trades": uncertified,
             "trustworthy": (cal.get("trustworthy", False)
                             and not model_conflicts),
             "entry_model_conflicts": model_conflicts,
@@ -664,8 +719,50 @@ def summarise(results) -> dict:
     }
 
 
+def certified_pairs(con, tfs) -> set:
+    """The (symbol, tf) pairs whose settlements the record can be expected to
+    hold under the current EXEC_VERSION — everything else the replay
+    produces is a market nobody has been asked about.
+
+    `execsim` only runs for pairs the scanner still visits, so a version bump
+    re-derives the live scan set and leaves every market that has since left
+    the universe on the OLD version forever. The replay has no such boundary:
+    it walks any symbol with stored candles. Measured 8 Sep 2026 at
+    exec-v0.26-draft, that was 140 trades across 47 pairs last scanned 20-72
+    hours earlier, and it kept calibration red against a rebuild that was
+    never going to reach them.
+
+    A pair qualifies on EITHER half:
+      · it already holds a fact under this version — the engine has run here
+        and produced output, so a trade missing from it is a real gap; or
+      · its symbol is still in the scan set — the engine will reach it, so
+        silence is a defect and not a market nobody is watching.
+
+    NEITHER half is `engine_runs`. That is the obvious discriminator and it
+    separates the same 140 exactly, but it is telemetry under a retention
+    sweep, and `regrade.py` refuses it in the same words for the same reason:
+    a grade must outlive a sweep. Scoped that way, a pair the engine ran and
+    wrote NOTHING for reads as a defect until the sweep takes its run rows and
+    is silently excused afterwards — the pin would lose its grip on exactly
+    the interesting failure, on a timer, with nothing to connect the two. Both
+    halves here are durable: facts are append-only, and the scan set is read
+    from the universe fact rather than from telemetry.
+
+    Coverage cannot shrink under this rule. A matched trade's pair holds its
+    own fact, so the first half admits every trade the join could ever certify
+    — verified on the store the day this was written: 140 set aside, 0 of 799
+    matched excused, 0 unmatched left owed.
+    """
+    from . import universe
+    from .execsim import EXEC_VERSION
+    have = {(r[0], r[1]) for r in con.execute(
+        "SELECT DISTINCT symbol, tf FROM facts "
+        "WHERE kind='exec' AND algo_version=?", (EXEC_VERSION,))}
+    return have | {(sym, tf) for sym in universe.scan_symbols(con) for tf in tfs}
+
+
 def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01, *,
-              beat=None) -> dict:
+              beat=None, certified=None) -> dict:
     """Reproduce the RECORDED book TRADE BY TRADE, and say plainly whether we
     managed it.
 
@@ -690,6 +787,11 @@ def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01, *,
         POPULATION difference, invisible to any per-trade comparison because
         there is nothing to compare, and invisible to any aggregate because it
         arrives as a magnitude rather than as a name.
+      · `not_resimulated` — trades on pairs the current EXEC_VERSION has never
+        run, which the record CANNOT hold and which therefore say nothing
+        about the simulator. Set aside with a count rather than counted as a
+        failure; `certified_pairs` explains why this does not blunt the
+        pin.
     `drift_n` and `drift_sum_r` are still reported, as context rather than as
     the verdict.
     """
@@ -743,6 +845,15 @@ def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01, *,
     # held to SL/TP (the managed exit was rejected by its own 2x2 gate — see
     # execsim line 105), and venue-derived costs.
     legacy = version in ("setup-v0.6-draft", "setup-v0.7-draft")
+
+    # Scoped to what the record could possibly hold; see `certified_pairs`
+    # for why neither half of that rule is the run log. A caller that grades
+    # off the same replay passes ITS set in, so the certificate and the grade
+    # cannot describe two different universe refreshes — recomputing here
+    # after a minutes-long replay is a real window, and a symbol admitted or
+    # dropped inside it would put the two out of step.
+    certified = certified_pairs(con, tfs) if certified is None else certified
+
     replayed = run_variant(
         con, symbols, tfs, version, managed=False,
         entry_model="LIMIT_AT_EDGE" if legacy else "MAKER_THEN_MARKET",
@@ -750,6 +861,21 @@ def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01, *,
         # Calibration replays the whole recorded book — the same minutes-long
         # dark window as the version replays, so it beats the same heartbeat.
         beat=None if beat is None else (lambda s: beat(f"calibrate {s}")))
+
+    # Set aside rather than dropped in silence, the same contract `set_aside`
+    # keeps for the scale-in adds: a calibration that certifies less than the
+    # whole book must say how much less, or "OK" quietly stops meaning what it
+    # did. Filtered BEFORE `summarise`, because `drift_n` and `drift_sum_r`
+    # divide by the recorded book and a replay carrying trades that book
+    # cannot contain reports a drift that is pure population.
+    stranded = [r for r in replayed
+                if (r["symbol"], r["tf"]) not in certified]
+    replayed = [r for r in replayed
+                if (r["symbol"], r["tf"]) in certified]
+    not_resimulated = sum(1 for r in stranded if r.get("filled"))
+    not_resimulated_pairs = len({(r["symbol"], r["tf"]) for r in stranded
+                                 if r.get("filled")})
+
     rep = summarise(replayed)
     if not recorded or not rep.get("n"):
         return {"status": "UNAVAILABLE", "trustworthy": False,
@@ -782,7 +908,12 @@ def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01, *,
                   f"{matched} of {rec_n} matched, none differing by more than "
                   f"{per_trade_r} R"
                   + (f"; {set_aside} scale-in adds set aside, graded by "
-                     f"replaying SCALE_VERSION" if set_aside else ""))
+                     f"replaying SCALE_VERSION" if set_aside else "")
+                  + (f"; {not_resimulated} trades across "
+                     f"{not_resimulated_pairs} pairs NOT CERTIFIED — "
+                     f"{EXEC_VERSION} has not run for them, so the record "
+                     f"holds no settlement to compare"
+                     if not_resimulated else ""))
     elif diverged:
         d0 = diverged[0]
         detail = (f"REPLAY DISAGREES WITH THE RECORDED BOOK on {len(diverged)} "
@@ -790,14 +921,22 @@ def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01, *,
                   f"{d0['setup_id']} replayed {d0['replayed_r']} vs recorded "
                   f"{d0['recorded_r']}) — the 2x2 numbers below are NOT "
                   f"comparable to production and must not be used to accept or "
-                  f"reject the change")
+                  f"reject the change"
+                  + (f"; a further {not_resimulated} trades across "
+                     f"{not_resimulated_pairs} pairs were set aside as not "
+                     f"re-settled under {EXEC_VERSION}"
+                     if not_resimulated else ""))
     else:
         detail = (f"THE REPLAY AND THE RECORD ARE NOT LOOKING AT THE SAME "
                   f"TRADES: {len(only_recorded)} recorded trades the replay "
                   f"never produced, {len(only_replayed)} replayed trades the "
                   f"record does not contain. Every matched trade agrees, so "
                   f"this is a population difference, not a simulation one — "
-                  f"the 2x2 numbers below still must not be used")
+                  f"the 2x2 numbers below still must not be used"
+                  + (f" (a further {not_resimulated} trades across "
+                     f"{not_resimulated_pairs} pairs were set aside as not "
+                     f"re-settled under {EXEC_VERSION}, and are not part of "
+                     f"this count)" if not_resimulated else ""))
     return {
         "status": "OK" if ok else "DRIFT",
         "trustworthy": ok,
@@ -809,6 +948,11 @@ def calibrate(con, symbols, tfs, tolerance=0.15, per_trade_r=0.01, *,
         "unmatched_recorded": len(only_recorded),
         "unmatched_replayed": len(only_replayed),
         "scale_in_set_aside": set_aside,
+        # Trades the replay produced for pairs the current EXEC_VERSION has
+        # never run. NOT a failure and NOT a pass: an uncertified remainder,
+        # reported so "OK" says how much of the book it speaks for.
+        "not_resimulated": not_resimulated,
+        "not_resimulated_pairs": not_resimulated_pairs,
         "replay_degradations": rep.get("warnings") or [],
         "examples": diverged[:5] or (only_recorded + only_replayed)[:5],
         "per_trade_tolerance_r": per_trade_r,
@@ -836,11 +980,23 @@ CELLS = (
 def report(con, symbols=None, tfs=("5m", "15m", "1H", "4H", "1D", "1W")) -> dict:
     from .universe import all_tracked_symbols
     symbols = symbols or all_tracked_symbols(con)
-    cal = calibrate(con, symbols, tfs)
+    # THE CELLS AND THE CERTIFICATE COVER THE SAME BOOK. `_verdict` returns
+    # INDETERMINATE on an untrustworthy calibration and nothing else, so the
+    # day scoping let that flag go green this surface would have started
+    # publishing a real verdict over cells that still carried the markets
+    # calibration had declined to check. Same hazard as the grade, one
+    # function over; fixing one without the other is what turns a stuck red
+    # light into a confident wrong one.
+    certified = certified_pairs(con, tfs)
+    cal = calibrate(con, symbols, tfs, certified=certified)
     cells = {}
+    uncertified = 0
     for key, version, managed, entry_model, label in CELLS:
         res = run_variant(con, symbols, tfs, version, managed=managed,
                           entry_model=entry_model)
+        uncertified += sum(1 for r in res if r.get("filled")
+                           and (r["symbol"], r["tf"]) not in certified)
+        res = [r for r in res if (r["symbol"], r["tf"]) in certified]
         cells[key] = {"label": label, "setup_version": version,
                       "managed_exit": managed, "entry_model": entry_model,
                       **summarise(res)}
@@ -849,6 +1005,7 @@ def report(con, symbols=None, tfs=("5m", "15m", "1H", "4H", "1D", "1W")) -> dict
         for key, cell in cells.items() for note in cell.get("warnings") or ()]
     return {"version": ABTEST_VERSION, "calibration": cal,
             "trustworthy": cal.get("trustworthy", False), "cells": cells,
+            "uncertified_trades": uncertified,
             "replay_degradations": replay_degradations,
             "verdict": _verdict(cells, cal)}
 

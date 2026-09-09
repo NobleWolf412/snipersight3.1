@@ -346,7 +346,16 @@ EXPECTED = {
     # are derived purely from recorded exits. All four move together.
     # scale ALSO changed on its own account — its economics gate now prices the
     # add on the add's own venue instead of the process-wide Coinbase default.
-    "exec": "exec-v0.25-draft",
+    # exec-v0.25 -> v0.26 asks the EXIT leg the question v0.14 asked the entry
+    # cross: a fill must be a price the bar actually traded. A stop the bar
+    # gapped through now settles at that bar's open. One-sided on purpose — a
+    # resting TP limit gapped past still fills at its own price, because the
+    # order sat in the book at that level. Recorded book cost: 1 of 590
+    # stop-outs restates (TRUMP-USD 15m, -1.53 R to about -1.83 R), -0.297 R
+    # gross. CONSUMERS["exec"] is ("risk", "scale", "cooldown") and the same
+    # three reasons as the two notes above apply unchanged. `setup` does NOT
+    # move: exec is downstream of setups, and no plan changed.
+    "exec": "exec-v0.26-draft",
     # risk-v0.22: the envelope restated in R, sized by mode (paper/shadow 2%,
     # testnet/live 0.25%), gates identical everywhere; DECISIONs record their
     # pct. The v0.21 note above this line claimed "no cascade follows risk" —
@@ -360,9 +369,12 @@ EXPECTED = {
     # (operator-set, OPERATIONAL). A new refusal reason is a new DECISION
     # generation. Nothing else moves: CONSUMERS["risk"] is size_order(), which
     # is untouched, so setups' FORMING payloads are byte-identical.
-    "risk": "risk-v0.26-draft",
-    "scale": "scale-v0.19-draft",
-    "cooldown": "cooldown-v0.13-draft",
+    # risk/scale/cooldown v+1, 2026-09-07: cascade from exec-v0.26 only. No
+    # logic moved in any of the three — they read exec facts, and those facts
+    # now carry a corrected stop fill.
+    "risk": "risk-v0.27-draft",
+    "scale": "scale-v0.20-draft",
+    "cooldown": "cooldown-v0.14-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
     # every setup they emit. No rule changed in either and no trade differs —
     # both policies are ALLOW everywhere — but the payload does, and a payload
@@ -481,7 +493,17 @@ EXPECTED = {
     #
     # Landed while nothing on disk was ambiguous: 9 facts under v0.1, 5 under
     # v0.2, ZERO under v0.3. NO CASCADE, same reason as above.
-    "manual": "manual-v0.4-draft",
+    #
+    # manual-v0.5, 2026-09-07: a stop the bar GAPPED THROUGH now fills at that
+    # bar's open, shared from `execsim.stop_gap_fill` under exec-v0.26. This
+    # book had been left on the old convention while the engine moved, so the
+    # same fill booked -1.53 R here and -1.83 R in the graded book — the drift
+    # the module's FILL MODEL paragraph forbids, and it matters more here
+    # because this walk trails. NO CASCADE: nothing reads manual facts, which
+    # is the whole point of the separate version namespace. `MANUAL_VERSIONS`
+    # gained v0.4 so intents still open under it are still found — a bump that
+    # moved both would strand them.
+    "manual": "manual-v0.5-draft",
 }
 
 # Who reads whose facts. Bumping a key REQUIRES considering every value.

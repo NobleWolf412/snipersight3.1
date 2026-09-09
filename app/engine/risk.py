@@ -24,7 +24,11 @@ from .execsim import EXEC_VERSION, plan_versions as execsim_plan_versions
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.26-draft"
+RISK_VERSION = "risk-v0.27-draft"
+# v0.27: cascade from exec-v0.26 (a stop the bar gapped through now fills at
+# that bar's open). No sizing or gate rule changed here — but this module
+# REPLAYS THE ACCOUNT from exec facts, so every equity point, daily P&L and
+# governor trip is derived from the corrected exits and is a new generation.
 # v0.26: cascade from setup-v0.21 / exec-v0.25 (the chart-eye read upstream).
 # No sizing or gate rule changed.
 # v0.25: cascade from setup-v0.20 / exec-v0.24 (the context reading upstream).

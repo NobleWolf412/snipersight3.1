@@ -1,0 +1,101 @@
+/* App presentation layer. Shared status/accent tokens remain owned by ss.css. */
+#cryptoApp { --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:18px; }
+#cryptoApp .surface-head { margin-bottom:20px; gap:6px; }
+#cryptoApp .surface-head h1 { letter-spacing:-.035em; font-weight:650; }
+#cryptoApp .surface-head p { color:var(--fg-3); font-size:var(--fs-3); }
+#cryptoApp .panel { border-radius:var(--r-lg); }
+#cryptoApp .btn { min-height:44px; border-radius:var(--r-sm); }
+#cryptoApp .panel-head { gap:10px; flex-wrap:wrap; }
+#cryptoApp .panel-head h2 { letter-spacing:-.015em; }
+#cryptoApp .topbar-actions { display:flex; align-items:center; gap:8px; }
+#cryptoApp .topbar-actions #btnHalt { align-items:center; }
+#cryptoApp .topbar-actions .nav-spotter { display:flex; align-items:center; gap:6px; color:var(--fg-2); }
+#cryptoApp .topbar-actions .nav-ico { display:block; width:20px; height:20px; }
+#cryptoApp :is(button,a,input,select):focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.settings-intro { padding:24px 0; max-width:560px; }
+.settings-intro h2 { font-size:1.5rem; font-weight:600; letter-spacing:-.025em; margin:8px 0; }
+.settings-intro p { color:var(--fg-3); line-height:1.6; }
+#systemTabs.settings-index { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; border:0; padding:0; margin:0 0 24px; background:none; }
+#systemTabs.settings-index :is(button,a) { display:grid; grid-template-columns:30px minmax(0,1fr); gap:5px 12px; align-content:center; min-width:0; min-height:100px; padding:20px; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--card); color:var(--fg); text-align:left; text-decoration:none; white-space:normal; }
+#systemTabs.settings-index :is(button,a):hover { background:var(--card-2); border-color:var(--fg-4); }
+#systemTabs.settings-index :is(button,a)>span { grid-row:1/3; font:12px var(--f-mono); color:var(--accent); padding-top:3px; }
+#systemTabs.settings-index strong { font:600 1rem var(--f-body); letter-spacing:-.01em; }
+#systemTabs.settings-index small { color:var(--fg-3); font:400 .8125rem/1.5 var(--f-body); }
+#s-settings[data-active-view="home"] #systemTabs [data-view="home"],
+#s-settings:not([data-active-view="home"]) #systemTabs :is(button,a):not([data-view="home"]) { display:none; }
+#s-settings:not([data-active-view="home"]) #systemTabs { display:block; }
+#s-settings:not([data-active-view="home"]) #systemTabs [data-view="home"] { display:block; min-height:44px; padding:10px 14px; width:auto; background:transparent; }
+#s-settings .pack-cols { columns:1; max-width:1000px; }
+.settings-help { max-width:760px; }
+.settings-help h3 { font-size:1rem; margin:24px 0 8px; }
+.settings-help h3:first-child { margin-top:0; }
+.settings-help p { line-height:1.7; color:var(--fg-2); margin:8px 0; }
+.settings-help a { color:var(--fg); text-decoration:underline; text-underline-offset:3px; }
+.chart-insight { padding:18px; border-bottom:1px solid var(--border); }
+.insight-heading h2 { font-size:1.125rem; letter-spacing:-.025em; margin:8px 0; }
+.insight-heading p,.chart-insight .t-note { color:var(--fg-3); font-size:.8125rem; line-height:1.6; }
+.insight-reading { display:flex; flex-direction:column; gap:6px; padding:16px 0; }
+.insight-reading span,.insight-reading small { color:var(--fg-3); font-size:.75rem; }
+.insight-reading strong { font-size:1.5rem; text-transform:capitalize; }
+.insight-frames summary { min-height:44px; display:flex; align-items:center; cursor:pointer; font-weight:600; font-size:.875rem; }
+.insight-frame { display:grid; grid-template-columns:36px 1fr; gap:4px 10px; padding:10px 0; border-top:1px solid var(--border); font-size:.875rem; }
+.insight-frame b { grid-row:1/3; color:var(--fg-3); font:12px var(--f-mono); padding-top:3px; }
+.insight-frame small { color:var(--fg-3); font-size:.75rem; }
+.insight-facts { margin:12px 0; font-size:.8125rem; }
+.insight-facts div { padding:10px 0; border-top:1px solid var(--border); }
+.insight-facts dt { color:var(--fg-3); margin-bottom:5px; }
+.insight-facts dd { margin:0; overflow-wrap:anywhere; line-height:1.5; }
+.sheet-close { display:none; }
+@media(max-width:900px){
+  #cryptoApp .nav { grid-template-columns:repeat(5,minmax(0,1fr)); background:var(--bg-2); padding-bottom:env(safe-area-inset-bottom); }
+  #cryptoApp .nav a[data-route] { min-width:0; min-height:60px; font-size:11px; gap:5px; padding:8px 2px; }
+  #cryptoApp .nav .nav-ico { display:block; width:21px; height:21px; }
+  #cryptoApp .stage { padding:20px 14px 24px; }
+  #cryptoApp .surface-head h1 { font-size:1.75rem; line-height:1.2; }
+  #cryptoApp .surface-head { margin-bottom:16px; }
+  #cryptoApp .panel-head,#cryptoApp .panel-body { padding:16px; }
+  #cryptoApp .command-hero .panel-head { align-items:flex-start; }
+  #cryptoApp .command-heading h2 { font-size:1.25rem; }
+  #cryptoApp .command-kicker { font-size:10px; letter-spacing:.13em; }
+  #cryptoApp .next-action-summary { font-size:.9375rem; line-height:1.6; }
+  #cryptoApp .next-action-bot { padding:10px 12px; }
+  #cryptoApp .next-action-controls { gap:8px; }
+  #cryptoApp .fr-acts { flex-wrap:wrap; }
+  #cryptoApp .disposition { font-size:.875rem; line-height:1.6; }
+  #cryptoApp .topbar-actions .nav-spotter { width:44px; justify-content:center; padding:0; }
+  #cryptoApp .topbar-actions .nav-spotter span { display:none; }
+  #cryptoApp .topbar-actions #btnHalt { padding:0 10px; }
+  #cryptoApp .trade-evidence,#cryptoApp .ticket { border-radius:18px 18px 0 0; padding-bottom:16px; }
+  #cryptoApp .sheet-close { display:block; margin:12px 14px 0 auto; }
+  #cryptoApp .trade-mobile-bar button { min-height:48px; font-size:.875rem; }
+  #cryptoApp .trade-evidence,#cryptoApp .ticket { bottom:calc(var(--mobile-nav-h) + 48px); }
+  #cryptoApp .dirty-banner { bottom:calc(var(--mobile-nav-h) + 8px); border-radius:12px; }
+  #systemTabs.settings-index { grid-template-columns:1fr; gap:10px; }
+  #systemTabs.settings-index :is(button,a) { min-height:86px; padding:16px; }
+  .settings-intro { padding:4px 0 20px; }
+  .settings-intro h2 { font-size:1.375rem; }
+  .settings-intro p { font-size:.8125rem; }
+}
+@media(max-width:640px){
+  body[data-market="crypto"] { --topbar-h:94px; }
+  #cryptoApp .topbar { grid-template-rows:48px 36px; align-items:center; }
+}
+@media(max-width:430px){
+  body[data-market="crypto"] { --topbar-h:120px; }
+  #cryptoApp .topbar { padding-left:10px; padding-right:10px; grid-template-columns:minmax(0,1fr) auto; grid-template-rows:48px 20px 44px; }
+  #cryptoApp .topbar-actions { grid-column:2; }
+  #cryptoApp .topbar-system { grid-column:1/-1; grid-row:2; min-height:20px; }
+  #cryptoApp .topbar-account { grid-row:3; }
+  #cryptoApp .topbar-account>span { white-space:normal; flex-wrap:wrap; align-content:center; min-height:42px; line-height:1.35; font-size:10px; }
+  #cryptoApp .topbar-identity { gap:6px; }
+  #cryptoApp .topbar-actions { gap:4px; }
+  #cryptoApp .topbar-actions .nav-spotter { width:44px; }
+  #cryptoApp .topbar-account { flex-wrap:wrap; }
+  #cryptoApp .topbar-account>span { min-width:0; }
+  #cryptoApp .stage { padding-left:12px; padding-right:12px; }
+  #cryptoApp .surface-head p { line-height:1.5; }
+  #cryptoApp .mode-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(prefers-reduced-motion:reduce){
+  #cryptoApp *,#cryptoApp *::before,#cryptoApp *::after { scroll-behavior:auto; }
+}

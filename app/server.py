@@ -538,8 +538,10 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
         closed = sum(r["outcome"] is not None and r["outcome"] != "MISSED"
                      for r in eligible)
         winners = sum(r["failure_code"] == "WINNER" for r in eligible)
+        from engine import diagnostic_status
         return {
             "diagnostic_only": True,
+            "diagnostic_status": diagnostic_status.snapshot(con),
             "baseline": baseline,
             "filters": {"symbol": symbol, "tf": tf, "strategy": strategy},
             "versions": {"setup": setups.SETUP_VERSION, "risk": risk.RISK_VERSION,
@@ -1088,11 +1090,14 @@ def portfolio():
                 "start_equity": float(risk.START_EQUITY), "equity": round(eq, 2),
                 "return_pct": float(acct["return_pct"]) if acct else 0.0,
                 # Whether the numbers above are provisional: the scanner is
-                # re-deriving the record under a new setup generation and the
-                # account is replayed off a book still filling in. One reading
-                # of engine_runs; the UI says it beside the equity, nowhere
+                # re-deriving the record under a new generation and the account
+                # is replayed off a book still filling in. One reading of
+                # engine_runs; the UI says it beside the equity, nowhere
                 # re-derived (2026-09-05, a rebuild read as a slow loss).
-                "rebuild": _rebuild.status(con),
+                # `account_status`, not `status`: the latter only ever asked
+                # about SETUPS, so an exec-only bump rebuilt every settlement
+                # with the screen reporting the record complete (2026-09-07).
+                "rebuild": _rebuild.account_status(con),
                 "max_drawdown_pct": acct.get("max_drawdown_pct") if acct else None,
                 "decisions": acct["decisions"] if acct else {},
                 "kill_switch_days": kills,
@@ -1813,6 +1818,18 @@ def manifest(manifest_hash: str):
         if result is None:
             raise HTTPException(404, "manifest not found")
         return {"manifest_hash": manifest_hash, **result}
+    finally:
+        con.close()
+
+
+@app.get("/api/chart-insight")
+def chart_insight(symbol: str = Query("BTC-USD", pattern=SYMBOL_PATTERN),
+                  tf: str = Query("1H", pattern="^(5m|15m|1H|4H|1D|1W)$")):
+    """Current, closed-bar evidence only. No scanner or trading side effects."""
+    from engine import chart_insight as insight
+    con = store.connect()
+    try:
+        return insight.snapshot(con, symbol, tf)
     finally:
         con.close()
 
@@ -3196,6 +3213,14 @@ def operations_read_model():
                 "total_risk_remaining_usd": str(max(Decimal(0), total_budget - open_risk)
                                                 .quantize(Decimal("0.01"))),
                 "daily_loss_remaining_usd": str(daily_remaining.quantize(Decimal("0.01"))),
+                # `today_pnl` above is summed from the journal, which is built
+                # from exec facts at the CURRENT version. Between a version
+                # bump and the re-simulation that book is empty, so today's
+                # losses are not in it and this reports the full budget free —
+                # the governor's own number failing open. The portfolio's one
+                # rebuild reading travels with it so the chip can say so
+                # (2026-09-07); §6 rule 9, read here, re-derived nowhere.
+                "book_rebuilding": bool((pf.get("rebuild") or {}).get("active")),
                 "open_positions": len(pf.get("active_positions") or []),
                 "working_orders": len(pf.get("pending_orders") or []),
             }

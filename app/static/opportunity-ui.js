@@ -144,7 +144,7 @@
 
   function tradeEvidence(row){
     if(!row) return `<div class="trade-evidence-empty"><span class="op-state">No setup selected</span>
-      <h2>Chart inspection</h2><p>Open a setup to see why the bot likes it, on the chart and in the ticket.</p>
+      <h2>Recorded setup</h2><p>Choose a setup to review its recorded decision and planned levels.</p>
       <a class="btn btn-primary" href="#opportunities">Open Setups</a></div>`;
     const s = setup(row), entry = row.entry_recommendation || {};
     const grade = row.evidence || {}, td = s.top_down || {};
