@@ -92,8 +92,10 @@ VOLPROFILE_VERSION = "volprofile-v0.3-draft"
 # floating point), so `bin_lo`/`bin_hi` on the recorded fact could name the
 # bin below the one the close is in. Volume accumulation stays float — it is
 # a share, not a price — which is also why the hot loop does not pay for
-# Decimal on every bar. No trading consumer reads this engine; the record is
-# what changed, and that is a version.
+# Decimal on every bar. No trade is gated on this engine; factorgrade reads
+# its facts for the factor-evidence view, and grades against zero
+# observations until every pair has re-run under v0.3. The record is what
+# changed, and that is a version.
 # v0.2: input cascade from agg-v0.2 (own 4H/1W candle reads, ma-v0.2 shared
 # code) — acknowledged-partial buckets change the series profiles are built
 # over, and partial buckets carry genuinely smaller volume sums. No rule

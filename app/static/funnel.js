@@ -416,8 +416,8 @@
       /* By rule when the server says which (`risk_reasons`, since 2026-09-10);
          the single RISK_REJECTED bucket only as a fallback. The lexicon has
          had a sentence for every rule since day one — nothing reached them. */
-      risk_approved: (f.risk_reasons && Object.keys(f.risk_reasons).length)
-                       ? f.risk_reasons : pick(failures, ['RISK_REJECTED']),
+      risk_approved: (tel.risk_reasons && Object.keys(tel.risk_reasons).length)
+                       ? tel.risk_reasons : pick(failures, ['RISK_REJECTED']),
       order_placed:  stageCounts['VALIDATED'] ? { AWAITING_RISK: stageCounts['VALIDATED'] } : {},
       filled:        pick(failures, ['ENTRY_NOT_FILLED']),
       closed:        Object.assign({},

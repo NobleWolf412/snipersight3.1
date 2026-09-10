@@ -956,6 +956,30 @@ class ManualCase(unittest.TestCase):
         self.assertEqual(st["open_fraction"], "1")
         self.assertEqual(st["unrealized_usd"], "150.00")
 
+    def test_an_adopted_position_pays_the_fill_s_entry_role(self):
+        """v0.6: the engine crossed as TAKER on 148 of 935 fills; an adopted
+        one must settle with that role, not an assumed resting maker. The
+        first cut of v0.6 read the role off the walk result, where it never
+        was, so every adoption still paid maker — this pins the path from
+        the intent into settle_leg."""
+        self.load([(100, 100.5, 99.5, 100),
+                   (100, 104.5, 99.8, 104),
+                   (104, 110.5, 103, 110)])
+        manual.adopt_position(self.con, "ENG|ROLE", SPOT, "1H", "LONG",
+                              entry=100, sl=98, tp=110, fill_ts=0, adopted_at=0,
+                              entry_role="TAKER")
+        self.run_engine()
+        row = self.execs()[0]
+        import json as _json
+        self.assertIn('"entry_fee_role": "TAKER"', _json.dumps(row))
+        # ...and it costs what taker costs: (taker - maker) x entry / risk
+        # less than the maker settlement of the identical trade.
+        from engine import costs
+        pf = costs.profile_for(SPOT)
+        delta = ((pf.taker_rate - pf.maker_rate) * Decimal(100) / Decimal(2))
+        maker_r = Decimal(row["r_multiple"]) + delta
+        self.assertLess(Decimal(row["r_multiple"]), maker_r)
+
     def test_an_adopted_position_can_scale_out(self):
         """Custody means the operator's exit rules apply — the ladder with the
         rest of them."""

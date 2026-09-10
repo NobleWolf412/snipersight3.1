@@ -100,11 +100,18 @@ def aggregate(con, symbol: str, tf: str) -> dict:
     # they stay in the store beside recomputes from the new one. Under v0.1
     # every emitted bar was a pure function of a complete, immutable group,
     # so this comparison would have been dead code.
-    existing = {r[0]: tuple(map(str, r[1:6])) for r in con.execute(
+    # Compared as VALUES, not text. importer-v0.8 stores prices without
+    # trailing zeros, so a source bar re-imported by a repair path re-spells
+    # (0.20036000000000000000 -> 0.20036) and the bucket rebuilt from it can
+    # re-spell too; a text comparison then raised REWRITE for a bar whose
+    # every value was identical. A changed value still alarms.
+    def _vals(fields):
+        return tuple(Decimal(str(x)) for x in fields)
+    existing = {r[0]: _vals(r[1:6]) for r in con.execute(
         "SELECT open_ts, open, high, low, close, volume FROM candles "
         "WHERE symbol=? AND tf=?", (symbol, tf))}
     rewritten = [o[2] for o in out
-                 if o[2] in existing and existing[o[2]] != tuple(o[3:8])]
+                 if o[2] in existing and existing[o[2]] != _vals(o[3:8])]
     if rewritten:
         from .runlog import get_logger
         get_logger().warning(

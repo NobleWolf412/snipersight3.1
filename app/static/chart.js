@@ -783,7 +783,8 @@ window.SSChart = (() => {
         `Risking ${usd(m.riskUsd)} on one trade is more than the ` +
         `open-risk budget a trade can reach (${usd(equity *
           (cfg.effective_max_total_risk_pct || cfg.max_total_risk_pct))}). ` +
-        'The risk authority refuses it outright.',
+        'The engine sizes inside that budget; this override does not, ' +
+        'and it will still arm.',
       RISK_EXCEEDS_DAILY_HALT: () =>
         `A single loss here (${(m.riskPctEffective * 100).toFixed(1)}%) would ` +
         `breach the ${(cfg.daily_loss_pct * 100).toFixed(0)}% daily halt on its own.`,
@@ -1259,6 +1260,12 @@ window.SSChart = (() => {
       cfg = await cfgReq;
       setLock();
     }catch(err){ /* keep whatever we had; the ticket labels its source */ }
+    /* Loud fallback: the server says when it could not place this symbol on
+       a venue and served spot constants (1x, no shorts, 1.00% round trip).
+       Pricing an unknown market on those without saying so was the quiet
+       version of the fee bug this ticket exists to prevent. */
+    if(cfg && cfg.venue_fallback && typeof window.SSToast === 'function')
+      window.SSToast('Unknown market — the ticket is pricing on spot constants', 'warn');
     if(seq !== loadSeq){ noteStalledLoad(); return; }
     const [c, swing, struct, zone, liq, regime, setupF, cycle, riskF,
            orderF] = res;

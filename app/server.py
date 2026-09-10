@@ -1165,6 +1165,11 @@ def portfolio():
                 "operator_closed": sorted(overrides.values(),
                                           key=lambda d: d["closed_at"],
                                           reverse=True)[:20],
+                # manual-v0.6 prices a close net of fees; earlier closes are
+                # gross. When the total below adds both kinds, say so — the
+                # facts carry no other tell (old ones lack r_at_close_gross).
+                "operator_closed_pricing_mixed": len(
+                    {o.get("manual_version") for o in overrides.values()}) > 1,
                 # The operator's own exits on the ENGINE's trades — the engine
                 # picked the setup, the operator picked the moment. This money
                 # is counted in no other total on this payload or in the manual
@@ -3329,9 +3334,12 @@ def operations_read_model():
         scanner = _scanner_status()
 
         equity = Decimal(str(pf.get("equity") or risk.START_EQUITY))
-        # Committed (filled + resting), the basis the engine budgets on.
-        open_risk = Decimal(str(pf.get("committed_risk_usd",
-                                       pf.get("open_risk_usd")) or 0))
+        # Two figures, two names, the same names /api/portfolio uses:
+        # `open_risk_usd` is FILLED risk; `committed_risk_usd` adds resting
+        # orders and is the basis the engine budgets on. The remaining-budget
+        # figure below is measured against committed.
+        filled_risk = Decimal(str(pf.get("open_risk_usd") or 0))
+        open_risk = Decimal(str(pf.get("committed_risk_usd", filled_risk) or 0))
         # PAPER gates, because every dollar below is a paper-book dollar —
         # equity, open_risk and the journal all come from the research book,
         # and one basis per calculation is the rule. The dispatch mode's R is
@@ -3347,7 +3355,8 @@ def operations_read_model():
                 "risk_per_trade_pct": str(_gates["risk_pct"] * 100),
                 "next_risk_usd": str((equity * _gates["risk_pct"]).quantize(Decimal("0.01"))),
                 "dispatch_risk_pct": str(_dispatch_pct * 100),
-                "open_risk_usd": str(open_risk.quantize(Decimal("0.01"))),
+                "open_risk_usd": str(filled_risk.quantize(Decimal("0.01"))),
+                "committed_risk_usd": str(open_risk.quantize(Decimal("0.01"))),
                 "total_risk_remaining_usd": str(max(Decimal(0), total_budget - open_risk)
                                                 .quantize(Decimal("0.01"))),
                 "daily_loss_remaining_usd": str(daily_remaining.quantize(Decimal("0.01"))),

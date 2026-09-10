@@ -304,6 +304,49 @@ class VolumeProfileBins(unittest.TestCase):
         self.assertEqual(volprofile.bin_index(Decimal("100"), Decimal("0.5")), 200)
 
 
+class ServedShapes(unittest.TestCase):
+    """The fields the cockpit reads instead of re-deriving, present and
+    consistent on the served payloads. Read-only GETs against the app."""
+
+    @classmethod
+    def setUpClass(cls):
+        from fastapi.testclient import TestClient
+        cls.client = TestClient(server.app)
+
+    def test_trade_config_serves_the_reachable_budget(self):
+        d = self.client.get("/api/trade-config?symbol=BTCUSDT").json()
+        self.assertIn("effective_max_total_risk_pct", d)
+        self.assertLessEqual(d["effective_max_total_risk_pct"], d["max_total_risk_pct"])
+        self.assertAlmostEqual(
+            d["effective_max_total_risk_pct"],
+            min(d["max_total_risk_pct"], d["risk_pct"] * d["max_concurrent"]))
+        self.assertNotIn("venue_fallback", d)
+        self.assertIn("venue_fallback",
+                      self.client.get("/api/trade-config?symbol=NOPE-XYZ").json())
+
+    def test_portfolio_serves_committed_risk_and_the_daily_budget(self):
+        d = self.client.get("/api/portfolio").json()
+        self.assertGreaterEqual(float(d["committed_risk_usd"]), float(d["open_risk_usd"]))
+        for k in ("day_start_ts", "day_open_equity_usd", "lost_today_usd",
+                  "budget_usd", "remaining_usd"):
+            self.assertIn(k, d["daily_loss"])
+        self.assertIn("operator_closed_pricing_mixed", d)
+
+    def test_operations_names_filled_and_committed_risk_apart(self):
+        a = self.client.get("/api/operations").json()["account"]
+        self.assertIn("open_risk_usd", a)
+        self.assertIn("committed_risk_usd", a)
+        self.assertGreaterEqual(Decimal(a["committed_risk_usd"]),
+                                Decimal(a["open_risk_usd"]))
+
+    def test_telemetry_serves_risk_reasons_at_the_top_level(self):
+        d = self.client.get("/api/setup-telemetry?limit=5").json()
+        self.assertIn("risk_reasons", d)
+        self.assertNotIn("risk_reasons", d["funnel"])
+        for code in d["risk_reasons"]:
+            self.assertNotIn("(", code, "parameters must be stripped for the lexicon")
+
+
 class OperatorCloseReachesNextAction(unittest.TestCase):
     """opportunity-v0.7: a position the operator closed by hand is CLOSED in
     the read model Next Action reads, not only in the portfolio."""
@@ -345,15 +388,29 @@ class OperatorCloseReachesNextAction(unittest.TestCase):
         self.con.commit()
         self.assertEqual(self._state(), "CLOSED")
 
-    def test_an_old_close_does_not_hide_a_fresh_candidate(self):
-        """Same age rule as the custody overlay: a zone the operator closed
-        weeks ago can re-validate and must be tradeable again."""
+    def test_a_closed_zone_stays_closed_like_the_portfolio_says(self):
+        """The portfolio suppresses a hand-closed zone for the life of the
+        zone (manual.setup_zone_key); this model must agree or the exposure
+        chip says "room" while Next Action says "manage". An older close
+        therefore still closes a later re-validation of the same zone."""
         store.insert_fact(
             self.con, symbol="BTCUSDT", tf="1H", kind=self.manual.OVERRIDE_KIND,
             market_time=2000, confirmed_at=2000,
             algo_version=self.manual.MANUAL_VERSION,
             payload={"setup_id": self.sid, "source": "OPERATOR",
                      "event": "CLOSED_EARLY", "symbol": "BTCUSDT", "tf": "1H"})
+        self.con.commit()
+        self.assertEqual(self._state(), "CLOSED")
+
+    def test_an_adopted_position_is_still_open(self):
+        """ADOPTED moves custody to the operator; the position has not
+        closed, and "a position is open" stays true of it."""
+        store.insert_fact(
+            self.con, symbol="BTCUSDT", tf="1H", kind=self.manual.OVERRIDE_KIND,
+            market_time=9000, confirmed_at=9000,
+            algo_version=self.manual.MANUAL_VERSION,
+            payload={"setup_id": self.sid, "source": "OPERATOR",
+                     "event": "ADOPTED", "symbol": "BTCUSDT", "tf": "1H"})
         self.con.commit()
         self.assertNotEqual(self._state(), "CLOSED")
 

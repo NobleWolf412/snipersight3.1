@@ -670,7 +670,10 @@ def overridden_setups(con) -> dict:
     out = {}
     for r in _facts(con, OVERRIDE_KIND):
         p = json.loads(r["payload"])
-        out[p["setup_id"]] = {**p, "closed_at": r["confirmed_at"]}
+        # The version the close was PRICED under. v0.6 nets fees; earlier
+        # closes are gross, and a total that adds both must be able to say so.
+        out[p["setup_id"]] = {**p, "closed_at": r["confirmed_at"],
+                              "manual_version": r["algo_version"]}
     return out
 
 
@@ -781,8 +784,17 @@ def close_engine_position(con, setup_id: str, symbol: str, tf: str,
     setup continues untouched, so the strategy record still gets the outcome
     holding would have produced.
     """
-    entry, sl = Decimal(str(entry)), Decimal(str(sl))
+    plan_entry, sl = Decimal(str(entry)), Decimal(str(sl))
     long = direction == "LONG"
+    # The FILL, not the plan (v0.6). execsim prices every exit from the fill's
+    # entry, role and risk and says nothing below may reach back for the
+    # plan's version of any of the three; MAKER_THEN_MARKET crosses at a
+    # price the plan never named. Without the fill fact the plan stands, and
+    # the fact says so.
+    fill = _engine_fill(con, setup_id, symbol, tf)
+    entry = plan_entry
+    if fill and fill.get("fill_price"):
+        entry = Decimal(str(fill["fill_price"]))
     risk = risk_per_unit(direction, entry, sl)
     if risk <= 0:
         raise IntentRejected("this position has no measurable risk to close against")
@@ -818,7 +830,6 @@ def close_engine_position(con, setup_id: str, symbol: str, tf: str,
     # fill actually paid, taker on the market exit, funding from the fill
     # bar to this one. Without the fill fact the entry is assumed MAKER and
     # funding is zero — said on the fact, never silently.
-    fill = _engine_fill(con, setup_id, symbol, tf)
     entry_role = str((fill or {}).get("entry_fee_role") or "MAKER").upper()
     entry_rate = profile.maker_rate if entry_role == "MAKER" else profile.taker_rate
     entry_fee = entry_rate * entry
@@ -834,13 +845,19 @@ def close_engine_position(con, setup_id: str, symbol: str, tf: str,
     payload = {
         "setup_id": setup_id, "source": "OPERATOR", "event": "CLOSED_EARLY",
         "symbol": symbol, "tf": tf, "direction": direction,
-        "entry": str(entry), "sl": str(sl),
+        "entry": str(entry), "plan_entry": str(plan_entry),
+        "entry_from_fill": bool(fill and fill.get("fill_price")),
+        "sl": str(sl),
         "exit_price": str(px), "priced_at": "last closed bar",
         "effective_exit_price": str(eff_exit),
         "slippage_price_units": str(slip),
         "order_type": "MARKET",
         "r_at_close": str(r_mult),
-        "r_at_close_gross": str((gross / risk).quantize(Q2)),
+        # Gross the way execsim's r_gross is gross: quoted exit, no slippage,
+        # no fees. Two fields called gross that meant different things would
+        # be compared, and the comparison is the point.
+        "r_at_close_gross": str((((px - entry) if long else (entry - px))
+                                 / risk).quantize(Q2)),
         "usd_at_close": (None if risk_usd is None
                          else str((r_mult * Decimal(str(risk_usd))).quantize(Q2))),
         "fees_price_units": str(entry_fee + exit_fee),
@@ -1556,6 +1573,7 @@ def settle_leg(profile, symbol: str, entry: Decimal, exit_price: Decimal,
     gross = (exit_price - entry) if long else (entry - exit_price)
     net = (((eff_exit - entry) if long else (entry - eff_exit)) - fees - funding)
     return {"kind": kind, "outcome": outcome, "order_type": order_type,
+            "entry_fee_role": str(entry_role).upper(),
             "fraction": str(fraction),
             "exit_price": str(exit_price),
             "effective_exit_price": str(eff_exit),
@@ -1744,7 +1762,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 order_type="LIMIT", atr_at_exit=None,
                 bars_held=f["exit_i"] - i, tf_seconds=res_secs,
                 exit_ts=candles[f["exit_i"]]["open_ts"] + res_secs,
-                entry_role=w.get("entry_role") or "MAKER")
+                entry_role=s.get("entry_role") or "MAKER")
                 for f in filled]
             remainder = Decimal(1) - sum((f["fraction"] for f in filled),
                                          Decimal(0))
@@ -1755,7 +1773,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 # and the trailed one alike — and so is the timeout.
                 order_type="LIMIT" if outcome == "TP" else "MARKET",
                 atr_at_exit=atr[j], bars_held=j - i, tf_seconds=res_secs,
-                exit_ts=exit_ts, entry_role=w.get("entry_role") or "MAKER"))
+                exit_ts=exit_ts, entry_role=s.get("entry_role") or "MAKER"))
             counts[outcome] += 1
             if filled:
                 counts["SCALED"] += 1

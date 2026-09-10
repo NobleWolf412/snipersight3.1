@@ -81,7 +81,8 @@ OPERATIONAL_EXPECTED = {
     # opportunity-v0.7: an engine position the operator closed by hand reads
     # CLOSED in this model too, as the portfolio has always shown it; Next
     # Action stopped saying "a position is open" for a trade already off the
-    # book. Same zone key and age rule as the portfolio join.
+    # book. Same zone key and the same for-the-life-of-the-zone rule as the
+    # portfolio join; CLOSED_EARLY only, never over real custody.
     "opportunities": "opportunity-v0.7-draft",
     # quality-v0.5: staleness floored at 30 minutes. 2 x tf on a 5m series is
     # ten minutes, and a scan cycle is eleven to twelve, so every 5m feed was

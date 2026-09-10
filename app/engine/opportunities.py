@@ -23,9 +23,10 @@ OPPORTUNITY_VERSION = "opportunity-v0.7-draft"
 # existed; this read model never did, so after pressing Close on a mission
 # card the exposure chip dropped the trade while Next Action kept saying
 # "Manage X — a position is open" until the engine's own simulation reached
-# an exit — days, on a 4H or 1D trade. Same version-stripped zone key as the
-# portfolio, and the same age rule as the custody overlay: an override older
-# than the setup fact is history, not a verdict on the fresh candidate.
+# an exit — days, on a 4H or 1D trade. Same version-stripped zone key and the
+# same rule as the portfolio: a zone the operator closed stays closed for the
+# life of the zone. CLOSED_EARLY only — an ADOPTED position is still open —
+# and never over real custody.
 # v0.6: the ladder has ONE policy authority, and it is the playbook's own
 # recorded bias verdict — this module stops running a second, ungraded one.
 # Until now `top_down()` blocked dispatch for everything short of a fully
@@ -497,13 +498,13 @@ def list_candidates(con, *, include_history: bool = True, now: int | None = None
     custody = _private_custody_by_setup(con)
     # The operator's early closes, keyed on the version-free zone — the
     # portfolio's rule, reused rather than restated (see the v0.7 note).
+    # CLOSED_EARLY only: an ADOPTED position is still open, under the
+    # operator's custody, and "a position is open" stays true of it.
     from . import manual as _manual
     overrides = _manual.overridden_setups(con)
-    override_closed_at = {}
-    for osid, o in overrides.items():
-        zk = _manual.setup_zone_key(osid)
-        override_closed_at[zk] = max(override_closed_at.get(zk, 0),
-                                     int(o.get("closed_at") or 0))
+    closed_zones = {_manual.setup_zone_key(osid)
+                    for osid, o in overrides.items()
+                    if o.get("event") == "CLOSED_EARLY"}
     items = []
     for sid, payload in setups_by_id.items():
         payload.setdefault("setup_id", sid)
@@ -528,9 +529,14 @@ def list_candidates(con, *, include_history: bool = True, now: int | None = None
                 item = dataclasses.replace(
                     item, state=_cstate, eligible=False,
                     entry_recommendation=recommend_entry(payload, _cstate))
-        closed_by_hand = override_closed_at.get(_manual.setup_zone_key(sid))
-        if (closed_by_hand
-                and closed_by_hand >= int(payload.get("confirmed_at") or 0)
+        # The portfolio suppresses a hand-closed zone for the life of the
+        # zone (manual.setup_zone_key explains why: the same zone re-derives
+        # under every later setup version), and this model must say the
+        # same thing or the chip and the directive disagree. Real custody
+        # outranks the paper book here as everywhere: a TESTNET/LIVE
+        # position is not closed by a paper close.
+        if (sid not in custody
+                and _manual.setup_zone_key(sid) in closed_zones
                 and item.state not in (OpportunityState.CLOSED,
                                        OpportunityState.EXPIRED,
                                        OpportunityState.CANCELLED,
