@@ -46,7 +46,10 @@ OPERATIONAL_EXPECTED = {
     # read-only, its own strategy_regrades table). v0.1: unresolved simulator
     # orders pin their data source and receive exit-only processing after
     # universe removal.
-    "live": "live-v0.2-draft",
+    # v0.3 repairs missing execution work. It leaves every engine's own rules
+    # alone — research versions deliberately stay unchanged — but a pinned exit
+    # now emits cooldowns, which risk reads, so the bump is not cosmetic.
+    "live": "live-v0.3-draft",
     "contracts": "contracts-v0.3-draft",
     # automation-v0.5: every drill names and enforces its required evidence;
     # restart demands a boot-id change, so lost-response recovery inside one

@@ -26,10 +26,17 @@ from pathlib import Path
 import notify
 from engine import (automation, autotrader, broker_factory, execution, positions, store,
                     importer, aggregator, execsim, risk, universe, ingest, quality,
-                    listings, marketdata, pipeline, venues)
+                    listings, marketdata, pipeline, venues, cooldowns)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.2-draft"
+LIVE_VERSION = "live-v0.3-draft"
+# v0.3: recover baseline plans missing their current execution generation,
+# including off-universe markets. UNI's older-version close was invisible to
+# the order-only recovery pass and risk kept reserving the sole position slot.
+# The simulator and the sizing arithmetic are untouched and old results are
+# never relabelled — but the pinned path now runs `cooldowns` after `execsim`,
+# so a pinned exit emits the cooldown facts it previously skipped and risk
+# reads those as a rejection gate. That is the sizing-visible half of the bump.
 # v0.2: the cycle runs a daily strategy regrade (engine/regrade.py) —
 # read-only, fail-closed, records its own row. The cycle's durable output
 # grew a table, which is what earns the bump.
@@ -369,6 +376,49 @@ def check_drift(con, log, threshold=DRIFT_ALERT_PCT, dry=False):
             log.warning(f"drift check failed for {sym}: {e}")
 
 
+def execution_rebuild_work(con) -> dict[tuple[str, str], list[dict]]:
+    """Plans risk can reserve but an order-only recovery pass cannot discover.
+
+    Upgrades can leave historical plans on off-universe markets without any
+    order in the new execution generation. Rebuild through the existing
+    simulator, using risk's plan whitelist and baseline, never an old result.
+    Current orders remain owned by execsim.unresolved().
+    """
+    versions = execsim.plan_versions()
+    placeholders = ",".join("?" for _ in versions)
+    rows = con.execute(
+        "WITH covered AS ("
+        " SELECT DISTINCT json_extract(payload,'$.setup_id') AS setup_id"
+        " FROM facts WHERE kind IN ('order','exec') AND algo_version=?"
+        ") SELECT DISTINCT s.symbol,s.tf,s.confirmed_at,"
+        " json_extract(s.payload,'$.setup_id') AS setup_id"
+        " FROM facts s LEFT JOIN covered c"
+        " ON c.setup_id=json_extract(s.payload,'$.setup_id')"
+        f" WHERE s.kind='setup' AND s.algo_version IN ({placeholders})"
+        " AND s.confirmed_at>=? AND json_extract(s.payload,'$.state')='VALIDATED'"
+        " AND c.setup_id IS NULL"
+        # A plan whose order bar has not printed yet is PENDING in the
+        # simulator, which writes NO order fact for it (execsim.run). Without
+        # this, every setup validated on the newest bar reads as missing work
+        # until the next bar closes — a whole week on 1W — so the recovery
+        # warning would fire on ordinary cycles and the idle short-circuit
+        # below would never engage again. Covered by the PRIMARY KEY index.
+        " AND EXISTS (SELECT 1 FROM candles k WHERE k.symbol=s.symbol"
+        "             AND k.tf=s.tf AND k.open_ts>=s.confirmed_at)"
+        " ORDER BY s.symbol,s.tf,setup_id",
+        (execsim.EXEC_VERSION, *versions,
+         store.get_active_baseline(con)["started_at"])).fetchall()
+    work: dict[tuple[str, str], list[dict]] = {}
+    for symbol, tf, confirmed_at, setup_id in rows:
+        # Watch-only plans can never reserve account risk. Do not reactivate
+        # their retired feeds merely to complete unrelated research history.
+        if (tf in risk.TFS and setup_id
+                and universe.admitted_at(con, symbol, confirmed_at)):
+            work.setdefault((symbol, tf), []).append(
+                {"setup_id": setup_id, "event": "REBUILD"})
+    return work
+
+
 def cycle(con, log, beat=None) -> tuple[int, list]:
     """Run one scan pass.
 
@@ -392,6 +442,14 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     # would leave Kraken cold and defeat the whole point of warming it.
     scan = universe.scan_symbols(con)
     unresolved_exec = execsim.unresolved(con)
+    rebuild_exec = execution_rebuild_work(con)
+    for key, plans in rebuild_exec.items():
+        unresolved_exec.setdefault(key, []).extend(plans)
+    if rebuild_exec:
+        log.warning(
+            f"execution rebuild: {sum(map(len, rebuild_exec.values()))} "
+            "baseline plan(s) missing current execution records; "
+            "recovering with quality-gated simulation")
     scan_set = set(scan)
     pinned_exec = {key: value for key, value in unresolved_exec.items()
                    if key[0] not in scan_set}
@@ -494,7 +552,9 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     except Exception as exc:
         log.warning(f"manual resolve pass failed: {type(exc).__name__} {exc}")
 
-    if not new_candles:
+    # A migration may need replay over candles already held. An idle feed
+    # must not prevent recovery of a missing execution generation.
+    if not new_candles and not rebuild_exec:
         return 0, []
 
     before = con.execute("SELECT COALESCE(MAX(id),0) FROM facts").fetchone()[0]
@@ -511,10 +571,11 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
             aggregator.aggregate(con, sym, tf)
 
     # A universe decision governs NEW opportunities, never the lifecycle of an
-    # order already placed.  Run only execsim here: sending an off-universe
-    # symbol through the full pipeline could create fresh setups and keep it
-    # pinned forever.  The quality gate remains mandatory because resolving an
-    # exit across an unexplained candle gap would invent which level hit first.
+    # order already placed. Run execution and its exit cooldowns only: sending
+    # an off-universe symbol through the full pipeline could create fresh
+    # setups and keep it pinned forever. The quality gate remains mandatory
+    # because resolving an exit across an unexplained candle gap would invent
+    # which level hit first.
     pinned_blocked = []
     pinned_by_symbol: dict[str, list[str]] = {}
     for symbol, tf in pinned_exec:
@@ -522,9 +583,25 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     for symbol, tfs in sorted(pinned_by_symbol.items()):
         _beat(f"resolve pinned {symbol}")
         try:
-            quality.assert_market_ready(con, symbol, now)
+            checks = quality.assert_market_ready(con, symbol, now)
+            # Until a current order exists, quality's order pin cannot see
+            # this missing generation. Retired holes are acceptable history,
+            # never acceptable evidence for reconstructing a reserved trade.
+            #
+            # This can only ever veto a REBUILD, which is why it is safe to
+            # veto at all. `quality.unsafe_to_retire()` contains every symbol
+            # in `execsim.unresolved`, and RETIRED_SEQUENCE_GAPS is emitted
+            # only for symbols outside that set, so a market carrying a PLACED
+            # or FILLED order reports BLOCKED SEQUENCE_GAPS and raises above
+            # this line instead. Do not add a live-order carve-out here: it
+            # reads as prudent, it cannot execute, and writing one requires
+            # believing the opposite of what the gate does.
+            if any(c["code"] == "RETIRED_SEQUENCE_GAPS" for c in checks):
+                raise quality.DataQualityError(
+                    f"{symbol}: retired sequence gaps prevent execution recovery")
             for tf in sorted(tfs, key=lambda value: importer.TF_SECONDS[value]):
                 execsim.run(con, symbol, tf, importer.TF_SECONDS[tf])
+                cooldowns.run(con, symbol, tf, importer.TF_SECONDS[tf])
         except Exception as exc:
             pinned_blocked.append(f"{symbol} ({type(exc).__name__}: {exc})")
     if pinned_blocked:

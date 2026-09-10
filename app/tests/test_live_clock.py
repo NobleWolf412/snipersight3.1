@@ -41,6 +41,7 @@ class LiveClockContract(unittest.TestCase):
              patch.object(live.ingest, "history_floor", return_value=0), \
              patch.object(live.venues, "REFERENCE", {}), \
              patch.object(live.execsim, "unresolved", return_value={}), \
+             patch.object(live, "execution_rebuild_work", return_value={}), \
              patch("engine.manual.unresolved", return_value={}):
             self.assertEqual(live.cycle(_Connection(), Mock()), (0, []))
 
@@ -59,6 +60,7 @@ class LiveClockContract(unittest.TestCase):
              patch.object(live.universe, "scan_symbols",
                           return_value=["BTCUSDT"]), \
              patch.object(live.execsim, "unresolved", return_value=pinned), \
+             patch.object(live, "execution_rebuild_work", return_value={}), \
              patch.object(live.importer, "native_tfs",
                           return_value={"5m": 300}), \
              patch.object(live.importer, "backfill", side_effect=backfill), \
