@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from engine import rebuild, store
+from engine import rebuild, setups, store
 
 NOW = 1_800_000_000
 
@@ -69,6 +69,37 @@ class RebuildStatus(unittest.TestCase):
         _run(self.con, rebuild.SETUP_VERSION, "OLD-USD", "1H", NOW - 3 * 86400)
         s = rebuild.status(self.con, now=NOW)
         self.assertEqual((s["done"], s["total"]), (0, 2))
+        self.assertTrue(s["active"])
+
+    def test_a_pair_that_left_the_universe_is_not_work_owed(self):
+        """The 24h window is a PROXY for scan-set membership and a slow one.
+
+        On 2026-09-10 the swing-v0.11 rebuild finished all 222 live pairs and
+        the notice still read 222/270: 48 pairs on markets that had just left
+        the universe were inside the window, counted as owed, and could never
+        be paid. A provisional banner that outlives the rebuild by a day is
+        the cry-wolf failure this module exists to prevent, one direction
+        over. With a universe fact present, the universe answers.
+        """
+        from engine import universe
+        store.insert_fact(
+            self.con, symbol="UNIVERSE", tf="ALL", kind="universe",
+            market_time=0, confirmed_at=0, algo_version=universe.UNIVERSE_VERSION,
+            payload={"members": [{"symbol": "BTCUSDT", "state": "ADMITTED"}]})
+        self.con.commit()
+        _run(self.con, setups.SETUP_VERSION, "BTCUSDT", "1H", NOW - 50)
+        _run(self.con, "setup-v0.9-draft", "GONE-USD", "1H", NOW - 50)
+        s = rebuild.status(self.con, now=NOW)
+        self.assertEqual((s["done"], s["total"]), (1, 1))
+        self.assertFalse(s["active"], "a market that left the universe is not owed")
+
+    def test_without_a_universe_fact_the_window_still_answers(self):
+        """`current_symbols` falls back to the seed pair with no universe
+        fact — a default, not a measurement. Filtering on it would report a
+        fresh store as owing nothing."""
+        _run(self.con, "setup-v0.9-draft", "AAAA-USD", "1H", NOW - 50)
+        s = rebuild.status(self.con, now=NOW)
+        self.assertEqual((s["done"], s["total"]), (0, 1))
         self.assertTrue(s["active"])
 
     def test_an_empty_store_is_not_a_rebuild(self):
