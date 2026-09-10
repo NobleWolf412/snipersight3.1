@@ -542,7 +542,11 @@ EXPECTED = {
     # is the whole point of the separate version namespace. `MANUAL_VERSIONS`
     # gained v0.4 so intents still open under it are still found — a bump that
     # moved both would strand them.
-    "manual": "manual-v0.5-draft",
+    # manual-v0.6: an operator's early close is priced net of entry fee, exit
+    # fee and funding, as the engine prices its own exits; adopted positions
+    # carry the engine fill's fee role into settle_leg. The operator-vs-rule
+    # comparison was tilted ~0.07-0.1 R per close in the operator's favour.
+    "manual": "manual-v0.6-draft",
     # Locked 2026-09-10 — see the LOCKED note. Versions recorded as found;
     # none was moved by the lock.
     "fvg": "fvg-v0.2-draft",

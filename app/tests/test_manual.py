@@ -1112,9 +1112,19 @@ class ManualCase(unittest.TestCase):
             self.con, "SID|4H|X", SPOT, "1H", "LONG",
             entry=100, sl=98, risk_usd=200)
         self.assertTrue(out["written"])
-        # priced at the last CLOSED bar: (105-100)/2 = 2.5R
-        self.assertEqual(out["r_at_close"], "2.50")
-        self.assertEqual(out["usd_at_close"], "500.00")
+        # priced at the last CLOSED bar: (105-100)/2 = 2.5R gross...
+        self.assertEqual(out["r_at_close_gross"], "2.50")
+        # ...and NET of fees since v0.6, exactly as the engine prices its own
+        # exit. On spot that is a 1% round trip, which is the whole point:
+        # the operator's number and the engine's must lose the same money.
+        from decimal import Decimal
+        from engine import costs
+        pf = costs.profile_for(SPOT)
+        net_r = ((Decimal(5) - pf.maker_rate * Decimal(100)
+                  - pf.taker_rate * Decimal(105)) / 2).quantize(Decimal("0.01"))
+        self.assertEqual(out["r_at_close"], str(net_r))
+        self.assertEqual(out["usd_at_close"],
+                         str((net_r * Decimal(200)).quantize(Decimal("0.01"))))
         self.assertEqual(out["exit_price"], "105")
         self.assertTrue(out["not_the_strategy_record"])
         # nothing written under any strategy version or kind
@@ -1129,7 +1139,19 @@ class ManualCase(unittest.TestCase):
         self.load([(100, 101, 99, 100), (100, 101, 94, 95)], symbol=PERP)
         out = manual.close_engine_position(
             self.con, "S2", PERP, "1H", "SHORT", entry=100, sl=102)
-        self.assertEqual(out["r_at_close"], "2.50")   # (100-95)/2
+        self.assertEqual(out["r_at_close_gross"], "2.50")   # (100-95)/2
+        # v0.6: NET of fees, like the engine. No fill fact here, so the entry
+        # is assumed MAKER (and the fact says so) and there is no funding.
+        from decimal import Decimal
+        from engine import costs
+        pf = costs.profile_for(PERP)
+        net = (Decimal(5) - pf.maker_rate * Decimal(100)
+               - pf.taker_rate * Decimal(95))
+        self.assertEqual(out["r_at_close"], str((net / 2).quantize(Decimal("0.01"))))
+        self.assertLess(Decimal(out["r_at_close"]), Decimal("2.50"))
+        self.assertEqual(out["entry_fee_role"], "MAKER")
+        self.assertTrue(out["entry_fee_assumed"])
+        self.assertEqual(Decimal(out["funding_price_units"]), 0)
 
     def test_a_market_close_pays_slippage_like_every_other_market_exit(self):
         """execsim charges its market exits fee AND slippage. The first cut of

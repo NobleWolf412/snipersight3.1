@@ -118,7 +118,19 @@ from .runlog import RunRecorder
 from .execsim import (MAX_BARS, MAX_ENTRY_BARS, FUNDING_RATE_PER_SETTLEMENT,
                       stop_gap_fill)
 
-MANUAL_VERSION = "manual-v0.5-draft"
+MANUAL_VERSION = "manual-v0.6-draft"
+# v0.6: an operator's early close is priced NET, the way the engine prices
+# its own exits. `close_engine_position` computed the taker fee, recorded it,
+# and then divided the GROSS move by the risk — its own comment promised
+# "exactly what execsim charges", and the code charged slippage only. The
+# engine's R is net of entry fee, exit fee and funding (execsim.settle), so
+# the one comparison this feature exists for — did the operator's judgement
+# beat the rule? — was tilted in the operator's favour by ~0.07-0.1 R per
+# close on a 1% stop, invisibly. The entry fee follows the engine fill's
+# recorded role (MAKER_THEN_MARKET crosses 148 of 935 fills as TAKER) and
+# funding runs from the fill bar to the close bar. Adopted positions carry
+# the same `entry_role` into `settle_leg`, which charged maker on every
+# entry regardless. Existing override facts stay as written.
 # v0.5: a stop the bar GAPPED THROUGH now fills at that bar's open, not at the
 # stop price — `execsim.stop_gap_fill`, shared rather than restated, under
 # exec-v0.26-draft. This book was left on the old convention when the engine
@@ -134,7 +146,8 @@ MANUAL_VERSION = "manual-v0.5-draft"
 #: the old tag, because `unresolved` — the resolver's work list — finds work by
 #: version and would simply stop seeing them. See the module docstring.
 MANUAL_VERSIONS = ("manual-v0.1-draft", "manual-v0.2-draft",
-                   "manual-v0.3-draft", "manual-v0.4-draft", MANUAL_VERSION)
+                   "manual-v0.3-draft", "manual-v0.4-draft",
+                   "manual-v0.5-draft", MANUAL_VERSION)
 Q2 = Decimal("0.01")
 
 #: Scale-out bounds. The cap is not a capacity limit — it is a statement about
@@ -673,7 +686,8 @@ def overridden_zone_keys(overrides: dict) -> set:
 def adopt_position(con, setup_id: str, symbol: str, tf: str, direction: str,
                    entry, sl, tp, fill_ts: int, adopted_at: int,
                    risk_usd=None, trail_r=None, note: str = "",
-                   original_sl=None, partials=None) -> dict:
+                   original_sl=None, partials=None,
+                   entry_role: str | None = None) -> dict:
     """Take custody of an engine position with the operator's own levels.
 
     The engine entered this trade; the operator is changing where it ends. Two
@@ -731,6 +745,9 @@ def adopt_position(con, setup_id: str, symbol: str, tf: str, direction: str,
         # rather than hunt for a fill it would never find.
         "adopted_fill_ts": fill_ts,
         "adopted_from": setup_id,
+        # What the engine's fill paid on the way in, so settle_leg charges
+        # the same role rather than assuming a resting maker entry.
+        "entry_role": str(entry_role or "MAKER").upper(),
         "note": note[:280],
         "cost_manifest_hash": costs.record(con, costs.profile_for(symbol)),
     }
@@ -797,8 +814,23 @@ def close_engine_position(con, setup_id: str, symbol: str, tf: str,
             f"NOT modelled, so this close is priced slightly flatteringly")
     eff_exit = (px - slip) if long else (px + slip)
     gross = (eff_exit - entry) if long else (entry - eff_exit)
-    r_mult = (gross / risk).quantize(Q2)
-    fees = profile.taker_rate * eff_exit
+    # NET, like execsim.settle (v0.6): entry fee at the role the engine's
+    # fill actually paid, taker on the market exit, funding from the fill
+    # bar to this one. Without the fill fact the entry is assumed MAKER and
+    # funding is zero — said on the fact, never silently.
+    fill = _engine_fill(con, setup_id, symbol, tf)
+    entry_role = str((fill or {}).get("entry_fee_role") or "MAKER").upper()
+    entry_rate = profile.maker_rate if entry_role == "MAKER" else profile.taker_rate
+    entry_fee = entry_rate * entry
+    exit_fee = profile.taker_rate * eff_exit
+    holding_hours = Decimal(0)
+    if fill and fill.get("confirmed_at") is not None:
+        holding_hours = (Decimal(max(0, closed_at - int(fill["confirmed_at"])))
+                         / Decimal(3600))
+    funding = venues.funding_cost_rate(
+        symbol, FUNDING_RATE_PER_SETTLEMENT, holding_hours) * entry
+    net = gross - entry_fee - exit_fee - funding
+    r_mult = (net / risk).quantize(Q2)
     payload = {
         "setup_id": setup_id, "source": "OPERATOR", "event": "CLOSED_EARLY",
         "symbol": symbol, "tf": tf, "direction": direction,
@@ -808,9 +840,14 @@ def close_engine_position(con, setup_id: str, symbol: str, tf: str,
         "slippage_price_units": str(slip),
         "order_type": "MARKET",
         "r_at_close": str(r_mult),
+        "r_at_close_gross": str((gross / risk).quantize(Q2)),
         "usd_at_close": (None if risk_usd is None
                          else str((r_mult * Decimal(str(risk_usd))).quantize(Q2))),
-        "fees_price_units": str(fees),
+        "fees_price_units": str(entry_fee + exit_fee),
+        "entry_fee_role": entry_role,
+        "entry_fee_assumed": fill is None,
+        "funding_price_units": str(funding),
+        "holding_hours": str(holding_hours),
         "risk_usd": None if risk_usd is None else str(risk_usd),
         "note": note[:280],
         # Stated on the fact itself so a row read in isolation cannot be
@@ -822,6 +859,21 @@ def close_engine_position(con, setup_id: str, symbol: str, tf: str,
         confirmed_at=closed_at, algo_version=MANUAL_VERSION, payload=payload)
     con.commit()
     return {"written": bool(written), **payload}
+
+
+def _engine_fill(con, setup_id: str, symbol: str, tf: str) -> dict | None:
+    """The engine's FILLED order for this setup, any execution generation —
+    its `entry_fee_role` and fill time price an operator close honestly.
+    None when the engine never recorded a fill (a test fixture, or a close
+    on a position the book only knows from custody)."""
+    row = con.execute(
+        "SELECT confirmed_at, payload FROM facts WHERE symbol=? AND tf=? "
+        "AND kind='order' AND json_extract(payload,'$.setup_id')=? "
+        "AND json_extract(payload,'$.event')='FILLED' ORDER BY id DESC LIMIT 1",
+        (symbol, tf, setup_id)).fetchone()
+    if not row:
+        return None
+    return {**json.loads(row[1]), "confirmed_at": row[0]}
 
 
 def _tf_seconds_of(tf: str) -> int:
@@ -1461,7 +1513,8 @@ def _exit_walk(p: dict, candles: list, start_i: int, fill_i: int,
 def settle_leg(profile, symbol: str, entry: Decimal, exit_price: Decimal,
                risk: Decimal, long: bool, fraction: Decimal, kind: str,
                outcome: str, order_type: str, atr_at_exit, bars_held: int,
-               tf_seconds: int, exit_ts: int) -> dict:
+               tf_seconds: int, exit_ts: int,
+               entry_role: str = "MAKER") -> dict:
     """One settlement of one slice of the position, priced in full.
 
     This is the arithmetic `run` has always done for a single exit, lifted out
@@ -1490,7 +1543,13 @@ def settle_leg(profile, symbol: str, entry: Decimal, exit_price: Decimal,
         slip = profile.market_slippage_atr * atr_at_exit
     eff_exit = (exit_price - slip) if long else (exit_price + slip)
     exit_rate = profile.maker_rate if order_type == "LIMIT" else profile.taker_rate
-    fees = profile.maker_rate * entry + exit_rate * eff_exit
+    # The entry paid whatever its order paid. An armed intent rests a limit
+    # (maker); an ADOPTED position inherits the engine fill's role, and the
+    # engine crosses as TAKER on 148 of 935 fills this generation (v0.6 —
+    # this charged maker on every entry regardless).
+    entry_rate = profile.maker_rate if str(entry_role).upper() == "MAKER" \
+        else profile.taker_rate
+    fees = entry_rate * entry + exit_rate * eff_exit
     holding_hours = Decimal(bars_held * tf_seconds) / Decimal(3600)
     funding = venues.funding_cost_rate(
         symbol, FUNDING_RATE_PER_SETTLEMENT, holding_hours) * entry
@@ -1684,7 +1743,8 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 # earns maker and pays no slippage, exactly as the target does.
                 order_type="LIMIT", atr_at_exit=None,
                 bars_held=f["exit_i"] - i, tf_seconds=res_secs,
-                exit_ts=candles[f["exit_i"]]["open_ts"] + res_secs)
+                exit_ts=candles[f["exit_i"]]["open_ts"] + res_secs,
+                entry_role=w.get("entry_role") or "MAKER")
                 for f in filled]
             remainder = Decimal(1) - sum((f["fraction"] for f in filled),
                                          Decimal(0))
@@ -1695,7 +1755,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 # and the trailed one alike — and so is the timeout.
                 order_type="LIMIT" if outcome == "TP" else "MARKET",
                 atr_at_exit=atr[j], bars_held=j - i, tf_seconds=res_secs,
-                exit_ts=exit_ts))
+                exit_ts=exit_ts, entry_role=w.get("entry_role") or "MAKER"))
             counts[outcome] += 1
             if filled:
                 counts["SCALED"] += 1

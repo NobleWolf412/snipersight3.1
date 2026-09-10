@@ -3900,7 +3900,8 @@ def adopt_position(payload: dict):
                 fill_ts=row[0], adopted_at=int(time.time()),
                 risk_usd=pos.get("risk_usd"), trail_r=payload.get("trail_r"),
                 partials=payload.get("partials"),
-                note=str(payload.get("note") or ""))
+                note=str(payload.get("note") or ""),
+                entry_role=fill.get("entry_fee_role"))
         except manual.IntentRejected as exc:
             raise HTTPException(400, str(exc))
         from engine.runlog import get_logger
