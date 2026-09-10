@@ -130,7 +130,10 @@ OPERATIONAL_EXPECTED = {
     # regrade-v0.1: writes durable strategy_regrades rows under this tag —
     # a reading that outlives retention deserves the same lock as any other
     # version-stamped durable state.
-    "regrade": "regrade-v0.1-draft",
+    # regrade-v0.2: a regrade is deferred while the record is rebuilding.
+    # Grading the new rules over a fraction of their own output wrote a
+    # durable row nothing downstream could tell from a complete reading.
+    "regrade": "regrade-v0.2-draft",
     "apexbridge": "apexbridge-v0.1-draft",
     "stocks": "stocks-foundation-v0.2-draft",
     "stock_calendar": "stock-calendar-v0.1-draft",

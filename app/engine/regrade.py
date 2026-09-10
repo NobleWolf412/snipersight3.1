@@ -43,7 +43,13 @@ from __future__ import annotations
 import json
 import time
 
-REGRADE_VERSION = "regrade-v0.1-draft"
+REGRADE_VERSION = "regrade-v0.2-draft"
+# v0.2: a regrade is DEFERRED while the record is rebuilding. A version
+# cascade re-simulates every setup and settlement, and `versions_to_grade()`
+# self-corrects to the new tags at once — so a regrade landing in that window
+# graded the new rules over a fraction of their own output, and the row is
+# durable, append-only, and indistinguishable from a complete reading. Found
+# while starting the swing-v0.11 rebuild, which would have produced one.
 
 #: Daily. The book grows by a handful of closed trades a day, so a tighter
 #: cadence would regrade noise; a looser one recreates the stale-verdict
@@ -142,6 +148,35 @@ def run(con, now: int | None = None, *, resamples: int = RESAMPLES,
 def maybe_run(con, now: int, log=None, beat=None) -> dict | None:
     """The scheduled entry point `live.cycle` calls. None means not due yet."""
     if not due(con, now):
+        return None
+    # NOT WHILE THE BOOK IS BEING REBUILT. A version cascade re-simulates
+    # every setup and every settlement; until the scan set has been walked
+    # under the new tags the book this grades is a PARTIAL one, and
+    # `versions_to_grade()` self-corrects to the new tags immediately — so a
+    # regrade landing in that window grades the new rules over a fraction of
+    # their own output. The row is durable and append-only, `last_run()`
+    # takes the latest, and nothing downstream can tell it apart from a
+    # complete reading. Deferring costs one day of grading; recording it
+    # costs a permanent wrong answer about whether a playbook has edge.
+    #
+    # The check is one indexed COUNT, so unlike the failure path below there
+    # is no crash-loop risk in re-testing it every cycle: `due()` stays true
+    # and this simply defers until the rebuild reports done.
+    from . import rebuild
+    try:
+        status = rebuild.account_status(con, now=now)
+    except Exception as exc:                    # fail OPEN: a broken status
+        status = None                           # reading must not stop grading
+        if log is not None:
+            log.warning(f"REGRADE could not read rebuild status ({exc}); "
+                        f"grading anyway")
+    if status and status.get("active"):
+        if log is not None:
+            log.warning(
+                f"REGRADE deferred: the record is still rebuilding "
+                f"({status['engine']} {status['version']} "
+                f"{status['done']}/{status['total']}) — grading a partial "
+                f"book would record a permanent wrong answer")
         return None
     try:
         res = run(con, now, beat=beat)

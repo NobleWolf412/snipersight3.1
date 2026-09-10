@@ -89,6 +89,43 @@ class RegradeSchedule(unittest.TestCase):
         self.assertIn("PULLBACK", regrades[0])
         self.assertIn("clears_zero=False", regrades[0])
 
+    def test_a_regrade_is_deferred_while_the_record_is_rebuilding(self):
+        """regrade-v0.2. `versions_to_grade()` follows a version bump at once,
+        so a regrade due during a cascade grades the NEW rules over whatever
+        fraction of their own output has been re-simulated so far — and the
+        row it writes is durable, append-only, and indistinguishable from a
+        complete reading. Found while starting the swing-v0.11 rebuild, which
+        was hours from producing one."""
+        logged = []
+
+        class _Log:
+            def info(self, msg):
+                logged.append(msg)
+
+            def warning(self, msg):
+                logged.append(msg)
+
+        rebuilding = {"active": True, "engine": "setup",
+                      "version": "setup-v0.22-draft", "done": 0, "total": 270}
+        with mock.patch("engine.rebuild.account_status", return_value=rebuilding),              mock.patch("engine.abtest.by_strategy", side_effect=AssertionError(
+                 "a regrade graded a partially rebuilt book")):
+            self.assertIsNone(regrade.maybe_run(self.con, 3_000_000, log=_Log()))
+        self.assertEqual(regrade.last_run(self.con), None,
+                         "a deferral must not record an attempt — the next "
+                         "cycle retries, and the check is one indexed count")
+        self.assertTrue(any("deferred" in m and "0/270" in m for m in logged),
+                        "a deferral must be audible")
+
+    def test_an_unreadable_rebuild_status_does_not_stop_grading(self):
+        """Fail OPEN. A broken status reading is not evidence that the book
+        is mid-rebuild, and silently never grading again is worse than one
+        possibly-early row."""
+        with mock.patch("engine.rebuild.account_status",
+                        side_effect=RuntimeError("no such table")),              mock.patch("engine.abtest.by_strategy",
+                        return_value=_fake_report()),              mock.patch("engine.universe.all_tracked_symbols",
+                        return_value=["BTCUSDT"]):
+            self.assertIsNotNone(regrade.maybe_run(self.con, 3_000_000))
+
     def test_untrustworthy_regrade_warns_rather_than_passing_silently(self):
         logged = []
 
