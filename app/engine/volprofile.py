@@ -79,7 +79,21 @@ from . import store
 from .ma import plain, sig
 from .runlog import RunRecorder
 
-VOLPROFILE_VERSION = "volprofile-v0.2-draft"
+def bin_index(price, step: Decimal) -> int:
+    """Which bin a price falls in, exactly. Decimal floor division has no
+    0.3 // 0.1 == 2.0 surprise; a close ON an edge belongs to the bin that
+    starts there."""
+    return int(Decimal(str(price)) // step)
+
+
+VOLPROFILE_VERSION = "volprofile-v0.3-draft"
+# v0.3: bin INDICES are computed in Decimal. `int(float(close) // stepf)` put
+# a close that sits exactly on a bin edge one bin low (0.3 // 0.1 == 2.0 in
+# floating point), so `bin_lo`/`bin_hi` on the recorded fact could name the
+# bin below the one the close is in. Volume accumulation stays float — it is
+# a share, not a price — which is also why the hot loop does not pay for
+# Decimal on every bar. No trading consumer reads this engine; the record is
+# what changed, and that is a version.
 # v0.2: input cascade from agg-v0.2 (own 4H/1W candle reads, ma-v0.2 shared
 # code) — acknowledged-partial buckets change the series profiles are built
 # over, and partial buckets carry genuinely smaller volume sums. No rule
@@ -123,15 +137,13 @@ def walk_states(candles: list) -> list[dict]:
     step = bin_step(Decimal(candles[0]["close"]))
     if step <= 0:
         return []
-    stepf = float(step)
 
     bins: dict[int, float] = {}
 
     def spread(i: int, sign: float) -> None:
         c = candles[i]
-        lo, hi = float(c["low"]), float(c["high"])
         vol = float(c["volume"]) * sign
-        b0, b1 = int(lo // stepf), int(hi // stepf)
+        b0, b1 = bin_index(c["low"], step), bin_index(c["high"], step)
         share = vol / (b1 - b0 + 1)
         for b in range(b0, b1 + 1):
             nv = bins.get(b, 0.0) + share
@@ -154,7 +166,7 @@ def walk_states(candles: list) -> list[dict]:
             median = vols[len(vols) // 2] if vols else 0.0
         if median <= 0:
             continue
-        cb = int(float(candles[i]["close"]) // stepf)
+        cb = bin_index(candles[i]["close"], step)
         ratio = bins.get(cb, 0.0) / median
         new = classify(state, ratio)
         if new != state:

@@ -262,6 +262,48 @@ class DailyBudget(unittest.TestCase):
                          "the panel re-derives today's loss from local midnight")
 
 
+class StoredPriceText(unittest.TestCase):
+    """importer-v0.8: the stored spelling carries no trailing zeros, so a lone
+    20-decimal venue bar cannot set a series' tick to 1e-20 forever."""
+
+    def test_trailing_fractional_zeros_are_dropped(self):
+        from engine import importer
+        self.assertEqual(importer.price_text(Decimal("0.20036000000000000000")),
+                         "0.20036")
+        self.assertEqual(importer.price_text("78262.30"), "78262.3")
+        self.assertEqual(importer.price_text(Decimal("100.00")), "100")
+        self.assertEqual(importer.price_text("0.0000034673"), "0.0000034673")
+
+    def test_no_exponent_ever(self):
+        from engine import importer
+        for raw in ("1E+2", "1e-7", "0E-8"):
+            self.assertNotRegex(importer.price_text(Decimal(raw)), r"[eE]")
+
+    def test_the_value_is_unchanged(self):
+        from engine import importer
+        for raw in ("0.20036000000000000000", "78262.30", "100.00", "0.5"):
+            self.assertEqual(Decimal(importer.price_text(raw)), Decimal(raw))
+
+    def test_a_clean_bar_no_longer_inherits_a_dirty_tick(self):
+        """Once the text is clean the running maximum in quote_ticks is
+        driven by real precision, not by one padded row."""
+        from engine import importer, swings
+        dirty = [{"open": "0.2003", "high": "0.2005", "low": "0.2001", "close": "0.20036000000000000000"}]
+        clean = [{k: importer.price_text(v) for k, v in dirty[0].items()}]
+        self.assertEqual(swings.quote_ticks(dirty)[-1], Decimal("1E-20"))
+        self.assertEqual(swings.quote_ticks(clean)[-1], Decimal("0.00001"))
+
+
+class VolumeProfileBins(unittest.TestCase):
+    def test_a_close_on_a_bin_edge_is_in_the_bin_that_starts_there(self):
+        from engine import volprofile
+        step = Decimal("0.1")
+        # 0.3 // 0.1 is 2.0 in floating point; the record said bin 2.
+        self.assertEqual(volprofile.bin_index("0.3", step), 3)
+        self.assertEqual(volprofile.bin_index("0.29999", step), 2)
+        self.assertEqual(volprofile.bin_index(Decimal("100"), Decimal("0.5")), 200)
+
+
 class OperatorCloseReachesNextAction(unittest.TestCase):
     """opportunity-v0.7: a position the operator closed by hand is CLOSED in
     the read model Next Action reads, not only in the portfolio."""

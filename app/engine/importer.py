@@ -19,7 +19,29 @@ from datetime import datetime, timezone
 from . import binance, kraken, phemex, venues
 
 API = "https://api.exchange.coinbase.com"
-IMPORTER_VERSION = "importer-v0.7-draft"
+def price_text(value) -> str:
+    """The stored spelling of a price: plain decimal notation, no exponent,
+    no trailing fractional zeros. `Decimal.normalize()` is NOT used — it
+    spells 100.00 as 1E+2, which is a price no reader here expects."""
+    d = value if isinstance(value, Decimal) else Decimal(str(value))
+    s = format(d, "f")
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s or "0"
+
+
+IMPORTER_VERSION = "importer-v0.8-draft"
+# v0.8: price text is stored without trailing fractional zeros. Kraken
+# occasionally serves `0.20036000000000000000` (PF_ADAUSD 5m, 2 of 13,556
+# bars; PF_PUMPUSD to 20 dp, PF_AAVEUSD to 15) and `swings.quote_ticks` reads
+# the venue's tick off the exponent of the stored string as a RUNNING maximum
+# — so one such bar set the tick to 1e-15..1e-20 for that series forever, on
+# 37 symbols. Every structural tolerance is `max(tick, 0.05*ATR)` and stayed
+# sane; the bare-tick readers (setups' `risk < 2*tick` veto, breakout's
+# one-tick band) simply went inert on those symbols. The value is unchanged
+# (Decimal("0.20036") == Decimal("0.20036000000000000000")); only the text
+# is. Rows already stored keep their zeros — the fix is for every bar from
+# here on, which is what an append-only store can promise.
 # v0.7: a quiet bucket at the HEAD of a served window is acknowledged when the
 # market has already listed. v0.5 fixed the empty answer; a partial answer
 # that omitted only its first bucket still counted that bucket as pre-listing,
@@ -225,7 +247,8 @@ def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int, *,
                 f"O={op} H={hi} L={lo} C={cl} V={vol} — excluded, becomes a "
                 f"gap (never repaired)")
             continue
-        seen[t] = (str(op), str(hi), str(lo), str(cl), str(vol))
+        seen[t] = (price_text(op), price_text(hi), price_text(lo),
+                   price_text(cl), str(vol))
 
     imported_at = int(time.time())
     con.executemany(

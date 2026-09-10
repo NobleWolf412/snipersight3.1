@@ -269,7 +269,11 @@ EXPECTED = {
     # importer-v0.7, 2026-09-02: gap accounting only (a head-of-window quiet
     # bucket is acknowledged once the market has listed). Stamped on no fact
     # and no candle row, so no CONSUMERS entry — the same reasoning as v0.5.
-    "importer": "importer-v0.7-draft",
+    # importer-v0.8, 2026-09-10: price text stored without trailing fractional
+    # zeros. Values unchanged; only swings.quote_ticks, which reads the
+    # venue's tick off the string's exponent, sees the difference — a lone
+    # 20-decimal Kraken bar had set 37 symbols' tick to 1e-20 forever.
+    "importer": "importer-v0.8-draft",
     # agg-v0.2 cascade, 2026-08-09 — wider than S53, and the first to start
     # from CANDLES rather than facts. The aggregator now builds a 4H/1W bucket
     # from the source candles that exist when every missing one is a bucket
@@ -550,7 +554,9 @@ EXPECTED = {
     # Locked 2026-09-10 — see the LOCKED note. Versions recorded as found;
     # none was moved by the lock.
     "fvg": "fvg-v0.2-draft",
-    "volprofile": "volprofile-v0.2-draft",
+    # volprofile-v0.3: bin indices in Decimal; a close on a bin edge no longer
+    # lands one bin low on the recorded fact.
+    "volprofile": "volprofile-v0.3-draft",
     "abtest": "abtest-v0.6",
     "edgestats": "edgestats-v0.4-draft",
     "entrystats": "entrystats-v0.3-draft",
