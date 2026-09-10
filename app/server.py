@@ -4287,8 +4287,14 @@ def health(deep: bool = Query(False)):
         for symbol, tf, last_open in rows:
             sec = importer.TF_SECONDS[tf]
             age_s = max(0, now - (last_open + sec))
+            # The SAME staleness rule the quality engine applies (2 x tf,
+            # floored at quality.STALE_FLOOR_S). This endpoint carried its
+            # own 2 x tf until 2026-09-10, so after the floor landed it
+            # read DEGRADED for the first minutes of every cycle while the
+            # scanner's verdict read PASS — two authorities on one word.
+            stale_after = max(2 * sec, quality.STALE_FLOOR_S)
             series.append({"symbol": symbol, "tf": tf, "last_open": last_open,
-                           "age_s": age_s, "stale": age_s > 2 * sec,
+                           "age_s": age_s, "stale": age_s > stale_after,
                            "maintained": symbol in maintained})
         stale_maintained = [s for s in series if s["stale"] and s["maintained"]]
         stale_stored = [s for s in series if s["stale"] and not s["maintained"]]
