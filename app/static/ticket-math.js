@@ -142,10 +142,13 @@
     out.notional = notional;
 
     if(useOverride){
-      // The coupled envelope still applies. Risking more than the account's
-      // whole open-risk budget on one trade would breach the limit that keeps
-      // two concurrent positions survivable.
-      const cap = equity * (cfg.max_total_risk_pct || cfg.risk_pct);
+      // The coupled envelope still applies. Risking more than the open-risk
+      // budget on one trade breaches the limit the risk authority enforces.
+      // The REACHABLE budget when the server sends it: with one slot the 2R
+      // headline is 1R in practice, and a note that only fires at 4% would
+      // wave through a 3% override the engine refuses.
+      const cap = equity * (cfg.effective_max_total_risk_pct
+                            || cfg.max_total_risk_pct || cfg.risk_pct);
       if(riskUsd > cap) out.notes.push('RISK_EXCEEDS_TOTAL_BUDGET');
       if(out.riskPctEffective > (cfg.daily_loss_pct || 1))
         out.notes.push('RISK_EXCEEDS_DAILY_HALT');

@@ -78,7 +78,11 @@ OPERATIONAL_EXPECTED = {
     # recorded bias verdict blocks; CONFLICT/CONDITIONAL are display states
     # and a missing ladder reading never holds dispatch. v0.5: risk reasons
     # trader-readable; top-down independent of risk state.
-    "opportunities": "opportunity-v0.6-draft",
+    # opportunity-v0.7: an engine position the operator closed by hand reads
+    # CLOSED in this model too, as the portfolio has always shown it; Next
+    # Action stopped saying "a position is open" for a trade already off the
+    # book. Same zone key and age rule as the portfolio join.
+    "opportunities": "opportunity-v0.7-draft",
     # quality-v0.5: staleness floored at 30 minutes. 2 x tf on a 5m series is
     # ten minutes, and a scan cycle is eleven to twelve, so every 5m feed was
     # DEGRADED near the end of every cycle and healed on the next import — the

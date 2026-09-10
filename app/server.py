@@ -468,6 +468,16 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
         stages = Counter(r["stage"] for r in records)
         failures = Counter(r["failure_code"] for r in records
                            if r["failure_code"] not in telemetry.NON_FAILURES)
+        # WHY the risk authority said no, by rule. `failure_points` folds every
+        # risk refusal into one RISK_REJECTED bucket, which left the funnel's
+        # risk stage unable to use the twenty rule sentences it carries —
+        # "the risk rules said no" for 246 of 275 validated setups. The
+        # parameter is stripped (CONCURRENT_LIMIT(1) -> CONCURRENT_LIMIT) so
+        # the lexicon key matches.
+        risk_reasons = Counter(
+            str(code).split("(")[0]
+            for r in records if r["failure_code"] == "RISK_REJECTED"
+            for code in (r.get("risk_reasons") or []))
         rejected_candidates = Counter()
         rows = con.execute(
             "SELECT symbol,tf,payload FROM facts WHERE kind='setup_rejection' "
@@ -552,6 +562,7 @@ def setup_telemetry(symbol: str | None = None, tf: str | None = None,
                        "closed": closed, "winners": winners},
             "stages": dict(stages),
             "failure_points": dict(failures.most_common()),
+            "risk_reasons": dict(risk_reasons.most_common()),
             "candidate_rejections": dict(rejected_candidates.most_common()),
             "data_gates": data_gates,
             "engine_faults": engine_faults,
@@ -937,6 +948,21 @@ def _daily_budget(journal: list, equity: Decimal, gates: dict) -> dict:
             "limit_r": str(gates["daily_loss_r"])}
 
 
+def _effective_open_risk(gates: dict) -> Decimal:
+    """The open-risk budget a trade can actually reach.
+
+    MAX_OPEN_R is 2R, but MAX_CONCURRENT is 1 and SCALE_ADD_R is 0, so the
+    second R has no way in: CONCURRENT_LIMIT fires before the budget check
+    (risk.py) and EXPOSURE_LIMIT has not fired once under the current risk
+    version — 0 against 1,633 CONCURRENT_LIMIT rejections. Surfaces that
+    printed the headline 2R as "budget" showed ~$186 free after one fill that
+    no trade could use. The cap the operator can hit is the smaller of the
+    two, and every surface reads THIS rather than re-deriving it.
+    """
+    per_slot = gates["risk_pct"] * Decimal(gates["max_concurrent"])
+    return min(Decimal(str(gates["max_total_open_risk_pct"])), per_slot)
+
+
 def _envelope_config(con, eq: float) -> dict:
     """The envelope of the book being DISPLAYED — the paper book — plus the
     dispatch mode's R as separate, labelled information.
@@ -954,6 +980,7 @@ def _envelope_config(con, eq: float) -> dict:
     return {"mode": mode.value,
             "risk_pct": float(g["risk_pct"]) * 100,
             "max_total_risk_pct": float(g["max_total_open_risk_pct"]) * 100,
+            "effective_max_total_risk_pct": float(_effective_open_risk(g)) * 100,
             "max_concurrent": g["max_concurrent"],
             "max_leverage": float(risk.MAX_LEVERAGE),
             "daily_loss_pct": float(g["daily_loss_limit_pct"]) * 100,
@@ -1101,13 +1128,16 @@ def portfolio():
                 "costs_r": float(ex.get("costs_r") or 0),
                 "holding_hours": ex.get("holding_hours"),
                 "risk_usd": risk_usd,
-                # Decimal, from the raw payload strings, quantized the same way
-                # risk.py builds the equity curve. Both operands arrive 2dp-
-                # quantized, so the product lands on exactly 4 decimals and
-                # half-cent ties are reachable — where Python's round() banks
-                # to even and the engine's quantize() rounds half up. A journal
-                # that disagrees with the curve by a cent is a journal nobody
-                # trusts the rest of.
+                # Decimal, from the raw payload strings. Both operands arrive
+                # 2dp-quantized, so the product lands on exactly 4 decimals
+                # and half-cent ties are reachable. This rounds HALF_UP; the
+                # equity curve in risk.py quantizes with Python's default,
+                # which is HALF_EVEN (this comment used to claim the engine
+                # rounds half up — it does not; nothing in engine/ sets a
+                # rounding context). On a tie the two can differ by a cent.
+                # None of today's settlements tie; the day one does, make
+                # risk.py's rounding explicit under a RISK_VERSION bump rather
+                # than changing this side to match.
                 "pnl_usd": float((Decimal(str(ex.get("r_multiple") or 0)) *
                                   Decimal(str(sized.get("risk_usd") or 0)))
                                  .quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
@@ -1188,6 +1218,15 @@ def portfolio():
                 "pending_orders": pending_orders,
                 "open_risk_usd": round(sum(float(p["risk_usd"] or 0)
                                            for p in positions), 2),
+                # FILLED risk above; COMMITTED risk here. risk.py budgets
+                # against `open_pos`, which a trade joins the moment it is
+                # sized — every one of the 243 engine orders since baseline
+                # rested before filling (median 45 min) — so the budget the
+                # engine will actually grant is measured against this figure.
+                # The top-bar chip read "$372 free" off filled-only risk
+                # while a resting order already held the slot.
+                "committed_risk_usd": round(sum(float(p["risk_usd"] or 0)
+                                                for p in positions + pending_orders), 2),
                 "curve": [{"ts": c["ts"], "equity": float(c["equity"])}
                           for c in (acct["curve"] if acct else [])],
                 "recent": recent[-25:],
@@ -2265,9 +2304,22 @@ def overview():
         for sym in universe.all_tracked_symbols(con):
             days = store.get_candles(con, sym, "1D", limit=2)
             price = chg = None
+            price_tf = "1D"
             if len(days) == 2:
                 prev, last = float(days[0]["close"]), float(days[1]["close"])
                 price, chg = last, round(100 * (last - prev) / prev, 2)
+            # The MARKER price is the freshest closed bar the store holds,
+            # not the daily close. The mission cards position "where price
+            # stands" between stop and target off this figure, and the 1D
+            # close is 16 to 40 hours old — measured 1.7% off the ticker on
+            # a 15m trade whose whole bracket was ~1%, which puts the ring
+            # on the wrong side of the stop. `change_pct` stays daily.
+            if days:
+                for tf in ("5m", "15m", "1H", "4H"):
+                    fresh = store.get_candles(con, sym, tf, limit=1)
+                    if fresh and fresh[-1]["open_ts"] > days[-1]["open_ts"]:
+                        price, price_tf = float(fresh[-1]["close"]), tf
+                        break
             regs = store.get_facts(con, sym, "1D", "regime", regime.REGIME_VERSION)
             reg = json.loads(regs[-1]["payload"])["regime"] if regs else None
             m = umembers.get(sym, {})
@@ -2292,7 +2344,8 @@ def overview():
                          "allow_shorts": v.allow_shorts}
             except ValueError:
                 vinfo = None          # unknown instrument; say nothing rather than guess
-            symbols.append({"symbol": sym, "price": price, "change_pct": chg,
+            symbols.append({"symbol": sym, "price": price, "price_tf": price_tf,
+                            "change_pct": chg,
                             "regime": reg, "state": m.get("state", "UNTRACKED"),
                             "rank": m.get("rank"), "vol_usd": m.get("vol_usd"),
                             "venue": vinfo})
@@ -2481,10 +2534,15 @@ def trade_config(symbol: str | None = None):
     that flips the sign of the decision.
     """
     from engine import venues
+    venue_fallback = None
     try:
         v = venues.venue_for(symbol) if symbol else venues.COINBASE_SPOT
-    except ValueError:
+    except ValueError as exc:
         v = venues.COINBASE_SPOT          # conservative: the costlier venue
+        # Loud-fallback rule: the ticket must be able to say it is pricing an
+        # unknown market on spot constants (1x, no shorts, 1.00% round trip)
+        # rather than present them as that market's own.
+        venue_fallback = f"unknown symbol {symbol!r}: {exc}"
     # PAPER basis: the manual order ticket arms the operator's paper book,
     # so its sizing constants are that book's. (The dispatch mode's R never
     # applies here — manual arms do not cross to a real venue.)
@@ -2492,7 +2550,12 @@ def trade_config(symbol: str | None = None):
     return {
         "risk_pct": float(g["risk_pct"]),
         "max_total_risk_pct": float(g["max_total_open_risk_pct"]),
+        # What the envelope actually lets you carry. With one slot and no
+        # adds, the 2R budget can never be more than 1R full — see
+        # _effective_open_risk. The ticket caps on this, not the headline.
+        "effective_max_total_risk_pct": float(_effective_open_risk(g)),
         "max_concurrent": g["max_concurrent"],
+        **({"venue_fallback": venue_fallback} if venue_fallback else {}),
         "max_leverage": float(v.max_leverage),
         "daily_loss_pct": float(g["daily_loss_limit_pct"]),
         "venue": {"key": v.key, "kind": v.kind, "quote": v.quote,
@@ -3266,14 +3329,17 @@ def operations_read_model():
         scanner = _scanner_status()
 
         equity = Decimal(str(pf.get("equity") or risk.START_EQUITY))
-        open_risk = Decimal(str(pf.get("open_risk_usd") or 0))
+        # Committed (filled + resting), the basis the engine budgets on.
+        open_risk = Decimal(str(pf.get("committed_risk_usd",
+                                       pf.get("open_risk_usd")) or 0))
         # PAPER gates, because every dollar below is a paper-book dollar —
         # equity, open_risk and the journal all come from the research book,
         # and one basis per calculation is the rule. The dispatch mode's R is
         # reported as its own labelled field, never subtracted from paper's.
         _gates = risk.gates_for_mode(risk.AutomationMode.PAPER)
         _dispatch_pct = risk.MODE_RISK_PCT[automation.current(con)[0]]
-        total_budget = (equity * _gates["max_total_open_risk_pct"])
+        # The reachable budget, not the headline — see _effective_open_risk.
+        total_budget = (equity * _effective_open_risk(_gates))
         daily = _daily_budget(pf.get("journal", []), equity, _gates)
         daily_remaining = Decimal(daily["remaining_usd"])
         account = {

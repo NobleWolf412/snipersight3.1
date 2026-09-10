@@ -32,9 +32,15 @@ def status(con, *, engine: str = "setup", version: str = SETUP_VERSION,
     total = con.execute(
         "SELECT COUNT(DISTINCT symbol || '|' || tf) FROM engine_runs "
         "WHERE engine=? AND run_at>=?", (engine, now - window_s)).fetchone()[0]
+    # The SAME window as `total`. Counted all-time, `done` included pairs the
+    # scanner stopped visiting — 114 retired setup pairs and 42 execsim pairs
+    # already carried current-version runs on 2026-09-10 — and `min(done,
+    # total)` then reported complete while live pairs were still unrebuilt.
+    # That is the exact way the PROVISIONAL notice went quiet early on 09-05.
     done = con.execute(
         "SELECT COUNT(DISTINCT symbol || '|' || tf) FROM engine_runs "
-        "WHERE engine=? AND algo_version=?", (engine, version)).fetchone()[0]
+        "WHERE engine=? AND algo_version=? AND run_at>=?",
+        (engine, version, now - window_s)).fetchone()[0]
     last = con.execute(
         "SELECT MAX(run_at) FROM engine_runs WHERE engine=? AND algo_version=?",
         (engine, version)).fetchone()[0]

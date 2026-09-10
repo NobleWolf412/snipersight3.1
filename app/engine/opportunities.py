@@ -17,7 +17,15 @@ from .contracts import (DecisionReason, EntryRecommendation, FactorGrade,
                         TopDownDecision, TopDownState, TradeSetup, to_wire)
 
 
-OPPORTUNITY_VERSION = "opportunity-v0.6-draft"
+OPPORTUNITY_VERSION = "opportunity-v0.7-draft"
+# v0.7: an engine position the OPERATOR closed by hand is CLOSED here too.
+# /api/portfolio has joined `manual.overridden_setups` since the override
+# existed; this read model never did, so after pressing Close on a mission
+# card the exposure chip dropped the trade while Next Action kept saying
+# "Manage X — a position is open" until the engine's own simulation reached
+# an exit — days, on a 4H or 1D trade. Same version-stripped zone key as the
+# portfolio, and the same age rule as the custody overlay: an override older
+# than the setup fact is history, not a verdict on the fresh candidate.
 # v0.6: the ladder has ONE policy authority, and it is the playbook's own
 # recorded bias verdict — this module stops running a second, ungraded one.
 # Until now `top_down()` blocked dispatch for everything short of a fully
@@ -487,6 +495,15 @@ def list_candidates(con, *, include_history: bool = True, now: int | None = None
     order_by_id = _latest_by_setup(con, "order", execsim.EXEC_VERSION, since)
     exec_by_id = _latest_by_setup(con, "exec", execsim.EXEC_VERSION, since)
     custody = _private_custody_by_setup(con)
+    # The operator's early closes, keyed on the version-free zone — the
+    # portfolio's rule, reused rather than restated (see the v0.7 note).
+    from . import manual as _manual
+    overrides = _manual.overridden_setups(con)
+    override_closed_at = {}
+    for osid, o in overrides.items():
+        zk = _manual.setup_zone_key(osid)
+        override_closed_at[zk] = max(override_closed_at.get(zk, 0),
+                                     int(o.get("closed_at") or 0))
     items = []
     for sid, payload in setups_by_id.items():
         payload.setdefault("setup_id", sid)
@@ -511,6 +528,16 @@ def list_candidates(con, *, include_history: bool = True, now: int | None = None
                 item = dataclasses.replace(
                     item, state=_cstate, eligible=False,
                     entry_recommendation=recommend_entry(payload, _cstate))
+        closed_by_hand = override_closed_at.get(_manual.setup_zone_key(sid))
+        if (closed_by_hand
+                and closed_by_hand >= int(payload.get("confirmed_at") or 0)
+                and item.state not in (OpportunityState.CLOSED,
+                                       OpportunityState.EXPIRED,
+                                       OpportunityState.CANCELLED,
+                                       OpportunityState.REJECTED)):
+            item = dataclasses.replace(
+                item, state=OpportunityState.CLOSED, eligible=False,
+                entry_recommendation=recommend_entry(payload, OpportunityState.CLOSED))
         if not include_history and item.state in {
                 OpportunityState.CLOSED, OpportunityState.EXPIRED,
                 OpportunityState.CANCELLED, OpportunityState.REJECTED}:

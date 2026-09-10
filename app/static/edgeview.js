@@ -359,9 +359,17 @@
   async function load() {
     panel('<div class="empty">measuring…</div>');
     try {
-      const r = await fetch('/api/edge-stats');
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      render(await r.json());
+      // Through SSData, watched: a raw fetch here was invisible to the
+      // health chip, so a failed edge read left this panel's error as the
+      // only sign anything was wrong, with no age on the numbers around it.
+      if (window.SSData && window.SSData.get) {
+        if (window.SSData.watch) window.SSData.watch('/api/edge-stats');
+        render(await window.SSData.get('/api/edge-stats', 0));
+      } else {
+        const r = await fetch('/api/edge-stats');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        render(await r.json());
+      }
     } catch (e) {
       // Never a zero. A statistics panel that fails quietly is a lie.
       panel(`<div class="empty" style="color:var(--red-2)">

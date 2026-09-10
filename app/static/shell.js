@@ -3043,9 +3043,19 @@ weighed in. Name the facts you used.`;
        than when it fills. Metering the filled-only figure would show budget
        room that the risk authority will refuse to give, which is precisely the
        "the engine is being arbitrary" reading this panel exists to prevent. */
-    const openRisk = (p.active_positions || []).concat(p.pending_orders || [])
-      .reduce((s, t) => s + (+t.risk_usd || 0), 0);
-    const openCap = eq * (+cfg.max_total_risk_pct || 0) / 100;
+    // Served as `committed_risk_usd` (filled + resting) since 2026-09-10 so
+    // this cell, the top-bar chip and /api/operations meter one figure; the
+    // sum is kept only as the fallback for an older payload.
+    const openRisk = p.committed_risk_usd != null ? +p.committed_risk_usd
+      : (p.active_positions || []).concat(p.pending_orders || [])
+          .reduce((s, t) => s + (+t.risk_usd || 0), 0);
+    /* The REACHABLE cap, served by the engine (`effective_max_total_risk_pct`):
+       with one slot the 2R headline can never be more than 1R full, and this
+       bar used to show $186 "free" after a fill that no second trade could
+       use — the engine refuses on the slot before it ever looks at the budget. */
+    const openCapPct = cfg.effective_max_total_risk_pct != null
+      ? +cfg.effective_max_total_risk_pct : (+cfg.max_total_risk_pct || 0);
+    const openCap = eq * openCapPct / 100;
     const slots = (p.active_positions || []).length +
                   (p.pending_orders || []).length;
     const slotCap = +cfg.max_concurrent || 0;
@@ -3422,7 +3432,9 @@ weighed in. Name the facts you used.`;
       setSub('rDD', 'no closed trades');
       setSub('rEquity', 'starting balance');
     } else {
-      $('rReturn').textContent = (up ? '+' : '') + p.return_pct + '%';
+      // Through pct(), like the top bar and Command: this tile printed the
+      // raw figure ("-6.83%") beside three surfaces showing "-6.8%".
+      $('rReturn').textContent = (up ? '+' : '') + pct(p.return_pct);
       $('rReturn').parentElement.className = 'tile ' + (up ? 'up' : 'down');
       $('rDD').textContent = (p.max_drawdown_pct ?? '—') + '%';
       setSub('rReturn', ''); setSub('rDD', ''); setSub('rEquity', '');
@@ -3941,7 +3953,14 @@ weighed in. Name the facts you used.`;
        just LOCKED — the lock spent months here with no definition anywhere. */
     $('riskNow').innerHTML =
       row('risk per trade', pct(c.risk_pct)) +
-      row('total open risk', pct(c.max_total_risk_pct), `(${c.max_concurrent} × per-trade)`) +
+      /* Two numbers, both true: the headline budget and what one slot can
+         reach. The old note "(N × per-trade)" claimed 4% = 1 × 2%. */
+      row('total open risk', pct(c.effective_max_total_risk_pct != null
+                                   ? c.effective_max_total_risk_pct : c.max_total_risk_pct),
+          c.effective_max_total_risk_pct != null
+            && +c.effective_max_total_risk_pct < +c.max_total_risk_pct
+            ? `(budget ${pct(c.max_total_risk_pct)}, capped by ${c.max_concurrent} slot × per-trade)`
+            : `(${c.max_concurrent} × per-trade)`) +
       row('concurrent positions', c.max_concurrent) +
       row('daily loss halt', pct(c.daily_loss_pct)) +
       row('live execution', c.live_enabled ? 'ENABLED' : 'LOCKED — see Going live') +

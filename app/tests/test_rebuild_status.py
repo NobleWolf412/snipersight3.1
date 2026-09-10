@@ -58,6 +58,19 @@ class RebuildStatus(unittest.TestCase):
         self.assertFalse(s["active"])
         self.assertEqual(s["total"], 1)
 
+    def test_a_retired_pair_with_an_old_current_version_run_is_not_done(self):
+        """`done` is windowed exactly like `total`. Counted all-time it swept
+        in pairs the scanner stopped visiting — 114 setup pairs on
+        2026-09-10 — and min(done, total) then reported complete while live
+        pairs were still unrebuilt, which is how the PROVISIONAL notice went
+        quiet early on 09-05."""
+        _run(self.con, "setup-v0.9-draft", "BTCUSDT", "1H", NOW - 50)   # old
+        _run(self.con, "setup-v0.9-draft", "ETHUSDT", "1H", NOW - 50)   # old
+        _run(self.con, rebuild.SETUP_VERSION, "OLD-USD", "1H", NOW - 3 * 86400)
+        s = rebuild.status(self.con, now=NOW)
+        self.assertEqual((s["done"], s["total"]), (0, 2))
+        self.assertTrue(s["active"])
+
     def test_an_empty_store_is_not_a_rebuild(self):
         s = rebuild.status(self.con, version="setup-vNEW", now=NOW)
         self.assertFalse(s["active"])

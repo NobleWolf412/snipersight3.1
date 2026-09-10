@@ -262,5 +262,59 @@ class DailyBudget(unittest.TestCase):
                          "the panel re-derives today's loss from local midnight")
 
 
+class OperatorCloseReachesNextAction(unittest.TestCase):
+    """opportunity-v0.7: a position the operator closed by hand is CLOSED in
+    the read model Next Action reads, not only in the portfolio."""
+
+    def setUp(self):
+        from engine import manual, setups
+        self.tmp = tempfile.TemporaryDirectory()
+        self.con = store.connect(Path(self.tmp.name) / "o.db")
+        store.start_baseline(self.con, started_at=1000, label="test")
+        self.sid = "BTCUSDT|1H|PULLBACK|BTCUSDT|1H|DEMAND|5000|" + setups.SETUP_VERSION
+        store.insert_fact(
+            self.con, symbol="BTCUSDT", tf="1H", kind="setup", market_time=5000,
+            confirmed_at=8600, algo_version=setups.SETUP_VERSION,
+            payload={"setup_id": self.sid, "state": "VALIDATED", "strategy": "PULLBACK",
+                     "direction": "LONG", "entry": "100", "sl": "95", "tp": "110",
+                     "rr": "2", "rank": 50, "expires_at_ts": 10 ** 9})
+        self.manual = manual
+        self.con.commit()
+
+    def tearDown(self):
+        self.con.close()
+        self.tmp.cleanup()
+
+    def _state(self):
+        from engine import opportunities
+        rows = opportunities.list_candidates(self.con, now=20000)
+        return next(r["state"] for r in rows
+                    if r["setup"]["setup_id"] == self.sid)
+
+    def test_a_hand_close_after_the_setup_reads_closed(self):
+        before = self._state()
+        self.assertNotEqual(before, "CLOSED")
+        store.insert_fact(
+            self.con, symbol="BTCUSDT", tf="1H", kind=self.manual.OVERRIDE_KIND,
+            market_time=9000, confirmed_at=9000,
+            algo_version=self.manual.MANUAL_VERSION,
+            payload={"setup_id": self.sid, "source": "OPERATOR",
+                     "event": "CLOSED_EARLY", "symbol": "BTCUSDT", "tf": "1H"})
+        self.con.commit()
+        self.assertEqual(self._state(), "CLOSED")
+
+    def test_an_old_close_does_not_hide_a_fresh_candidate(self):
+        """Same age rule as the custody overlay: a zone the operator closed
+        weeks ago can re-validate and must be tradeable again."""
+        store.insert_fact(
+            self.con, symbol="BTCUSDT", tf="1H", kind=self.manual.OVERRIDE_KIND,
+            market_time=2000, confirmed_at=2000,
+            algo_version=self.manual.MANUAL_VERSION,
+            payload={"setup_id": self.sid, "source": "OPERATOR",
+                     "event": "CLOSED_EARLY", "symbol": "BTCUSDT", "tf": "1H"})
+        self.con.commit()
+        self.assertNotEqual(self._state(), "CLOSED")
+
+
 if __name__ == "__main__":
     unittest.main()

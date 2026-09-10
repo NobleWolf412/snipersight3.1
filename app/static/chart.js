@@ -743,7 +743,9 @@ window.SSChart = (() => {
         : row('stop now locks in', '+' + m.lockedR.toFixed(2) + 'R', 'good'));
 
     // reflect where the risk number came from, without touching the default
-    $('tkRisk').value = m.riskUsd == null ? '' : Math.round(m.riskUsd);
+    // To the cent, not the dollar: the ticket showed "you risk $186.34" and
+    // armed $186 — the fact recorded a different stake than the one shown.
+    $('tkRisk').value = m.riskUsd == null ? '' : Number(m.riskUsd.toFixed(2));
     /* "(engine default)" wrapped the label to a second line in the 268px
        column; the disabled Default button already says the value IS the
        default, so the suffix only flags the exceptional case. */
@@ -778,9 +780,10 @@ window.SSChart = (() => {
             : 'The risk authority will cut this size.');
       },
       RISK_EXCEEDS_TOTAL_BUDGET: () =>
-        `Risking ${usd(m.riskUsd)} on one trade is more than the whole ` +
-        `open-risk budget (${usd(equity * cfg.max_total_risk_pct)}). ` +
-        'That budget is what keeps two concurrent positions survivable.',
+        `Risking ${usd(m.riskUsd)} on one trade is more than the ` +
+        `open-risk budget a trade can reach (${usd(equity *
+          (cfg.effective_max_total_risk_pct || cfg.max_total_risk_pct))}). ` +
+        'The risk authority refuses it outright.',
       RISK_EXCEEDS_DAILY_HALT: () =>
         `A single loss here (${(m.riskPctEffective * 100).toFixed(1)}%) would ` +
         `breach the ${(cfg.daily_loss_pct * 100).toFixed(0)}% daily halt on its own.`,
