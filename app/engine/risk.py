@@ -130,6 +130,28 @@ START_EQUITY = Decimal("10000")
 # the SAME trades, halt at the SAME point, and produce the SAME R
 # distribution — which is what makes paper a rehearsal rather than a
 # different system. The only mode-dependent number is MODE_RISK_PCT.
+# HEADROOM, NOT BUDGET — and the difference is the thing to read before
+# changing either number. 2R of open risk cannot be reached at one slot with
+# no adds: CONCURRENT_LIMIT is tested before the budget (see run()), so
+# EXPOSURE_LIMIT has fired ZERO times under risk-v0.27 against 1,633
+# CONCURRENT_LIMIT refusals. The reachable cap is 1R, and every surface that
+# shows a budget reads `server._effective_open_risk`, which says so.
+#
+# The two are not out of step by accident. `docs/AUTONOMY-OPERATIONS.md`
+# writes "one position at a time" down as a deliberate first-live contract
+# (d341d54); 1ca13ae then restated the envelope in R and restored the OTHER
+# three numbers, leaving this one where the contract put it. So 2R is the
+# envelope the day slots go to 2, and 1R is what the book trades today.
+#
+# Raising MAX_CONCURRENT is a TRADING decision with an unmet precondition
+# the operator recorded on 2026-09-05: "if multiple concurrent positions are
+# introduced later, add portfolio exposure and correlated-asset limits before
+# increasing position slots" (docs/INTELLIGENCE-REVIEW-2026-09-05.md). There
+# is no correlated-asset limit in this package. `universe._base_asset` stops
+# one UNDERLYING filling two slots and stops nothing else, so two alt longs
+# are one crypto-beta bet wearing two tickets — which at 2 slots is 2R on a
+# single move. SAME_SIDE_HALT is the nearest control and only acts after two
+# closed losses on one side in a UTC day.
 MAX_OPEN_R = Decimal("2")            # total open risk: 2 full stop-outs
 DAILY_LOSS_R = Decimal("4")          # realized -4R in a UTC day -> halt
 MAX_CONCURRENT = 1                   # one base position; adds don't count

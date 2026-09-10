@@ -57,13 +57,27 @@ their promotion evidence passes.
 
 ## Initial risk contract
 
-- 0.25% account equity risked per trade
-- one position at a time
-- 0.5% maximum total open risk
-- 1% deterministic UTC-day loss halt
+Stated in R, because that is how `risk.gates_for_mode` states it: R-multiples
+are size-invariant, so paper and a funded account take the same trades and
+halt at the same point. Only the size of one R differs by mode — 2% on the
+paper research book, 0.25% on TESTNET and LIVE (`risk.MODE_RISK_PCT`).
+
+- **1 R risked per trade** — 2% paper, 0.25% dispatched
+- **one position at a time** (`MAX_CONCURRENT = 1`)
+- **2 R maximum total open risk** — headroom for a second slot, not a budget
+  the book can spend today: the concurrency cap is tested first, so the
+  reachable ceiling is 1 R. The cockpit shows the reachable figure.
+- **4 R deterministic UTC-day loss halt**
 - isolated margin and one-way position mode
 - no averaging down, martingale, automatic leverage escalation, or withdrawal
   permission
+
+Three of these lines read 0.25% / 0.5% / 1% until 2026-09-10 — the absolute
+percentages `d341d54` set for a 0.25% book. `1ca13ae` restated the envelope in
+R and restored the magnitudes; this file was not updated with it, so it
+understated the live envelope by 8x for a month. The concurrency line is the
+one that did NOT move, and it is a deliberate contract: see the note on
+`MAX_OPEN_R` in `engine/risk.py` for the precondition on raising it.
 
 HALT blocks new entries. Existing exposure remains under protective management.
 
