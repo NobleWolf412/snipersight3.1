@@ -1,10 +1,12 @@
 import sqlite3
 from decimal import Decimal
+from unittest import mock
 
 import pytest
 
 from engine import automation, execution
-from engine.contracts import (AutomationMode, BrokerOrder, DecisionReason,
+from engine.contracts import (AutomationMode, AutomationStatus, BrokerOrder,
+                              DecisionReason,
                               ExecutionPlan, OrderIntent, OrderKind, RiskDecision)
 
 
@@ -116,6 +118,69 @@ def test_safety_drill_requires_testnet_ack_and_real_matching_observation():
     assert automation.safety_drills(con)[0]["status"] == "PASSED"
     assert con.execute(
         "SELECT COUNT(*) FROM execution_events WHERE event='SAFETY_DRILL'").fetchone()[0] == 1
+
+
+def test_live_refuses_a_size_measured_against_the_paper_book():
+    """execution-core-v0.7. Every dispatched size descends from the PAPER
+    research book's replayed equity; `dispatch_scale` converts the R and
+    nothing converts the ACCOUNT, so on a funded account smaller than the
+    paper book each order risks proportionally more, with nothing on the wire
+    saying so. LIVE refuses until the size was measured against the balance
+    the order will actually hit.
+
+    The promotion gate is forced open here because it sits ABOVE this one and
+    is build-locked; the thing it protects — the broker — is stubbed in the
+    same breath, so a regression fails this assertion rather than routing.
+    """
+    con = memory()
+
+    class MustNotRun:
+        environment = "mainnet"
+        def submit(self, _):
+            raise AssertionError("a LIVE order reached the broker")
+
+    open_gate = AutomationStatus(
+        mode=AutomationMode.LIVE, revision=0, halted=False,
+        live_submission_enabled=True, dispatch_allowed=True,
+        promotion=automation.promotion_summary(live_gate(True), shadow_ready()),
+        reasons=())
+    with mock.patch.object(automation, "status", return_value=open_gate):
+        with pytest.raises(execution.DispatchRejected) as refused:
+            execution.Coordinator(MustNotRun()).dispatch(con, plan(AutomationMode.LIVE))
+        assert "PAPER_REPLAY" in str(refused.value)
+
+        # ...and it goes through once the size names the funded account.
+        priced = plan(AutomationMode.LIVE)
+        priced = ExecutionPlan(
+            priced.intent,
+            RiskDecision(True, "APPROVED", Decimal("25"), Decimal("0.01"),
+                         Decimal("500"), Decimal("0.05"),
+                         (DecisionReason("OK", "within limits"),),
+                         equity_basis_usd=Decimal("1000"),
+                         equity_basis_source="VENUE_BALANCE"),
+            priced.venue, priced.margin_mode, priced.position_mode)
+        with pytest.raises(execution.DispatchRejected) as next_gate:
+            execution.Coordinator(None).dispatch(con, priced)
+        assert "broker" in str(next_gate.value), "the equity gate did not clear"
+
+
+def test_the_autotrader_states_which_account_it_sized_against():
+    """The size is a percentage of the PAPER book's replayed equity, and the
+    wire record says so — that field is what the LIVE gate above reads."""
+    from engine import autotrader
+    built = autotrader.build_plan({
+        "eligible": True, "state": "READY",
+        "setup": {"setup_id": "s-1", "symbol": "BTCUSDT", "direction": "LONG",
+                  "stop": "49000", "targets": ["52000"], "entry": "50000",
+                  "venue": "phemex-perp", "timeframe": "1H"},
+        "risk_decision": {"decision": "APPROVED", "units": "0.01",
+                          "risk_usd": "25", "notional_usd": "500",
+                          "implied_leverage": "0.05", "equity_at": "9317.35",
+                          "reasons": ["WITHIN_LIMITS"]},
+        "entry_recommendation": {"order_kind": "LIMIT", "limit_price": "50000"},
+    }, AutomationMode.PAPER)
+    assert built.risk.equity_basis_usd == Decimal("9317.35")
+    assert built.risk.equity_basis_source == "PAPER_REPLAY"
 
 
 def test_shadow_never_calls_private_broker_and_outbox_is_idempotent():

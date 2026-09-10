@@ -54,7 +54,10 @@ OPERATIONAL_EXPECTED = {
     # alone — research versions deliberately stay unchanged — but a pinned exit
     # now emits cooldowns, which risk reads, so the bump is not cosmetic.
     "live": "live-v0.3-draft",
-    "contracts": "contracts-v0.3-draft",
+    # contracts-v0.4: a RiskDecision states the equity basis its size is a
+    # percentage of, and where that figure was read. Nothing converted the
+    # ACCOUNT between the paper replay and a dispatched order.
+    "contracts": "contracts-v0.4-draft",
     # automation-v0.5: every drill names and enforces its required evidence;
     # restart demands a boot-id change, so lost-response recovery inside one
     # process can no longer pass one of the seven TESTNET->LIVE gates.
@@ -62,12 +65,15 @@ OPERATIONAL_EXPECTED = {
     # autotrader-v0.4: quantity scales to the dispatch mode's R via
     # risk.dispatch_scale() — the risk fact sizes the paper book (2%), an
     # order sent to TESTNET/LIVE carries 0.25%'s quantity (x0.125).
-    "autotrader": "autotrader-v0.4-draft",
+    # autotrader-v0.5: records that basis on every plan (contracts-v0.4).
+    "autotrader": "autotrader-v0.5-draft",
     # execution-core-v0.6: private entries honour expires_at (cancel at the
     # venue), a proven pre-wire refusal is SUBMIT_FAILED and retryable
     # instead of stuck-SUBMITTING-forever, and RESTART_RECOVERED carries
     # boot-id evidence.
-    "execution_core": "execution-core-v0.6-draft",
+    # execution-core-v0.7: LIVE refuses a size not measured against the
+    # funded account's own balance. TESTNET unchanged.
+    "execution_core": "execution-core-v0.7-draft",
     "positions": "positions-v0.3-draft",
     # phemex-private-v0.4: the stop (sent on every order) and every target
     # are tick-validated for all order kinds; submit() sets the leverage the

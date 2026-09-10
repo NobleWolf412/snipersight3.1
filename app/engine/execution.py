@@ -19,7 +19,13 @@ from .contracts import (AutomationMode, BrokerExecution, BrokerOrder, DecisionRe
                         RiskDecision, to_wire)
 
 
-EXECUTION_CORE_VERSION = "execution-core-v0.6-draft"
+EXECUTION_CORE_VERSION = "execution-core-v0.7-draft"
+# v0.7: a LIVE dispatch is refused unless its size was measured against the
+# funded account's own balance (contracts-v0.4 `equity_basis_source`). Until
+# now every dispatched size descended from the paper book's replayed equity,
+# so the day the build lock came off the first real order would have risked a
+# percentage of the wrong account with nothing on the wire saying so. TESTNET
+# is unchanged — play money, paper basis, stated.
 # v0.6: three audited holes in the private path closed. (1) A resting private
 # entry now honours intent.expires_at — monitor_private cancels the remainder
 # at the venue; before this only the PAPER monitor read expiry, so an expired
@@ -642,6 +648,24 @@ class Coordinator:
                 automation.observe_safety_event(con, "KILL_SWITCH_BLOCKED", {
                     "intent_id": plan.intent.intent_id, "mode": mode.value})
             raise DispatchRejected(f"{mode.value} dispatch is promotion-gated")
+        # WHOSE money is this a percentage of? Every size on a plan descends
+        # from the paper research book's replayed equity; `dispatch_scale`
+        # converts the R and nothing converts the ACCOUNT, so a funded
+        # account smaller than the paper book takes a proportionally larger
+        # risk on every order — and the 2R/4R envelope that is meant to
+        # contain it is computed inside the paper replay, against equity the
+        # venue never confirmed. TESTNET is play money and keeps going on the
+        # paper basis, stated. LIVE does not: it refuses until the size was
+        # measured against the balance the order will actually hit. Nothing
+        # reads a venue balance today, which is the point — this is the
+        # question that has to be answered before the first funded fill, and
+        # a refusal is the only way to make sure it is asked.
+        if mode == AutomationMode.LIVE and \
+                plan.risk.equity_basis_source != "VENUE_BALANCE":
+            raise DispatchRejected(
+                f"LIVE order sized against {plan.risk.equity_basis_source} "
+                f"({plan.risk.equity_basis_usd}), not the funded account's own "
+                f"balance — size it against the venue before routing real money")
         if self.broker is None:
             raise DispatchRejected("no private broker adapter is configured")
         expected_environment = "testnet" if mode == AutomationMode.TESTNET else "mainnet"

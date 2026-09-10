@@ -17,7 +17,12 @@ from .contracts import (AutomationMode, DecisionReason, ExecutionPlan,
                         OrderIntent, OrderKind, RiskDecision)
 
 
-AUTOTRADER_VERSION = "autotrader-v0.4-draft"
+AUTOTRADER_VERSION = "autotrader-v0.5-draft"
+# v0.5: the plan states the equity basis its size is a percentage of
+# (contracts-v0.4). No arithmetic changed — `dispatch_scale` still converts
+# the R and nothing converts the account — but the wire record now says
+# which account was measured, which is what lets the dispatch gate refuse a
+# LIVE order sized against the paper book.
 # v0.4: quantity is scaled to the dispatch mode's R before an intent is
 # minted. The risk fact sizes the PAPER research book (2% R, risk-v0.22); an
 # order sent to TESTNET/LIVE must carry that mode's R (0.25%) or the first
@@ -77,6 +82,14 @@ def build_plan(row: dict, mode: AutomationMode) -> ExecutionPlan:
         # TESTNET/LIVE plan — a durable wire record contradicting its own
         # risk_usd, and a trap for any future gate that reads it.
         implied_leverage=(_d(risk.get("implied_leverage")) * scale).quantize(Decimal("0.01")),
+        # The account this size is a percentage of. `equity_at` is the risk
+        # replay's own figure for the PAPER book; scaling the R does not
+        # change whose equity it was. Stated on the wire so the dispatch gate
+        # can refuse a real-money order sized against the wrong account —
+        # see contracts.RiskDecision.
+        equity_basis_usd=(_d(risk.get("equity_at"))
+                          if risk.get("equity_at") is not None else None),
+        equity_basis_source="PAPER_REPLAY",
         reasons=tuple(DecisionReason(str(reason), str(reason))
                       for reason in risk.get("reasons") or ["WITHIN_LIMITS"]))
     return ExecutionPlan(

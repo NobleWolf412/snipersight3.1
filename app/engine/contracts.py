@@ -15,7 +15,15 @@ from enum import Enum
 from typing import Any
 
 
-CONTRACT_VERSION = "contracts-v0.3-draft"
+CONTRACT_VERSION = "contracts-v0.4-draft"
+# v0.4: a RiskDecision states its EQUITY BASIS — the account balance the size
+# is a percentage of, and where that figure was read. Every dispatched size
+# descends from the paper research book's replayed equity ($9,317 today);
+# `dispatch_scale` converts the R (2% -> 0.25%) and nothing converts the
+# ACCOUNT. On a $1,000 funded account the resulting order risks 2.3% per
+# trade, and the 2R/4R envelope that is supposed to contain it lives entirely
+# inside the paper replay. Recording the basis is what lets the dispatch gate
+# refuse a real-money order sized against a book that is not the one paying.
 
 
 class StrEnum(str, Enum):
@@ -216,6 +224,17 @@ class RiskDecision:
     notional_usd: Decimal
     implied_leverage: Decimal
     reasons: tuple[DecisionReason, ...]
+    #: WHOSE money this size is a percentage of, and where that figure came
+    #: from. Every size on this record is derived from the PAPER research
+    #: book's replayed equity — `dispatch_scale` converts the R, not the
+    #: account — so a TESTNET/LIVE order carries a percentage of an account
+    #: it was never measured against. On a funded account smaller than the
+    #: paper book that is silently oversize, and nothing on the wire said so.
+    #: `equity_basis_source` is the guard's whole point: only "VENUE_BALANCE"
+    #: means the number was read from the account the order will actually
+    #: hit. See execution.Coordinator.dispatch.
+    equity_basis_usd: Decimal | None = None
+    equity_basis_source: str = "PAPER_REPLAY"
     version: str = CONTRACT_VERSION
 
 
