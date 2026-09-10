@@ -118,7 +118,8 @@ from .ma import ema, plain, sig
 from .runlog import RunRecorder
 from .swings import compute_atr
 
-VOLATILITY_VERSION = "volatility-v0.2-draft"
+VOLATILITY_VERSION = "volatility-v0.3-draft"
+# v0.3: the swing-v0.11 ATR cascade — reads compute_atr.
 # v0.2: input cascade from agg-v0.2 (own 4H/1W candle reads and ma-v0.2
 # shared code) — acknowledged-partial buckets; no rule change here.
 

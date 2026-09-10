@@ -128,7 +128,9 @@ from .ranges import break_tolerance
 from .runlog import RunRecorder
 from .swings import compute_atr, quote_ticks
 
-MA_VERSION = "ma-v0.2-draft"
+MA_VERSION = "ma-v0.3-draft"
+# v0.3: the swing-v0.11 ATR cascade — ribbon deadband, level tolerance and the
+# close_to_* distances are all ATR multiples. sig() itself is unchanged.
 # v0.2: input cascade from agg-v0.2 — acknowledged-partial 4H/1W buckets
 # change the series every average here is computed over; no rule change.
 

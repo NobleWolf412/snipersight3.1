@@ -118,6 +118,52 @@ class ReadWindow(unittest.TestCase):
         self.assertGreaterEqual(r["false_breaks"], 1)
         self.assertEqual(r["read"], "CHOP")
 
+    def test_a_sub_cent_market_can_reach_chop_at_all(self):
+        """chartread-v0.6. The same broken-and-reversed range as above, at
+        PF_PEPEUSD scale.
+
+        A fixed Q4 level quantum is no significant figures at all down here:
+        every level rounded to "0.0000", so `false_breaks` compared closes
+        against ZERO — true from the first bar, so the excursion never
+        "returns" and the count stays 0. The v0.5 CHOP path was therefore
+        structurally unreachable on 23 (symbol, tf) pairs, and the chart-eye
+        read recorded on every setup for those markets was decided by the
+        fallback branch instead. This fixture fails on the fixed quantum and
+        passes on the scale-free one.
+        """
+        e = Decimal("0.00000001")            # one tick at this scale
+        def zig(levels, wing=3):
+            highs, lows = [], []
+            for a, b in zip(levels, levels[1:]):
+                for k in range(wing + 1):
+                    v = Decimal(a) * e + (Decimal(b) - Decimal(a)) * e * k / (wing + 1)
+                    highs.append(v + e)
+                    lows.append(v - e)
+            highs.append(Decimal(levels[-1]) * e + e)
+            lows.append(Decimal(levels[-1]) * e - e)
+            return _bars(highs, lows)
+
+        bars = zig([100, 110, 101, 111, 100, 110, 101, 110, 100, 110, 101, 110])
+        r = cr.read_window(bars, Decimal(2) * e)
+        # The levels are REAL prices, not zero. This is the assertion the
+        # fixed quantum could not satisfy.
+        for lv in r["resistance"] + r["support"]:
+            self.assertGreater(Decimal(lv["price"]), 0,
+                               "a level collapsed to zero — false_breaks is "
+                               "comparing closes against nothing")
+        self.assertEqual(r["read"], "RANGE")
+        self.assertEqual(r["false_breaks"], 0)
+
+        broken = [dict(b) for b in bars]
+        for k in range(5, 8):
+            broken[k] = {**broken[k], "high": str(Decimal(116) * e),
+                         "close": str(Decimal(115) * e)}
+        r = cr.read_window(broken, Decimal(2) * e)
+        self.assertGreaterEqual(r["false_breaks"], 1,
+                                "a boundary that broke and reversed must be "
+                                "countable at any price scale")
+        self.assertEqual(r["read"], "CHOP")
+
     def test_small_swings_inside_a_big_move_do_not_count_as_structure(self):
         """The house rule from swings.py: a pivot is a LOCAL swing only if the
         reversal to the next opposite pivot is at least LOCAL_ATR_MULT x ATR.

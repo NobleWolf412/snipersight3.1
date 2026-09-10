@@ -28,7 +28,8 @@ from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.20-draft"
+SCALE_VERSION = "scale-v0.21-draft"
+# v0.21: the swing-v0.11 ATR cascade — compute_atr plus setup, exec and structure facts.
 # v0.20: cascade from exec-v0.26/risk-v0.27 (the corrected gapped-stop fill).
 # No rule change: an add only ever attaches to a position the simulator says
 # is open, and that set is a new generation.

@@ -64,7 +64,9 @@ from .structure import STRUCTURE_VERSION
 from .swings import compute_atr
 from .volatility import VOLATILITY_VERSION
 
-REGIMEREAD_VERSION = "regimeread-v0.1-draft"
+REGIMEREAD_VERSION = "regimeread-v0.2-draft"
+# v0.2: the swing-v0.11 ATR cascade — reads compute_atr plus regime, structure and
+# volatility facts.
 
 #: A CHoCH this many bars old or younger is FRESH — the turn just printed.
 FRESH_BARS = 12

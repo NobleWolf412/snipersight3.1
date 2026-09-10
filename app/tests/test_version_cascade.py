@@ -272,7 +272,52 @@ LOCKED = {
 RETIRED_MANUAL = tuple(v for v in manual.MANUAL_VERSIONS
                        if v != manual.MANUAL_VERSION)
 
+#: Every module that imports `swings.compute_atr` AND writes facts. A change
+#: to the ATR rule changes their output while their own version constant sits
+#: still — the S37 defect through a FUNCTION rather than through a fact, which
+#: is why CONSUMERS (a fact-level map) cannot see it. The 2026-09-10 cascade
+#: found three members no map prompts for: `manual` (excluded from CONSUMERS
+#: by design, and it stamps `atr_at_exit` on durable exit facts), `fvg` and
+#: `abtest` (no entries at all). `abtest` is listed because it is locked and
+#: replays ATR even though it appends nothing.
+#:
+#: Analysis-time tools with no version and no facts — draft, episodes,
+#: ignition — are deliberately absent: their output changes silently and
+#: correctly, and a version they do not have cannot strand anything.
+ATR_CONSUMERS = (
+    "abtest", "breakout", "chartread", "execsim", "fvg", "liquidity", "ma",
+    "manual", "momentum", "ranges", "regimeread", "scalein", "setups",
+    "structure", "trend", "volatility", "volume", "zones",
+)
+
+
 EXPECTED = {
+    # ------------------------------------------------------------------
+    # 2026-09-10 — THE ATR CASCADE. `swings.compute_atr` quantized to a FIXED
+    # Q8, which is thirteen significant figures on BTC at 78,262 and ONE on
+    # PF_PEPEUSD at 0.0000034673: its recorded 5m ATR was 6E-8 or 7E-8 and
+    # nothing else, so every ATR multiple in the pipeline carried an 8-15%
+    # step error on 27 (symbol, tf) pairs. `chartread` had the same defect one
+    # quantum coarser — a fixed Q4 left 23 pairs with every level at "0.0000",
+    # which made `false_breaks` compare closes against zero and put the v0.5
+    # CHOP path structurally out of reach on those markets. Both now use
+    # `swings.scale_quantum`, floored at the old quantum so no market loses
+    # precision it had.
+    #
+    # Twenty-four constants move. Three of them no map prompts for, and they
+    # are the ones to check first if this is ever repeated: `manual`
+    # (excluded from CONSUMERS by design, and it stamps `atr_at_exit` on
+    # durable exit facts), `fvg` and `abtest` (no CONSUMERS entries at all).
+    # ATR_CONSUMERS above is the guard that would have caught them.
+    #
+    # DELIBERATELY NOT MOVED: importer, agg, sessions, basis, cycles,
+    # volprofile (ma.plain/sig only, no ATR), venues, universe, quality,
+    # listings, opportunities, and every OPERATIONAL version. `risk` moves for
+    # this cascade ALONE — MAX_CONCURRENT was not touched; see its note.
+    # `analyst_context` and `chart_insight` read chartread and change output,
+    # and stay put: they persist nothing, so a bump there could strand nothing
+    # and force no question.
+    # ------------------------------------------------------------------
     # importer-v0.7, 2026-09-02: gap accounting only (a head-of-window quiet
     # bucket is acknowledged once the market has listed). Stamped on no fact
     # and no candle row, so no CONSUMERS entry — the same reasoning as v0.5.
@@ -318,7 +363,7 @@ EXPECTED = {
     # below — then regime (reads structure), and the trading tail exec / risk /
     # scale / cooldown through setup. ma, volatility, volume, venues, cycles,
     # manual are the only engines that stay put.
-    "swing": "swing-v0.10-draft",
+    "swing": "swing-v0.11-draft",
     # S53 addendum, caught in the FIRST live v0.9 cycle: the new consumer
     # collapse keyed pivots on market_time alone, and one bar can host both a
     # promoted HIGH and a promoted LOW (2025-10-10 carries a MAJOR pair on
@@ -327,19 +372,19 @@ EXPECTED = {
     # structure/zone/liquidity rules changed, so they and everything downstream
     # move AGAIN — the v0.11/v0.12/v0.10 facts from that one cycle remain in
     # the store as the recorded dud.
-    "structure": "structure-v0.13-draft",
+    "structure": "structure-v0.14-draft",
     # S50: zone-v0.11 closed a creation-time LOOKAHEAD — the cluster count read
     # swings not yet confirmed, inflating formation_quality on 7.9% of zones.
     # CONSUMERS["zone"] is ("setup",), and setup's own consumers are
     # ("exec", "risk", "scale"), so the whole trading path cascades.
-    "zone": "zone-v0.14-draft",
-    "liquidity": "liq-v0.12-draft",
-    "regime": "regime-v0.13-draft",
-    "ranges": "ranges-v0.3-draft",
-    "ma": "ma-v0.2-draft",
-    "momentum": "momentum-v0.3-draft",
-    "volatility": "volatility-v0.2-draft",
-    "volume": "volume-v0.2-draft",
+    "zone": "zone-v0.15-draft",
+    "liquidity": "liq-v0.13-draft",
+    "regime": "regime-v0.14-draft",
+    "ranges": "ranges-v0.4-draft",
+    "ma": "ma-v0.3-draft",
+    "momentum": "momentum-v0.4-draft",
+    "volatility": "volatility-v0.3-draft",
+    "volume": "volume-v0.3-draft",
     # sessions-v0.1: NEW ENGINE, the last of the Wave 2.4 indicator set.
     # Emit-on-change UTC session labels (ASIA/LONDON/NY_OVERLAP/NY/QUIET) on
     # 5m/15m/1H only — a 4H bar spans sessions and gets no label. Crypto is
@@ -378,7 +423,7 @@ EXPECTED = {
     # setup-v0.21, 2026-09-05: VALIDATED facts record the chart-eye read
     # (chartread) and carry WINDOW_POLICY, ALLOW everywhere. Same five-tag
     # cascade as v0.20, for the same reason.
-    "setup": "setup-v0.21-draft",
+    "setup": "setup-v0.22-draft",
     # S50 cascade. exec-v0.13 -> v0.14 corrected the MAKER_THEN_MARKET crossing
     # leg, which booked a market fill at the PLAN's price — two bars stale, and
     # outside the fill bar's own [low, high] on 78 of 95 crossed orders, never
@@ -405,7 +450,7 @@ EXPECTED = {
     # gross. CONSUMERS["exec"] is ("risk", "scale", "cooldown") and the same
     # three reasons as the two notes above apply unchanged. `setup` does NOT
     # move: exec is downstream of setups, and no plan changed.
-    "exec": "exec-v0.26-draft",
+    "exec": "exec-v0.27-draft",
     # risk-v0.22: the envelope restated in R, sized by mode (paper/shadow 2%,
     # testnet/live 0.25%), gates identical everywhere; DECISIONs record their
     # pct. The v0.21 note above this line claimed "no cascade follows risk" —
@@ -422,9 +467,9 @@ EXPECTED = {
     # risk/scale/cooldown v+1, 2026-09-07: cascade from exec-v0.26 only. No
     # logic moved in any of the three — they read exec facts, and those facts
     # now carry a corrected stop fill.
-    "risk": "risk-v0.27-draft",
-    "scale": "scale-v0.20-draft",
-    "cooldown": "cooldown-v0.14-draft",
+    "risk": "risk-v0.28-draft",
+    "scale": "scale-v0.21-draft",
+    "cooldown": "cooldown-v0.15-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
     # every setup they emit. No rule changed in either and no trade differs —
     # both policies are ALLOW everywhere — but the payload does, and a payload
@@ -439,7 +484,7 @@ EXPECTED = {
     # was. The day `setups.py` starts recording a bias block — step 3 of the
     # plan — that stops being true and setup/exec/risk/scale/cooldown all move
     # together.
-    "breakout": "breakout-v0.6-draft",
+    "breakout": "breakout-v0.7-draft",
     # trend-v0.1: NEW ENGINE, measured and not enabled. It arrives because
     # grading the MA against the book found LONG x ABOVE = 0 and
     # SHORT x BELOW = 0 across all 477 closed trades — both shipped playbooks
@@ -448,14 +493,14 @@ EXPECTED = {
     # trend-*), but it sits downstream of `ma` and `swing`: it computes the
     # ribbon with ma.ema / ma.sma and takes targets from INTERMEDIATE+ swings,
     # so both appear in its CONSUMERS entries and a bump to either moves this.
-    "trend": "trend-v0.3-draft",
+    "trend": "trend-v0.4-draft",
     # bias-v0.1: NEW SHARED LAYER, record-only. It arrives because three
     # engines answered "does the higher timeframe matter" three different ways
     # — scalein gates hard, setups records and ignores, trend did not look at
     # all — and none of those three answers was chosen by measurement. It reads
     # `regime` and `structure` facts and writes none of its own, so it is
     # downstream of both and upstream of every playbook that records it.
-    "bias": "bias-v0.2-draft",
+    "bias": "bias-v0.3-draft",
     # 2026-09-03: the two readers behind the direction-first rebuild. Graded
     # over the existing book before anything records them (rule 7):
     # regimeread's IMPULSE/TURN/DRIFT phases separate REVERSAL cells by
@@ -463,12 +508,12 @@ EXPECTED = {
     # LONG); htfread's has_htf_zone graded WORSE for reversals (-0.17R vs
     # -0.09R) and its target_alt no better, so neither of those earns a
     # recording bump yet.
-    "regimeread": "regimeread-v0.1-draft",
-    "htfread": "htfread-v0.1-draft",
+    "regimeread": "regimeread-v0.2-draft",
+    "htfread": "htfread-v0.2-draft",
     # 2026-09-04: the window read the operator described (§26/§27). Locked
     # from birth; graded at analysis time and against the golden labels
     # before any playbook reads it.
-    "chartread": "chartread-v0.5-draft",
+    "chartread": "chartread-v0.6-draft",
     # venues-v0.3: the REFERENCE contract — a per-symbol pointer to the
     # deepest venue's candle series (operator ruling 2026-08-09), stored under
     # '@'-keys that venue_for REFUSES, which is the enforcement keeping every
@@ -557,14 +602,14 @@ EXPECTED = {
     # fee and funding, as the engine prices its own exits; adopted positions
     # carry the engine fill's fee role into settle_leg. The operator-vs-rule
     # comparison was tilted ~0.07-0.1 R per close in the operator's favour.
-    "manual": "manual-v0.6-draft",
+    "manual": "manual-v0.7-draft",
     # Locked 2026-09-10 — see the LOCKED note. Versions recorded as found;
     # none was moved by the lock.
-    "fvg": "fvg-v0.2-draft",
+    "fvg": "fvg-v0.3-draft",
     # volprofile-v0.3: bin indices in Decimal; a close on a bin edge no longer
     # lands one bin low on the recorded fact.
     "volprofile": "volprofile-v0.3-draft",
-    "abtest": "abtest-v0.6",
+    "abtest": "abtest-v0.7",
     "edgestats": "edgestats-v0.4-draft",
     "entrystats": "entrystats-v0.3-draft",
     "factorstats": "factorstats-v0.2-draft",
@@ -764,6 +809,47 @@ class VersionLockfile(unittest.TestCase):
             self.assertTrue(
                 kind.startswith(stem) or stem.startswith(kind[:4]),
                 f"{kind} version {ver!r} does not name its own engine")
+
+    def test_every_atr_importer_that_writes_facts_is_declared(self):
+        """The guard the 2026-09-10 cascade needed and did not have.
+
+        `compute_atr` is imported, not read as a fact, so an ATR rule change
+        moves eighteen versioned engines' output while CONSUMERS — which maps
+        FACT-level coupling — stays silent. This derives the real importer
+        list from the source, so the next ATR change has to look at anyone
+        new.
+        """
+        import re as _re
+        from pathlib import Path
+        engine_dir = Path(__file__).resolve().parents[1] / "engine"
+        found = set()
+        for path in engine_dir.glob("*.py"):
+            if path.stem == "swings":
+                continue
+            text = path.read_text(encoding="utf-8")
+            if "compute_atr" not in text:
+                continue
+            # A VERSION is the qualifier, not `insert_fact`. chartread and
+            # regimeread append nothing of their own — their readings are
+            # recorded inside someone else's fact — and that is exactly the
+            # silent second generation this guard exists for. A module with
+            # no version (draft, episodes, ignition) cannot strand anything.
+            if _re.search(r"^[A-Z_]+_VERSION\s*=", text, _re.M):
+                found.add(path.stem)
+        self.assertEqual(
+            found, set(ATR_CONSUMERS),
+            "the set of fact-writing compute_atr importers has changed. Add "
+            "it to ATR_CONSUMERS and ask whether its version must move with "
+            "the next ATR rule change — CONSUMERS cannot see this coupling.")
+
+    def test_the_declared_atr_consumers_really_import_it(self):
+        from pathlib import Path
+        engine_dir = Path(__file__).resolve().parents[1] / "engine"
+        for name in ATR_CONSUMERS:
+            self.assertIn(
+                "compute_atr",
+                (engine_dir / f"{name}.py").read_text(encoding="utf-8"),
+                f"{name} is declared an ATR consumer and does not import it")
 
 
 if __name__ == "__main__":

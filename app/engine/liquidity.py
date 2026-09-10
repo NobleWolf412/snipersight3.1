@@ -16,7 +16,8 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-LIQ_VERSION = "liq-v0.12-draft"
+LIQ_VERSION = "liq-v0.13-draft"
+# v0.13: the swing-v0.11 ATR cascade — reads compute_atr and swing facts.
 # v0.12: input cascade from agg-v0.2 via swing-v0.10 — acknowledged-partial
 # 4H/1W buckets change the pivots pools cluster, with no rule change here.
 # v0.11: the v0.10 collapse keyed on market_time alone; a bar hosting both a

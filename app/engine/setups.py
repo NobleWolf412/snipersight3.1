@@ -32,7 +32,11 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.21-draft"
+SETUP_VERSION = "setup-v0.22-draft"
+# v0.22: the swing-v0.11 ATR cascade and chartread-v0.6. Every producer above this
+# engine moved, and the chart-eye read recorded on each setup is now a real
+# reading on the 23 markets where its levels used to be zero. No rule here
+# changed; the inputs did, which is exactly the S37/S53 shape.
 # v0.21: VALIDATED setups record the CHART READ — the regime a trader sees in
 # the window a chart opens with (chartread-v0.5: read, bias, location,
 # structure_state, false_breaks on the trade's timeframe; the rung above's

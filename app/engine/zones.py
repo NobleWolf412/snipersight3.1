@@ -23,7 +23,8 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-ZONE_VERSION = "zone-v0.14-draft"
+ZONE_VERSION = "zone-v0.15-draft"
+# v0.15: the swing-v0.11 ATR cascade — reads compute_atr and swing facts.
 # v0.14: input cascade from agg-v0.2 via swing-v0.10/structure-v0.13 —
 # acknowledged-partial 4H/1W buckets change the pivots zones cluster, with no
 # rule change here.

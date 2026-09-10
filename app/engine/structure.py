@@ -19,7 +19,8 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-STRUCTURE_VERSION = "structure-v0.13-draft"
+STRUCTURE_VERSION = "structure-v0.14-draft"
+# v0.14: the swing-v0.11 ATR cascade — reads compute_atr and swing facts.
 # v0.13: input cascade from agg-v0.2, via swing-v0.10 and this engine's own
 # 4H/1W candle reads — acknowledged-partial buckets change both with no rule
 # change here.

@@ -27,7 +27,8 @@ from .setups import SETUP_VERSION
 from .swings import compute_atr
 from .runlog import RunRecorder
 
-EXEC_VERSION = "exec-v0.26-draft"
+EXEC_VERSION = "exec-v0.27-draft"
+# v0.27: the swing-v0.11 ATR cascade — compute_atr (exit slippage) and setup facts.
 # v0.26: THE STOP NO LONGER FILLS AT A PRICE THE BAR NEVER TRADED. v0.14 fixed
 #   this for the ENTRY cross and the exit leg was never asked the same
 #   question. A bar that opens already through the stop now settles at that

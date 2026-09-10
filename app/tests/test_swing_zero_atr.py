@@ -1,31 +1,36 @@
-"""A zero-quantized ATR must not crash the swing engine.
+"""A zero ATR must not crash the swing engine — and the artefact that first
+produced one is gone.
 
-On an 8dp-quoted low-tick coin in a dead hour, a one-tick true range
-Wilder-averages to ~1e-8/14 = 7e-10, which Q8 rounds to 0E-8: the bar is not
-flat, but its recorded ATR is zero. The LOCAL promotion then computed
-`reversal < 0.75 * 0` (False, since a strict fractal always reverses by at
-least a tick) and fell straight into `reversal / atr` —
-decimal.DivisionByZero, 1,151 ERROR rows in engine_runs (PF_PEPEUSD 5m
-1,041, PF_SHIBUSD 5m 110), and no swing facts for either series past each
-run's crash point.
+ORIGINALLY: on an 8dp-quoted low-tick coin in a dead hour, a one-tick true
+range Wilder-averages to ~1e-8/14 = 7e-10, which a FIXED Q8 rounds to 0E-8 —
+the bar is not flat, but its recorded ATR is zero. The LOCAL promotion then
+computed `reversal < 0.75 * 0` (False, since a strict fractal always reverses
+by at least a tick) and fell straight into `reversal / atr` —
+decimal.DivisionByZero, 1,151 ERROR rows in engine_runs (PF_PEPEUSD 5m 1,041,
+PF_SHIBUSD 5m 110), and no swing facts for either series past each crash.
 
-The fix treats ATR==0 exactly like ATR==None — "no usable ATR measurement",
-skip the ATR-normalized promotion, keep the micro fact — the same guard
-ma.py applies to its ribbon distances. These tests pin:
+The guard treats ATR==0 exactly like ATR==None — "no usable ATR measurement",
+skip the ATR-normalized promotion, keep the micro fact.
 
-  · the fixture genuinely reaches ATR==0E-8 at a swing bar (else the guard
-    is untested and this file proves nothing);
-  · the run completes, records the micro swings, and emits no LOCAL
-    promotion for the zero-ATR swing (an undefined reversal-in-ATRs is not
-    evidence, and threshold-0 would have promoted EVERY swing);
+SINCE swing-v0.11 the quantum follows the price scale (`scale_quantum`), so
+that same fixture measures 7.1429E-10 instead of 0E-8 and the artefact cannot
+recur. A zero ATR is now only what it always claimed to be: a market that did
+not move at all. That is still reachable — and a fractal bar's own true range
+is never zero, so no candle series can put a zero ATR *at a swing bar* any
+more. The guard is therefore exercised here by feeding it the zero directly,
+which is the honest way to test a guard whose trigger has become unreachable
+by accident.
+
+These tests pin:
+
+  · the old artefact is gone, and the value it now carries is a real one;
+  · a genuinely flat market still measures exactly zero;
+  · handed a zero ATR at a swing bar, the run completes, records the micro
+    swings, and emits no LOCAL promotion (an undefined reversal-in-ATRs is
+    not evidence, and threshold-0 would have promoted EVERY swing);
   · a re-run writes nothing (idempotence survives the guard);
-  · once ATR becomes measurable later in the same series, promotions work
-    again — the guard skips a bar, not the engine.
-
-No version bump: the unguarded code CRASHED here, and RunRecorder commits
-on the error path, so every fact v0.10 ever committed for these series is
-byte-identical under the guard — the fix only adds facts where none could
-exist. There is no second generation under the label.
+  · once ATR is measurable, promotions work — the guard skips a bar, not
+    the engine.
 """
 import json
 import sys
@@ -33,6 +38,7 @@ import tempfile
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from unittest import mock
 
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP))
@@ -69,17 +75,39 @@ class ZeroAtrDoesNotCrash(unittest.TestCase):
                  lo if i == 20 else base,
                  base) for i in range(25)]
 
-    def test_fixture_reaches_zero_atr_at_the_swing_bar(self):
+    @staticmethod
+    def zero_atr(candles):
+        """What the engine used to be handed by its own quantum."""
+        return [None] * swings.ATR_PERIOD + \
+               [Decimal(0)] * (len(candles) - swings.ATR_PERIOD)
+
+    def test_the_quantization_artefact_is_gone(self):
+        """swing-v0.11. The same dead-hour series that used to record 0E-8
+        now records the measurement it actually made."""
         self.load(self.tick_series())
         candles = [dict(r) for r in store.get_candles(self.con, "PF_PEPEUSD", TF)]
         atr = swings.compute_atr(candles)
-        self.assertEqual(atr[16], Decimal("0E-8"),
-                         "the one-tick TR must quantize to zero at Q8, or "
-                         "nothing below exercises the guard")
+        self.assertGreater(atr[16], 0,
+                           "a bar that moved a tick must not measure zero ATR")
+        self.assertEqual(atr[16].quantize(swings.Q8), Decimal("0E-8"),
+                         "sanity: this is exactly the value the old fixed "
+                         "quantum threw away")
+        self.assertEqual(len(atr[16].as_tuple().digits), swings.MIN_SIG,
+                         "the quantum follows the price scale")
 
-    def test_run_completes_and_skips_the_undefined_promotion(self):
+    def test_a_flat_market_still_measures_exactly_zero(self):
+        """The guard's remaining real trigger: nothing moved, so there is no
+        range to average. Scale-free rounding cannot invent one."""
+        flat = [("0.00000100",) * 4] * 25
+        self.load(flat, symbol="FLATUSDT")
+        candles = [dict(r) for r in store.get_candles(self.con, "FLATUSDT", TF)]
+        atr = swings.compute_atr(candles)
+        self.assertEqual(atr[16], Decimal(0))
+
+    def test_a_zero_atr_at_a_swing_bar_skips_the_undefined_promotion(self):
         self.load(self.tick_series())
-        r = swings.run(self.con, "PF_PEPEUSD", TF, TFS)   # crashed before the fix
+        with mock.patch.object(swings, "compute_atr", self.zero_atr):
+            r = swings.run(self.con, "PF_PEPEUSD", TF, TFS)   # crashed before the guard
         self.assertEqual(r["micro"], 2,
                          "both fractal swings are still recorded as MICRO")
         self.assertEqual(r["local"], 0,
@@ -94,8 +122,9 @@ class ZeroAtrDoesNotCrash(unittest.TestCase):
 
     def test_rerun_writes_nothing(self):
         self.load(self.tick_series())
-        swings.run(self.con, "PF_PEPEUSD", TF, TFS)
-        r2 = swings.run(self.con, "PF_PEPEUSD", TF, TFS)
+        with mock.patch.object(swings, "compute_atr", self.zero_atr):
+            swings.run(self.con, "PF_PEPEUSD", TF, TFS)
+            r2 = swings.run(self.con, "PF_PEPEUSD", TF, TFS)
         self.assertEqual((r2["micro"], r2["local"]), (0, 0),
                          "idempotence must survive the guard")
 
@@ -104,7 +133,7 @@ class ZeroAtrDoesNotCrash(unittest.TestCase):
         after the dead hour and its swings must still reach LOCAL."""
         base = self.tick_series()
         # same coin, same scale — a 20-tick range is enough to keep the
-        # Wilder average comfortably above Q8 (2e-7/14 ~ 1.4e-8 > 0E-8)
+        # Wilder average comfortably measurable
         volatile = [("0.00000100", "0.00000110", "0.00000090",
                      "0.00000100")] * 40
         k = len(base) + 20
@@ -116,7 +145,7 @@ class ZeroAtrDoesNotCrash(unittest.TestCase):
         r = swings.run(self.con, "PF_PEPEUSD", TF, TFS)
         candles = [dict(r_) for r_ in store.get_candles(self.con, "PF_PEPEUSD", TF)]
         atr = swings.compute_atr(candles)
-        self.assertGreater(atr[k], 0, "sanity: ATR must be measurable again")
+        self.assertGreater(atr[k], 0, "sanity: ATR must be measurable")
         self.assertGreaterEqual(r["local"], 1,
                                 "a measurable reversal after the dead hour "
                                 "must still promote")

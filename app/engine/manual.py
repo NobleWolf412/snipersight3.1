@@ -118,7 +118,11 @@ from .runlog import RunRecorder
 from .execsim import (MAX_BARS, MAX_ENTRY_BARS, FUNDING_RATE_PER_SETTLEMENT,
                       stop_gap_fill)
 
-MANUAL_VERSION = "manual-v0.6-draft"
+MANUAL_VERSION = "manual-v0.7-draft"
+# v0.7: the swing-v0.11 ATR cascade. This book is excluded from CONSUMERS by design, so
+# no map prompts for it — and it puts compute_atr's output on DURABLE exit
+# facts: `atr_at_exit` prices the market-exit slippage in settle_leg and in
+# the operator's early close. A different ATR is a different recorded exit.
 # v0.6: an operator's early close is priced NET, the way the engine prices
 # its own exits. `close_engine_position` computed the taker fee, recorded it,
 # and then divided the GROSS move by the risk — its own comment promised
@@ -147,7 +151,7 @@ MANUAL_VERSION = "manual-v0.6-draft"
 #: version and would simply stop seeing them. See the module docstring.
 MANUAL_VERSIONS = ("manual-v0.1-draft", "manual-v0.2-draft",
                    "manual-v0.3-draft", "manual-v0.4-draft",
-                   "manual-v0.5-draft", MANUAL_VERSION)
+                   "manual-v0.5-draft", "manual-v0.6-draft", MANUAL_VERSION)
 Q2 = Decimal("0.01")
 
 #: Scale-out bounds. The cap is not a capacity limit — it is a statement about

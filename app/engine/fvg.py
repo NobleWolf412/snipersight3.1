@@ -65,7 +65,10 @@ from .ma import plain, sig
 from .runlog import RunRecorder
 from .swings import compute_atr
 
-FVG_VERSION = "fvg-v0.2-draft"
+FVG_VERSION = "fvg-v0.3-draft"
+# v0.3: the swing-v0.11 ATR cascade — the gap-size floor is an ATR multiple. This
+# engine has no CONSUMERS entry (locked 2026-09-10), so no map prompts for
+# it: it moves because it imports compute_atr and writes facts.
 # v0.2: input cascade from agg-v0.2 (own 4H/1W candle reads, ma-v0.2 and
 # swings shared code) — acknowledged-partial buckets change the series gaps
 # are detected over; no rule change here. This engine is not in the version

@@ -24,7 +24,12 @@ from .execsim import EXEC_VERSION, plan_versions as execsim_plan_versions
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.27-draft"
+RISK_VERSION = "risk-v0.28-draft"
+# v0.28: the swing-v0.11 ATR cascade — the account is replayed from setup, exec and
+# cooldown facts, all of which moved. NO sizing rule changed and
+# MAX_CONCURRENT is deliberately untouched; size_order does not read the
+# concurrency cap, so CONSUMERS["risk"] was checked and `setup` moves for
+# the ATR cascade rather than for anything this engine decided.
 # v0.27: cascade from exec-v0.26 (a stop the bar gapped through now fills at
 # that bar's open). No sizing or gate rule changed here — but this module
 # REPLAYS THE ACCOUNT from exec facts, so every equity point, daily P&L and

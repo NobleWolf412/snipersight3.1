@@ -80,10 +80,16 @@ import random
 from decimal import Decimal
 
 from . import store
-from .swings import compute_atr
+from .swings import compute_atr, scale_quantum
 from .zones import ZONE_ATR
 
-CHARTREAD_VERSION = "chartread-v0.5-draft"
+CHARTREAD_VERSION = "chartread-v0.6-draft"
+# v0.6: level prices are quantized SCALE-FREE (swings.scale_quantum), floored
+# at Q4. A fixed 0.0001 quantum is no significant figures at all on
+# PF_PEPEUSD — every level read 0.0000, so `false_breaks` compared closes
+# against zero, never returned, and the v0.5 CHOP path could not fire on
+# that market; VTHO-USD's boundaries snapped to a grid ~20% of its price.
+# 23 pairs collapsed outright, 268 kept three figures or fewer. Also the swing-v0.11 ATR cascade.
 # v0.5: RANGE against CHOP is decided by FALSE BREAKS. Two blind pilots
 # (20 windows, 2026-09-04/05) agreed on every direction the reader asserted
 # and disagreed three times on RANGE versus CHOP, each time the same way:
@@ -218,7 +224,17 @@ def cluster_levels(prices, atr):
         else:
             levels.append({"lo": p, "hi": p, "touches": 1, "members": [p]})
     for lv in levels:
-        lv["price"] = (sum(lv["members"]) / len(lv["members"])).quantize(Q4)
+        # Scale-free, floored at Q4 (swings.scale_quantum). A fixed 0.0001
+        # quantum is six significant figures on a $100 market and NONE on
+        # PF_PEPEUSD at 0.0000034673 — every level there collapsed to
+        # "0.0000", so `false_breaks` tested `close > 0 + tol`, which is
+        # true from the first bar and never returns: the v0.5 CHOP path was
+        # structurally unreachable on that market. VTHO-USD did not collapse
+        # but snapped to a grid ~20% of its price, so its boundary was not
+        # where its cluster is. 23 pairs collapsed outright, 268 kept three
+        # figures or fewer.
+        avg = sum(lv["members"]) / len(lv["members"])
+        lv["price"] = avg.quantize(scale_quantum(avg, Q4))
         del lv["members"]
     return levels
 

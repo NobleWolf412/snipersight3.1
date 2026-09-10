@@ -164,7 +164,8 @@ from . import store
 from .regime import REGIME_VERSION
 from .structure import STRUCTURE_VERSION
 
-BIAS_VERSION = "bias-v0.2-draft"
+BIAS_VERSION = "bias-v0.3-draft"
+# v0.3: the swing-v0.11 ATR cascade — reads regime and structure facts.
 # v0.2: input cascade from agg-v0.2 via regime-v0.13/structure-v0.13 — the
 # ladder is read off their facts, and those are a new generation. No rule
 # change here.

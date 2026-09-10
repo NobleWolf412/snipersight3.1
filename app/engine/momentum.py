@@ -125,7 +125,8 @@ from .ma import ema, plain, sig
 from .runlog import RunRecorder
 from .swings import SWING_VERSION, alternate
 
-MOMENTUM_VERSION = "momentum-v0.3-draft"
+MOMENTUM_VERSION = "momentum-v0.4-draft"
+# v0.4: the swing-v0.11 ATR cascade — reads swing facts and ma primitives.
 # v0.3: input cascade from agg-v0.2 (own 4H/1W candle reads, swing-v0.10
 # facts, and ma-v0.2 shared code) — acknowledged-partial buckets; no rule
 # change here.

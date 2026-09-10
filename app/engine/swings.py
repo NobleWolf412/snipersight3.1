@@ -17,7 +17,13 @@ from decimal import Decimal
 from . import store
 from .runlog import RunRecorder
 
-SWING_VERSION = "swing-v0.10-draft"
+SWING_VERSION = "swing-v0.11-draft"
+# v0.11: ATR and the LOCAL threshold are quantized SCALE-FREE (scale_quantum),
+# floored at Q8 so nothing loses precision it had. Q8 is one significant
+# figure on a 10-dp quote: PF_PEPEUSD 5m recorded an ATR of 6E-8 or 7E-8 and
+# nothing else, so every ATR multiple below this engine carried an 8-15% step
+# error on 27 (symbol, tf) pairs. Same values on every other market; a
+# different ATR on those 27 is a different fact, and that is a version.
 # v0.10: input cascade from agg-v0.2 — the 4H/1W series now include
 # acknowledged-partial buckets (thin markets regain windows v0.1 discarded;
 # BICO-USD 4H alone regains ~621), so pivots over those series differ with no
@@ -87,6 +93,31 @@ PRIOR_LIQ = "liq-v0.2-draft"
 # evidence becomes a required filter only after the user grades it.
 
 
+#: The fewest significant figures any price-scale quantity may keep: the
+#: quantum must never cost more than 0.01% of the value it rounds.
+MIN_SIG = 5
+
+
+def scale_quantum(x: Decimal, floor: Decimal) -> Decimal:
+    """The quantum to round `x` to — `floor`, or finer when its own scale
+    demands it. NEVER coarser than `floor`, so nothing loses precision it has.
+
+    A fixed decimal place is a fixed quantum, and a quantum is only "small"
+    relative to a price. Q8 is thirteen significant figures on BTC at 78,262
+    and ONE on PF_PEPEUSD at 0.0000034673: its recorded 5m ATR was 6E-8 or
+    7E-8 and nothing else, so every ATR multiple below it — the LOCAL swing
+    threshold, SL_BUFFER_ATR, the slippage model, breakout bands — carried an
+    8-15% step error on those markets. `ma.sig()` names the same problem and
+    is the same shape; it is not reused here because it is unconditionally
+    scale-free, which at eight figures re-rounds 629 of the store's 1,003
+    (symbol, tf) pairs. Flooring at the existing quantum keeps the change to
+    the markets that are actually broken: 27 pairs, all PEPE/SHIB-class.
+    """
+    if not x:
+        return floor
+    return min(floor, Decimal(1).scaleb(x.adjusted() - (MIN_SIG - 1)))
+
+
 def compute_atr(candles: list) -> list:
     """ATR14 per bar index; None until enough history exists."""
     atr: list = [None] * len(candles)
@@ -97,10 +128,12 @@ def compute_atr(candles: list) -> list:
         h, l = Decimal(candles[i]["high"]), Decimal(candles[i]["low"])
         pc = Decimal(candles[i - 1]["close"])
         trs.append(max(h - l, abs(h - pc), abs(l - pc)))
-    a = (sum(trs[1:ATR_PERIOD + 1]) / ATR_PERIOD).quantize(Q8)
+    a = sum(trs[1:ATR_PERIOD + 1]) / ATR_PERIOD
+    a = a.quantize(scale_quantum(a, Q8))
     atr[ATR_PERIOD] = a
     for i in range(ATR_PERIOD + 1, len(candles)):
-        a = ((a * (ATR_PERIOD - 1) + trs[i]) / ATR_PERIOD).quantize(Q8)
+        a = (a * (ATR_PERIOD - 1) + trs[i]) / ATR_PERIOD
+        a = a.quantize(scale_quantum(a, Q8))
         atr[i] = a
     return atr
 
@@ -257,7 +290,8 @@ def _run(con, rec, symbol: str, tf: str, tf_seconds: int) -> dict:
         if opp is None:
             continue
         reversal = abs(Decimal(s["price"]) - Decimal(opp["price"]))
-        threshold = (LOCAL_ATR_MULT * atr[s["i"]]).quantize(Q8)
+        threshold = LOCAL_ATR_MULT * atr[s["i"]]
+        threshold = threshold.quantize(scale_quantum(threshold, Q8))
         if reversal < threshold:
             continue
         bar_ts = candles[s["i"]]["open_ts"]
@@ -278,7 +312,9 @@ def _run(con, rec, symbol: str, tf: str, tf_seconds: int) -> dict:
         opp = next((t for t in swings[idx + 1:] if t["type"] != s["type"]), None)
         if not atr[s["i"]] or opp is None:
             continue
-        if abs(Decimal(s["price"]) - Decimal(opp["price"])) < (LOCAL_ATR_MULT * atr[s["i"]]).quantize(Q8):
+        _t = LOCAL_ATR_MULT * atr[s["i"]]
+        if abs(Decimal(s["price"]) - Decimal(opp["price"])) < _t.quantize(
+                scale_quantum(_t, Q8)):
             continue
         locals_.append({"type": s["type"], "price": s["price"], "i": s["i"],
                         "market_time": candles[s["i"]]["open_ts"],

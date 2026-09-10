@@ -19,7 +19,8 @@ from . import store
 from .structure import STRUCTURE_VERSION
 from .runlog import RunRecorder
 
-REGIME_VERSION = "regime-v0.13-draft"
+REGIME_VERSION = "regime-v0.14-draft"
+# v0.14: the swing-v0.11 ATR cascade — reads structure facts.
 # v0.13: input cascade from agg-v0.2 via structure-v0.13 — acknowledged-partial
 # 4H/1W buckets change the breaks this engine classifies from; no rule change.
 # v0.12: cascade from structure-v0.12 (same-bar HIGH+LOW pivot pairs no longer

@@ -143,7 +143,8 @@ from . import store
 from .swings import SWING_VERSION, alternate, compute_atr, quote_ticks
 from .runlog import RunRecorder
 
-RANGES_VERSION = "ranges-v0.3-draft"
+RANGES_VERSION = "ranges-v0.4-draft"
+# v0.4: the swing-v0.11 ATR cascade — reads compute_atr and swing facts.
 # v0.3: input cascade from agg-v0.2 via swing-v0.10 and this engine's own
 # 4H/1W candle reads — acknowledged-partial buckets; no rule change here.
 # v0.2: cascade from swing-v0.9. No rule change here — this engine reads LOCAL
