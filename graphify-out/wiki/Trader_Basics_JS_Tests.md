@@ -5,10 +5,10 @@
 ## Key Concepts
 
 - **test_trader_basics.js** (11 connections) — `app/tests/test_trader_basics.js`
-- **S()** (2 connections) — `app/tests/test_trader_basics.js`
 - **fs** (1 connections) — `app/tests/test_trader_basics.js`
 - **path** (1 connections) — `app/tests/test_trader_basics.js`
 - **assert** (1 connections) — `app/tests/test_trader_basics.js`
+- **S()** (1 connections) — `app/tests/test_trader_basics.js`
 - **CHART** (1 connections) — `app/tests/test_trader_basics.js`
 - **SHELL** (1 connections) — `app/tests/test_trader_basics.js`
 - **HTML** (1 connections) — `app/tests/test_trader_basics.js`
@@ -19,7 +19,7 @@
 
 ## Relationships
 
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -27,8 +27,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 22 (96%)
-- INFERRED: 1 (4%)
+- EXTRACTED: 22 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

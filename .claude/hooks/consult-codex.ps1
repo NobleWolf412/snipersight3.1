@@ -28,6 +28,16 @@ try {
         [string]::IsNullOrWhiteSpace([string]$hookInput.prompt)) {
         exit 0
     }
+    # Only the OPERATOR's prompts deserve a second opinion. Background task
+    # notifications (a Monitor event, a finished agent) arrive through the
+    # same hook, and overnight on 2026-09-10 one log watch produced ~30 of
+    # them — each one a full Codex call that burned the operator's quota on
+    # "should Claude push a notification about this log line". Skip anything
+    # that is not a human turn.
+    $promptText = [string]$hookInput.prompt
+    if ($promptText -match '^\s*<(task-notification|system-reminder|ci-monitor-event)') {
+        exit 0
+    }
 
     if ($env:CODEX_CONSULT_DRY_RUN -eq '1') {
         $codexResponse = 'Dry-run Codex consultation succeeded.'
@@ -78,8 +88,15 @@ engineering second opinion, say that briefly.
             $ErrorActionPreference = $previousErrorAction
         }
         if ($LASTEXITCODE -ne 0) {
+            # The LAST error line only. codex's stderr carries its banner and,
+            # in `exec` mode, an echo of the whole prompt — so a failure used
+            # to inject the operator's entire message back into the turn
+            # (10 KB per failure, every turn, for the five days the CLI was
+            # stale). One line says what went wrong; the rest is the prompt.
             $detail = if (Test-Path $errorFile) {
-                (Get-Content -Raw $errorFile).Trim()
+                $errLines = @(Get-Content $errorFile | Where-Object { $_ -match '^ERROR' })
+                if ($errLines.Count -gt 0) { $errLines[-1].Trim() }
+                else { ((Get-Content $errorFile | Select-Object -Last 1) -join '').Trim() }
             } else {
                 'No error detail was returned.'
             }

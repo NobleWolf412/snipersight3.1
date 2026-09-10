@@ -1,35 +1,34 @@
 # .Mt
 
-> 11 nodes
+> 9 nodes
 
 ## Key Concepts
 
-- **RetiredSymbolStalenessTest** (8 connections) — `app/tests/test_pipeline_quality.py`
-- **.test_fails_open_when_the_universe_is_unreadable()** (4 connections) — `app/tests/test_pipeline_quality.py`
-- **RuntimeError** (3 connections)
-- **._stale_symbols()** (3 connections) — `app/tests/test_pipeline_quality.py`
-- **.test_retired_symbol_is_not_reported_stale()** (2 connections) — `app/tests/test_pipeline_quality.py`
-- **.test_live_set_is_not_shared_across_connections()** (2 connections) — `app/tests/test_pipeline_quality.py`
-- **.setUp()** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **.tearDown()** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **Staleness is only meaningful for a symbol we still track.      Switching the u** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **If we cannot tell what is live, warn rather than silently suppress.** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **A module-level cache keyed on nothing would let an audit of one         databas** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **renderProgression()** (7 connections) — `app/static/shell.js`
+- **makeRail()** (6 connections) — `app/static/shell.js`
+- **renderStatWheel()** (5 connections) — `app/static/shell.js`
+- **mountRails()** (4 connections) — `app/static/shell.js`
+- **renderScoreboard()** (4 connections) — `app/static/shell.js`
+- **statCards()** (2 connections) — `app/static/shell.js`
+- **progressionRows()** (2 connections) — `app/static/shell.js`
+- **gateRows()** (2 connections) — `app/static/shell.js`
+- **loadLiveGate()** (2 connections) — `app/static/shell.js`
 
 ## Relationships
 
-- [stocks.py](stocks.py.md) (1 shared connections)
-- [Data Quality Engine](Data_Quality_Engine.md) (1 shared connections)
-- [test_pipeline_quality.py](test_pipeline_quality.py.md) (1 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (9 shared connections)
+- [NextWakeMath](NextWakeMath.md) (3 shared connections)
+- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (2 shared connections)
+- [BTC Alignment Engine](BTC_Alignment_Engine.md) (2 shared connections)
 
 ## Source Files
 
-- `app/tests/test_pipeline_quality.py`
+- `app/static/shell.js`
 
 ## Audit Trail
 
-- EXTRACTED: 25 (93%)
-- INFERRED: 2 (7%)
+- EXTRACTED: 34 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

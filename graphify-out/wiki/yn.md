@@ -4,29 +4,30 @@
 
 ## Key Concepts
 
-- **NextWakeMath** (8 connections) — `app/tests/test_boundary_wake.py`
-- **.test_inside_the_finalization_window_waits_only_for_it()** (2 connections) — `app/tests/test_boundary_wake.py`
-- **.test_every_boundary_gets_an_aligned_wake()** (2 connections) — `app/tests/test_boundary_wake.py`
-- **.test_just_before_a_boundary_lands_just_after_it()** (1 connections) — `app/tests/test_boundary_wake.py`
-- **.test_mid_candle_is_the_heartbeat()** (1 connections) — `app/tests/test_boundary_wake.py`
-- **.test_never_longer_than_the_poll()** (1 connections) — `app/tests/test_boundary_wake.py`
-- **.test_never_a_hot_loop()** (1 connections) — `app/tests/test_boundary_wake.py`
-- **.test_heartbeat_spacing_holds_across_the_walk()** (1 connections) — `app/tests/test_boundary_wake.py`
-- **now = boundary+2 with a 5s buffer must sleep 3s — not 903. The         candidat** (1 connections) — `app/tests/test_boundary_wake.py`
-- **The property the whole change exists for: walk the clock forward by         rep** (1 connections) — `app/tests/test_boundary_wake.py`
+- **test_next_action.py** (10 connections) — `app/tests/test_next_action.py`
+- **action()** (8 connections) — `app/tests/test_next_action.py`
+- **row()** (5 connections) — `app/tests/test_next_action.py`
+- **test_halt_outranks_every_trade_directive()** (3 connections) — `app/tests/test_next_action.py`
+- **test_open_position_outranks_ready_setup_and_preserves_selection()** (3 connections) — `app/tests/test_next_action.py`
+- **test_ready_setup_is_the_next_review()** (3 connections) — `app/tests/test_next_action.py`
+- **test_data_warning_blocks_a_ready_setup()** (3 connections) — `app/tests/test_next_action.py`
+- **test_dead_scanner_hands_phone_recovery_to_citadel()** (2 connections) — `app/tests/test_next_action.py`
+- **test_quiet_paper_book_is_explicitly_no_trade_and_points_to_shadow()** (2 connections) — `app/tests/test_next_action.py`
+- **The Overview directive is an ordered read model, never a browser guess.** (1 connections) — `app/tests/test_next_action.py`
 
 ## Relationships
 
-- [Boundary Wake Grid Tests](Boundary_Wake_Grid_Tests.md) (1 shared connections)
+- [API Server Endpoints](API_Server_Endpoints.md) (1 shared connections)
+- [Chart Vendor Grid & Axis](Chart_Vendor_Grid_%26_Axis.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_boundary_wake.py`
+- `app/tests/test_next_action.py`
 
 ## Audit Trail
 
-- EXTRACTED: 19 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 39 (98%)
+- INFERRED: 1 (2%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -1,60 +1,43 @@
 # Execution Simulator & Risk
 
-> 32 nodes
+> 21 nodes
 
 ## Key Concepts
 
-- **risk.py** (21 connections) — `app/engine/risk.py`
-- **execsim.py** (19 connections) — `app/engine/execsim.py`
-- **run()** (11 connections) — `app/engine/risk.py`
-- **run()** (8 connections) — `app/engine/execsim.py`
-- **plan_versions()** (6 connections) — `app/engine/execsim.py`
-- **Decimal** (5 connections)
-- **_venue_max_leverage()** (5 connections) — `app/engine/risk.py`
-- **size_order()** (5 connections) — `app/engine/risk.py`
-- **settle()** (4 connections) — `app/engine/execsim.py`
-- **simulate_entry()** (4 connections) — `app/engine/execsim.py`
-- **gates_for_mode()** (4 connections) — `app/engine/risk.py`
-- **_symbols()** (4 connections) — `app/engine/risk.py`
-- **admitted_at()** (4 connections) — `app/engine/universe.py`
-- **walk_exit()** (3 connections) — `app/engine/execsim.py`
-- **cross_fill()** (3 connections) — `app/engine/execsim.py`
-- **dispatch_scale()** (3 connections) — `app/engine/risk.py`
-- **_venue_allows_shorts()** (3 connections) — `app/engine/risk.py`
-- **_day()** (2 connections) — `app/engine/risk.py`
-- **Execution simulator — paper-trades every VALIDATED setup. algo exec-v0.1-draft.** (1 connections) — `app/engine/execsim.py`
-- **Walk forward from the fill bar to a terminal outcome.      Returns (outcome, e** (1 connections) — `app/engine/execsim.py`
-- **The price a crossing market order actually gets, and the ONE definition.** (1 connections) — `app/engine/execsim.py`
-- **Price one closed leg: slippage, fees, funding, and the R they leave.      THE** (1 connections) — `app/engine/execsim.py`
-- **Turn a PLAN into the fill it actually got: which bar, what price, whose     fee** (1 connections) — `app/engine/execsim.py`
-- **THE definition of what this book trades — the setup generations the     simulat** (1 connections) — `app/engine/execsim.py`
-- **Risk Authority — §9: strategies request risk, this engine decides. Paper only.** (1 connections) — `app/engine/risk.py`
-- *... and 7 more nodes in this community*
+- **ExecutionRebuild** (17 connections) — `app/tests/test_execution_rebuild.py`
+- **.fact()** (7 connections) — `app/tests/test_execution_rebuild.py`
+- **.plan()** (7 connections) — `app/tests/test_execution_rebuild.py`
+- **.seed_book()** (7 connections) — `app/tests/test_execution_rebuild.py`
+- **.cycle()** (5 connections) — `app/tests/test_execution_rebuild.py`
+- **.test_real_replay_releases_ghost_but_keeps_a_genuinely_open_slot()** (4 connections) — `app/tests/test_execution_rebuild.py`
+- **.test_the_veto_can_never_reach_a_market_holding_a_slot()** (4 connections) — `app/tests/test_execution_rebuild.py`
+- **.test_old_generation_close_does_not_hide_missing_current_work()** (3 connections) — `app/tests/test_execution_rebuild.py`
+- **.test_only_current_baseline_enabled_plans_need_rebuilding()** (3 connections) — `app/tests/test_execution_rebuild.py`
+- **.test_cycle_recovers_removed_market_even_without_new_candles()** (3 connections) — `app/tests/test_execution_rebuild.py`
+- **.test_quality_failure_never_fabricates_a_close()** (3 connections) — `app/tests/test_execution_rebuild.py`
+- **.test_retired_gap_note_cannot_be_used_to_reconstruct_a_trade()** (3 connections) — `app/tests/test_execution_rebuild.py`
+- **.test_a_plan_whose_order_bar_has_not_printed_is_not_missing_work()** (3 connections) — `app/tests/test_execution_rebuild.py`
+- **.decisions()** (2 connections) — `app/tests/test_execution_rebuild.py`
+- **.test_a_timeframe_risk_cannot_size_is_not_missing_work()** (2 connections) — `app/tests/test_execution_rebuild.py`
+- **.setUp()** (1 connections) — `app/tests/test_execution_rebuild.py`
+- **.tearDown()** (1 connections) — `app/tests/test_execution_rebuild.py`
+- **Run orchestration with network, routing and housekeeping stubbed.** (1 connections) — `app/tests/test_execution_rebuild.py`
+- **What makes the retired-gap veto safe, asserted where it is used.          The** (1 connections) — `app/tests/test_execution_rebuild.py`
+- **Deleting the risk.TFS filter must fail something.** (1 connections) — `app/tests/test_execution_rebuild.py`
+- **Otherwise every fresh setup reads as missing until its next bar.** (1 connections) — `app/tests/test_execution_rebuild.py`
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (12 shared connections)
-- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (4 shared connections)
-- [A/B Test Engine](A-B_Test_Engine.md) (2 shared connections)
-- [Edge Statistics Engine](Edge_Statistics_Engine.md) (1 shared connections)
-- [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (1 shared connections)
-- [funding.py](funding.py.md) (1 shared connections)
-- [_facts](_facts.md) (1 shared connections)
 - [Live Scanner Loop](Live_Scanner_Loop.md) (1 shared connections)
-- [A/B Calibration Tests](A-B_Calibration_Tests.md) (1 shared connections)
-- [Cycle Detection Engine](Cycle_Detection_Engine.md) (1 shared connections)
-- [Copilot Pack Builder](Copilot_Pack_Builder.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/execsim.py`
-- `app/engine/risk.py`
-- `app/engine/universe.py`
+- `app/tests/test_execution_rebuild.py`
 
 ## Audit Trail
 
-- EXTRACTED: 127 (99%)
-- INFERRED: 1 (1%)
+- EXTRACTED: 79 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

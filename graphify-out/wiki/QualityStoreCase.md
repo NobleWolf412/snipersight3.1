@@ -1,56 +1,42 @@
 # QualityStoreCase
 
-> 23 nodes
+> 20 nodes
 
 ## Key Concepts
 
-- **u()** (11 connections) — `app/static/lightweight-charts.js`
-- **wt** (8 connections) — `app/static/lightweight-charts.js`
-- **.Mt()** (8 connections) — `app/static/lightweight-charts.js`
-- **ct** (6 connections) — `app/static/lightweight-charts.js`
-- **.J()** (6 connections) — `app/static/lightweight-charts.js`
-- **Cn** (6 connections) — `app/static/lightweight-charts.js`
-- **.Mt()** (4 connections) — `app/static/lightweight-charts.js`
-- **dt()** (4 connections) — `app/static/lightweight-charts.js`
-- **.K()** (4 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (4 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (3 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (2 connections) — `app/static/lightweight-charts.js`
-- **.K()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Ds()** (2 connections) — `app/static/lightweight-charts.js`
-- **.K()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.us()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.J()** (1 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- **.bt()** (1 connections) — `app/static/lightweight-charts.js`
+- **Enforcement** (6 connections) — `app/tests/test_context_policy.py`
+- **test_context_policy.py** (5 connections) — `app/tests/test_context_policy.py`
+- **Lockfile** (3 connections) — `app/tests/test_context_policy.py`
+- **Validation** (3 connections) — `app/tests/test_context_policy.py`
+- **Vocabulary** (3 connections) — `app/tests/test_context_policy.py`
+- **.test_the_shipped_policy_is_allow_everywhere()** (2 connections) — `app/tests/test_context_policy.py`
+- **.test_no_reading_is_not_a_hostile_reading()** (2 connections) — `app/tests/test_context_policy.py`
+- **.test_the_validated_payload_records_the_reading()** (2 connections) — `app/tests/test_context_policy.py`
+- **.test_the_manifest_records_it()** (1 connections) — `app/tests/test_context_policy.py`
+- **.test_a_policy_silent_on_a_state_is_rejected()** (1 connections) — `app/tests/test_context_policy.py`
+- **.test_an_unknown_action_or_state_is_rejected()** (1 connections) — `app/tests/test_context_policy.py`
+- **.test_a_block_policy_actually_blocks_a_pullback_inside_a_trend()** (1 connections) — `app/tests/test_context_policy.py`
+- **.test_the_same_policy_allows_a_pullback_with_no_direction_asserted()** (1 connections) — `app/tests/test_context_policy.py`
+- **.test_it_is_keyed_on_pullback_only()** (1 connections) — `app/tests/test_context_policy.py`
+- **.test_blocked_is_the_one_place_the_question_is_asked()** (1 connections) — `app/tests/test_context_policy.py`
+- **.test_the_reason_is_canonical_and_has_a_funnel_sentence()** (1 connections) — `app/tests/test_context_policy.py`
+- **The context gate (setups.PULLBACK_CONTEXT_POLICY, setup-v0.20).  Built and armed** (1 connections) — `app/tests/test_context_policy.py`
+- **Recording must not change a single trade. If this stops being         ALLOW ever** (1 connections) — `app/tests/test_context_policy.py`
+- **UNKNOWN is never a weak form of AGAINST — the rule every gate in         this co** (1 connections) — `app/tests/test_context_policy.py`
+- **The fields a later grade reads. Text-pinned, because the payload is         asse** (1 connections) — `app/tests/test_context_policy.py`
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (7 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (4 shared connections)
-- [Fact Store Conventions](Fact_Store_Conventions.md) (4 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (3 shared connections)
-- [Bias Ladder Engine](Bias_Ladder_Engine.md) (2 shared connections)
-- [he](he.md) (2 shared connections)
-- [Manual Trading Engine](Manual_Trading_Engine.md) (1 shared connections)
-- [te](te.md) (1 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (1 shared connections)
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (1 shared connections)
-- [BTC Alignment Engine](BTC_Alignment_Engine.md) (1 shared connections)
-- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/tests/test_context_policy.py`
 
 ## Audit Trail
 
-- EXTRACTED: 73 (91%)
-- INFERRED: 7 (9%)
+- EXTRACTED: 38 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

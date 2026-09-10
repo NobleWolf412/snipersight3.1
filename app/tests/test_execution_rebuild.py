@@ -24,10 +24,14 @@ class ExecutionRebuild(unittest.TestCase):
             payload={"members": [{"symbol": s, "state": "ADMITTED"}
                                  for s in ("UNIUSDT", "BTCUSDT")]})
         self.con.commit()
+        # Process-lifetime memory of vetoed markets would otherwise leak from
+        # the retired-gap test into every test that runs after it.
+        live._REBUILD_VETOED.clear()
 
     def tearDown(self):
         self.con.close()
         self.tmp.cleanup()
+        live._REBUILD_VETOED.clear()
 
     def fact(self, kind, sid, ts=72000, symbol="UNIUSDT", version=None, **p):
         store.insert_fact(
@@ -184,6 +188,17 @@ class ExecutionRebuild(unittest.TestCase):
         run.assert_not_called()
         self.assertTrue(any("retired sequence gaps" in c.args[0]
                             for c in log.warning.call_args_list))
+
+    def test_a_vetoed_market_is_not_relisted_until_restart(self):
+        """The veto writes nothing, so without memory it repeats every cycle:
+        the recovery warning fires forever and the idle short-circuit never
+        engages again. Process memory is the smallest thing that stops it."""
+        self.seed_book()
+        self.assertIn(("UNIUSDT", "1H"), live.execution_rebuild_work(self.con))
+        self.cycle(retired=True)
+        self.assertNotIn(("UNIUSDT", "1H"), live.execution_rebuild_work(self.con))
+        live._REBUILD_VETOED.clear()          # what a restart does
+        self.assertIn(("UNIUSDT", "1H"), live.execution_rebuild_work(self.con))
 
     def test_the_veto_can_never_reach_a_market_holding_a_slot(self):
         """What makes the retired-gap veto safe, asserted where it is used.

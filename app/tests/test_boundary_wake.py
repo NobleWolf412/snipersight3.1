@@ -117,7 +117,11 @@ class TheLoopWearsIt(unittest.TestCase):
         src = inspect.getsource(live.main)
         self.assertIn("next_wake(", src,
                       "the loop no longer computes its wake at all")
-        slept = re.findall(r"time\.sleep\(([^)]*)\)", src)
+        # The nap is taken by nap_until_woken since 2026-09-10 — the same
+        # sleep, sliced so a cockpit Check-now can end it early — so the
+        # property is asserted on whichever of the two spellings the loop
+        # uses: the FIRST argument is the computed interval.
+        slept = re.findall(r"(?:time\.sleep|nap_until_woken)\(([^,)]*)", src)
         self.assertTrue(slept, "the loop does not sleep")
         for arg in slept:
             arg = arg.strip()

@@ -1,69 +1,44 @@
 # Chart Vendor Pane Views
 
-> 73 nodes
+> 22 nodes
 
 ## Key Concepts
 
-- **RunRecorder** (54 connections) — `app/engine/runlog.py`
-- **compute_atr()** (40 connections) — `app/engine/swings.py`
-- **runlog.py** (31 connections) — `app/engine/runlog.py`
-- **setups.py** (29 connections) — `app/engine/setups.py`
-- **swings.py** (29 connections) — `app/engine/swings.py`
-- **quote_ticks()** (20 connections) — `app/engine/swings.py`
-- **run()** (16 connections) — `app/engine/setups.py`
-- **trend.py** (15 connections) — `app/engine/trend.py`
-- **breakout.py** (13 connections) — `app/engine/breakout.py`
-- **zones.py** (13 connections) — `app/engine/zones.py`
-- **regime.py** (12 connections) — `app/engine/regime.py`
-- **structure.py** (12 connections) — `app/engine/structure.py`
-- **run()** (11 connections) — `app/engine/trend.py`
-- **liquidity.py** (10 connections) — `app/engine/liquidity.py`
-- **scalein.py** (10 connections) — `app/engine/scalein.py`
-- **vetoes()** (8 connections) — `app/engine/setups.py`
-- **run()** (7 connections) — `app/engine/swings.py`
-- **run()** (7 connections) — `app/engine/zones.py`
-- **run()** (6 connections) — `app/engine/breakout.py`
-- **confirms()** (6 connections) — `app/engine/setups.py`
-- **_ribbon()** (6 connections) — `app/engine/trend.py`
-- **_fp()** (5 connections) — `app/engine/setups.py`
-- **Decimal** (5 connections)
-- **run()** (5 connections) — `app/engine/structure.py`
-- **basis.py** (4 connections) — `app/engine/basis.py`
-- *... and 48 more nodes in this community*
+- **test_ignition.py** (6 connections) — `app/tests/test_ignition.py`
+- **_regime()** (5 connections) — `app/tests/test_ignition.py`
+- **ExtractCase** (5 connections) — `app/tests/test_ignition.py`
+- **StopLevelCase** (5 connections) — `app/tests/test_ignition.py`
+- **BaselineCase** (4 connections) — `app/tests/test_ignition.py`
+- **NotAGateCase** (4 connections) — `app/tests/test_ignition.py`
+- **.test_only_transitions_into_full_trend_count()** (2 connections) — `app/tests/test_ignition.py`
+- **.test_freshness_is_the_transitions_own_lag()** (2 connections) — `app/tests/test_ignition.py`
+- **.test_state_end_bounds_the_random_baseline()** (2 connections) — `app/tests/test_ignition.py`
+- **.test_mismatched_evidence_is_flagged_not_traded()** (2 connections) — `app/tests/test_ignition.py`
+- **.test_no_trading_module_imports_the_audition()** (2 connections) — `app/tests/test_ignition.py`
+- **.test_reads_only_labels_already_confirmed()** (1 connections) — `app/tests/test_ignition.py`
+- **.test_the_latest_confirmed_hl_wins()** (1 connections) — `app/tests/test_ignition.py`
+- **.test_wrong_label_kind_is_never_a_stop()** (1 connections) — `app/tests/test_ignition.py`
+- **.test_no_label_yet_is_none_not_zero()** (1 connections) — `app/tests/test_ignition.py`
+- **.test_random_bar_is_deterministic_across_runs()** (1 connections) — `app/tests/test_ignition.py`
+- **.test_different_events_get_different_bars()** (1 connections) — `app/tests/test_ignition.py`
+- **.test_degenerate_window_returns_its_only_bar()** (1 connections) — `app/tests/test_ignition.py`
+- **.test_the_module_writes_nothing()** (1 connections) — `app/tests/test_ignition.py`
+- **.test_one_execution_authority()** (1 connections) — `app/tests/test_ignition.py`
+- **Trend ignition is an AUDITION, and these are the properties that keep it one.  T** (1 connections) — `app/tests/test_ignition.py`
+- **Evidence is recorded, not filtered on. A passing grade here is a         version** (1 connections) — `app/tests/test_ignition.py`
 
 ## Relationships
 
-- [Indicator Engines](Indicator_Engines.md) (29 shared connections)
-- [volume.py](volume.py.md) (18 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (12 shared connections)
-- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (9 shared connections)
-- [_facts](_facts.md) (8 shared connections)
-- [.ja](ja.md) (7 shared connections)
-- [cached_audit](cached_audit.md) (5 shared connections)
-- [A/B Test Engine](A-B_Test_Engine.md) (4 shared connections)
-- [Cooldown Engine](Cooldown_Engine.md) (3 shared connections)
-- [cycles.py](cycles.py.md) (3 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (3 shared connections)
-- [Copilot Pack Builder](Copilot_Pack_Builder.md) (2 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
-- `app/engine/basis.py`
-- `app/engine/breakout.py`
-- `app/engine/liquidity.py`
-- `app/engine/regime.py`
-- `app/engine/runlog.py`
-- `app/engine/scalein.py`
-- `app/engine/setups.py`
-- `app/engine/structure.py`
-- `app/engine/swings.py`
-- `app/engine/trend.py`
-- `app/engine/zones.py`
+- `app/tests/test_ignition.py`
 
 ## Audit Trail
 
-- EXTRACTED: 454 (98%)
-- INFERRED: 8 (2%)
+- EXTRACTED: 50 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -4,57 +4,47 @@
 
 ## Key Concepts
 
-- **he** (26 connections) — `app/static/lightweight-charts.js`
-- **t()** (21 connections) — `app/tests/test_ticket_math.js`
-- **T()** (17 connections) — `app/static/lightweight-charts.js`
-- **.Xb()** (14 connections) — `app/static/lightweight-charts.js`
-- **.tw()** (12 connections) — `app/static/lightweight-charts.js`
-- **nt** (7 connections) — `app/static/lightweight-charts.js`
-- **se()** (6 connections) — `app/static/lightweight-charts.js`
-- **.be()** (4 connections) — `app/static/lightweight-charts.js`
-- **.ya()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Qb()** (4 connections) — `app/static/lightweight-charts.js`
-- **.ne()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Gs()** (3 connections) — `app/static/lightweight-charts.js`
-- **.ne()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Gs()** (3 connections) — `app/static/lightweight-charts.js`
-- **ee()** (3 connections) — `app/static/lightweight-charts.js`
-- **.iw()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Gb()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Jb()** (3 connections) — `app/static/lightweight-charts.js`
-- **le()** (3 connections) — `app/static/lightweight-charts.js`
-- **.addCandlestickSeries()** (3 connections) — `app/static/lightweight-charts.js`
-- **.format()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Ad()** (2 connections) — `app/static/lightweight-charts.js`
-- **.Kb()** (2 connections) — `app/static/lightweight-charts.js`
-- **.nw()** (2 connections) — `app/static/lightweight-charts.js`
-- **.createPriceLine()** (2 connections) — `app/static/lightweight-charts.js`
+- **log()** (14 connections) — `app/watchdog.py`
+- **watchdog.py** (13 connections) — `app/watchdog.py`
+- **main()** (12 connections) — `app/watchdog.py`
+- **Child** (10 connections) — `app/watchdog.py`
+- **retention_tick()** (7 connections) — `app/watchdog.py`
+- **audit_tick()** (7 connections) — `app/watchdog.py`
+- **.tick()** (7 connections) — `app/watchdog.py`
+- **.start()** (6 connections) — `app/watchdog.py`
+- **rotate_engine_log()** (5 connections) — `app/watchdog.py`
+- **.kill()** (5 connections) — `app/watchdog.py`
+- **.alive()** (5 connections) — `app/watchdog.py`
+- **_orphans()** (4 connections) — `app/watchdog.py`
+- **clear_orphans()** (4 connections) — `app/watchdog.py`
+- **._rotate_err()** (4 connections) — `app/watchdog.py`
+- **alert_tick()** (4 connections) — `app/watchdog.py`
+- **server_up()** (3 connections) — `app/watchdog.py`
+- **._child_env()** (3 connections) — `app/watchdog.py`
+- **._last_error()** (3 connections) — `app/watchdog.py`
+- **.__init__()** (1 connections) — `app/watchdog.py`
+- **Watchdog — keeps the scanner and server alive. The forward paper record is the p** (1 connections) — `app/watchdog.py`
+- **Is an API server answering?      The timeout was 3s against an endpoint measured** (1 connections) — `app/watchdog.py`
+- **Scanner/server processes from a PREVIOUS supervisor, still running.      watchdo** (1 connections) — `app/watchdog.py`
+- **Bound the duplicated/operational stream while both children are down.      The s** (1 connections) — `app/watchdog.py`
+- **Coordinate a safe hot-log rollover during a scanner idle boundary.      Returns** (1 connections) — `app/watchdog.py`
+- **Call quality.audit() and dispatch by Kill-Switch rung.      HALT present or QUAR** (1 connections) — `app/watchdog.py`
 - *... and 5 more nodes in this community*
 
 ## Relationships
 
-- [Simulator Convention Tests](Simulator_Convention_Tests.md) (8 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (8 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (8 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (7 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (6 shared connections)
-- [Manifest & Cost Tests](Manifest_%26_Cost_Tests.md) (5 shared connections)
-- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (4 shared connections)
-- [Chart Vendor Crosshair](Chart_Vendor_Crosshair.md) (4 shared connections)
-- [te](te.md) (4 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (3 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (3 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (2 shared connections)
+- [Watchdog Restart Dispatch Tests](Watchdog_Restart_Dispatch_Tests.md) (3 shared connections)
+- [Watchdog Supervisor](Watchdog_Supervisor.md) (2 shared connections)
+- [Watchdog Audit Cadence Tests](Watchdog_Audit_Cadence_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
-- `app/tests/test_ticket_math.js`
+- `app/watchdog.py`
 
 ## Audit Trail
 
-- EXTRACTED: 131 (82%)
-- INFERRED: 29 (18%)
+- EXTRACTED: 126 (98%)
+- INFERRED: 2 (2%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -796,5 +796,14 @@
      reads; /api/overview is then pulled from cache inside load(), which is what
      stops this panel and the shell describing two different scans. The
      operator's stage selection is held in `selected` and survives the repaint. */
-  window.SSData.subscribe('/api/setup-telemetry?limit=500', () => { load(); }, 30000);
+  /* Poll only while this panel is on the surface being looked at. Without the
+     predicate this refetched 500 telemetry rows every 30 s on every surface —
+     an idle Command issued ~32 GETs a minute (measured 2026-09-10), against a
+     store the scanner is writing to. Back on screen, the next tick fetches. */
+  const onScreen = () => {
+    const root = document.getElementById('funnelRoot');
+    return !!(root && root.closest('.surface.on'));
+  };
+  window.SSData.subscribe('/api/setup-telemetry?limit=500', () => { load(); },
+                          30000, {when: onScreen});
 })();

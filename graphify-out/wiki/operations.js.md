@@ -1,12 +1,16 @@
 # operations.js
 
-> 4 nodes
+> 8 nodes
 
 ## Key Concepts
 
-- **operations.js** (3 connections) — `app/static/operations.js`
-- **paint()** (2 connections) — `app/static/operations.js`
-- **refresh()** (2 connections) — `app/static/operations.js`
+- **operations.js** (7 connections) — `app/static/operations.js`
+- **paintAction()** (6 connections) — `app/static/operations.js`
+- **paintCommand()** (3 connections) — `app/static/operations.js`
+- **paint()** (3 connections) — `app/static/operations.js`
+- **refresh()** (3 connections) — `app/static/operations.js`
+- **refreshCommand()** (3 connections) — `app/static/operations.js`
+- **runAction()** (2 connections) — `app/static/operations.js`
 - **bindOverviewTabs()** (1 connections) — `app/static/operations.js`
 
 ## Relationships
@@ -19,7 +23,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 8 (100%)
+- EXTRACTED: 28 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

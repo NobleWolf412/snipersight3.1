@@ -1,10 +1,10 @@
 # Trade Surface JS Tests
 
-> 13 nodes
+> 12 nodes
 
 ## Key Concepts
 
-- **test_trade_surfaces.js** (14 connections) — `app/tests/test_trade_surfaces.js`
+- **test_trade_surfaces.js** (13 connections) — `app/tests/test_trade_surfaces.js`
 - **S()** (2 connections) — `app/tests/test_trade_surfaces.js`
 - **ok()** (2 connections) — `app/tests/test_trade_surfaces.js`
 - **armSrc()** (2 connections) — `app/tests/test_trade_surfaces.js`
@@ -16,11 +16,10 @@
 - **CHART** (1 connections) — `app/tests/test_trade_surfaces.js`
 - **FUNNEL** (1 connections) — `app/tests/test_trade_surfaces.js`
 - **TRACER** (1 connections) — `app/tests/test_trade_surfaces.js`
-- **setDevBody** (1 connections) — `app/tests/test_trade_surfaces.js`
 
 ## Relationships
 
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- [he](he.md) (1 shared connections)
 
 ## Source Files
 
@@ -28,7 +27,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 27 (96%)
+- EXTRACTED: 25 (96%)
 - INFERRED: 1 (4%)
 - AMBIGUOUS: 0 (0%)
 

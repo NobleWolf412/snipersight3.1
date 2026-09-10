@@ -12,7 +12,24 @@ from decimal import Decimal
 
 from . import aggregator, importer, listings, venues
 
-QUALITY_VERSION = "quality-v0.4-draft"
+# The youngest a series can be and still count as stale. Must exceed one scan
+# cycle plus one bar, or a feed that is imported once per cycle is judged
+# stale near the end of every cycle (measured: 640 s cycles vs a 600 s bar).
+STALE_FLOOR_S = 1800
+
+QUALITY_VERSION = "quality-v0.5-draft"
+# v0.5: staleness has a floor. A series was DEGRADED (STALE_SERIES /
+# REFERENCE_STALE_SERIES) once its newest closed bar was older than 2 x tf.
+# On 5m that is ten minutes — and a scan cycle takes eleven to twelve (mean
+# 640 s over 2026-09-09), importing each feed exactly once. So every 5m
+# series aged past the bar near the end of EVERY cycle, recovered on the next
+# import, and the supervisor's audit read QUARANTINE 34 -> 1 -> 34 all night
+# on 2026-09-10 with nothing wrong: 31 reference feeds plus a few tracked
+# ones, toasting the operator's phone ~30 times for a threshold that could
+# not be met by construction. The floor (STALE_FLOOR_S) is thirty minutes,
+# which the drift check already uses as its own reference-age limit; a dead
+# feed — the failure this check exists for — is stale for hours or forever
+# and is still caught. A different verdict for the same store: a version.
 # v0.4: the v0.3 demotion held a list of everything that could still resolve a
 # trade across the hole, and that list was short by one — execution.monitor_paper
 # walks candles to settle durable PAPER intents and was never in it. A symbol
@@ -629,7 +646,9 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
         # quiet while it matters. Switching to perps retired 108 spot symbols
         # and produced 108 permanent warnings — the same cry-wolf failure as the
         # 1,364 blockers that wedged the scanner for days.
-        if rows and sym in live and now - (rows[-1][0] + sec) > 2 * sec:
+        # 2 x tf, floored at STALE_FLOOR_S — see the v0.5 note at the top.
+        stale_after = max(2 * sec, STALE_FLOOR_S)
+        if rows and sym in live and now - (rows[-1][0] + sec) > stale_after:
             _issue(checks, "DATA", "DEGRADED", "STALE_SERIES",
                    f"latest closed candle is {now - (rows[-1][0] + sec)}s old", sym, tf)
         # A reference key is never in `live` (current_symbols excludes it by
@@ -642,7 +661,7 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
         # series whose silence IS the failure mode gets its own staleness
         # check, at the rung reference findings live on.
         elif rows and venues.is_reference_key(sym) \
-                and now - (rows[-1][0] + sec) > 2 * sec:
+                and now - (rows[-1][0] + sec) > stale_after:
             _issue(checks, "DATA", "DEGRADED", "REFERENCE_STALE_SERIES",
                    f"reference feed's latest closed candle is "
                    f"{now - (rows[-1][0] + sec)}s old — a delisted or dead "

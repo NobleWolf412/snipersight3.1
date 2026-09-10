@@ -22,7 +22,7 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
+- [Onboarding Path Tests](Onboarding_Path_Tests.md) (1 shared connections)
 
 ## Source Files
 

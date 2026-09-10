@@ -17,9 +17,9 @@
 - **_risk_of()** (8 connections) — `app/engine/manual.py`
 - **_facts()** (7 connections) — `app/engine/manual.py`
 - **adopt_position()** (7 connections) — `app/engine/manual.py`
-- **live()** (7 connections) — `app/engine/manual.py`
 - **risk_per_unit()** (6 connections) — `app/engine/manual.py`
 - **validate_partials()** (6 connections) — `app/engine/manual.py`
+- **live()** (6 connections) — `app/engine/manual.py`
 - **_resolution()** (6 connections) — `app/engine/manual.py`
 - **_exit_walk()** (6 connections) — `app/engine/manual.py`
 - **validate()** (5 connections) — `app/engine/manual.py`
@@ -33,10 +33,10 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (8 shared connections)
+- [t](t.md) (4 shared connections)
+- [Onboarding Path Tests](Onboarding_Path_Tests.md) (4 shared connections)
 - [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
-- [Refresh Repair Tests](Refresh_Repair_Tests.md) (1 shared connections)
+- [Breakeven Fee Tests](Breakeven_Fee_Tests.md) (1 shared connections)
 
 ## Source Files
 
@@ -44,8 +44,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 304 (99%)
-- INFERRED: 2 (1%)
+- EXTRACTED: 304 (100%)
+- INFERRED: 1 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

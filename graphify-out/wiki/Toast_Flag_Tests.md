@@ -1,32 +1,52 @@
 # Toast Flag Tests
 
-> 7 nodes
+> 23 nodes
 
 ## Key Concepts
 
-- **QueueCase** (8 connections) — `app/tests/test_alerts.py`
-- **TheToastFlagGatesOnlyTheToast** (5 connections) — `app/tests/test_alerts.py`
-- **.setUp()** (1 connections) — `app/tests/test_alerts.py`
-- **.tearDown()** (1 connections) — `app/tests/test_alerts.py`
-- **.test_the_flag_does_not_stop_an_event_being_recorded()** (1 connections) — `app/tests/test_alerts.py`
-- **.test_the_flag_is_checked_in_the_toast_sink_only()** (1 connections) — `app/tests/test_alerts.py`
-- **SNIPERSIGHT_NO_TOAST=1 is set on the scanner by the supervisor.      Hoisted i** (1 connections) — `app/tests/test_alerts.py`
+- **re()** (32 connections) — `app/static/lightweight-charts.js`
+- **.getVisibleRange()** (2 connections) — `app/static/lightweight-charts.js`
+- **.setVisibleLogicalRange()** (2 connections) — `app/static/lightweight-charts.js`
+- **.height()** (2 connections) — `app/static/lightweight-charts.js`
+- **.ww()** (2 connections) — `app/static/lightweight-charts.js`
+- **.scrollPosition()** (1 connections) — `app/static/lightweight-charts.js`
+- **.scrollToPosition()** (1 connections) — `app/static/lightweight-charts.js`
+- **.scrollToRealTime()** (1 connections) — `app/static/lightweight-charts.js`
+- **.setVisibleRange()** (1 connections) — `app/static/lightweight-charts.js`
+- **.resetTimeScale()** (1 connections) — `app/static/lightweight-charts.js`
+- **.fitContent()** (1 connections) — `app/static/lightweight-charts.js`
+- **.coordinateToLogical()** (1 connections) — `app/static/lightweight-charts.js`
+- **.timeToCoordinate()** (1 connections) — `app/static/lightweight-charts.js`
+- **.width()** (1 connections) — `app/static/lightweight-charts.js`
+- **.subscribeVisibleTimeRangeChange()** (1 connections) — `app/static/lightweight-charts.js`
+- **.unsubscribeVisibleTimeRangeChange()** (1 connections) — `app/static/lightweight-charts.js`
+- **.subscribeVisibleLogicalRangeChange()** (1 connections) — `app/static/lightweight-charts.js`
+- **.unsubscribeVisibleLogicalRangeChange()** (1 connections) — `app/static/lightweight-charts.js`
+- **.subscribeSizeChange()** (1 connections) — `app/static/lightweight-charts.js`
+- **.unsubscribeSizeChange()** (1 connections) — `app/static/lightweight-charts.js`
+- **.applyOptions()** (1 connections) — `app/static/lightweight-charts.js`
+- **.options()** (1 connections) — `app/static/lightweight-charts.js`
+- **.Mw()** (1 connections) — `app/static/lightweight-charts.js`
 
 ## Relationships
 
-- [Scanner Alert Isolation Tests](Scanner_Alert_Isolation_Tests.md) (3 shared connections)
-- [Alert Idempotency Tests](Alert_Idempotency_Tests.md) (1 shared connections)
-- [Remote Alert Sink Tests](Remote_Alert_Sink_Tests.md) (1 shared connections)
-- [Toast Sink Tests](Toast_Sink_Tests.md) (1 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (4 shared connections)
+- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (2 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
+- [Simulator Convention Tests](Simulator_Convention_Tests.md) (1 shared connections)
+- [Pipeline Quality Tests](Pipeline_Quality_Tests.md) (1 shared connections)
+- [Glossary UI](Glossary_UI.md) (1 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (1 shared connections)
+- [applyLevels](applyLevels.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_alerts.py`
+- `app/static/lightweight-charts.js`
 
 ## Audit Trail
 
-- EXTRACTED: 18 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 57 (98%)
+- INFERRED: 1 (2%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -1,6 +1,6 @@
 # test_market_workspaces.js
 
-> 17 nodes
+> 16 nodes
 
 ## Key Concepts
 
@@ -8,7 +8,6 @@
 - **fs** (1 connections) — `app/tests/test_market_workspaces.js`
 - **path** (1 connections) — `app/tests/test_market_workspaces.js`
 - **assert** (1 connections) — `app/tests/test_market_workspaces.js`
-- **S()** (1 connections) — `app/tests/test_market_workspaces.js`
 - **HTML** (1 connections) — `app/tests/test_market_workspaces.js`
 - **MARKETS** (1 connections) — `app/tests/test_market_workspaces.js`
 - **STOCKS** (1 connections) — `app/tests/test_market_workspaces.js`
@@ -24,7 +23,7 @@
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [he](he.md) (1 shared connections)
 
 ## Source Files
 
@@ -32,7 +31,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 32 (100%)
+- EXTRACTED: 31 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

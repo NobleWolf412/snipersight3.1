@@ -1,41 +1,42 @@
 # Portfolio & Position Endpoints
 
-> 29 nodes
+> 26 nodes
 
 ## Key Concepts
 
-- **portfolio()** (13 connections) — `app/server.py`
-- **_automation_read()** (7 connections) — `app/server.py`
-- **live_gate()** (6 connections) — `app/server.py`
-- **_live_gate_from()** (5 connections) — `app/server.py`
-- **operations_read_model()** (5 connections) — `app/server.py`
-- **achievement_progress()** (5 connections) — `app/server.py`
+- **portfolio()** (14 connections) — `app/server.py`
+- **status()** (7 connections) — `app/server.py`
 - **_performance_dimensions()** (4 connections) — `app/server.py`
+- **manual_open()** (4 connections) — `app/server.py`
+- **copilot_chat()** (4 connections) — `app/server.py`
 - **_journal_performance_summary()** (3 connections) — `app/server.py`
 - **_envelope_config()** (3 connections) — `app/server.py`
-- **automation_status()** (3 connections) — `app/server.py`
-- **automation_mode()** (3 connections) — `app/server.py`
+- **credentials_status()** (3 connections) — `app/server.py`
+- **credentials_store()** (3 connections) — `app/server.py`
+- **stocks_status()** (3 connections) — `app/server.py`
 - **close_position()** (3 connections) — `app/server.py`
 - **adopt_position()** (3 connections) — `app/server.py`
-- **copilot_chat()** (3 connections) — `app/server.py`
+- **macro_calendar_snapshot()** (3 connections) — `app/server.py`
 - **One server-owned scoreboard for the current funded forward book.** (1 connections) — `app/server.py`
 - **Comparable funded-book cuts; unknown metadata stays explicitly unknown.** (1 connections) — `app/server.py`
 - **The envelope of the book being DISPLAYED — the paper book — plus the     dispat** (1 connections) — `app/server.py`
 - **Paper account state from risk-authority facts (§9/§13 dashboard).** (1 connections) — `app/server.py`
 - **Funded forward-book results by operator comparison dimension.** (1 connections) — `app/server.py`
-- **The four criteria that stand between the paper book and real money.      Read-** (1 connections) — `app/server.py`
-- **Evaluate the gate from an already-authoritative portfolio payload.** (1 connections) — `app/server.py`
-- **One server-owned automation answer for every cockpit surface.** (1 connections) — `app/server.py`
-- **Current mode, locks and promotion evidence.  This endpoint never arms.** (1 connections) — `app/server.py`
-- **Revision-checked mode transition with explicit high-risk acknowledgement.** (1 connections) — `app/server.py`
-- **Compact command-layer state shared by every cockpit destination.** (1 connections) — `app/server.py`
-- *... and 4 more nodes in this community*
+- **What credentials EXIST — never their values. There is deliberately no     route** (1 connections) — `app/server.py`
+- **Encrypt and store one credential field.      The value is never logged, never** (1 connections) — `app/server.py`
+- **Stock-workspace readiness without decrypting or probing credentials.** (1 connections) — `app/server.py`
+- **Operator closes an ENGINE position early, at the last closed bar.      Records** (1 connections) — `app/server.py`
+- **Operator takes custody of an engine position with their own levels.      The e** (1 connections) — `app/server.py`
+- **Live state of the operator's open trades on one chart.      Resolves first, th** (1 connections) — `app/server.py`
+- **Cached official calendar reads only; no store or trading writes.** (1 connections) — `app/server.py`
+- *... and 1 more nodes in this community*
 
 ## Relationships
 
-- [API Server Endpoints](API_Server_Endpoints.md) (14 shared connections)
-- [status](status.md) (2 shared connections)
+- [API Server Endpoints](API_Server_Endpoints.md) (13 shared connections)
+- [wire](wire.md) (3 shared connections)
 - [Performance & Playbook Endpoints](Performance_%26_Playbook_Endpoints.md) (1 shared connections)
+- [Chart Vendor Grid & Axis](Chart_Vendor_Grid_%26_Axis.md) (1 shared connections)
 
 ## Source Files
 
@@ -43,7 +44,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 81 (100%)
+- EXTRACTED: 70 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

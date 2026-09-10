@@ -1,33 +1,40 @@
 # Scale-Out Settlement Tests
 
-> 10 nodes
+> 19 nodes
 
 ## Key Concepts
 
-- **.scale_bars()** (7 connections) — `app/tests/test_manual.py`
-- **.test_half_off_at_a_level_blends_two_settlements()** (6 connections) — `app/tests/test_manual.py`
-- **.test_the_blend_is_reproducible_from_the_recorded_legs_alone()** (6 connections) — `app/tests/test_manual.py`
-- **.test_each_leg_pays_funding_for_its_own_holding_period()** (6 connections) — `app/tests/test_manual.py`
-- **.test_every_settled_trade_in_the_book_reproduces_its_own_headline()** (5 connections) — `app/tests/test_manual.py`
-- **Fill at 100, rung at 104 on bar 1, target 110 on bar 2.** (1 connections) — `app/tests/test_manual.py`
-- **The headline case: half off at +2R, the rest rides to the target.          Han** (1 connections) — `app/tests/test_manual.py`
-- **The house rule, as a property rather than a promise.          `blend_r` is the** (1 connections) — `app/tests/test_manual.py`
-- **The same property, swept over a book of mixed shapes.          One passing exa** (1 connections) — `app/tests/test_manual.py`
-- **A rung taken at bar 1 did not hold the position to bar 2.          Charging th** (1 connections) — `app/tests/test_manual.py`
+- **kraken.py** (10 connections) — `app/engine/kraken.py`
+- **_get()** (7 connections) — `app/engine/kraken.py`
+- **list_products()** (5 connections) — `app/engine/kraken.py`
+- **_RateLimiter** (4 connections) — `app/engine/kraken.py`
+- **maintenance_margin()** (4 connections) — `app/engine/kraken.py`
+- **rank_by_volume()** (4 connections) — `app/engine/kraken.py`
+- **fetch_candles()** (4 connections) — `app/engine/kraken.py`
+- **funding_rate()** (3 connections) — `app/engine/kraken.py`
+- **.acquire()** (2 connections) — `app/engine/kraken.py`
+- **Decimal** (2 connections)
+- **.__init__()** (1 connections) — `app/engine/kraken.py`
+- **Kraken Futures adapter — market data and ranking. No credentials, no orders.  Op** (1 connections) — `app/engine/kraken.py`
+- **Shared spacing. A per-worker sleep still bursts N requests at once, so     the g** (1 connections) — `app/engine/kraken.py`
+- **Throttled GET with backoff. A dropped symbol is indistinguishable from an     il** (1 connections) — `app/engine/kraken.py`
+- **Tradeable USD-quoted perpetuals, normalised to the fields we care about.      `c** (1 connections) — `app/engine/kraken.py`
+- **First-tier maintenance margin as the venue publishes it.      `venues.liquidatio** (1 connections) — `app/engine/kraken.py`
+- **USD perps ranked by 24h quote volume.      `volumeQuote` is already notional in** (1 connections) — `app/engine/kraken.py`
+- **Current funding rate, or None if the venue does not say.      Only the CURRENT r** (1 connections) — `app/engine/kraken.py`
+- **Closed candles in [start_ts, end_ts), ascending, as store-shaped dicts.      Onl** (1 connections) — `app/engine/kraken.py`
 
 ## Relationships
 
-- [Manual Settlement Tests](Manual_Settlement_Tests.md) (8 shared connections)
-- [Manual Arm Validation Tests](Manual_Arm_Validation_Tests.md) (5 shared connections)
-- [Manual Book Tests](Manual_Book_Tests.md) (4 shared connections)
+- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
 
 ## Source Files
 
-- `app/tests/test_manual.py`
+- `app/engine/kraken.py`
 
 ## Audit Trail
 
-- EXTRACTED: 35 (100%)
+- EXTRACTED: 54 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

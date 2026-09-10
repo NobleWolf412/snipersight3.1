@@ -35,6 +35,10 @@ from engine import (automation, autotrader, contracts, execution, lifecycle,
                     stockcalendar, stockdemo, stocks, stockstore)
 from engine import (apexbridge, listings, livegate, phemex_private, positions,
                     quality, regrade, universe)
+from engine import (abtest, achievements, analyst_context, chart_insight,
+                    diagnostic_status, edgestats, entrystats, factorstats,
+                    funding, fvg, learning, macro_calendar, market_context,
+                    registry, settings, volprofile)
 
 
 # Operational authorities do not write research facts, so they do not belong
@@ -75,6 +79,11 @@ OPERATIONAL_EXPECTED = {
     # and a missing ladder reading never holds dispatch. v0.5: risk reasons
     # trader-readable; top-down independent of risk state.
     "opportunities": "opportunity-v0.6-draft",
+    # quality-v0.5: staleness floored at 30 minutes. 2 x tf on a 5m series is
+    # ten minutes, and a scan cycle is eleven to twelve, so every 5m feed was
+    # DEGRADED near the end of every cycle and healed on the next import — the
+    # supervisor toasted QUARANTINE 34 -> 1 -> 34 all night on 2026-09-10 for
+    # a bar that could not be met. Same store, different verdict: a version.
     # quality-v0.4: the v0.3 pin-list of everything that can still resolve a
     # trade across the hole missed execution.monitor_paper's durable PAPER
     # intents, so a delisted market carrying one reported PASS where it now
@@ -87,7 +96,7 @@ OPERATIONAL_EXPECTED = {
     # never universe membership: `members` is the top_n slice, and keying on it
     # demoted 81 live perps (reverted, ba9d8fb). v0.2: acknowledged venue voids
     # are durable notes, not warnings; gaps on a LIVE market still block.
-    "quality": "quality-v0.4-draft",
+    "quality": "quality-v0.5-draft",
     # listings-v0.1: the venue product sweep, appended one fact per venue per
     # run. Locked from birth — quality's verdict now depends on it, and a
     # version nobody tracks until something reads it leaves its early facts
@@ -219,6 +228,29 @@ LOCKED = {
     # that if anyone ever wires it into the cascade, this file has to be
     # edited in the same commit and the decision becomes visible.
     "manual": manual.MANUAL_VERSION,
+    # Found outside the lockfile on 2026-09-10: sixteen version constants
+    # nothing here pinned, so a rule edit under any of them passed the suite.
+    # Two WRITE facts — fvg (2 insert_fact sites, 3 importers) and volprofile
+    # (1 site, 2 importers) — which is the S37 shape exactly. The rest are
+    # versioned readers and graders whose output the cockpit and the
+    # regrade consume; they are locked for the reason `cycles` and `bias`
+    # are: a version that cannot force a question is decoration.
+    "fvg": fvg.FVG_VERSION,
+    "volprofile": volprofile.VOLPROFILE_VERSION,
+    "abtest": abtest.ABTEST_VERSION,
+    "edgestats": edgestats.EDGESTATS_VERSION,
+    "entrystats": entrystats.ENTRYSTATS_VERSION,
+    "factorstats": factorstats.FACTORSTATS_VERSION,
+    "funding": funding.FUNDING_VERSION,
+    "achievements": achievements.ACHIEVEMENT_VERSION,
+    "analyst_context": analyst_context.ANALYST_CONTEXT_VERSION,
+    "chart_insight": chart_insight.INSIGHT_VERSION,
+    "diagnostic_status": diagnostic_status.DIAGNOSTIC_STATUS_VERSION,
+    "learning": learning.LEARNING_VERSION,
+    "macro_calendar": macro_calendar.MACRO_CALENDAR_VERSION,
+    "market_context": market_context.MARKET_CONTEXT_VERSION,
+    "strategy_contract": registry.STRATEGY_CONTRACT_VERSION,
+    "settings": settings.SETTINGS_VERSION,
 }
 
 #: Superseded manual versions the resolver still READS. They are not in LOCKED
@@ -507,6 +539,24 @@ EXPECTED = {
     # gained v0.4 so intents still open under it are still found — a bump that
     # moved both would strand them.
     "manual": "manual-v0.5-draft",
+    # Locked 2026-09-10 — see the LOCKED note. Versions recorded as found;
+    # none was moved by the lock.
+    "fvg": "fvg-v0.2-draft",
+    "volprofile": "volprofile-v0.2-draft",
+    "abtest": "abtest-v0.6",
+    "edgestats": "edgestats-v0.4-draft",
+    "entrystats": "entrystats-v0.3-draft",
+    "factorstats": "factorstats-v0.2-draft",
+    "funding": "funding-v0.1-draft",
+    "achievements": "achievements-v0.1-draft",
+    "analyst_context": "analyst-context-v0.2-draft",
+    "chart_insight": "chart-insight-v0.1-draft",
+    "diagnostic_status": "diagnostic-status-v0.1-draft",
+    "learning": "learning-v0.1-draft",
+    "macro_calendar": "macro-calendar-v0.1-draft",
+    "market_context": "market-context-v0.1-draft",
+    "strategy_contract": "strategy-contract-v0.1-draft",
+    "settings": "settings-v0.2-draft",
 }
 
 # Who reads whose facts. Bumping a key REQUIRES considering every value.

@@ -21,8 +21,7 @@
 
 ## Relationships
 
-- [Manual Book Tests](Manual_Book_Tests.md) (10 shared connections)
-- [Manual Arm Validation Tests](Manual_Arm_Validation_Tests.md) (8 shared connections)
+- [Manual Book Tests](Manual_Book_Tests.md) (18 shared connections)
 - [Manual Settlement Tests](Manual_Settlement_Tests.md) (5 shared connections)
 
 ## Source Files

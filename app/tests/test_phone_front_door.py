@@ -13,6 +13,9 @@ refusing; the second just quietly stops offering to install.
 """
 import json
 import os
+import pathlib
+import tempfile
+from unittest import mock
 import tempfile
 import unittest
 from pathlib import Path
@@ -236,7 +239,19 @@ class SiteBridgeTests(unittest.TestCase):
         self.assertEqual(r.json()["identity"], "bridge-only")
 
     def test_bridge_token_cannot_trigger_a_write(self):
-        r = self.client.post("/api/scan", headers=self._bridge_headers())
+        # The guard is what is under test, so the thing it protects is
+        # stubbed in the same breath (CLAUDE.md): a regression here must fail
+        # this assertion, not wake the operator's live scanner or run a real
+        # cycle against the real store.
+        import live
+        with mock.patch.object(live, "cycle", side_effect=AssertionError(
+                "the bridge gate let a POST reach a real scan cycle")), \
+             mock.patch.object(live, "WAKE_REQUEST",
+                               pathlib.Path(tempfile.gettempdir())
+                               / "snipersight-test-scan-request"), \
+             mock.patch.object(server, "_scanner_status",
+                               return_value={"state": "OFFLINE"}):
+            r = self.client.post("/api/scan", headers=self._bridge_headers())
         self.assertEqual(r.status_code, 403)
         self.assertEqual(r.json()["identity"], "bridge-only")
 
@@ -251,6 +266,18 @@ class BaselineResetTests(unittest.TestCase):
 
     def setUp(self):
         self.client = TestClient(server.app)
+        # These assert refusals, and a refusal is a guard — so the write the
+        # guard protects is stubbed here, in the same test (CLAUDE.md). The
+        # form-post case below sends confirm=true and relied on FastAPI's 422
+        # alone to keep the operator's baseline intact; one loosened
+        # signature and the suite would have re-scoped the real book.
+        self._no_reset = mock.patch.object(
+            server.store, "start_baseline",
+            side_effect=AssertionError("a refused request reached the reset"))
+        self._no_reset.start()
+
+    def tearDown(self):
+        self._no_reset.stop()
 
     def test_a_form_post_cannot_reach_the_handler(self):
         """The second lock, behind the guard: a plain HTML form cannot produce

@@ -1,29 +1,35 @@
 # Next Wake Math Tests
 
-> 6 nodes
+> 9 nodes
 
 ## Key Concepts
 
-- **OneFillModel** (4 connections) — `app/tests/test_abtest.py`
-- **.test_a_crossed_order_is_priced_on_the_bar_it_crossed_on()** (3 connections) — `app/tests/test_abtest.py`
-- **.test_a_missing_atr_on_the_cross_degrades_audibly()** (3 connections) — `app/tests/test_abtest.py`
-- **The whole fill model is the engine's, not just the crossing price.** (1 connections) — `app/tests/test_abtest.py`
-- **The passive limit rests below every low so it can never fill; the         engin** (1 connections) — `app/tests/test_abtest.py`
-- **`cross_fill` returns a `slipped` flag and abtest discarded it         (`entry_p** (1 connections) — `app/tests/test_abtest.py`
+- **test_ssdata.js** (7 connections) — `app/tests/test_ssdata.js`
+- **ms()** (5 connections) — `app/static/lightweight-charts.js`
+- **sleep()** (3 connections) — `app/tests/test_ssdata.js`
+- **load()** (3 connections) — `app/tests/test_ssdata.js`
+- **fs** (1 connections) — `app/tests/test_ssdata.js`
+- **path** (1 connections) — `app/tests/test_ssdata.js`
+- **assert** (1 connections) — `app/tests/test_ssdata.js`
+- **SRC** (1 connections) — `app/tests/test_ssdata.js`
+- **ok()** (1 connections) — `app/tests/test_ssdata.js`
 
 ## Relationships
 
-- [CalibrationAgainstTheLiveStore](CalibrationAgainstTheLiveStore.md) (2 shared connections)
-- [Engine Fault Row Tests](Engine_Fault_Row_Tests.md) (1 shared connections)
+- [Pipeline Quality Tests](Pipeline_Quality_Tests.md) (2 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (1 shared connections)
+- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_abtest.py`
+- `app/static/lightweight-charts.js`
+- `app/tests/test_ssdata.js`
 
 ## Audit Trail
 
-- EXTRACTED: 13 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 20 (87%)
+- INFERRED: 3 (13%)
 - AMBIGUOUS: 0 (0%)
 
 ---

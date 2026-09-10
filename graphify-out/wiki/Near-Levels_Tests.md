@@ -33,7 +33,7 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
+- [t](t.md) (1 shared connections)
 
 ## Source Files
 

@@ -29,9 +29,9 @@
 
 ## Relationships
 
-- [plan_facts](plan_facts.md) (6 shared connections)
+- [.key](key.md) (6 shared connections)
 - [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (2 shared connections)
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (1 shared connections)
+- [Onboarding Path Tests](Onboarding_Path_Tests.md) (1 shared connections)
 - [Bias, Trend & Setups](Bias%2C_Trend_%26_Setups.md) (1 shared connections)
 - [Shell Disposition & Risk Rendering](Shell_Disposition_%26_Risk_Rendering.md) (1 shared connections)
 - [Chart Vendor Scales](Chart_Vendor_Scales.md) (1 shared connections)

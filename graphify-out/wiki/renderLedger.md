@@ -1,23 +1,28 @@
 # renderLedger
 
-> 2 nodes
+> 5 nodes
 
 ## Key Concepts
 
-- **workspaces.js** (1 connections) — `app/static/workspaces.js`
-- **bind()** (1 connections) — `app/static/workspaces.js`
+- **renderLedger()** (6 connections) — `app/static/shell.js`
+- **ledgerRow()** (3 connections) — `app/static/shell.js`
+- **renderLedgerMine()** (3 connections) — `app/static/shell.js`
+- **renderLedgerExits()** (3 connections) — `app/static/shell.js`
+- **bookCard()** (2 connections) — `app/static/shell.js`
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (5 shared connections)
+- [NextWakeMath](NextWakeMath.md) (1 shared connections)
+- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/workspaces.js`
+- `app/static/shell.js`
 
 ## Audit Trail
 
-- EXTRACTED: 2 (100%)
+- EXTRACTED: 17 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

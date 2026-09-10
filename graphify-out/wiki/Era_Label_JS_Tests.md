@@ -5,11 +5,11 @@
 ## Key Concepts
 
 - **test_era_labels.js** (12 connections) — `app/tests/test_era_labels.js`
-- **read()** (2 connections) — `app/tests/test_era_labels.js`
 - **fs** (1 connections) — `app/tests/test_era_labels.js`
 - **path** (1 connections) — `app/tests/test_era_labels.js`
 - **assert** (1 connections) — `app/tests/test_era_labels.js`
 - **APP** (1 connections) — `app/tests/test_era_labels.js`
+- **read()** (1 connections) — `app/tests/test_era_labels.js`
 - **SHELL** (1 connections) — `app/tests/test_era_labels.js`
 - **HTML** (1 connections) — `app/tests/test_era_labels.js`
 - **EDGE** (1 connections) — `app/tests/test_era_labels.js`
@@ -20,7 +20,7 @@
 
 ## Relationships
 
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -28,8 +28,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 24 (96%)
-- INFERRED: 1 (4%)
+- EXTRACTED: 24 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

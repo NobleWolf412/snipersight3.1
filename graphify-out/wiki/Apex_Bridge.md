@@ -4,7 +4,7 @@
 
 ## Key Concepts
 
-- **apexbridge.py** (7 connections) — `app/engine/apexbridge.py`
+- **apexbridge.py** (8 connections) — `app/engine/apexbridge.py`
 - **state()** (6 connections) — `app/engine/apexbridge.py`
 - **action()** (5 connections) — `app/engine/apexbridge.py`
 - **log_line()** (3 connections) — `app/engine/apexbridge.py`
@@ -18,7 +18,7 @@
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [Chart Vendor Price Scale Formatting](Chart_Vendor_Price_Scale_Formatting.md) (1 shared connections)
 
 ## Source Files
 
@@ -26,7 +26,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 32 (100%)
+- EXTRACTED: 33 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

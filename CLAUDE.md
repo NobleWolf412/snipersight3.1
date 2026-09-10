@@ -103,11 +103,15 @@ and `uvicorn server:app` gives `Could not import module "server"`.
 
 ```
 cd app
-python -m unittest discover -s tests     # what CI runs
-python -m pytest tests -q                # same suite, quicker to read
+python -m pytest tests -q                # what CI runs
 for f in tests/test_*.js; do node "$f"; done
 npm ci && npx eslint .                   # first run only needs the npm ci
 ```
+
+Use pytest, not `unittest discover`. Eighteen suites are bare pytest
+functions and unittest's discovery collects none of them — 131 tests that
+CI reported green for weeks without running (found 2026-09-10). pytest runs
+both styles.
 
 `pytest` also works from the repo root (`python -m pytest app/tests -q`); the
 server does not.

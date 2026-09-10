@@ -279,6 +279,18 @@ function load() {
     assert.strictEqual(D.health().failing, 0);
   });
 
+  await ok('a watched path alarms without a subscription', async () => {
+    /* shell.js polls through get() and never subscribes; before watch() its
+       failures were invisible to health() and the chip said nothing had ever
+       loaded. */
+    const {D, sandbox} = load();
+    D.watch('/shell-read');
+    sandbox.plan['/shell-read'] = {fail: true};
+    await D.get('/shell-read', 0).catch(() => {});
+    assert.notStrictEqual(D.health().state, 'ok', 'a watched failure did not alarm');
+    assert.strictEqual(D.health().watched, 1);
+  });
+
   await ok('health ignores paths nothing on screen depends on', async () => {
     /* A chart the operator browsed away from must not be able to put the
        whole cockpit into a failure state. */

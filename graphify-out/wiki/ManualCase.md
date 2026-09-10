@@ -2,7 +2,7 @@
 
 > God node · 101 connections · `app/tests/test_manual.py`
 
-**Community:** [Manual Arm Validation Tests](Manual_Arm_Validation_Tests.md)
+**Community:** [Manual Book Tests](Manual_Book_Tests.md)
 
 ## Connections by Relation
 

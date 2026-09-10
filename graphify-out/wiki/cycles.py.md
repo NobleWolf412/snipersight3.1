@@ -4,7 +4,7 @@
 
 ## Key Concepts
 
-- **cycles.py** (12 connections) — `app/engine/cycles.py`
+- **cycles.py** (13 connections) — `app/engine/cycles.py`
 - **summarize()** (7 connections) — `app/engine/cycles.py`
 - **run()** (7 connections) — `app/engine/cycles.py`
 - **detect_lows()** (5 connections) — `app/engine/cycles.py`
@@ -26,7 +26,8 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (3 shared connections)
+- [Onboarding Path Tests](Onboarding_Path_Tests.md) (3 shared connections)
+- [Chart Vendor Price Scale Formatting](Chart_Vendor_Price_Scale_Formatting.md) (1 shared connections)
 - [Cycle Detection Engine](Cycle_Detection_Engine.md) (1 shared connections)
 
 ## Source Files
@@ -35,7 +36,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 59 (98%)
+- EXTRACTED: 60 (98%)
 - INFERRED: 1 (2%)
 - AMBIGUOUS: 0 (0%)
 

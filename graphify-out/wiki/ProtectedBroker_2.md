@@ -1,12 +1,16 @@
 # ProtectedBroker
 
-> 40 nodes
+> 48 nodes
 
 ## Key Concepts
 
 - **BrokerOrder** (50 connections) — `app/engine/contracts.py`
 - **PhemexBroker** (29 connections) — `app/engine/phemex_private.py`
+- **PhemexError** (24 connections) — `app/engine/phemex_private.py`
+- **BrokerExecution** (16 connections) — `app/engine/contracts.py`
+- **AmbiguousSubmission** (15 connections) — `app/engine/phemex_private.py`
 - **._request()** (15 connections) — `app/engine/phemex_private.py`
+- **phemex_private.py** (12 connections) — `app/engine/phemex_private.py`
 - **Decimal** (12 connections)
 - **.submit()** (12 connections) — `app/engine/phemex_private.py`
 - **._order()** (11 connections) — `app/engine/phemex_private.py`
@@ -25,20 +29,16 @@
 - **._client_id()** (4 connections) — `app/engine/phemex_private.py`
 - **.cancel()** (4 connections) — `app/engine/phemex_private.py`
 - **.set_leverage()** (4 connections) — `app/engine/phemex_private.py`
-- **.refresh_products()** (3 connections) — `app/engine/phemex_private.py`
-- **.sync_time()** (3 connections) — `app/engine/phemex_private.py`
-- **.client_order_id()** (3 connections) — `app/engine/phemex_private.py`
-- **.positions()** (3 connections) — `app/engine/phemex_private.py`
-- *... and 15 more nodes in this community*
+- *... and 23 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (34 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (38 shared connections)
 - [Chart Vendor Series](Chart_Vendor_Series.md) (11 shared connections)
-- [Notification Delivery](Notification_Delivery.md) (6 shared connections)
+- [Notification Delivery](Notification_Delivery.md) (9 shared connections)
 - [Shared Pipeline Loop Tests](Shared_Pipeline_Loop_Tests.md) (5 shared connections)
-- [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (2 shared connections)
-- [A/B Calibration Tests](A-B_Calibration_Tests.md) (1 shared connections)
+- [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (4 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (3 shared connections)
 - [One Source of Truth JS Tests](One_Source_of_Truth_JS_Tests.md) (1 shared connections)
 - [CustodyOverridesTheSimulatorsStory](CustodyOverridesTheSimulatorsStory.md) (1 shared connections)
 - [Cycle Detection Engine](Cycle_Detection_Engine.md) (1 shared connections)
@@ -52,8 +52,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 222 (86%)
-- INFERRED: 37 (14%)
+- EXTRACTED: 268 (81%)
+- INFERRED: 64 (19%)
 - AMBIGUOUS: 0 (0%)
 
 ---

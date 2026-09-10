@@ -1,38 +1,59 @@
 # Filtered Book Refusal Tests
 
-> 13 nodes
+> 49 nodes
 
 ## Key Concepts
 
-- **TestFilteredBookRefusal** (11 connections) — `app/tests/test_edgestats.py`
-- **._shadow()** (6 connections) — `app/tests/test_edgestats.py`
-- **._traded()** (4 connections) — `app/tests/test_edgestats.py`
-- **.test_a_handful_of_tradeable_trades_is_refused_not_solved_for_a_fee()** (4 connections) — `app/tests/test_edgestats.py`
-- **.test_the_traded_half_is_still_graded_when_it_clears_the_floor()** (4 connections) — `app/tests/test_edgestats.py`
-- **.test_the_refusal_still_reports_what_the_filter_removed()** (3 connections) — `app/tests/test_edgestats.py`
-- **.test_an_all_shadow_book_refuses_rather_than_dividing_by_zero()** (2 connections) — `app/tests/test_edgestats.py`
-- **.test_breakeven_fee_on_an_empty_book_is_not_computable()** (2 connections) — `app/tests/test_edgestats.py`
-- **The floor has to be measured on the book being GRADED, not on the one     `load** (1 connections) — `app/tests/test_edgestats.py`
-- **A filtered report that cannot say what it left out is worse than no         rep** (1 connections) — `app/tests/test_edgestats.py`
-- **Quieter than the crash and worse: below the floor but above zero,         the o** (1 connections) — `app/tests/test_edgestats.py`
-- **The gate must only refuse — it must not narrow a book that qualifies.         `** (1 connections) — `app/tests/test_edgestats.py`
-- **Defence in depth. `report`'s floor is the real gate, but this is a         modu** (1 connections) — `app/tests/test_edgestats.py`
+- **bn** (21 connections) — `app/static/lightweight-charts.js`
+- **ht()** (12 connections) — `app/static/lightweight-charts.js`
+- **ai** (12 connections) — `app/static/lightweight-charts.js`
+- **ji** (11 connections) — `app/static/lightweight-charts.js`
+- **.Mt()** (9 connections) — `app/static/lightweight-charts.js`
+- **.bt()** (9 connections) — `app/static/lightweight-charts.js`
+- **li()** (8 connections) — `app/static/lightweight-charts.js`
+- **.la()** (8 connections) — `app/static/lightweight-charts.js`
+- **ke** (6 connections) — `app/static/lightweight-charts.js`
+- **.K()** (5 connections) — `app/static/lightweight-charts.js`
+- **hi()** (5 connections) — `app/static/lightweight-charts.js`
+- **.qr()** (5 connections) — `app/static/lightweight-charts.js`
+- **.ze()** (4 connections) — `app/static/lightweight-charts.js`
+- **.Ae()** (4 connections) — `app/static/lightweight-charts.js`
+- **.Ee()** (4 connections) — `app/static/lightweight-charts.js`
+- **.Kr()** (4 connections) — `app/static/lightweight-charts.js`
+- **.Xr()** (4 connections) — `app/static/lightweight-charts.js`
+- **.Ii()** (4 connections) — `app/static/lightweight-charts.js`
+- **.Ve()** (3 connections) — `app/static/lightweight-charts.js`
+- **.Ur()** (3 connections) — `app/static/lightweight-charts.js`
+- **.gt()** (3 connections) — `app/static/lightweight-charts.js`
+- **.Hh()** (3 connections) — `app/static/lightweight-charts.js`
+- **.options()** (3 connections) — `app/static/lightweight-charts.js`
+- **.jr()** (2 connections) — `app/static/lightweight-charts.js`
+- **.Hr()** (2 connections) — `app/static/lightweight-charts.js`
+- *... and 24 more nodes in this community*
 
 ## Relationships
 
-- [Breakeven Fee Tests](Breakeven_Fee_Tests.md) (2 shared connections)
-- [Edge Stats Determinism Tests](Edge_Stats_Determinism_Tests.md) (1 shared connections)
-- [Small Sample Refusal Tests](Small_Sample_Refusal_Tests.md) (1 shared connections)
-- [Forward vs Historical Book Tests](Forward_vs_Historical_Book_Tests.md) (1 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (12 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (11 shared connections)
+- [Pipeline Quality Tests](Pipeline_Quality_Tests.md) (8 shared connections)
+- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (7 shared connections)
+- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (5 shared connections)
+- [momentum.py](momentum.py.md) (4 shared connections)
+- [Glossary UI](Glossary_UI.md) (3 shared connections)
+- [Simulator Convention Tests](Simulator_Convention_Tests.md) (3 shared connections)
+- [Chart Vendor Internals](Chart_Vendor_Internals.md) (2 shared connections)
+- [Chart Vendor Panes](Chart_Vendor_Panes.md) (1 shared connections)
+- [Chart UI Layer](Chart_UI_Layer.md) (1 shared connections)
+- [he](he.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_edgestats.py`
+- `app/static/lightweight-charts.js`
 
 ## Audit Trail
 
-- EXTRACTED: 41 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 189 (99%)
+- INFERRED: 1 (1%)
 - AMBIGUOUS: 0 (0%)
 
 ---

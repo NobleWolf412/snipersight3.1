@@ -1,45 +1,36 @@
 # BTC Alignment Engine
 
-> 13 nodes
+> 11 nodes
 
 ## Key Concepts
 
-- **.Yr()** (15 connections) — `app/static/lightweight-charts.js`
-- **.Fi()** (9 connections) — `app/static/lightweight-charts.js`
-- **.format()** (6 connections) — `app/static/lightweight-charts.js`
-- **.Qi()** (6 connections) — `app/static/lightweight-charts.js`
-- **.ma()** (6 connections) — `app/static/lightweight-charts.js`
-- **.so()** (6 connections) — `app/static/lightweight-charts.js`
-- **.ql()** (6 connections) — `app/static/lightweight-charts.js`
-- **.Fh()** (6 connections) — `app/static/lightweight-charts.js`
-- **.s_()** (5 connections) — `app/static/lightweight-charts.js`
-- **.l_()** (5 connections) — `app/static/lightweight-charts.js`
-- **.n_()** (5 connections) — `app/static/lightweight-charts.js`
-- **.Yl()** (4 connections) — `app/static/lightweight-charts.js`
-- **.format()** (2 connections) — `app/static/lightweight-charts.js`
+- **renderDeck()** (9 connections) — `app/static/shell.js`
+- **loadOverview()** (7 connections) — `app/static/shell.js`
+- **renderMissions()** (6 connections) — `app/static/shell.js`
+- **renderRadar()** (5 connections) — `app/static/shell.js`
+- **missionRailSync()** (4 connections) — `app/static/shell.js`
+- **deckSplit()** (3 connections) — `app/static/shell.js`
+- **indexHeld()** (3 connections) — `app/static/shell.js`
+- **renderPositions()** (3 connections) — `app/static/shell.js`
+- **deckEmptyHtml()** (2 connections) — `app/static/shell.js`
+- **renderFunnel()** (2 connections) — `app/static/shell.js`
+- **loadRefused()** (2 connections) — `app/static/shell.js`
 
 ## Relationships
 
-- [Chart Vendor Core](Chart_Vendor_Core.md) (13 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (5 shared connections)
-- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (4 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (3 shared connections)
-- [Fact Store Conventions](Fact_Store_Conventions.md) (2 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (2 shared connections)
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (2 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
-- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (1 shared connections)
-- [te](te.md) (1 shared connections)
-- [he](he.md) (1 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (12 shared connections)
+- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (3 shared connections)
+- [Chart Vendor Widget Lifecycle](Chart_Vendor_Widget_Lifecycle.md) (3 shared connections)
+- [NextWakeMath](NextWakeMath.md) (2 shared connections)
+- [.Mt](Mt.md) (2 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/static/shell.js`
 
 ## Audit Trail
 
-- EXTRACTED: 81 (100%)
+- EXTRACTED: 46 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

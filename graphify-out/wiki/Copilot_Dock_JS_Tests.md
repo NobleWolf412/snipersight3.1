@@ -4,37 +4,37 @@
 
 ## Key Concepts
 
-- **test_copilot_dock.js** (18 connections) — `app/tests/test_copilot_dock.js`
-- **S()** (2 connections) — `app/tests/test_copilot_dock.js`
-- **fs** (1 connections) — `app/tests/test_copilot_dock.js`
-- **path** (1 connections) — `app/tests/test_copilot_dock.js`
-- **assert** (1 connections) — `app/tests/test_copilot_dock.js`
-- **CHART** (1 connections) — `app/tests/test_copilot_dock.js`
-- **FUNNEL** (1 connections) — `app/tests/test_copilot_dock.js`
-- **SHELL** (1 connections) — `app/tests/test_copilot_dock.js`
-- **HTML** (1 connections) — `app/tests/test_copilot_dock.js`
-- **CSS** (1 connections) — `app/tests/test_copilot_dock.js`
-- **SERVER** (1 connections) — `app/tests/test_copilot_dock.js`
-- **ENGINE** (1 connections) — `app/tests/test_copilot_dock.js`
-- **SEND_SIG** (1 connections) — `app/tests/test_copilot_dock.js`
-- **READS_BOX** (1 connections) — `app/tests/test_copilot_dock.js`
-- **BLOCK_COMMENT** (1 connections) — `app/tests/test_copilot_dock.js`
-- **LINE_COMMENT** (1 connections) — `app/tests/test_copilot_dock.js`
-- **SEND_CALL_WITH_ARG** (1 connections) — `app/tests/test_copilot_dock.js`
-- **ok()** (1 connections) — `app/tests/test_copilot_dock.js`
+- **test_cockpit_redesign.js** (18 connections) — `app/tests/test_cockpit_redesign.js`
+- **fs** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **path** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **assert** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **STATIC** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **HTML** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **CSS** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **OPPORTUNITIES** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **OP_UI** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **OPERATIONS_UI** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **WORKSPACES** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **TRADE** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **COCKPIT** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **FACTORS** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **CHART** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **EDGE** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **SERVER** (1 connections) — `app/tests/test_cockpit_redesign.js`
+- **ok()** (1 connections) — `app/tests/test_cockpit_redesign.js`
 
 ## Relationships
 
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (2 shared connections)
+- [Pipeline Quality Tests](Pipeline_Quality_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_copilot_dock.js`
+- `app/tests/test_cockpit_redesign.js`
 
 ## Audit Trail
 
-- EXTRACTED: 35 (97%)
-- INFERRED: 1 (3%)
+- EXTRACTED: 35 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -1,50 +1,49 @@
 # Chart Vendor Panes
 
-> 39 nodes
+> 31 nodes
 
 ## Key Concepts
 
-- **hs()** (38 connections) — `app/static/lightweight-charts.js`
-- **._b()** (15 connections) — `app/static/lightweight-charts.js`
-- **.p()** (13 connections) — `app/static/lightweight-charts.js`
-- **.Ab()** (12 connections) — `app/static/lightweight-charts.js`
-- **.S()** (11 connections) — `app/static/lightweight-charts.js`
-- **.S()** (10 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (9 connections) — `app/static/lightweight-charts.js`
-- **.ob()** (9 connections) — `app/static/lightweight-charts.js`
-- **.Hh()** (7 connections) — `app/static/lightweight-charts.js`
-- **.mb()** (7 connections) — `app/static/lightweight-charts.js`
-- **.fp()** (6 connections) — `app/static/lightweight-charts.js`
-- **.Pb()** (6 connections) — `app/static/lightweight-charts.js`
-- **.S()** (5 connections) — `app/static/lightweight-charts.js`
-- **.rb()** (5 connections) — `app/static/lightweight-charts.js`
-- **.S()** (4 connections) — `app/static/lightweight-charts.js`
-- **.bb()** (4 connections) — `app/static/lightweight-charts.js`
-- **.eb()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Db()** (4 connections) — `app/static/lightweight-charts.js`
-- **.ub()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Hn()** (3 connections) — `app/static/lightweight-charts.js`
-- **.L_()** (3 connections) — `app/static/lightweight-charts.js`
-- **.sc()** (3 connections) — `app/static/lightweight-charts.js`
-- **.Fc()** (3 connections) — `app/static/lightweight-charts.js`
-- **jn()** (3 connections) — `app/static/lightweight-charts.js`
-- **.hp()** (3 connections) — `app/static/lightweight-charts.js`
-- *... and 14 more nodes in this community*
+- **lt** (20 connections) — `app/static/lightweight-charts.js`
+- **.Un()** (10 connections) — `app/static/lightweight-charts.js`
+- **yn** (9 connections) — `app/static/lightweight-charts.js`
+- **.ns()** (8 connections) — `app/static/lightweight-charts.js`
+- **.Xn()** (7 connections) — `app/static/lightweight-charts.js`
+- **.convertHorzItemToInternal()** (7 connections) — `app/static/lightweight-charts.js`
+- **.Yn()** (5 connections) — `app/static/lightweight-charts.js`
+- **kn** (5 connections) — `app/static/lightweight-charts.js`
+- **.K()** (5 connections) — `app/static/lightweight-charts.js`
+- **.md()** (5 connections) — `app/static/lightweight-charts.js`
+- **.pp()** (5 connections) — `app/static/lightweight-charts.js`
+- **.pp()** (5 connections) — `app/static/lightweight-charts.js`
+- **.Nn()** (4 connections) — `app/static/lightweight-charts.js`
+- **.$n()** (4 connections) — `app/static/lightweight-charts.js`
+- **.q()** (4 connections) — `app/static/lightweight-charts.js`
+- **.ts()** (3 connections) — `app/static/lightweight-charts.js`
+- **.wl()** (3 connections) — `app/static/lightweight-charts.js`
+- **.fc()** (3 connections) — `app/static/lightweight-charts.js`
+- **.bc()** (3 connections) — `app/static/lightweight-charts.js`
+- **.X()** (2 connections) — `app/static/lightweight-charts.js`
+- **.kn()** (2 connections) — `app/static/lightweight-charts.js`
+- **.jn()** (2 connections) — `app/static/lightweight-charts.js`
+- **.Zn()** (2 connections) — `app/static/lightweight-charts.js`
+- **.Un()** (2 connections) — `app/static/lightweight-charts.js`
+- **.Kn()** (2 connections) — `app/static/lightweight-charts.js`
+- *... and 6 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (16 shared connections)
-- [Chart UI Layer](Chart_UI_Layer.md) (8 shared connections)
-- [Chart Vendor Number Formatting](Chart_Vendor_Number_Formatting.md) (8 shared connections)
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (8 shared connections)
-- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (6 shared connections)
-- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (6 shared connections)
-- [status](status.md) (3 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (3 shared connections)
-- [Chart Vendor Core](Chart_Vendor_Core.md) (3 shared connections)
-- [Simulator Convention Tests](Simulator_Convention_Tests.md) (3 shared connections)
-- [Chart Vendor API](Chart_Vendor_API.md) (2 shared connections)
-- [Chart Vendor Crosshair](Chart_Vendor_Crosshair.md) (2 shared connections)
+- [Chart Vendor Core](Chart_Vendor_Core.md) (13 shared connections)
+- [Pipeline Quality Tests](Pipeline_Quality_Tests.md) (6 shared connections)
+- [Glossary UI](Glossary_UI.md) (6 shared connections)
+- [Chart Vendor Internals](Chart_Vendor_Internals.md) (5 shared connections)
+- [Chart Vendor API](Chart_Vendor_API.md) (3 shared connections)
+- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (3 shared connections)
+- [momentum.py](momentum.py.md) (2 shared connections)
+- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (2 shared connections)
+- [Filtered Book Refusal Tests](Filtered_Book_Refusal_Tests.md) (1 shared connections)
+- [Simulator Convention Tests](Simulator_Convention_Tests.md) (1 shared connections)
+- [applyLevels](applyLevels.md) (1 shared connections)
 
 ## Source Files
 
@@ -52,8 +51,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 216 (98%)
-- INFERRED: 4 (2%)
+- EXTRACTED: 135 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -1,6 +1,6 @@
 # stocks.py
 
-> 11 nodes
+> 12 nodes
 
 ## Key Concepts
 
@@ -11,14 +11,15 @@
 - **_get_json()** (3 connections) — `app/engine/stocks.py`
 - **_alpaca_headers()** (3 connections) — `app/engine/stocks.py`
 - **status()** (2 connections) — `app/engine/stocks.py`
-- **US-equity workspace foundation and provider connection contracts.  This module d** (1 connections) — `app/engine/stocks.py`
+- **RuntimeError** (1 connections)
+- **US-equity workspace foundation and provider connection contracts.  This module** (1 connections) — `app/engine/stocks.py`
 - **A provider refusal safe to show without exposing request credentials.** (1 connections) — `app/engine/stocks.py`
-- **Run only read-only provider checks; never submit, cancel, or modify.      Alpaca** (1 connections) — `app/engine/stocks.py`
+- **Run only read-only provider checks; never submit, cancel, or modify.      Alpa** (1 connections) — `app/engine/stocks.py`
 - **Server-owned readiness; configured is never presented as verified.** (1 connections) — `app/engine/stocks.py`
 
 ## Relationships
 
-- [.Mt](Mt.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -26,7 +27,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 35 (100%)
+- EXTRACTED: 36 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

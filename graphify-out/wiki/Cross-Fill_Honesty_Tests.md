@@ -18,7 +18,7 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (2 shared connections)
+- [t](t.md) (2 shared connections)
 
 ## Source Files
 

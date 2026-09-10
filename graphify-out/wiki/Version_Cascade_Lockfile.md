@@ -5,7 +5,7 @@
 ## Key Concepts
 
 - **VersionLockfile** (9 connections) — `app/tests/test_version_cascade.py`
-- **test_version_cascade.py** (3 connections) — `app/tests/test_version_cascade.py`
+- **test_version_cascade.py** (4 connections) — `app/tests/test_version_cascade.py`
 - **operational_versions()** (2 connections) — `app/tests/test_version_cascade.py`
 - **.test_operational_versions_are_locked()** (2 connections) — `app/tests/test_version_cascade.py`
 - **.test_pipeline_versions_are_what_we_think_they_are()** (2 connections) — `app/tests/test_version_cascade.py`
@@ -25,7 +25,7 @@
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [Live Scanner Loop](Live_Scanner_Loop.md) (1 shared connections)
 
 ## Source Files
 
@@ -33,7 +33,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 36 (100%)
+- EXTRACTED: 37 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

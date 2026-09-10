@@ -18,7 +18,7 @@
 
 ## Relationships
 
-- [Bias Ladder Engine](Bias_Ladder_Engine.md) (1 shared connections)
+- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (1 shared connections)
 
 ## Source Files
 

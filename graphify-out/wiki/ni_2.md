@@ -1,25 +1,31 @@
 # ni
 
-> 4 nodes
+> 10 nodes
 
 ## Key Concepts
 
-- **test_autotrader.py** (4 connections) — `app/tests/test_autotrader.py`
-- **ready()** (3 connections) — `app/tests/test_autotrader.py`
-- **test_ready_candidate_becomes_decimal_isolated_one_way_plan()** (2 connections) — `app/tests/test_autotrader.py`
-- **test_no_trade_or_risk_rejection_never_becomes_intent()** (2 connections) — `app/tests/test_autotrader.py`
+- **ConfoundGuard** (8 connections) — `app/tests/test_edgestats.py`
+- **._t()** (5 connections) — `app/tests/test_edgestats.py`
+- **.test_a_handful_of_orphan_rows_is_residue_not_a_split_book()** (3 connections) — `app/tests/test_edgestats.py`
+- **.test_a_slice_from_one_generation_in_a_split_book_is_confounded()** (2 connections) — `app/tests/test_edgestats.py`
+- **.test_a_slice_spanning_both_generations_is_comparable()** (2 connections) — `app/tests/test_edgestats.py`
+- **.test_a_single_generation_book_can_never_be_confounded()** (2 connections) — `app/tests/test_edgestats.py`
+- **.test_an_unversioned_setup_id_is_named_not_guessed()** (2 connections) — `app/tests/test_edgestats.py`
+- **A slice is only comparable to another if the same code produced both.      Por** (1 connections) — `app/tests/test_edgestats.py`
+- **Three stragglers out of 340 flagged 3 of 4 timeframes as CONFOUNDED         on** (1 connections) — `app/tests/test_edgestats.py`
+- **Guessing which generation an unlabelled fact came from is exactly the         c** (1 connections) — `app/tests/test_edgestats.py`
 
 ## Relationships
 
-- [A/B Calibration Tests](A-B_Calibration_Tests.md) (1 shared connections)
+- [Edge Stats Determinism Tests](Edge_Stats_Determinism_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_autotrader.py`
+- `app/tests/test_edgestats.py`
 
 ## Audit Trail
 
-- EXTRACTED: 11 (100%)
+- EXTRACTED: 27 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

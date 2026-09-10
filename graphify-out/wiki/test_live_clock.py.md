@@ -1,44 +1,31 @@
 # test_live_clock.py
 
-> 18 nodes
+> 9 nodes
 
 ## Key Concepts
 
-- **_Connection** (8 connections) — `app/tests/test_live_clock.py`
-- **connect()** (5 connections) — `app/engine/store.py`
-- **test_live_clock.py** (5 connections) — `app/tests/test_live_clock.py`
-- **_migrate()** (4 connections) — `app/engine/store.py`
-- **checkpoint_wal()** (3 connections) — `app/engine/store.py`
-- **get_active_baseline()** (3 connections) — `app/engine/store.py`
-- **start_baseline()** (3 connections) — `app/engine/store.py`
-- **_Rows** (3 connections) — `app/tests/test_live_clock.py`
-- **.test_cycle_passes_its_opening_clock_to_the_importer()** (3 connections) — `app/tests/test_live_clock.py`
-- **.execute()** (2 connections) — `app/tests/test_live_clock.py`
-- **LiveClockContract** (2 connections) — `app/tests/test_live_clock.py`
-- **Path** (1 connections)
-- **Reclaim the write-ahead log. Safe to call whenever; never raises.      Call th** (1 connections) — `app/engine/store.py`
-- **Small explicit migration runner; every schema change is recorded.** (1 connections) — `app/engine/store.py`
-- **Return the active forward-test window without mutating legacy stores.** (1 connections) — `app/engine/store.py`
-- **Start a new non-destructive research window and retain all prior facts.** (1 connections) — `app/engine/store.py`
-- **.fetchone()** (1 connections) — `app/tests/test_live_clock.py`
-- **A live scan has one clock snapshot from import through quality.  The scan takes** (1 connections) — `app/tests/test_live_clock.py`
+- **sidegovernor.py** (7 connections) — `app/engine/sidegovernor.py`
+- **refusals()** (4 connections) — `app/engine/sidegovernor.py`
+- **grade()** (4 connections) — `app/engine/sidegovernor.py`
+- **_day()** (3 connections) — `app/engine/sidegovernor.py`
+- **load()** (3 connections) — `app/engine/sidegovernor.py`
+- **main()** (3 connections) — `app/engine/sidegovernor.py`
+- **Same-side session governor — what would N have refused? READ-ONLY.  `risk.py` v0** (1 connections) — `app/engine/sidegovernor.py`
+- **The rows the governor at `n` would have refused. Pure, SEQUENTIAL.      `rows`:** (1 connections) — `app/engine/sidegovernor.py`
+- **Closed trades at the current exec version, oldest first.      `entry_ts` is the** (1 connections) — `app/engine/sidegovernor.py`
 
 ## Relationships
 
-- [Fact Store & Migrations](Fact_Store_%26_Migrations.md) (5 shared connections)
-- [Facts Window Tests](Facts_Window_Tests.md) (1 shared connections)
-- [Live Scanner Loop](Live_Scanner_Loop.md) (1 shared connections)
-- [Universe & Rate Limiting](Universe_%26_Rate_Limiting.md) (1 shared connections)
+- [Chart Vendor Price Scale Formatting](Chart_Vendor_Price_Scale_Formatting.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/store.py`
-- `app/tests/test_live_clock.py`
+- `app/engine/sidegovernor.py`
 
 ## Audit Trail
 
-- EXTRACTED: 46 (96%)
-- INFERRED: 2 (4%)
+- EXTRACTED: 27 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

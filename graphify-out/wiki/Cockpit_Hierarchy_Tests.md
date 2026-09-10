@@ -10,7 +10,7 @@
 - **.test_open_risk_is_shown_against_its_ceiling()** (2 connections) — `app/tests/test_core_hardening.py`
 - **.setUp()** (1 connections) — `app/tests/test_core_hardening.py`
 - **.test_halt_is_always_reachable()** (1 connections) — `app/tests/test_core_hardening.py`
-- **.test_guardrails_and_telemetry_have_a_home()** (1 connections) — `app/tests/test_core_hardening.py`
+- **.test_guardrails_and_engine_faults_have_a_home()** (1 connections) — `app/tests/test_core_hardening.py`
 - **.test_scanner_state_is_persistent_chrome()** (1 connections) — `app/tests/test_core_hardening.py`
 - **The account must be readable from anywhere, and the things that can stop     tr** (1 connections) — `app/tests/test_core_hardening.py`
 - **It lives in the topbar, outside any <section class="surface">, so         the o** (1 connections) — `app/tests/test_core_hardening.py`

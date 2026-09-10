@@ -24,7 +24,12 @@ import urllib.request
 APP = Path(__file__).resolve().parent
 LOG = APP / "data" / "watchdog.log"
 LOCK_PORT = 8423
-SERVER_URL = "http://127.0.0.1:8422/api/status"
+# Liveness, not store health. /api/status does COUNT(*) over facts and a
+# GROUP BY over candles — 2.4 s on the 7.3 GB store today, 6.9 s under load,
+# and growing with the table — so a busy store could look like a dead server
+# and trip the second-uvicorn takeover below. /api/scan/state answers from
+# memory; if it does not answer, the process is gone.
+SERVER_URL = "http://127.0.0.1:8422/api/scan/state"
 AUDIT_INTERVAL_SEC = 60           # kill-switch audit cadence (SQLite read)
 
 # A restart must never be able to prevent the work it is restarting.
@@ -94,7 +99,7 @@ UNHEALABLE_HALT_CODES = frozenset({"UNKNOWN_TIMEFRAME", "SEQUENCE_GAPS"})
 # (420); by 2026-08-28 cycles ran 725-800s with 32 markets, and a grace under
 # the cycle time is what turned one HALT into a permanent restart loop.
 RESTART_GRACE_SEC = 900
-SERVER_PROBE_TIMEOUT = 15         # > /api/status measured at 6.9s under load
+SERVER_PROBE_TIMEOUT = 15         # generous: the probe is in-memory now
 SERVER_MISSES_BEFORE_TAKEOVER = 3 # one slow answer is not a disappearance
 ERR_LOG_CAP_BYTES = 8 * 1024 * 1024   # a diagnostic must not fill the disk
 ENGINE_LOG_CAP_BYTES = 64 * 1024 * 1024
@@ -390,15 +395,31 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
         toast("⚠ SniperSight data HALT",
               f"{halt_now} finding(s) the scanner cannot heal: "
               f"{', '.join(halt_codes[:4]) or '(none)'}")
+    q_toast = state.get("q_toast")
     if streak == QUARANTINE_CLIMB_TICKS and not reason:
         codes = sorted({c["code"] for c in report.get("warnings", [])
                         if c.get("rung") == "QUARANTINE"})
         log(f"audit: worst={worst} counts={counts} — QUARANTINE {quarantine_now} "
             f"sustained over {streak} audits, codes={codes[:6]}. NOT restarting: "
             f"a data verdict is not a process fault.")
-        toast("⚠ SniperSight data quarantine",
-              f"{quarantine_now} finding(s) held back for "
-              f"{streak} audits: {', '.join(codes[:4]) or '(none)'}")
+        # Toast on CHANGE, not on every streak. Overnight on 2026-09-10 the
+        # count oscillated 34 -> 1 -> 34 every ~25 minutes (reference feeds
+        # ageing past a 10-minute bar inside an 11-minute cycle), and each
+        # climb re-toasted the identical line: 30 phone notifications saying
+        # the same thing, none of which the operator could act on. The log
+        # keeps every occurrence; the phone hears about a new picture only.
+        # Keyed on the CODES, not the count: the count moves at every trough
+        # (6, 1, 2, 2 on the same morning) and each new figure would toast
+        # again for the same condition.
+        picture = tuple(codes)
+        if picture != q_toast:
+            toast("⚠ SniperSight data quarantine",
+                  f"{quarantine_now} finding(s) held back for "
+                  f"{streak} audits: {', '.join(codes[:4]) or '(none)'}")
+            q_toast = picture
+    elif quarantine_now == 0 and q_toast is not None:
+        log(f"audit: quarantine cleared (was {', '.join(q_toast) or '(none)'})")
+        q_toast = None
 
     if reason:
         # BLOCKER codes only. This union used to fold QUARANTINE codes into
@@ -427,7 +448,8 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
                 f"live-scanner is {age:.0f}s old and a cycle needs up to "
                 f"{RESTART_GRACE_SEC}s; "
                 f"deferring restart (codes={codes[:6]})")
-            return {"counts": counts, "at": now_mono, "q_streak": streak}
+            return {"counts": counts, "at": now_mono, "q_streak": streak,
+                    "q_toast": q_toast}
         log(f"audit: worst={worst} counts={counts} — restart live ({reason}, "
             f"codes={codes[:6]})")
         toast("⚠ SniperSight audit restart",
@@ -445,7 +467,8 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
     else:
         log(f"audit: worst={worst} — clean")
 
-    return {"counts": counts, "at": now_mono, "q_streak": streak}
+    return {"counts": counts, "at": now_mono, "q_streak": streak,
+            "q_toast": q_toast}
 
 
 class Child:

@@ -171,13 +171,19 @@ In the order the evidence argues for:
 
 1. **Forward record on a correct simulator.** Everything else is downstream. The
    book was re-derived after S50; what it needs now is time, not features.
-2. **`sessions.py`** (Wave 2.4) — the only unbuilt indicator engine.
+2. ~~**`sessions.py`** (Wave 2.4)~~ — built; `engine/sessions.py` writes
+   `sessions-v*` facts and sits in the version lockfile. (Stale here until
+   2026-09-10.)
 3. **TRANSITION gate** (Wave 2.2) — the largest remaining rejection bucket now
    that RANGE has been explained.
 4. **Doc reconciliation** — this file. The stale set it used to list was
    reconciled 2026-08-07; `docs/README.md` now carries the index.
-5. **Order router**, if and only if the forward record earns it. It does not
-   exist today, and `live_enabled` is a hard-coded literal, which is correct.
+5. **Order router — built, and build-locked.** `engine/autotrader.py` exists;
+   `automation.LIVE_ROUTER_BUILD_ENABLED = False` keeps every real-money path
+   unreachable, and `live_enabled` is *computed* from that lock plus the
+   verification drills, not a literal. What is left is the decision to lift
+   the lock, which the forward record has not earned. CLAUDE.md carries the
+   rule that the repository goes private before the first live fill.
 
 ---
 

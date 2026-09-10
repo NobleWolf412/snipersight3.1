@@ -19,7 +19,7 @@
 ## Relationships
 
 - [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (7 shared connections)
-- [.ja](ja.md) (1 shared connections)
+- [Pipeline Gate Tests](Pipeline_Gate_Tests.md) (1 shared connections)
 - [Toast Isolation Tests](Toast_Isolation_Tests.md) (1 shared connections)
 
 ## Source Files

@@ -1,59 +1,60 @@
 # Chart Vendor Chart API
 
-> 33 nodes
+> 35 nodes
 
 ## Key Concepts
 
-- **gn** (20 connections) — `app/static/lightweight-charts.js`
-- **G** (9 connections) — `app/static/lightweight-charts.js`
-- **xi** (7 connections) — `app/static/lightweight-charts.js`
-- **H** (6 connections) — `app/static/lightweight-charts.js`
-- **.Gt()** (4 connections) — `app/static/lightweight-charts.js`
-- **.J()** (4 connections) — `app/static/lightweight-charts.js`
-- **.tu()** (4 connections) — `app/static/lightweight-charts.js`
-- **.iu()** (4 connections) — `app/static/lightweight-charts.js`
-- **.eu()** (4 connections) — `app/static/lightweight-charts.js`
-- **.bt()** (3 connections) — `app/static/lightweight-charts.js`
-- **.X()** (3 connections) — `app/static/lightweight-charts.js`
-- **.setOptions()** (3 connections) — `app/static/lightweight-charts.js`
-- **.formatTickmark()** (3 connections) — `app/static/lightweight-charts.js`
-- **.gt()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (2 connections) — `app/static/lightweight-charts.js`
-- **.K()** (2 connections) — `app/static/lightweight-charts.js`
-- **.nu()** (2 connections) — `app/static/lightweight-charts.js`
-- **xn()** (2 connections) — `app/static/lightweight-charts.js`
-- **qn()** (2 connections) — `app/static/lightweight-charts.js`
-- **.preprocessData()** (2 connections) — `app/static/lightweight-charts.js`
-- **.updateFormatter()** (2 connections) — `app/static/lightweight-charts.js`
-- **.maxTickMarkWeight()** (2 connections) — `app/static/lightweight-charts.js`
-- **.fillWeightsForPoints()** (2 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (1 connections) — `app/static/lightweight-charts.js`
-- *... and 8 more nodes in this community*
+- **setups.py** (26 connections) — `app/engine/setups.py`
+- **run()** (14 connections) — `app/engine/setups.py`
+- **breakout.py** (13 connections) — `app/engine/breakout.py`
+- **vetoes()** (8 connections) — `app/engine/setups.py`
+- **scalein.py** (6 connections) — `app/engine/scalein.py`
+- **confirms()** (6 connections) — `app/engine/setups.py`
+- **run()** (6 connections) — `app/engine/breakout.py`
+- **_fp()** (5 connections) — `app/engine/setups.py`
+- **Decimal** (5 connections)
+- **window_verdict()** (4 connections) — `app/engine/setups.py`
+- **reversal_evidence()** (4 connections) — `app/engine/setups.py`
+- **context_verdict()** (3 connections) — `app/engine/setups.py`
+- **context_blocked()** (3 connections) — `app/engine/setups.py`
+- **window_situation()** (3 connections) — `app/engine/setups.py`
+- **window_blocked()** (3 connections) — `app/engine/setups.py`
+- **playbook()** (3 connections) — `app/engine/setups.py`
+- **enabled_strategies()** (3 connections) — `app/engine/setups.py`
+- **run()** (2 connections) — `app/engine/scalein.py`
+- **validate_context_policy()** (2 connections) — `app/engine/setups.py`
+- **Scale-in playbook — LTF adds inside an active HTF setup. algo scale-v0.1-draft.** (1 connections) — `app/engine/scalein.py`
+- **validate_window_policy()** (1 connections) — `app/engine/setups.py`
+- **Setup detector — pullback playbook. algo setup-v0.1-draft.  The strategy layer** (1 connections) — `app/engine/setups.py`
+- **Price for WHY text, decimals scaled to magnitude — chart.js `digits()`     exac** (1 connections) — `app/engine/setups.py`
+- **Every permitted state answered, every answer a known word. Loud at     import,** (1 connections) — `app/engine/setups.py`
+- **Pure: what the context policy says about this trade. `permitted` None     (no r** (1 connections) — `app/engine/setups.py`
+- *... and 10 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (7 shared connections)
-- [Simulator Convention Tests](Simulator_Convention_Tests.md) (3 shared connections)
-- [Chart Vendor Watermark](Chart_Vendor_Watermark.md) (2 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (2 shared connections)
-- [te](te.md) (2 shared connections)
-- [Bias Ladder Engine](Bias_Ladder_Engine.md) (2 shared connections)
-- [Chart Vendor Series Views](Chart_Vendor_Series_Views.md) (2 shared connections)
-- [Chart Vendor Coordinates](Chart_Vendor_Coordinates.md) (2 shared connections)
-- [NextWakeMath](NextWakeMath.md) (1 shared connections)
-- [Chart Vendor Layout](Chart_Vendor_Layout.md) (1 shared connections)
-- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
-- [execsim.py](execsim.py.md) (1 shared connections)
+- [t](t.md) (7 shared connections)
+- [Onboarding Path Tests](Onboarding_Path_Tests.md) (4 shared connections)
+- [Chart Vendor Crosshair](Chart_Vendor_Crosshair.md) (3 shared connections)
+- [zt](zt.md) (3 shared connections)
+- [Breakeven Fee Tests](Breakeven_Fee_Tests.md) (2 shared connections)
+- [Kraken Adapter](Kraken_Adapter.md) (1 shared connections)
+- [deck](deck.md) (1 shared connections)
+- [Copilot Pack Builder](Copilot_Pack_Builder.md) (1 shared connections)
+- [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (1 shared connections)
+- [A/B Test Engine](A-B_Test_Engine.md) (1 shared connections)
+- [Single-Walk Book Tests](Single-Walk_Book_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/engine/breakout.py`
+- `app/engine/scalein.py`
+- `app/engine/setups.py`
 
 ## Audit Trail
 
-- EXTRACTED: 100 (95%)
-- INFERRED: 5 (5%)
+- EXTRACTED: 135 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

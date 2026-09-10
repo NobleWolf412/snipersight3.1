@@ -69,8 +69,16 @@ ok('it resolves before it reports', () => {
 
 ok('one unreadable market cannot blank the panel', () => {
   const fn = ENGINE.slice(ENGINE.indexOf('def live(con)'), ENGINE.indexOf('def status('));
-  assert(/except Exception:/.test(fn) && /continue/.test(fn),
+  assert(/except Exception as exc:/.test(fn) && /continue/.test(fn),
     'the rows that CAN be resolved are still worth showing');
+  /* ...and the one that cannot must not VANISH. Until 2026-09-10 the except
+     was a bare `continue`, so an armed order disappeared from the one panel
+     built to show it whenever its resolver threw, with nothing in the payload
+     or the log. It stays, marked, with the reason. */
+  assert(/"state": "UNRESOLVED"/.test(fn) && /resolver_error/.test(fn),
+    'an unresolvable order must be reported, not dropped');
+  assert(/get_logger\(\)\.warning/.test(fn),
+    'a dropped resolve must be audible in the log');
 });
 
 /* ─────────────────── the two books stay separate ─────────────────── */

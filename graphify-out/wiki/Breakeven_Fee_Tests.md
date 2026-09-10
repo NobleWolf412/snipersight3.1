@@ -1,34 +1,41 @@
 # Breakeven Fee Tests
 
-> 10 nodes
+> 15 nodes
 
 ## Key Concepts
 
-- **add_trade()** (12 connections) — `app/tests/test_edgestats.py`
-- **TestBreakevenFee** (5 connections) — `app/tests/test_edgestats.py`
-- **TestFeeScenarios** (4 connections) — `app/tests/test_edgestats.py`
-- **.test_recorded_r_is_not_re_netted_and_venue_rates_re_price_it()** (3 connections) — `app/tests/test_edgestats.py`
-- **.test_filters_narrow_the_book()** (3 connections) — `app/tests/test_edgestats.py`
-- **.test_breakeven_per_side_fee_is_mean_fee_free_r_over_mean_leg_r()** (2 connections) — `app/tests/test_edgestats.py`
-- **.test_breakeven_is_compared_against_the_venue_not_a_hard_coded_rate()** (2 connections) — `app/tests/test_edgestats.py`
-- **.test_a_book_that_loses_before_fees_reports_no_fee_rescues_it()** (2 connections) — `app/tests/test_edgestats.py`
-- **Insert the setup+exec fact pair for one filled paper trade.** (1 connections) — `app/tests/test_edgestats.py`
-- **The caveat that inverts on the port: r_multiple already has fees in.** (1 connections) — `app/tests/test_edgestats.py`
+- **execsim.py** (15 connections) — `app/engine/execsim.py`
+- **plan_versions()** (5 connections) — `app/engine/execsim.py`
+- **run()** (5 connections) — `app/engine/execsim.py`
+- **settle()** (4 connections) — `app/engine/execsim.py`
+- **simulate_entry()** (4 connections) — `app/engine/execsim.py`
+- **walk_exit()** (3 connections) — `app/engine/execsim.py`
+- **cross_fill()** (3 connections) — `app/engine/execsim.py`
+- **unresolved()** (2 connections) — `app/engine/execsim.py`
+- **Execution simulator — paper-trades every VALIDATED setup. algo exec-v0.1-draft.** (1 connections) — `app/engine/execsim.py`
+- **Current simulator orders that still need market data to become terminal.** (1 connections) — `app/engine/execsim.py`
+- **Walk forward from the fill bar to a terminal outcome.      Returns (outcome, e** (1 connections) — `app/engine/execsim.py`
+- **The price a crossing market order actually gets, and the ONE definition.** (1 connections) — `app/engine/execsim.py`
+- **Price one closed leg: slippage, fees, funding, and the R they leave.      THE** (1 connections) — `app/engine/execsim.py`
+- **Turn a PLAN into the fill it actually got: which bar, what price, whose     fee** (1 connections) — `app/engine/execsim.py`
+- **THE definition of what this book trades — the setup generations the     simulat** (1 connections) — `app/engine/execsim.py`
 
 ## Relationships
 
-- [Edge Stats Determinism Tests](Edge_Stats_Determinism_Tests.md) (5 shared connections)
-- [Small Sample Refusal Tests](Small_Sample_Refusal_Tests.md) (3 shared connections)
-- [Filtered Book Refusal Tests](Filtered_Book_Refusal_Tests.md) (2 shared connections)
-- [Forward vs Historical Book Tests](Forward_vs_Historical_Book_Tests.md) (1 shared connections)
+- [deck](deck.md) (4 shared connections)
+- [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (2 shared connections)
+- [Kraken Adapter](Kraken_Adapter.md) (1 shared connections)
+- [Volume, Ranges & Aggregation](Volume%2C_Ranges_%26_Aggregation.md) (1 shared connections)
+- [funding.py](funding.py.md) (1 shared connections)
+- [_facts](_facts.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_edgestats.py`
+- `app/engine/execsim.py`
 
 ## Audit Trail
 
-- EXTRACTED: 35 (100%)
+- EXTRACTED: 48 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

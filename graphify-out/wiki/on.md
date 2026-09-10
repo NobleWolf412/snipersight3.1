@@ -1,16 +1,21 @@
 # on
 
-> 7 nodes
+> 12 nodes
 
 ## Key Concepts
 
-- **trade-workspace.js** (6 connections) — `app/static/trade-workspace.js`
-- **projection()** (3 connections) — `app/static/trade-workspace.js`
-- **renderState()** (3 connections) — `app/static/trade-workspace.js`
-- **renderEvidence()** (3 connections) — `app/static/trade-workspace.js`
-- **tradeWorkspaceProjection()** (2 connections) — `app/static/trade-workspace.js`
-- **refreshAuthority()** (2 connections) — `app/static/trade-workspace.js`
-- **syncSheet()** (1 connections) — `app/static/trade-workspace.js`
+- **opportunities.js** (11 connections) — `app/static/opportunities.js`
+- **paint()** (7 connections) — `app/static/opportunities.js`
+- **refresh()** (6 connections) — `app/static/opportunities.js`
+- **inFilter()** (4 connections) — `app/static/opportunities.js`
+- **selected()** (4 connections) — `app/static/opportunities.js`
+- **paintDetail()** (4 connections) — `app/static/opportunities.js`
+- **visible()** (3 connections) — `app/static/opportunities.js`
+- **paintCounts()** (3 connections) — `app/static/opportunities.js`
+- **choose()** (3 connections) — `app/static/opportunities.js`
+- **setFilter()** (2 connections) — `app/static/opportunities.js`
+- **closeDetail()** (2 connections) — `app/static/opportunities.js`
+- **openTrade()** (1 connections) — `app/static/opportunities.js`
 
 ## Relationships
 
@@ -18,12 +23,12 @@
 
 ## Source Files
 
-- `app/static/trade-workspace.js`
+- `app/static/opportunities.js`
 
 ## Audit Trail
 
-- EXTRACTED: 20 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 48 (96%)
+- INFERRED: 2 (4%)
 - AMBIGUOUS: 0 (0%)
 
 ---

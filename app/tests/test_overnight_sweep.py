@@ -1,0 +1,266 @@
+"""Behavioural pins for the 2026-09-10 sweep — the parts nothing else tested.
+
+Every test runs against a scratch store or a stubbed process; nothing here
+touches app/data, wakes the live scanner, or runs a cycle.
+"""
+import json
+import tempfile
+import threading
+import time
+import unittest
+from decimal import Decimal
+from pathlib import Path
+from unittest import mock
+
+import live
+import server
+from engine import quality, risk, store
+
+
+class NapUntilWoken(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.wake = Path(self.tmp.name) / "scan-request"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_full_nap_returns_false_and_leaves_nothing_behind(self):
+        t0 = time.monotonic()
+        self.assertFalse(live.nap_until_woken(0.3, self.wake, tick=0.05))
+        self.assertGreaterEqual(time.monotonic() - t0, 0.25)
+        self.assertFalse(self.wake.exists())
+
+    def test_a_request_ends_the_nap_early_and_is_consumed(self):
+        threading.Timer(0.15, self.wake.touch).start()
+        t0 = time.monotonic()
+        self.assertTrue(live.nap_until_woken(5.0, self.wake, tick=0.05))
+        self.assertLess(time.monotonic() - t0, 2.0)
+        self.assertFalse(self.wake.exists(), "one press must mean one cycle")
+
+    def test_a_request_already_waiting_ends_the_nap_at_once(self):
+        self.wake.touch()
+        self.assertTrue(live.nap_until_woken(5.0, self.wake, tick=0.05))
+
+
+class CheckNow(unittest.TestCase):
+    """POST /api/scan owns no cycle while a scanner process exists."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.wake = Path(self.tmp.name) / "scan-request"
+        server._scan.update(running=False, woken_cycles=None, detail="")
+        self.stack = [
+            mock.patch.object(live, "WAKE_REQUEST", self.wake),
+            mock.patch.object(live, "cycle", side_effect=AssertionError(
+                "a cycle ran inside the API server")),
+        ]
+        for p in self.stack:
+            p.start()
+
+    def tearDown(self):
+        for p in self.stack:
+            p.stop()
+        server._scan.update(running=False, woken_cycles=None, detail="")
+        self.tmp.cleanup()
+
+    def _status(self, state, pid=4242, cycles=7, stage="import"):
+        return {"state": state, "age_s": 5, "stage": stage, "pid": pid,
+                "cycles": cycles}
+
+    def test_a_scanning_scanner_is_woken_not_duplicated(self):
+        with mock.patch.object(server, "_scanner_status",
+                               return_value=self._status("SCANNING")), \
+             mock.patch.object(server, "_pid_alive", return_value=True):
+            out = server.scan_now(mock.Mock())
+        self.assertTrue(out["ok"])
+        self.assertFalse(out["ran_here"])
+        self.assertTrue(self.wake.exists())
+        self.assertTrue(server._scan["running"], "the button needs a transition")
+
+    def test_a_stale_heartbeat_with_a_live_pid_is_still_woken(self):
+        """STALE is 'busy or napping', never 'gone'. The old branch read a
+        95 s heartbeat as absence and ran a second cycle here — the exact
+        concurrent-cycle fault the wake file exists to prevent."""
+        with mock.patch.object(server, "_scanner_status",
+                               return_value=self._status("STALE")), \
+             mock.patch.object(server, "_pid_alive", return_value=True):
+            out = server.scan_now(mock.Mock())
+        self.assertFalse(out["ran_here"])
+        self.assertTrue(self.wake.exists())
+
+    def test_no_scanner_process_means_the_server_runs_the_pass(self):
+        ran = threading.Event()
+        with mock.patch.object(server, "_scanner_status",
+                               return_value=self._status("STALE", pid=1)), \
+             mock.patch.object(server, "_pid_alive", return_value=False), \
+             mock.patch.object(live, "cycle",
+                               side_effect=lambda *a, **k: (ran.set(), (0, []))[1]), \
+             mock.patch.object(server.store, "connect",
+                               return_value=mock.MagicMock()):
+            out = server.scan_now(mock.Mock())
+            self.assertTrue(out["ran_here"])
+            self.assertTrue(ran.wait(5), "the bare-server path did not run a cycle")
+        self.assertFalse(self.wake.exists())
+
+    def test_the_woken_pass_reports_done_when_the_cycle_counter_moves(self):
+        with mock.patch.object(server, "_scanner_status",
+                               return_value=self._status("SCANNING", cycles=7)), \
+             mock.patch.object(server, "_pid_alive", return_value=True):
+            server.scan_now(mock.Mock())
+            self.assertTrue(server.scan_state()["running"])
+        with mock.patch.object(server, "_scanner_status",
+                               return_value=self._status("SCANNING", cycles=8)), \
+             mock.patch.object(server, "_pid_alive", return_value=True):
+            state = server.scan_state()
+        self.assertFalse(state["running"])
+        self.assertIn("cycle 8", state["detail"])
+
+    def test_a_scanner_that_dies_after_the_press_says_so(self):
+        with mock.patch.object(server, "_scanner_status",
+                               return_value=self._status("SCANNING")), \
+             mock.patch.object(server, "_pid_alive", return_value=True):
+            server.scan_now(mock.Mock())
+        with mock.patch.object(server, "_scanner_status",
+                               return_value=self._status("STALE")), \
+             mock.patch.object(server, "_pid_alive", return_value=False):
+            state = server.scan_state()
+        self.assertFalse(state["running"])
+        self.assertIn("went away", state["detail"])
+
+
+class IntegrityCache(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Path(self.tmp.name) / "s.db"
+        self.con = store.connect(self.db)
+        server._integrity.update(value=None, checked_at=0, running=False)
+
+    def tearDown(self):
+        self.con.close()
+        server._integrity.update(value=None, checked_at=0, running=False)
+        self.tmp.cleanup()
+
+    def test_a_small_store_is_checked_on_the_request_and_then_cached(self):
+        with mock.patch.object(server.store, "DB_PATH", self.db):
+            self.assertEqual(server.db_integrity(self.con), "ok")
+            # A cache hit never touches the connection it is handed.
+            untouched = mock.Mock()
+            untouched.execute.side_effect = AssertionError("quick_check re-ran")
+            self.assertEqual(server.db_integrity(untouched), "ok")
+            # ...and deep=1 does, on that connection.
+            self.assertEqual(server.db_integrity(self.con, deep=True), "ok")
+
+    def test_a_big_store_reports_checking_then_the_answer(self):
+        with mock.patch.object(server.store, "DB_PATH", self.db), \
+             mock.patch.object(server, "INTEGRITY_SYNC_MAX_BYTES", 0):
+            first = server.db_integrity(self.con)
+            self.assertEqual(first, "checking")
+            for _ in range(100):
+                if server._integrity["value"]:
+                    break
+                time.sleep(0.05)
+            self.assertEqual(server.db_integrity(self.con), "ok")
+
+    def test_a_background_failure_cannot_wedge_checking_forever(self):
+        with mock.patch.object(server.store, "DB_PATH", self.db), \
+             mock.patch.object(server, "INTEGRITY_SYNC_MAX_BYTES", 0), \
+             mock.patch.object(server.store, "connect",
+                               side_effect=RuntimeError("database is locked")):
+            self.assertEqual(server.db_integrity(self.con), "checking")
+            for _ in range(100):
+                if not server._integrity["running"]:
+                    break
+                time.sleep(0.05)
+        self.assertFalse(server._integrity["running"])
+        self.assertIn("check failed", server._integrity["value"])
+
+    def test_checking_is_unknown_not_degraded(self):
+        """The first poll after a boot must not paint the chip amber for a
+        verdict nobody has reached; the field itself says 'checking'."""
+        with mock.patch.object(server, "db_integrity", return_value="checking"), \
+             mock.patch.object(server.store, "connect", return_value=self.con), \
+             mock.patch.object(server.universe, "scan_symbols", return_value=[]):
+            out = server.health()
+        self.assertEqual(out["database"], "checking")
+        self.assertEqual(out["status"], "OK")
+
+
+class StalenessFloor(unittest.TestCase):
+    """quality-v0.5: a feed imported once per cycle is not stale mid-cycle."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.con = store.connect(Path(self.tmp.name) / "q.db")
+
+    def tearDown(self):
+        self.con.close()
+        self.tmp.cleanup()
+
+    def _series(self, sym, tf, sec, newest_close_age):
+        now = 10 ** 9
+        last_open = now - newest_close_age - sec
+        for i in range(3):
+            self.con.execute(
+                "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (sym, tf, last_open - (2 - i) * sec, "1", "1", "1", "1", "1",
+                 "coinbase", 1))
+        self.con.commit()
+        return now
+
+    def _codes(self, sym, now):
+        with mock.patch("engine.universe.current_symbols", return_value=[sym]):
+            return {c["code"] for c in quality.audit_market_inputs(self.con, sym, now)}
+
+    def test_eleven_minutes_on_a_five_minute_series_is_not_stale(self):
+        now = self._series("BTCUSDT", "5m", 300, 11 * 60)
+        self.assertNotIn("STALE_SERIES", self._codes("BTCUSDT", now))
+
+    def test_the_floor_is_thirty_minutes(self):
+        now = self._series("BTCUSDT", "5m", 300, 31 * 60)
+        self.assertIn("STALE_SERIES", self._codes("BTCUSDT", now))
+
+    def test_two_bars_still_rule_on_slow_timeframes(self):
+        now = self._series("BTCUSDT", "1H", 3600, 121 * 60)
+        self.assertIn("STALE_SERIES", self._codes("BTCUSDT", now))
+        now = self._series("ETHUSDT", "1H", 3600, 119 * 60)
+        self.assertNotIn("STALE_SERIES", self._codes("ETHUSDT", now))
+
+
+class DailyBudget(unittest.TestCase):
+    def test_it_settles_on_the_utc_day_and_day_open_equity(self):
+        day = int(time.time()) // 86_400 * 86_400
+        journal = [{"ts": day - 1, "pnl_usd": -500},      # yesterday, ignored
+                   {"ts": day + 60, "pnl_usd": -120.5},
+                   {"ts": day + 120, "pnl_usd": 20}]
+        gates = risk.gates_for_mode(risk.AutomationMode.PAPER)
+        out = server._daily_budget(journal, Decimal("9899.50"), gates)
+        self.assertEqual(out["today_pnl_usd"], "-100.50")
+        self.assertEqual(out["day_open_equity_usd"], "10000.00")
+        self.assertEqual(out["lost_today_usd"], "100.50")
+        budget = Decimal("10000.00") * gates["daily_loss_limit_pct"]
+        self.assertEqual(out["budget_usd"], str(budget.quantize(Decimal("0.01"))))
+        self.assertEqual(out["remaining_usd"],
+                         str((budget - Decimal("100.50")).quantize(Decimal("0.01"))))
+        self.assertEqual(out["day_start_ts"], day)
+
+    def test_a_winning_day_leaves_the_whole_budget(self):
+        day = int(time.time()) // 86_400 * 86_400
+        gates = risk.gates_for_mode(risk.AutomationMode.PAPER)
+        out = server._daily_budget([{"ts": day + 5, "pnl_usd": 300}],
+                                   Decimal("10300"), gates)
+        self.assertEqual(out["lost_today_usd"], "0.00")
+        self.assertEqual(out["remaining_usd"], out["budget_usd"])
+
+    def test_the_portfolio_reads_the_same_helper_the_panel_reads(self):
+        src = Path(server.__file__).read_text(encoding="utf-8")
+        self.assertIn('"daily_loss": _daily_budget(', src)
+        shell = (Path(server.__file__).parent / "static" / "shell.js").read_text(
+            encoding="utf-8")
+        self.assertIn("p.daily_loss", shell)
+        self.assertNotIn("midnight.setHours(0, 0, 0, 0);\n    const cut", shell,
+                         "the panel re-derives today's loss from local midnight")
+
+
+if __name__ == "__main__":
+    unittest.main()

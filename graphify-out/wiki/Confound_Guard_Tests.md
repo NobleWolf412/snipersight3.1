@@ -1,32 +1,37 @@
 # Confound Guard Tests
 
-> 10 nodes
+> 12 nodes
 
 ## Key Concepts
 
-- **ConfoundGuard** (8 connections) — `app/tests/test_edgestats.py`
-- **._t()** (5 connections) — `app/tests/test_edgestats.py`
-- **.test_a_handful_of_orphan_rows_is_residue_not_a_split_book()** (3 connections) — `app/tests/test_edgestats.py`
-- **.test_a_slice_from_one_generation_in_a_split_book_is_confounded()** (2 connections) — `app/tests/test_edgestats.py`
-- **.test_a_slice_spanning_both_generations_is_comparable()** (2 connections) — `app/tests/test_edgestats.py`
-- **.test_a_single_generation_book_can_never_be_confounded()** (2 connections) — `app/tests/test_edgestats.py`
-- **.test_an_unversioned_setup_id_is_named_not_guessed()** (2 connections) — `app/tests/test_edgestats.py`
-- **A slice is only comparable to another if the same code produced both.      Por** (1 connections) — `app/tests/test_edgestats.py`
-- **Three stragglers out of 340 flagged 3 of 4 timeframes as CONFOUNDED         on** (1 connections) — `app/tests/test_edgestats.py`
-- **Guessing which generation an unlabelled fact came from is exactly the         c** (1 connections) — `app/tests/test_edgestats.py`
+- **ranges.py** (14 connections) — `app/engine/ranges.py`
+- **run()** (10 connections) — `app/engine/ranges.py`
+- **break_tolerance()** (8 connections) — `app/engine/ranges.py`
+- **Decimal** (5 connections)
+- **contained()** (5 connections) — `app/engine/ranges.py`
+- **is_flat()** (4 connections) — `app/engine/ranges.py`
+- **boundaries()** (3 connections) — `app/engine/ranges.py`
+- **Range engine — horizontal ranges, their boundaries, and their lifecycle. algo r** (1 connections) — `app/engine/ranges.py`
+- **The house break tolerance: max(1 tick, 0.05*ATR).      structure.py, zones.py** (1 connections) — `app/engine/ranges.py`
+- **(top, bottom, n_top, n_bottom) — the EXTREME of each cluster, not its mean.** (1 connections) — `app/engine/ranges.py`
+- **Do the pivots CLUSTER at two levels rather than march in one direction?      S** (1 connections) — `app/engine/ranges.py`
+- **Did every bar of the formation window close inside the band?      Closes only** (1 connections) — `app/engine/ranges.py`
 
 ## Relationships
 
-- [Edge Stats Determinism Tests](Edge_Stats_Determinism_Tests.md) (1 shared connections)
+- [t](t.md) (7 shared connections)
+- [Onboarding Path Tests](Onboarding_Path_Tests.md) (3 shared connections)
+- [volume.py](volume.py.md) (3 shared connections)
+- [Volume Engine Tests](Volume_Engine_Tests.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_edgestats.py`
+- `app/engine/ranges.py`
 
 ## Audit Trail
 
-- EXTRACTED: 27 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 53 (98%)
+- INFERRED: 1 (2%)
 - AMBIGUOUS: 0 (0%)
 
 ---

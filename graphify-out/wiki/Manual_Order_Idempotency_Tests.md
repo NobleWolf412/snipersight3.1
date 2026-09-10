@@ -1,35 +1,45 @@
 # Manual Order Idempotency Tests
 
-> 12 nodes
+> 23 nodes
 
 ## Key Concepts
 
-- **._rows()** (7 connections) — `app/tests/test_manual.py`
-- **.test_a_settled_order_id_is_not_answered_as_still_armed()** (7 connections) — `app/tests/test_manual.py`
-- **.test_a_refused_arm_writes_nothing_at_all()** (5 connections) — `app/tests/test_manual.py`
-- **.test_the_same_order_arriving_twice_is_a_receipt_not_a_refusal()** (5 connections) — `app/tests/test_manual.py`
-- **.test_a_changed_plan_is_not_the_same_order()** (5 connections) — `app/tests/test_manual.py`
-- **.test_two_plans_cannot_share_one_order_id()** (5 connections) — `app/tests/test_manual.py`
-- **Every fact and every manifest — the whole of what a write is.** (1 connections) — `app/tests/test_manual.py`
-- **Not "no second intent" — NOTHING. The guard sits ahead of the cost         mani** (1 connections) — `app/tests/test_manual.py`
-- **THE REPORTED BUG. `created_at` is chosen by the caller so a retry         rebui** (1 connections) — `app/tests/test_manual.py`
-- **Same second, different levels — a nudge between two taps. That is         not t** (1 connections) — `app/tests/test_manual.py`
-- **The receipt is only a receipt while the order is still on the book.         Rep** (1 connections) — `app/tests/test_manual.py`
-- **A LONG and a SHORT armed on one chart within the same second is a         legit** (1 connections) — `app/tests/test_manual.py`
+- **load_orders()** (11 connections) — `app/engine/entrystats.py`
+- **counterfactual()** (8 connections) — `app/engine/entrystats.py`
+- **_d()** (6 connections) — `app/engine/entrystats.py`
+- **_f()** (5 connections) — `app/engine/entrystats.py`
+- **walk_forward()** (5 connections) — `app/engine/entrystats.py`
+- **_spread()** (3 connections) — `app/engine/entrystats.py`
+- **_execution_window()** (3 connections) — `app/engine/entrystats.py`
+- **_first_bar_at_or_after()** (3 connections) — `app/engine/entrystats.py`
+- **_rows()** (3 connections) — `app/engine/entrystats.py`
+- **_plans_elsewhere()** (3 connections) — `app/engine/entrystats.py`
+- **_plan_anchor()** (3 connections) — `app/engine/entrystats.py`
+- **_feature()** (2 connections) — `app/engine/entrystats.py`
+- **Taker-minus-maker spread for THIS symbol's venue.      The entry-fee penalty i** (1 connections) — `app/engine/entrystats.py`
+- **(max_holding_bars, max_entry_bars) as RECORDED, not as currently coded.      E** (1 connections) — `app/engine/entrystats.py`
+- **Best-effort float. Used ONLY on R-multiples and already-derived ratios.** (1 connections) — `app/engine/entrystats.py`
+- **Decimal or None. Used on every price. Never returns a float.** (1 connections) — `app/engine/entrystats.py`
+- **Index of the first candle that OPENS at or after `available_at`.      This is** (1 connections) — `app/engine/entrystats.py`
+- **Resolve a hypothetical position against stored bars. COUNTERFACTUAL.      Rule** (1 connections) — `app/engine/entrystats.py`
+- **What the trade WOULD have done. COUNTERFACTUAL — never a recorded result.** (1 connections) — `app/engine/entrystats.py`
+- **Facts of one kind/version across the whole portfolio, in causal order.      `s** (1 connections) — `app/engine/entrystats.py`
+- **Which OTHER setup versions claim these order keys.      Diagnostic only, and i** (1 connections) — `app/engine/entrystats.py`
+- **The plan price an order was created from, not necessarily its limit.      MAKER_** (1 connections) — `app/engine/entrystats.py`
+- **One record per VALIDATED plan, joined to its order lifecycle, its outcome     a** (1 connections) — `app/engine/entrystats.py`
 
 ## Relationships
 
-- [Manual Book Tests](Manual_Book_Tests.md) (10 shared connections)
-- [Manual Arm Validation Tests](Manual_Arm_Validation_Tests.md) (6 shared connections)
-- [Manual Settlement Tests](Manual_Settlement_Tests.md) (2 shared connections)
+- [Entry Stats Engine](Entry_Stats_Engine.md) (13 shared connections)
+- [Kraken Adapter](Kraken_Adapter.md) (3 shared connections)
 
 ## Source Files
 
-- `app/tests/test_manual.py`
+- `app/engine/entrystats.py`
 
 ## Audit Trail
 
-- EXTRACTED: 40 (100%)
+- EXTRACTED: 66 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

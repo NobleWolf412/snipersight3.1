@@ -1,26 +1,28 @@
 # Word Budget JS Tests
 
-> 13 nodes
+> 15 nodes
 
 ## Key Concepts
 
-- **test_word_budget.js** (12 connections) — `app/tests/test_word_budget.js`
+- **test_word_budget.js** (14 connections) — `app/tests/test_word_budget.js`
+- **stripFirstRun()** (4 connections) — `app/tests/test_word_budget.js`
 - **surfaceText()** (4 connections) — `app/tests/test_word_budget.js`
 - **firstRunSpan()** (3 connections) — `app/tests/test_word_budget.js`
-- **stripFirstRun()** (3 connections) — `app/tests/test_word_budget.js`
+- **words()** (3 connections) — `app/tests/test_word_budget.js`
+- **viewPanels()** (3 connections) — `app/tests/test_word_budget.js`
+- **screenWords()** (3 connections) — `app/tests/test_word_budget.js`
 - **assert** (2 connections) — `app/tests/test_word_budget.js`
-- **S()** (2 connections) — `app/tests/test_word_budget.js`
 - **firstRunWords()** (2 connections) — `app/tests/test_word_budget.js`
-- **words()** (2 connections) — `app/tests/test_word_budget.js`
 - **fs** (1 connections) — `app/tests/test_word_budget.js`
 - **path** (1 connections) — `app/tests/test_word_budget.js`
+- **S()** (1 connections) — `app/tests/test_word_budget.js`
 - **HTML** (1 connections) — `app/tests/test_word_budget.js`
 - **ok()** (1 connections) — `app/tests/test_word_budget.js`
 - **CEILINGS** (1 connections) — `app/tests/test_word_budget.js`
 
 ## Relationships
 
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -28,8 +30,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 34 (97%)
-- INFERRED: 1 (3%)
+- EXTRACTED: 44 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

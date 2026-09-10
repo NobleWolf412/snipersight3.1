@@ -1,35 +1,38 @@
 # funding.py
 
-> 13 nodes
+> 16 nodes
 
 ## Key Concepts
 
-- **stockdemo.py** (7 connections) — `app/engine/stockdemo.py`
-- **stockcalendar.py** (4 connections) — `app/engine/stockcalendar.py`
-- **report()** (4 connections) — `app/engine/stockdemo.py`
-- **_instant()** (3 connections) — `app/engine/stockcalendar.py`
-- **datetime** (3 connections)
-- **classify()** (3 connections) — `app/engine/stockcalendar.py`
-- **_candidate()** (3 connections) — `app/engine/stockdemo.py`
-- **_load()** (2 connections) — `app/engine/stockdemo.py`
-- **_iso_epoch()** (2 connections) — `app/engine/stockdemo.py`
-- **_simulate()** (2 connections) — `app/engine/stockdemo.py`
-- **US-equity session classification from an explicit calendar authority.  Productio** (1 connections) — `app/engine/stockcalendar.py`
-- **Classify one instant against one authority-owned exchange session.** (1 connections) — `app/engine/stockcalendar.py`
-- **Deterministic, credentials-free US-stock training workflow.  All output is fixtu** (1 connections) — `app/engine/stockdemo.py`
+- **funding.py** (11 connections) — `app/engine/funding.py`
+- **Decimal** (6 connections)
+- **phemex_history()** (6 connections) — `app/engine/funding.py`
+- **history()** (6 connections) — `app/engine/funding.py`
+- **kraken_history()** (5 connections) — `app/engine/funding.py`
+- **report()** (5 connections) — `app/engine/funding.py`
+- **charge()** (4 connections) — `app/engine/funding.py`
+- **_now()** (3 connections) — `app/engine/funding.py`
+- **_get()** (3 connections) — `app/engine/funding.py`
+- **What funding ACTUALLY cost, against the constant the simulator charges. READ-ON** (1 connections) — `app/engine/funding.py`
+- **Wall clock, in one place so a test can pin it.** (1 connections) — `app/engine/funding.py`
+- **(settlement unix seconds, rate) hourly, oldest first.      `relativeFundingRat** (1 connections) — `app/engine/funding.py`
+- **(settlement unix seconds, rate) 8-hourly, oldest first.      Keyed on the INDE** (1 connections) — `app/engine/funding.py`
+- **Real settlements for one symbol, or [] where the venue charges none.      Spot** (1 connections) — `app/engine/funding.py`
+- **What this hold really paid — signed, in price units on entry notional.      SI** (1 connections) — `app/engine/funding.py`
+- **Re-price the recorded book on real funding. Writes nothing.      The R denomin** (1 connections) — `app/engine/funding.py`
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [Breakeven Fee Tests](Breakeven_Fee_Tests.md) (1 shared connections)
+- [Chart Vendor Price Scale Formatting](Chart_Vendor_Price_Scale_Formatting.md) (1 shared connections)
 
 ## Source Files
 
-- `app/engine/stockcalendar.py`
-- `app/engine/stockdemo.py`
+- `app/engine/funding.py`
 
 ## Audit Trail
 
-- EXTRACTED: 36 (100%)
+- EXTRACTED: 56 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

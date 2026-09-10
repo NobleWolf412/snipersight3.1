@@ -1,41 +1,39 @@
 # Chart Vendor Line Renderers
 
-> 14 nodes
+> 17 nodes
 
 ## Key Concepts
 
-- **deckRowInner()** (11 connections) — `app/static/shell.js`
-- **ringSvg()** (9 connections) — `app/static/shell.js`
-- **mineCardInner()** (6 connections) — `app/static/shell.js`
-- **missionCardInner()** (4 connections) — `app/static/shell.js`
-- **ladderRing()** (4 connections) — `app/static/shell.js`
-- **ladderHtml()** (4 connections) — `app/static/shell.js`
-- **htfChip()** (2 connections) — `app/static/shell.js`
-- **expiresIn()** (2 connections) — `app/static/shell.js`
-- **foundAgo()** (2 connections) — `app/static/shell.js`
-- **foundTitle()** (2 connections) — `app/static/shell.js`
-- **reasonText()** (2 connections) — `app/static/shell.js`
-- **heldBadge()** (2 connections) — `app/static/shell.js`
-- **storyOf()** (2 connections) — `app/static/shell.js`
-- **windowLeft()** (2 connections) — `app/static/shell.js`
+- **regimefresh.py** (9 connections) — `app/engine/regimefresh.py`
+- **grade()** (6 connections) — `app/engine/regimefresh.py`
+- **_regime_series()** (5 connections) — `app/engine/regimefresh.py`
+- **annotate()** (5 connections) — `app/engine/regimefresh.py`
+- **verify()** (5 connections) — `app/engine/regimefresh.py`
+- **label_asof()** (4 connections) — `app/engine/regimefresh.py`
+- **trigger_at()** (3 connections) — `app/engine/regimefresh.py`
+- **factor_extractors()** (3 connections) — `app/engine/regimefresh.py`
+- **main()** (2 connections) — `app/engine/regimefresh.py`
+- **Regime freshness — how stale was the label this trade was gated on? READ-ONLY.** (1 connections) — `app/engine/regimefresh.py`
+- **The market event that defined this label, or None when unrecorded.      regime** (1 connections) — `app/engine/regimefresh.py`
+- **(confirmed_at, regime, trigger_at) for one market, in confirmation order.** (1 connections) — `app/engine/regimefresh.py`
+- **The governing label at `ts`, and whether a newer one had already landed.** (1 connections) — `app/engine/regimefresh.py`
+- **Stamp regime-freshness fields onto candidate payloads, in place.      Mutates** (1 connections) — `app/engine/regimefresh.py`
+- **Prove the reconstruction against the engine's own recorded regime.      The ga** (1 connections) — `app/engine/regimefresh.py`
+- **0/1 flags for outcome_split. Absent when unannotated, so MISSING stays     hone** (1 connections) — `app/engine/regimefresh.py`
+- **The whole audition: load, annotate, split, and say what held.** (1 connections) — `app/engine/regimefresh.py`
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (14 shared connections)
-- [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (3 shared connections)
-- [renderProgression](renderProgression.md) (2 shared connections)
-- [market_context.py](market_context.py.md) (1 shared connections)
-- [renderNear](renderNear.md) (1 shared connections)
-- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
-- `app/static/shell.js`
+- `app/engine/regimefresh.py`
 
 ## Audit Trail
 
-- EXTRACTED: 54 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 48 (96%)
+- INFERRED: 2 (4%)
 - AMBIGUOUS: 0 (0%)
 
 ---

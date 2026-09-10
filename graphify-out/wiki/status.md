@@ -1,31 +1,26 @@
 # status
 
-> 9 nodes
+> 5 nodes
 
 ## Key Concepts
 
-- **status()** (6 connections) — `app/server.py`
-- **manual_open()** (4 connections) — `app/server.py`
-- **credentials_status()** (3 connections) — `app/server.py`
-- **credentials_store()** (3 connections) — `app/server.py`
-- **stocks_status()** (3 connections) — `app/server.py`
-- **What credentials EXIST — never their values. There is deliberately no     route** (1 connections) — `app/server.py`
-- **Encrypt and store one credential field.      The value is never logged, never** (1 connections) — `app/server.py`
-- **Stock-workspace readiness without decrypting or probing credentials.** (1 connections) — `app/server.py`
-- **Live state of the operator's open trades on one chart.      Resolves first, th** (1 connections) — `app/server.py`
+- **glossary.js** (4 connections) — `app/static/glossary.js`
+- **ensure()** (2 connections) — `app/static/glossary.js`
+- **show()** (2 connections) — `app/static/glossary.js`
+- **capTriggers()** (2 connections) — `app/static/glossary.js`
+- **markFocusable()** (2 connections) — `app/static/glossary.js`
 
 ## Relationships
 
-- [API Server Endpoints](API_Server_Endpoints.md) (5 shared connections)
-- [Portfolio & Position Endpoints](Portfolio_%26_Position_Endpoints.md) (2 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
-- `app/server.py`
+- `app/static/glossary.js`
 
 ## Audit Trail
 
-- EXTRACTED: 23 (100%)
+- EXTRACTED: 12 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

@@ -33,11 +33,11 @@
 
 ## Relationships
 
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (20 shared connections)
-- [A/B Calibration Tests](A-B_Calibration_Tests.md) (6 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (24 shared connections)
 - [ProtectedBroker](ProtectedBroker.md) (5 shared connections)
 - [Market Data Importer](Market_Data_Importer.md) (4 shared connections)
 - [Cycle Detection Engine](Cycle_Detection_Engine.md) (3 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (2 shared connections)
 - [Chart Vendor Renderer Base](Chart_Vendor_Renderer_Base.md) (2 shared connections)
 - [One Source of Truth JS Tests](One_Source_of_Truth_JS_Tests.md) (1 shared connections)
 

@@ -7,8 +7,8 @@
 - **funnel.js** (9 connections) — `app/static/funnel.js`
 - **render()** (7 connections) — `app/static/funnel.js`
 - **load()** (4 connections) — `app/static/funnel.js`
-- **paintFailing()** (3 connections) — `app/static/funnel.js`
 - **build()** (2 connections) — `app/static/funnel.js`
+- **paintFailing()** (2 connections) — `app/static/funnel.js`
 - **renderGates()** (2 connections) — `app/static/funnel.js`
 - **renderPill()** (2 connections) — `app/static/funnel.js`
 - **renderStages()** (2 connections) — `app/static/funnel.js`
@@ -17,7 +17,7 @@
 
 ## Relationships
 
-- [QualityStoreCase](QualityStoreCase.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -25,8 +25,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 34 (97%)
-- INFERRED: 1 (3%)
+- EXTRACTED: 34 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

@@ -1,30 +1,34 @@
 # Action Feedback JS Tests
 
-> 8 nodes
+> 12 nodes
 
 ## Key Concepts
 
-- **test_action_feedback.js** (9 connections) — `app/tests/test_action_feedback.js`
-- **S()** (2 connections) — `app/tests/test_action_feedback.js`
-- **fs** (1 connections) — `app/tests/test_action_feedback.js`
-- **path** (1 connections) — `app/tests/test_action_feedback.js`
-- **assert** (1 connections) — `app/tests/test_action_feedback.js`
-- **HTML** (1 connections) — `app/tests/test_action_feedback.js`
-- **CSS** (1 connections) — `app/tests/test_action_feedback.js`
-- **ok()** (1 connections) — `app/tests/test_action_feedback.js`
+- **test_trader_translation.js** (11 connections) — `app/tests/test_trader_translation.js`
+- **S()** (2 connections) — `app/tests/test_trader_translation.js`
+- **fs** (1 connections) — `app/tests/test_trader_translation.js`
+- **path** (1 connections) — `app/tests/test_trader_translation.js`
+- **assert** (1 connections) — `app/tests/test_trader_translation.js`
+- **HTML** (1 connections) — `app/tests/test_trader_translation.js`
+- **SHELL** (1 connections) — `app/tests/test_trader_translation.js`
+- **CSS** (1 connections) — `app/tests/test_trader_translation.js`
+- **FUNNEL** (1 connections) — `app/tests/test_trader_translation.js`
+- **FACTOR** (1 connections) — `app/tests/test_trader_translation.js`
+- **COCKPIT** (1 connections) — `app/tests/test_trader_translation.js`
+- **ok()** (1 connections) — `app/tests/test_trader_translation.js`
 
 ## Relationships
 
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- [he](he.md) (1 shared connections)
 
 ## Source Files
 
-- `app/tests/test_action_feedback.js`
+- `app/tests/test_trader_translation.js`
 
 ## Audit Trail
 
-- EXTRACTED: 15 (94%)
-- INFERRED: 1 (6%)
+- EXTRACTED: 22 (96%)
+- INFERRED: 1 (4%)
 - AMBIGUOUS: 0 (0%)
 
 ---

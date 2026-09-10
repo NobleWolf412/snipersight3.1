@@ -376,6 +376,14 @@ def check_drift(con, log, threshold=DRIFT_ALERT_PCT, dry=False):
             log.warning(f"drift check failed for {sym}: {e}")
 
 
+# Markets whose rebuild this process has already refused for retired gaps.
+# The veto writes nothing, so without memory the same plan is re-listed every
+# cycle: the recovery warning fires forever and the idle short-circuit in
+# cycle() never engages again. Process-lifetime is the right scope — a
+# restart retries once, which is exactly when a repaired feed deserves it.
+_REBUILD_VETOED: set[str] = set()
+
+
 def execution_rebuild_work(con) -> dict[tuple[str, str], list[dict]]:
     """Plans risk can reserve but an order-only recovery pass cannot discover.
 
@@ -412,7 +420,7 @@ def execution_rebuild_work(con) -> dict[tuple[str, str], list[dict]]:
     for symbol, tf, confirmed_at, setup_id in rows:
         # Watch-only plans can never reserve account risk. Do not reactivate
         # their retired feeds merely to complete unrelated research history.
-        if (tf in risk.TFS and setup_id
+        if (tf in risk.TFS and setup_id and symbol not in _REBUILD_VETOED
                 and universe.admitted_at(con, symbol, confirmed_at)):
             work.setdefault((symbol, tf), []).append(
                 {"setup_id": setup_id, "event": "REBUILD"})
@@ -597,8 +605,10 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
             # reads as prudent, it cannot execute, and writing one requires
             # believing the opposite of what the gate does.
             if any(c["code"] == "RETIRED_SEQUENCE_GAPS" for c in checks):
+                _REBUILD_VETOED.add(symbol)
                 raise quality.DataQualityError(
-                    f"{symbol}: retired sequence gaps prevent execution recovery")
+                    f"{symbol}: retired sequence gaps prevent execution recovery"
+                    " — not retried until the scanner restarts")
             for tf in sorted(tfs, key=lambda value: importer.TF_SECONDS[value]):
                 execsim.run(con, symbol, tf, importer.TF_SECONDS[tf])
                 cooldowns.run(con, symbol, tf, importer.TF_SECONDS[tf])
@@ -815,6 +825,33 @@ def announce(sym: str, tf: str, p: dict, log):
         log.info(f"already announced, not re-queued: {title}")
 
 
+# The cockpit's Check-now button used to run a SECOND live.cycle() inside the
+# API server, concurrently with this loop and on its own clock. On 2026-09-10
+# at 00:21 that second cycle imported past the scanner's candle boundary,
+# judged 37 healthy 5m series DEVELOPING against the older clock, persisted a
+# BLOCKED verdict as if the scanner had said it, and collided with the
+# scanner's writes for a 46-lock storm. One process runs cycles. The button
+# now asks THIS loop to wake, by touching a file the nap checks every second.
+WAKE_REQUEST = Path(__file__).resolve().parent / "data" / "scan-request"
+
+
+def nap_until_woken(seconds: float, wake_file: Path, tick: float = 1.0) -> bool:
+    """Sleep `seconds`, ending early if `wake_file` appears. Returns True when
+    it was woken. Consumes the request so one press means one early cycle."""
+    deadline = time.monotonic() + max(0.0, seconds)
+    while True:
+        try:
+            if wake_file.exists():
+                wake_file.unlink()
+                return True
+        except OSError:
+            pass
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(tick, remaining))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true")
@@ -824,6 +861,14 @@ def main():
     con = store.connect()
     _exit_note("START", f"once={args.once}")
     log.info(f"live loop start (once={args.once}) poll={POLL_SECONDS}s")
+    # A wake request left by a press that landed while the previous process
+    # was being killed must not buy an unrequested extra cycle from this one.
+    try:
+        WAKE_REQUEST.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        log.warning(f"could not clear a stale scan request: {exc}")
     hb_path = Path(__file__).resolve().parent / "data" / "heartbeat.json"
     n_cycles = 0
     state = {"scanner_version": LIVE_VERSION, "cycles": 0,
@@ -832,8 +877,14 @@ def main():
     def write_hb(phase):
         """Heartbeat EVERY step, not just every poll — the UI light trusts this."""
         try:
-            hb_path.write_text(json.dumps(
+            # Temp-then-rename. A plain write_text truncates first, so a reader
+            # landing in that window sees an EMPTY file; _scanner_status then
+            # reports OFFLINE and the restart endpoint skips stopping a scanner
+            # that is running. os.replace is atomic on NTFS and POSIX alike.
+            tmp = hb_path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(
                 {"ts": int(time.time()), "pid": os.getpid(), "phase": phase, **state}))
+            os.replace(tmp, hb_path)
         except Exception as hb_err:
             log.warning(f"heartbeat write failed: {hb_err}")
 
@@ -886,13 +937,25 @@ def main():
                      f"{ck.get('checkpointed')}/{ck.get('frames')} frames")
         except Exception as e:
             log.error(f"live cycle failed: {e}")
+            # The failure left this connection's transaction OPEN — sqlite3
+            # begins one implicitly on the first write and only commits when
+            # the code reaches its commit. Left there, the next cycle's first
+            # write fails on the still-held lock before it has done anything,
+            # so one transient "database is locked" (00:25 on 2026-09-10, a
+            # reference import colliding with a cockpit-run cycle) would have
+            # cost two cycles rather than one.
+            try:
+                con.rollback()
+            except Exception as rb_err:
+                log.warning(f"rollback after failed cycle also failed: {rb_err}")
         if args.once:
             break
         # Aligned, not blind: the nap ends at the drift heartbeat or just past
         # the next candle boundary, whichever is sooner — see next_wake.
         nap = next_wake(time.time())
         log.info(f"sleeping {nap:.1f}s until the next wake")
-        time.sleep(nap)
+        if nap_until_woken(nap, WAKE_REQUEST):
+            log.info("woken early: a scan was requested from the cockpit")
         log.info("awake")
     con.close()
 

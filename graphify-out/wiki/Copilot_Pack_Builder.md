@@ -24,8 +24,9 @@
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (2 shared connections)
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
+- [deck](deck.md) (1 shared connections)
+- [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (1 shared connections)
+- [Onboarding Path Tests](Onboarding_Path_Tests.md) (1 shared connections)
 
 ## Source Files
 

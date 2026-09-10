@@ -3,7 +3,8 @@
 The security property under test is not "it stores a string" — it is that no
 route can surface a secret and no plaintext reaches disk, the log, or git.
 """
-import os
+import pathlib
+import tempfile
 import unittest
 from unittest import mock
 
@@ -13,14 +14,17 @@ from engine import credentials
 @unittest.skipUnless(credentials.available(), "DPAPI is Windows-only")
 class VaultTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = credentials.VAULT.parent / "credentials.test.vault"
+        # A scratch vault in a tempdir, never beside the operator's real one:
+        # the old path was app/data/credentials.test.vault, so a test that
+        # died mid-run left an encrypted file in the live data directory.
+        self._dir = tempfile.TemporaryDirectory()
+        self.tmp = pathlib.Path(self._dir.name) / "credentials.test.vault"
         self._patch = mock.patch.object(credentials, "VAULT", self.tmp)
         self._patch.start()
 
     def tearDown(self):
         self._patch.stop()
-        if self.tmp.exists():
-            os.remove(self.tmp)
+        self._dir.cleanup()
 
     def test_plaintext_never_reaches_disk(self):
         secret = "SUPER-SECRET-VALUE-9f3a"

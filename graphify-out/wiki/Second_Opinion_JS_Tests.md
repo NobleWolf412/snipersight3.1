@@ -17,7 +17,7 @@
 
 ## Relationships
 
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- [he](he.md) (1 shared connections)
 
 ## Source Files
 

@@ -1,19 +1,20 @@
 # Edge Statistics Engine
 
-> 33 nodes
+> 35 nodes
 
 ## Key Concepts
 
-- **edgestats.py** (20 connections) — `app/engine/edgestats.py`
+- **edgestats.py** (21 connections) — `app/engine/edgestats.py`
+- **load_trades()** (9 connections) — `app/engine/edgestats.py`
 - **report()** (9 connections) — `app/engine/edgestats.py`
-- **load_trades()** (7 connections) — `app/engine/edgestats.py`
 - **_scenarios()** (5 connections) — `app/engine/edgestats.py`
 - **_bootstrap_mean()** (4 connections) — `app/engine/edgestats.py`
+- **_risk_index()** (4 connections) — `app/engine/edgestats.py`
 - **_core()** (4 connections) — `app/engine/edgestats.py`
 - **_venue_fee_r()** (4 connections) — `app/engine/edgestats.py`
 - **confound_report()** (4 connections) — `app/engine/edgestats.py`
 - **main()** (4 connections) — `app/engine/edgestats.py`
-- **_risk_index()** (3 connections) — `app/engine/edgestats.py`
+- **_setup_time_index()** (3 connections) — `app/engine/edgestats.py`
 - **_venue_or_none()** (3 connections) — `app/engine/edgestats.py`
 - **_setup_version_of()** (3 connections) — `app/engine/edgestats.py`
 - **_max_consecutive_losses()** (3 connections) — `app/engine/edgestats.py`
@@ -26,14 +27,13 @@
 - **Edge statistics — is per-trade expectancy distinguishable from zero, and does i** (1 connections) — `app/engine/edgestats.py`
 - **Deterministic LCG bootstrap of the sample mean — verbatim in method from     th** (1 connections) — `app/engine/edgestats.py`
 - **(symbol, tf, setup_id, market_time) -> {stop distances} from setup facts.** (1 connections) — `app/engine/edgestats.py`
+- **Plan availability by the same identity used for the R denominator.** (1 connections) — `app/engine/edgestats.py`
 - **The engine generation behind a trade, read off its version-scoped id.      Ids** (1 connections) — `app/engine/edgestats.py`
-- **Filled trades for one algo version, in the order the system learned them.** (1 connections) — `app/engine/edgestats.py`
-- **Longest run of non-winning trades in confirmed_at order. A flat trade     (r_ne** (1 connections) — `app/engine/edgestats.py`
-- *... and 8 more nodes in this community*
+- *... and 10 more nodes in this community*
 
 ## Relationships
 
-- [Execution Simulator & Risk](Execution_Simulator_%26_Risk.md) (1 shared connections)
+- [Kraken Adapter](Kraken_Adapter.md) (3 shared connections)
 
 ## Source Files
 
@@ -41,8 +41,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 105 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 111 (98%)
+- INFERRED: 2 (2%)
 - AMBIGUOUS: 0 (0%)
 
 ---

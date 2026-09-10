@@ -59,23 +59,32 @@ class VersionStampedShellTests(unittest.TestCase):
                          "the served version is not the asset version")
 
     def test_the_version_follows_the_files(self):
+        import os
+        import shutil
+        import tempfile
+        import time
+        from pathlib import Path
+        from unittest import mock
         import server
-        v1 = server._asset_version()
-        # The version is the MAX mtime, so nudging one file by a couple of
-        # seconds proves nothing — another file is usually newer, and the first
-        # draft of this test failed exactly that way. Push the file past
-        # EVERYTHING by using wall-clock now plus a margin.
-        target = next(p for p in (APP / "static").glob("*.js"))
-        st = target.stat()
-        try:
-            import os
-            import time
-            os.utime(target, ns=(st.st_atime_ns,
-                                 time.time_ns() + 10_000_000_000))
-            self.assertNotEqual(server._asset_version(), v1,
-                                "a changed file does not change the version, "
-                                "so clients keep the stale module")
-        finally:
-            os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns))
-        self.assertEqual(server._asset_version(), v1,
-                         "the version moved without a file changing")
+        # On a COPY of static/, never the working tree: the old version of
+        # this test touched a real file's mtime under the live server, so a
+        # run that died between utime and restore left a shipped module
+        # stamped ten seconds into the future.
+        with tempfile.TemporaryDirectory() as tmp:
+            static = Path(tmp) / "static"
+            shutil.copytree(APP / "static", static)
+            with mock.patch.object(server, "STATIC", static):
+                v1 = server._asset_version()
+                # The version is the MAX mtime, so nudging one file by a couple
+                # of seconds proves nothing — another file is usually newer.
+                # Push the file past EVERYTHING with wall-clock now plus margin.
+                target = next(p for p in static.glob("*.js"))
+                st = target.stat()
+                os.utime(target, ns=(st.st_atime_ns,
+                                     time.time_ns() + 10_000_000_000))
+                self.assertNotEqual(server._asset_version(), v1,
+                                    "a changed file does not change the "
+                                    "version, so clients keep the stale module")
+                os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns))
+                self.assertEqual(server._asset_version(), v1,
+                                 "the version moved without a file changing")

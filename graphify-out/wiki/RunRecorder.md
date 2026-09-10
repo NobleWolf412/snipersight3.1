@@ -1,17 +1,12 @@
 # RunRecorder
 
-> God node · 54 connections · `app/engine/runlog.py`
+> God node · 48 connections · `app/engine/runlog.py`
 
-**Community:** [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md)
+**Community:** [Onboarding Path Tests](Onboarding_Path_Tests.md)
 
 ## Connections by Relation
 
 ### calls
-- run() `EXTRACTED`
-- run() `EXTRACTED`
-- run() `EXTRACTED`
-- run() `EXTRACTED`
-- run() `EXTRACTED`
 - run() `EXTRACTED`
 - run() `EXTRACTED`
 - run() `EXTRACTED`
@@ -27,31 +22,29 @@
 - run() `EXTRACTED`
 - run() `EXTRACTED`
 - run() `EXTRACTED`
+- run() `EXTRACTED`
+- .test_run_recorder_carries_lineage_envelope() `INFERRED`
 
 ### contains
 - runlog.py `EXTRACTED`
 
 ### imports
 - manual.py `EXTRACTED`
-- setups.py `EXTRACTED`
-- swings.py `EXTRACTED`
-- ma.py `EXTRACTED`
-- risk.py `EXTRACTED`
-- universe.py `EXTRACTED`
 - [volume.py](volume.py.md) `EXTRACTED`
-- [execsim.py](execsim.py.md) `EXTRACTED`
 - [momentum.py](momentum.py.md) `EXTRACTED`
-- ranges.py `EXTRACTED`
+- universe.py `EXTRACTED`
 - trend.py `EXTRACTED`
-- volatility.py `EXTRACTED`
+- [volatility.py](volatility.py.md) `EXTRACTED`
+- [ranges.py](ranges.py.md) `EXTRACTED`
 - breakout.py `EXTRACTED`
-- zones.py `EXTRACTED`
-- cooldowns.py `EXTRACTED`
 - [cycles.py](cycles.py.md) `EXTRACTED`
-- regime.py `EXTRACTED`
-- structure.py `EXTRACTED`
+- zones.py `EXTRACTED`
 - volprofile.py `EXTRACTED`
 - fvg.py `EXTRACTED`
+- regime.py `EXTRACTED`
+- structure.py `EXTRACTED`
+- liquidity.py `EXTRACTED`
+- basis.py `EXTRACTED`
 
 ### method
 - .__exit__() `EXTRACTED`
@@ -63,8 +56,15 @@
 - Context manager: times an engine run and records it on exit. `EXTRACTED`
 
 ### uses
+- [TestMarketQuality](TestMarketQuality.md) `INFERRED`
 - IntentRejected `INFERRED`
+- [QualityStoreCase](QualityStoreCase.md) `INFERRED`
+- [RetiredSymbolStalenessTest](RetiredSymbolStalenessTest.md) `INFERRED`
+- TestPipelineContracts `INFERRED`
+- TestKillSwitchRungs `INFERRED`
+- TestOnboardingIsNotAFailure `INFERRED`
 - _RateLimiter `INFERRED`
+- TestStrategyRulesRemainFrozen `INFERRED`
 
 ---
 

@@ -5,13 +5,13 @@
 ## Key Concepts
 
 - **test_responsive_layout.js** (11 connections) — `app/tests/test_responsive_layout.js`
-- **read()** (2 connections) — `app/tests/test_responsive_layout.js`
 - **maxWidths()** (2 connections) — `app/tests/test_responsive_layout.js`
 - **coversPhone()** (2 connections) — `app/tests/test_responsive_layout.js`
 - **fs** (1 connections) — `app/tests/test_responsive_layout.js`
 - **path** (1 connections) — `app/tests/test_responsive_layout.js`
 - **assert** (1 connections) — `app/tests/test_responsive_layout.js`
 - **STATIC** (1 connections) — `app/tests/test_responsive_layout.js`
+- **read()** (1 connections) — `app/tests/test_responsive_layout.js`
 - **ok()** (1 connections) — `app/tests/test_responsive_layout.js`
 - **BREAKPOINTS** (1 connections) — `app/tests/test_responsive_layout.js`
 - **rules()** (1 connections) — `app/tests/test_responsive_layout.js`
@@ -19,7 +19,7 @@
 
 ## Relationships
 
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (1 shared connections)
+- No strong cross-community connections detected
 
 ## Source Files
 
@@ -27,8 +27,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 24 (96%)
-- INFERRED: 1 (4%)
+- EXTRACTED: 24 (100%)
+- INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 
 ---

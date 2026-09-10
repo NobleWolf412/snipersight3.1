@@ -1,12 +1,14 @@
 # TestMarketQuality
 
-> 21 nodes
+> 31 nodes
 
 ## Key Concepts
 
-- **TestMarketQuality** (13 connections) — `app/tests/test_pipeline_quality.py`
+- **TestMarketQuality** (15 connections) — `app/tests/test_pipeline_quality.py`
+- **QualityStoreCase** (10 connections) — `app/tests/test_pipeline_quality.py`
 - **.candle()** (8 connections) — `app/tests/test_pipeline_quality.py`
-- **._partial_market()** (7 connections) — `app/tests/test_pipeline_quality.py`
+- **._partial_market()** (8 connections) — `app/tests/test_pipeline_quality.py`
+- **TestKillSwitchRungs** (8 connections) — `app/tests/test_pipeline_quality.py`
 - **.complete_market()** (4 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_retried_empty_tail_does_not_multiply_known_gap_budget()** (3 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_acknowledged_partial_bar_reconciles()** (3 connections) — `app/tests/test_pipeline_quality.py`
@@ -18,17 +20,20 @@
 - **.test_gap_blocks_downstream_engines()** (2 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_final_candle_does_not_erase_prior_gap_acknowledgements()** (2 connections) — `app/tests/test_pipeline_quality.py`
 - **.test_aggregate_mismatch_is_blocking()** (2 connections) — `app/tests/test_pipeline_quality.py`
-- **A quiet market retries from the same last candle every cycle.          The 1-gap** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **.test_acknowledged_gap_is_a_note_not_a_warning()** (2 connections) — `app/tests/test_pipeline_quality.py`
+- **.test_stale_series_routes_to_quarantine_not_halt()** (2 connections) — `app/tests/test_pipeline_quality.py`
+- **.setUp()** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **.tearDown()** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **.test_code_rung_is_the_watchdog_dispatch_table()** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **.test_halt_codes_carry_halt_rung()** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **.test_persisted_checks_include_rung_column()** (1 connections) — `app/tests/test_pipeline_quality.py`
+- **A quiet market retries from the same last candle every cycle.          The 1-g** (1 connections) — `app/tests/test_pipeline_quality.py`
 - **Three of four hours traded; 02:00 the venue served nothing for.          range** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **agg-v0.2's mirror: a partial bar the aggregator was entitled to         build i** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **A partial bar that does not reconcile to its present source candles         is** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **A qualifying partial bucket the aggregator has not built yet is a         DEGRA** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **Pin for the 2026-08-08 restart loop. An unrecognised tf may indict         the** (1 connections) — `app/tests/test_pipeline_quality.py`
-- **No acknowledgment -> the aggregator refuses the bucket and the         mirror n** (1 connections) — `app/tests/test_pipeline_quality.py`
+- *... and 6 more nodes in this community*
 
 ## Relationships
 
-- [test_pipeline_quality.py](test_pipeline_quality.py.md) (5 shared connections)
+- [Onboarding Path Tests](Onboarding_Path_Tests.md) (8 shared connections)
 
 ## Source Files
 
@@ -36,8 +41,8 @@
 
 ## Audit Trail
 
-- EXTRACTED: 65 (100%)
-- INFERRED: 0 (0%)
+- EXTRACTED: 93 (97%)
+- INFERRED: 3 (3%)
 - AMBIGUOUS: 0 (0%)
 
 ---

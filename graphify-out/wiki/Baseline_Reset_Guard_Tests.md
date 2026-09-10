@@ -4,7 +4,7 @@
 
 ## Key Concepts
 
-- **test_phone_front_door.py** (8 connections) — `app/tests/test_phone_front_door.py`
+- **test_phone_front_door.py** (9 connections) — `app/tests/test_phone_front_door.py`
 - **BaselineResetTests** (5 connections) — `app/tests/test_phone_front_door.py`
 - **.test_a_form_post_cannot_reach_the_handler()** (2 connections) — `app/tests/test_phone_front_door.py`
 - **OnePollForOnePayloadTests** (2 connections) — `app/tests/test_phone_front_door.py`
@@ -22,6 +22,7 @@
 - [Cross-Site Guard Tests](Cross-Site_Guard_Tests.md) (1 shared connections)
 - [Facts Window Tests](Facts_Window_Tests.md) (1 shared connections)
 - [PWA Installability Tests](PWA_Installability_Tests.md) (1 shared connections)
+- [SiteBridgeTests](SiteBridgeTests.md) (1 shared connections)
 - [Tailnet Access Tests](Tailnet_Access_Tests.md) (1 shared connections)
 
 ## Source Files
@@ -30,7 +31,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 25 (100%)
+- EXTRACTED: 26 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

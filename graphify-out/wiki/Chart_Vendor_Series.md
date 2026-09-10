@@ -33,10 +33,10 @@
 
 ## Relationships
 
-- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (31 shared connections)
+- [Chart Vendor Marker Rendering](Chart_Vendor_Marker_Rendering.md) (39 shared connections)
 - [ProtectedBroker](ProtectedBroker.md) (11 shared connections)
-- [A/B Calibration Tests](A-B_Calibration_Tests.md) (9 shared connections)
 - [Cycle Detection Engine](Cycle_Detection_Engine.md) (7 shared connections)
+- [A/B Calibration Tests](A-B_Calibration_Tests.md) (1 shared connections)
 - [CustodyOverridesTheSimulatorsStory](CustodyOverridesTheSimulatorsStory.md) (1 shared connections)
 
 ## Source Files

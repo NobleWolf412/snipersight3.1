@@ -383,6 +383,11 @@
 
   /* ---------- fetch with visible failure ---------- */
   let degraded = false;
+  /* The audit verdict's tone, remembered so a fetch RECOVERY cannot strip the
+     .degraded class that loadHealth set for a DEGRADED/BLOCKED verdict. Two
+     paths add the class; only one of them was consulted when removing it, so
+     the chip was shed below 900px for one cycle while reading BLOCKED. */
+  let lastHealthTone = 'good';
   /* Reads go through SSData so this file and funnel.js/chart.js/wizard.js share
      one response per endpoint instead of fetching the same thing on four
      unaligned clocks and then disagreeing about the answer.
@@ -398,7 +403,13 @@
      can take the better part of a minute while the scanner holds the store, and
      four modules asking separately used to mean four overlapping requests
      competing for it. The throw-on-failure contract is unchanged. */
-  const api = (path, maxAge) => window.SSData.get(path, maxAge == null ? 0 : maxAge);
+  /* Every path this file reads is on screen, so it is declared watched: the
+     health chip's failure count and "numbers are N seconds old" are computed
+     over watched paths, and this file never subscribes. */
+  const api = (path, maxAge) => {
+    if(window.SSData.watch) window.SSData.watch(path);
+    return window.SSData.get(path, maxAge == null ? 0 : maxAge);
+  };
   /* ONE severity ladder, ONE colour. The engine already grades every check on
      PASS < DEGRADED < BLOCKED (engine/quality.py ORDER) and this file used to
      re-derive a colour at three call sites from three different predicates.
@@ -2731,7 +2742,8 @@ weighed in. Name the facts you used.`;
 
     const risk = (+d.open_risk_usd || 0) + (+d.pending_risk_usd || 0);
     $('mineRisk').textContent =
-      `${money(risk)} committed · ${d.n_open} open, ${d.n_pending} waiting`;
+      `${money(risk)} committed · ${d.n_open} open, ${d.n_pending} waiting` +
+      (d.n_unresolved ? `, ${d.n_unresolved} not resolved` : '');
 
     /* The server's own measuring moment, not the browser's clock — every
        `bars_left` on this payload was counted against it. */
@@ -2772,6 +2784,11 @@ weighed in. Name the facts you used.`;
   function mineCardInner(t, now){
     const long = t.direction === 'LONG';
     const pending = t.state === 'PENDING';
+    /* The resolver could not read this market on the last pass, so the row is
+       its STORED state with no fill test and no mark. It must not wear the
+       FILLED stamp of a trade the book has actually followed — until
+       2026-09-10 it wore nothing at all, because the server dropped it. */
+    const unresolved = t.state === 'UNRESOLVED';
     const entry = +t.entry;
     /* ONE PRICE ON THIS CARD, AND IT IS THE SERVER'S. This panel used to fetch
        /api/candles per row on the CHART timeframe and mark the live price from
@@ -2797,7 +2814,9 @@ weighed in. Name the facts you used.`;
       ? Math.max(0, (now - (t.armed_at || now)) / t.tf_seconds) : 0;
     const span = (bars == null ? 0 : bars) + elapsed;
     const lifeFrac = (bars == null || span <= 0) ? 1 : bars / span;
-    const ring = pending
+    const ring = unresolved
+      ? ringSvg(1, 'ring-low', '?', 'not resolved')
+      : pending
       ? ringSvg(lifeFrac,
                 soon ? 'ring-low' : lifeFrac <= 0.5 ? 'ring-mid' : 'ring-ok',
                 bars == null ? '—' : String(bars),
@@ -2807,8 +2826,9 @@ weighed in. Name the facts you used.`;
     /* ARMED AND WAITING IS NOT OPEN AND FILLED, and the stamp is where that is
        said first. A resting order wears the dashed mark this app already uses
        for "not cleared yet"; a filled one wears solid ink. */
-    const stamp = pending ? ['st-mine-rest', 'YOURS · ARMED']
-                          : ['st-mine', 'YOURS · FILLED'];
+    const stamp = unresolved ? ['st-mine-rest', 'YOURS · UNRESOLVED']
+                : pending    ? ['st-mine-rest', 'YOURS · ARMED']
+                             : ['st-mine', 'YOURS · FILLED'];
     const held = t.bars_held == null ? ''
       : `Held ${t.bars_held} ${esc(t.tf)} bar${t.bars_held === 1 ? '' : 's'}`;
 
@@ -2818,7 +2838,11 @@ weighed in. Name the facts you used.`;
        for a reason nobody can read is the same bug in a quieter costume, so
        the reason is printed on the card rather than left in a run log. Null is
        the ordinary case and prints nothing. */
-    const degraded = t.resolution_degraded
+    const degraded = t.resolver_error
+      ? `<div class="mc-degraded">Could not be resolved on the last pass — ${
+           esc(t.resolver_error)}. Shown from its stored state; the next
+           scan retries.</div>`
+      : t.resolution_degraded
       ? `<div class="mc-degraded">Resolved on ${esc(t.resolution_tf || '')} bars — ${
            esc(t.resolution_degraded)}. The fill moment and the mark are
            coarser than usual.</div>`
@@ -2962,7 +2986,19 @@ weighed in. Name the facts you used.`;
       window.SSData.invalidate('/api/manual/open');
       await renderMine();
     }catch(err){
-      toast('could not reach the server — nothing was cancelled', 'bad');
+      /* A rejected fetch() is NOT "nothing was cancelled". The request may
+         have reached the server and the reply been lost — over a tunnel or
+         cellular that is the common case — so asserting the order is still
+         live is a coin flip with the operator's book. The arm and close paths
+         were fixed for exactly this; this one re-reads the book and says
+         what it saw instead of what it hoped. */
+      toast('could not confirm the cancel — re-reading your orders', 'warn');
+      window.SSData.invalidate('/api/manual/live');
+      window.SSData.invalidate('/api/manual/open');
+      try{ await renderMine(); }catch(_e){ /* the chip reports the outage */ }
+      const still = (MINE.open || []).some(r => r.intent_id === id);
+      toast(still ? `${what} is still open — the cancel did not go through`
+                  : `${what} is no longer open`, still ? 'bad' : 'ok');
       btn.disabled = false;
     }
   });
@@ -3014,14 +3050,16 @@ weighed in. Name the facts you used.`;
                   (p.pending_orders || []).length;
     const slotCap = +cfg.max_concurrent || 0;
 
-    // Today's realised loss, read from the same journal the scoreboard reads so
-    // the two can never disagree about what "today" means.
-    const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
-    const cut = midnight.getTime() / 1000;
-    const todayPnl = (p.journal || [])
-      .filter(j => j.ts >= cut).reduce((s, j) => s + j.pnl_usd, 0);
-    const lost = Math.max(0, -todayPnl);
-    const lossCap = eq * (+cfg.daily_loss_pct || 0) / 100;
+    /* Today's loss against the halt is READ from the portfolio's `daily_loss`
+       block, never derived here. This code used to sum the journal from LOCAL
+       midnight against CURRENT equity; the governor halts on UTC midnight and
+       day-OPEN equity (risk.py), and /api/operations already said so. Two
+       numbers for one cap — after a losing morning this cell could read
+       "nothing lost today" while the engine was one trade from halting. The
+       server computes it once (_daily_budget); this cell paints it. */
+    const dl = p.daily_loss || {};
+    const lost = +dl.lost_today_usd || 0;
+    const lossCap = +dl.budget_usd || 0;
 
     /* `act` is optional and only one of the three cells takes it. Open risk
        and today's losses are readings — there is nothing to open that says
@@ -3753,6 +3791,7 @@ weighed in. Name the facts you used.`;
     }
 
     const tone = healthTone(h);
+    lastHealthTone = tone;
     $('healthOrb').className = 'orb ' + tone;
     $('healthTxt').textContent = h.status;
     /* Keyed off the STATE, not off one branch that happens to set a class.
@@ -5703,7 +5742,10 @@ weighed in. Name the facts you used.`;
     else {
       if(degraded){
         degraded = false;
-        $('healthChip').classList.remove('clickable', 'degraded');
+        $('healthChip').classList.remove('clickable');
+        // Only the FETCH failure is over. The audit verdict owns the class
+        // too, and a BLOCKED verdict must keep the chip on screen.
+        if(lastHealthTone === 'good') $('healthChip').classList.remove('degraded');
       }
     }                                             // health orb is reset by loadHealth
   }

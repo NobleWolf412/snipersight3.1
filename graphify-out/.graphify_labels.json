@@ -363,7 +363,6 @@
   "361": "stocks.js",
   "362": "T",
   "363": "binance.py",
-  "364": "strategygrade.py",
   "365": "stocks_connection_test",
   "366": "NextWakeMath",
   "367": "edgeview.js",
@@ -377,8 +376,6 @@
   "375": "ProtectedBroker",
   "376": "aggregator.py",
   "377": "TestNoLookahead",
-  "378": "validate.py",
-  "379": "verify_pack.py",
   "380": "test_abtest.py",
   "381": "rebuild.py"
 }

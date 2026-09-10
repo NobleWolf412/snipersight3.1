@@ -20,7 +20,7 @@
 ## Relationships
 
 - [Live Scanner Loop](Live_Scanner_Loop.md) (1 shared connections)
-- [yn](yn.md) (1 shared connections)
+- [NextWakeMath](NextWakeMath.md) (1 shared connections)
 
 ## Source Files
 

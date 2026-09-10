@@ -19,22 +19,27 @@ in the notebook; discover current layout, versions, and counts from the repo.
 
 ## Route the work
 
-Use one lead agent by default. Do not delegate merely because roles are
-available. Treat these user phrases as explicit delegation requests:
+Default to a single agent. Delegate on **task shape**, not on request — the
+operator asked for automatic routing on 2026-08-08 — but delegating a bounded
+edit against a known authority spends context to rediscover what the lead
+already has.
 
-- **Lightweight workflow** or **no subagents**: lead handles the task alone.
-- **Audit this** or **independent review**: add a read-only Auditor after the
-  change or against the supplied diff.
-- **Competing hypotheses** or **contrarian pass**: add a read-only Contrarian
-  before editing when the diagnosis is uncertain.
-- **Full workflow**: Architect, one Implementer, then independent Auditor; add
-  the Contrarian only when diagnosis or evidence is genuinely uncertain.
+| Signal in the task | Role |
+|---|---|
+| crosses engines, moves an `algo_version`, more than one plausible home | **Architect**, first |
+| the cause of the symptom is still a theory | **Contrarian**, before editing |
+| implementation is being handed off | **Implementer**, exactly one |
+| facts, versions, sizing arithmetic, a safety guard, a live endpoint | **Auditor**, after |
+
+Explicit phrases still override: *lightweight* or *no subagents* keeps it
+single-agent; *audit this* adds the Auditor; *contrarian pass* adds the
+Contrarian; *full workflow* runs Architect → Implementer → Auditor.
 
 Read [references/agent-roles.md](references/agent-roles.md) before delegating.
-Use the smallest requested workflow. State which roles are being used and why.
-If the user did not request delegation, keep the work single-agent even when a
-larger workflow might help; recommend it when risk warrants rather than silently
-spending the tokens.
+Use the smallest workflow the task shape warrants. State which roles are being
+used and why. (This copy said "only when explicitly requested" until
+2026-09-10, contradicting CLAUDE.md and the Claude copy; the two are kept in
+step by hand — see CLAUDE.md "Four roles".)
 
 Maintain a single writer. Never allow two agents to edit the shared working
 tree concurrently. Architect, Contrarian, and Auditor are read-only. Give each

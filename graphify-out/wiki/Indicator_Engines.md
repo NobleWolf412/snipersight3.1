@@ -1,41 +1,44 @@
 # Indicator Engines
 
-> 50 nodes
+> 47 nodes
 
 ## Key Concepts
 
-- **ma.py** (23 connections) — `app/engine/ma.py`
 - **sig()** (21 connections) — `app/engine/ma.py`
 - **momentum.py** (19 connections) — `app/engine/momentum.py`
-- **volatility.py** (15 connections) — `app/engine/volatility.py`
+- **ma.py** (16 connections) — `app/engine/ma.py`
 - **plain()** (14 connections) — `app/engine/ma.py`
-- **run()** (13 connections) — `app/engine/ma.py`
-- **fvg.py** (10 connections) — `app/engine/fvg.py`
+- **volprofile.py** (11 connections) — `app/engine/volprofile.py`
 - **ema()** (10 connections) — `app/engine/ma.py`
+- **fvg.py** (10 connections) — `app/engine/fvg.py`
 - **run()** (10 connections) — `app/engine/momentum.py`
-- **run()** (9 connections) — `app/engine/volatility.py`
-- **Decimal** (8 connections)
+- **run()** (9 connections) — `app/engine/ma.py`
 - **run()** (6 connections) — `app/engine/fvg.py`
 - **compute_rsi()** (6 connections) — `app/engine/momentum.py`
 - **Decimal** (6 connections)
-- **Decimal** (6 connections)
-- **keltner()** (6 connections) — `app/engine/volatility.py`
+- **walk_states()** (6 connections) — `app/engine/volprofile.py`
 - **sma()** (5 connections) — `app/engine/ma.py`
 - **stack()** (5 connections) — `app/engine/ma.py`
 - **position()** (5 connections) — `app/engine/ma.py`
-- **bollinger()** (5 connections) — `app/engine/volatility.py`
-- **detect()** (4 connections) — `app/engine/fvg.py`
+- **bin_step()** (5 connections) — `app/engine/volprofile.py`
+- **run()** (5 connections) — `app/engine/volprofile.py`
 - **slope_state()** (4 connections) — `app/engine/ma.py`
+- **detect()** (4 connections) — `app/engine/fvg.py`
 - **_rsi()** (4 connections) — `app/engine/momentum.py`
 - **compute_macd()** (4 connections) — `app/engine/momentum.py`
 - **rsi_band()** (4 connections) — `app/engine/momentum.py`
-- *... and 25 more nodes in this community*
+- **sign_state()** (4 connections) — `app/engine/momentum.py`
+- **_pivots()** (4 connections) — `app/engine/momentum.py`
+- *... and 22 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor Pane Views](Chart_Vendor_Pane_Views.md) (29 shared connections)
-- [volume.py](volume.py.md) (10 shared connections)
-- [Chart Bootstrap Glue](Chart_Bootstrap_Glue.md) (6 shared connections)
+- [Onboarding Path Tests](Onboarding_Path_Tests.md) (9 shared connections)
+- [Kraken Adapter](Kraken_Adapter.md) (8 shared connections)
+- [volatility.py](volatility.py.md) (8 shared connections)
+- [t](t.md) (6 shared connections)
+- [zt](zt.md) (5 shared connections)
+- [volume.py](volume.py.md) (5 shared connections)
 - [Divergence & Factor Grading](Divergence_%26_Factor_Grading.md) (1 shared connections)
 - [Divergence Stats Tests](Divergence_Stats_Tests.md) (1 shared connections)
 
@@ -44,11 +47,11 @@
 - `app/engine/fvg.py`
 - `app/engine/ma.py`
 - `app/engine/momentum.py`
-- `app/engine/volatility.py`
+- `app/engine/volprofile.py`
 
 ## Audit Trail
 
-- EXTRACTED: 259 (100%)
+- EXTRACTED: 223 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

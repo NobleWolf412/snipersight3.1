@@ -1,34 +1,32 @@
 # renderProgression
 
-> 9 nodes
+> 11 nodes
 
 ## Key Concepts
 
-- **renderProgression()** (7 connections) — `app/static/shell.js`
-- **makeRail()** (6 connections) — `app/static/shell.js`
-- **renderStatWheel()** (5 connections) — `app/static/shell.js`
-- **mountRails()** (4 connections) — `app/static/shell.js`
-- **renderScoreboard()** (4 connections) — `app/static/shell.js`
-- **statCards()** (2 connections) — `app/static/shell.js`
-- **progressionRows()** (2 connections) — `app/static/shell.js`
-- **gateRows()** (2 connections) — `app/static/shell.js`
-- **loadLiveGate()** (2 connections) — `app/static/shell.js`
+- **ToastIsSpawnedIsolated** (7 connections) — `app/tests/test_toast_isolation.py`
+- **test_toast_isolation.py** (3 connections) — `app/tests/test_toast_isolation.py`
+- **._spawn_kwargs()** (3 connections) — `app/tests/test_toast_isolation.py`
+- **.test_the_child_does_not_borrow_our_console()** (2 connections) — `app/tests/test_toast_isolation.py`
+- **.test_the_child_is_in_its_own_process_group()** (2 connections) — `app/tests/test_toast_isolation.py`
+- **.test_a_toast_failure_is_never_raised_at_the_caller()** (2 connections) — `app/tests/test_toast_isolation.py`
+- **.test_the_kill_switch_spawns_nothing()** (2 connections) — `app/tests/test_toast_isolation.py`
+- **.test_the_temp_script_is_always_cleaned_up()** (1 connections) — `app/tests/test_toast_isolation.py`
+- **A notification must not be able to kill the process that emits it.  The live sca** (1 connections) — `app/tests/test_toast_isolation.py`
+- **check_drift and refresh_universe call this mid-cycle. A notification         tha** (1 connections) — `app/tests/test_toast_isolation.py`
+- **SNIPERSIGHT_NO_TOAST is what made the failure bisectable, and is the         rig** (1 connections) — `app/tests/test_toast_isolation.py`
 
 ## Relationships
 
-- [Shell Health & Staleness](Shell_Health_%26_Staleness.md) (9 shared connections)
-- [Shell Navigation & Near Levels](Shell_Navigation_%26_Near_Levels.md) (2 shared connections)
-- [Mission Rail & Radar UI](Mission_Rail_%26_Radar_UI.md) (2 shared connections)
-- [Chart Vendor Line Renderers](Chart_Vendor_Line_Renderers.md) (2 shared connections)
-- [renderNear](renderNear.md) (1 shared connections)
+- [Watchdog Supervisor](Watchdog_Supervisor.md) (1 shared connections)
 
 ## Source Files
 
-- `app/static/shell.js`
+- `app/tests/test_toast_isolation.py`
 
 ## Audit Trail
 
-- EXTRACTED: 34 (100%)
+- EXTRACTED: 25 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

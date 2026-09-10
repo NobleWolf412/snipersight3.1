@@ -1,8 +1,8 @@
 # f()
 
-> God node · 86 connections · `app/static/lightweight-charts.js`
+> God node · 83 connections · `app/static/lightweight-charts.js`
 
-**Community:** [Chart Vendor Internals](Chart_Vendor_Internals.md)
+**Community:** [he](he.md)
 
 ## Connections by Relation
 
@@ -36,14 +36,11 @@
 - S() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`
-- read() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`
-- read() `INFERRED`
+- S() `INFERRED`
+- S() `INFERRED`
 - E() `INFERRED`
-- S() `INFERRED`
-- S() `INFERRED`
-- S() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`
 - S() `INFERRED`

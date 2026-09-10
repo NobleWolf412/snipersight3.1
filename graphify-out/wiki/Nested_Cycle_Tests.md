@@ -1,12 +1,11 @@
 # Nested Cycle Tests
 
-> 27 nodes
+> 21 nodes
 
 ## Key Concepts
 
+- **test_nested_cycles.py** (10 connections) — `app/tests/test_nested_cycles.py`
 - **series()** (10 connections) — `app/tests/test_nested_cycles.py`
-- **test_nested_cycles.py** (9 connections) — `app/tests/test_nested_cycles.py`
-- **TestWindows** (6 connections) — `app/tests/test_nested_cycles.py`
 - **TestTranslation** (4 connections) — `app/tests/test_nested_cycles.py`
 - **._one_cycle()** (4 connections) — `app/tests/test_nested_cycles.py`
 - **TestDCLDetection** (3 connections) — `app/tests/test_nested_cycles.py`
@@ -23,17 +22,14 @@
 - **TestNesting** (2 connections) — `app/tests/test_nested_cycles.py`
 - **.test_three_to_one()** (2 connections) — `app/tests/test_nested_cycles.py`
 - **.test_payload_flags()** (2 connections) — `app/tests/test_nested_cycles.py`
-- **.test_low_to_low_brackets_nov_2022()** (1 connections) — `app/tests/test_nested_cycles.py`
-- **.test_halving_anchor_brackets_nov_2022()** (1 connections) — `app/tests/test_nested_cycles.py`
-- **.test_pushout_only_when_right_translated()** (1 connections) — `app/tests/test_nested_cycles.py`
-- **.test_windows_never_merged()** (1 connections) — `app/tests/test_nested_cycles.py`
-- **.test_4y_translation_pushout_variant()** (1 connections) — `app/tests/test_nested_cycles.py`
 - **.test_fail_soft()** (1 connections) — `app/tests/test_nested_cycles.py`
-- *... and 2 more nodes in this community*
+- **Deterministic synthetic-series tests for the nested-cycle satellite. No network,** (1 connections) — `app/tests/test_nested_cycles.py`
+- **Synthetic daily candles: flat drift with planted V-lows and optional tops.     P** (1 connections) — `app/tests/test_nested_cycles.py`
 
 ## Relationships
 
-- No strong cross-community connections detected
+- [Chart Vendor Price Scale Formatting](Chart_Vendor_Price_Scale_Formatting.md) (1 shared connections)
+- [ji](ji.md) (1 shared connections)
 
 ## Source Files
 
@@ -41,7 +37,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 72 (100%)
+- EXTRACTED: 62 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

@@ -1,15 +1,17 @@
 # Order Sizing Tests
 
-> 34 nodes
+> 40 nodes
 
 ## Key Concepts
 
-- **test_armed_order.py** (7 connections) — `app/tests/test_armed_order.py`
+- **test_armed_order.py** (8 connections) — `app/tests/test_armed_order.py`
+- **_StoreCase** (8 connections) — `app/tests/test_armed_order.py`
 - **PureSizing** (7 connections) — `app/tests/test_armed_order.py`
-- **_StoreCase** (7 connections) — `app/tests/test_armed_order.py`
+- **UnresolvedExecutionWork** (7 connections) — `app/tests/test_armed_order.py`
 - **Lineage** (6 connections) — `app/tests/test_armed_order.py`
 - **Inheritance** (5 connections) — `app/tests/test_armed_order.py`
 - **ArmedFlag** (4 connections) — `app/tests/test_armed_order.py`
+- **._fact()** (4 connections) — `app/tests/test_armed_order.py`
 - **.test_it_is_pure_no_connection_no_clock()** (2 connections) — `app/tests/test_armed_order.py`
 - **.test_risk_is_a_fixed_fraction_of_equity_not_of_the_stop()** (2 connections) — `app/tests/test_armed_order.py`
 - **.test_a_stop_beyond_liquidation_is_refused_not_resized()** (2 connections) — `app/tests/test_armed_order.py`
@@ -18,18 +20,16 @@
 - **.test_a_sizing_rejection_still_emits_the_candidate()** (2 connections) — `app/tests/test_armed_order.py`
 - **.test_a_missed_order_records_why_the_window_closed()** (2 connections) — `app/tests/test_armed_order.py`
 - **.test_lineage_rides_on_the_missed_path_too()** (2 connections) — `app/tests/test_armed_order.py`
+- **.test_latest_filled_order_without_exit_is_work()** (2 connections) — `app/tests/test_armed_order.py`
+- **.test_placed_order_without_fill_is_also_work()** (2 connections) — `app/tests/test_armed_order.py`
+- **.test_terminal_and_retired_generation_orders_are_not_work()** (2 connections) — `app/tests/test_armed_order.py`
 - **.test_same_inputs_give_the_same_order()** (1 connections) — `app/tests/test_armed_order.py`
 - **.test_a_rejection_carries_no_size()** (1 connections) — `app/tests/test_armed_order.py`
 - **.setUp()** (1 connections) — `app/tests/test_armed_order.py`
 - **.tearDown()** (1 connections) — `app/tests/test_armed_order.py`
 - **._setup_fact()** (1 connections) — `app/tests/test_armed_order.py`
 - **.test_orders_and_execs_carry_the_armed_lineage()** (1 connections) — `app/tests/test_armed_order.py`
-- **_validated_fields()** (1 connections) — `app/tests/test_armed_order.py`
-- **Armed order — "no runtime decision at execution", asserted rather than claimed.** (1 connections) — `app/tests/test_armed_order.py`
-- **Phase E — sizing extracted from the portfolio pass without moving §9.      `ri** (1 connections) — `app/tests/test_armed_order.py`
-- **Checked on the AST, not the source text.          The first version of this te** (1 connections) — `app/tests/test_armed_order.py`
-- **The invariant the whole sizing model rests on: a wide stop buys fewer         u** (1 connections) — `app/tests/test_armed_order.py`
-- *... and 9 more nodes in this community*
+- *... and 15 more nodes in this community*
 
 ## Relationships
 
@@ -41,7 +41,7 @@
 
 ## Audit Trail
 
-- EXTRACTED: 72 (100%)
+- EXTRACTED: 92 (100%)
 - INFERRED: 0 (0%)
 - AMBIGUOUS: 0 (0%)
 

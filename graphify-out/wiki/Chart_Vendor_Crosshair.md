@@ -1,54 +1,48 @@
 # Chart Vendor Crosshair
 
-> 31 nodes
+> 41 nodes
 
 ## Key Concepts
 
-- **ws** (32 connections) — `app/static/lightweight-charts.js`
-- **.constructor()** (12 connections) — `app/static/lightweight-charts.js`
-- **.If()** (12 connections) — `app/static/lightweight-charts.js`
-- **.tv()** (10 connections) — `app/static/lightweight-charts.js`
-- **.av()** (10 connections) — `app/static/lightweight-charts.js`
-- **.Af()** (9 connections) — `app/static/lightweight-charts.js`
-- **.Ef()** (8 connections) — `app/static/lightweight-charts.js`
-- **.$f()** (8 connections) — `app/static/lightweight-charts.js`
-- **xs()** (8 connections) — `app/static/lightweight-charts.js`
-- **.hv()** (7 connections) — `app/static/lightweight-charts.js`
-- **.Nf()** (6 connections) — `app/static/lightweight-charts.js`
-- **.Xf()** (6 connections) — `app/static/lightweight-charts.js`
-- **.dv()** (6 connections) — `app/static/lightweight-charts.js`
-- **.pv()** (6 connections) — `app/static/lightweight-charts.js`
-- **.Ff()** (6 connections) — `app/static/lightweight-charts.js`
-- **ls()** (5 connections) — `app/static/lightweight-charts.js`
-- **.qf()** (5 connections) — `app/static/lightweight-charts.js`
-- **.Zf()** (5 connections) — `app/static/lightweight-charts.js`
-- **.gv()** (5 connections) — `app/static/lightweight-charts.js`
-- **.wv()** (5 connections) — `app/static/lightweight-charts.js`
-- **.fv()** (5 connections) — `app/static/lightweight-charts.js`
-- **Ss()** (5 connections) — `app/static/lightweight-charts.js`
-- **.Kf()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Hf()** (4 connections) — `app/static/lightweight-charts.js`
-- **.Gf()** (4 connections) — `app/static/lightweight-charts.js`
-- *... and 6 more nodes in this community*
+- **chartread.py** (23 connections) — `app/engine/chartread.py`
+- **read_window()** (11 connections) — `app/engine/chartread.py`
+- **_d()** (8 connections) — `app/engine/chartread.py`
+- **context()** (8 connections) — `app/engine/chartread.py`
+- **.at()** (7 connections) — `app/engine/chartread.py`
+- **Chart** (6 connections) — `app/engine/chartread.py`
+- **load()** (6 connections) — `app/engine/chartread.py`
+- **propose()** (6 connections) — `app/engine/chartread.py`
+- **Decimal** (5 connections)
+- **nearest_htf_levels()** (5 connections) — `app/engine/chartread.py`
+- **golden_score()** (5 connections) — `app/engine/chartread.py`
+- **main()** (5 connections) — `app/engine/chartread.py`
+- **pivots()** (4 connections) — `app/engine/chartread.py`
+- **false_breaks()** (4 connections) — `app/engine/chartread.py`
+- **.window()** (4 connections) — `app/engine/chartread.py`
+- **annotate()** (4 connections) — `app/engine/chartread.py`
+- **grade()** (4 connections) — `app/engine/chartread.py`
+- **window_bars()** (3 connections) — `app/engine/chartread.py`
+- **efficiency()** (3 connections) — `app/engine/chartread.py`
+- **cluster_levels()** (3 connections) — `app/engine/chartread.py`
+- **local_swings()** (3 connections) — `app/engine/chartread.py`
+- **structure_state()** (3 connections) — `app/engine/chartread.py`
+- **reconcile()** (3 connections) — `app/engine/chartread.py`
+- **factor_extractors()** (3 connections) — `app/engine/chartread.py`
+- **.__init__()** (1 connections) — `app/engine/chartread.py`
+- *... and 16 more nodes in this community*
 
 ## Relationships
 
-- [Chart Vendor API](Chart_Vendor_API.md) (7 shared connections)
-- [Bias Ladder Engine](Bias_Ladder_Engine.md) (4 shared connections)
-- [Chart Vendor Internals](Chart_Vendor_Internals.md) (4 shared connections)
-- [te](te.md) (2 shared connections)
-- [Chart Vendor Panes](Chart_Vendor_Panes.md) (2 shared connections)
-- [Chart Vendor Rendering](Chart_Vendor_Rendering.md) (1 shared connections)
-- [Manifest & Cost Tests](Manifest_%26_Cost_Tests.md) (1 shared connections)
+- [Chart Vendor Chart API](Chart_Vendor_Chart_API.md) (3 shared connections)
 
 ## Source Files
 
-- `app/static/lightweight-charts.js`
+- `app/engine/chartread.py`
 
 ## Audit Trail
 
-- EXTRACTED: 212 (100%)
-- INFERRED: 1 (0%)
+- EXTRACTED: 151 (99%)
+- INFERRED: 2 (1%)
 - AMBIGUOUS: 0 (0%)
 
 ---

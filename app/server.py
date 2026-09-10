@@ -907,6 +907,36 @@ def _performance_dimensions(journal: list[dict], baseline: dict) -> dict:
                 ("strategy", "symbol", "regime", "horizon", "direction", "order_type")}}
 
 
+def _daily_budget(journal: list, equity: Decimal, gates: dict) -> dict:
+    """THE authority on today's loss against the daily halt, for every
+    surface that shows it.
+
+    Until 2026-09-10 the Command risk-budget panel re-derived this in the
+    browser from LOCAL midnight and CURRENT equity, while /api/operations
+    derived it from UTC midnight and day-OPEN equity — the engine's basis
+    (risk.py settles the halt on day_start_equity in the UTC day). Two
+    numbers for one cap: after a losing morning in a negative-offset
+    timezone the panel could read "nothing lost today" while the governor
+    was one trade from halting. Rule 9: the UI reads this; it does not
+    compute it.
+    """
+    utc_day_start = int(time.time()) // 86_400 * 86_400
+    today_pnl = sum((Decimal(str(row.get("pnl_usd") or 0))
+                     for row in journal
+                     if int(row.get("ts") or 0) >= utc_day_start), Decimal(0))
+    day_open_equity = equity - today_pnl
+    budget = day_open_equity * gates["daily_loss_limit_pct"]
+    remaining = max(Decimal(0), budget + min(Decimal(0), today_pnl))
+    q = Decimal("0.01")
+    return {"day_start_ts": utc_day_start,
+            "day_open_equity_usd": str(day_open_equity.quantize(q)),
+            "today_pnl_usd": str(today_pnl.quantize(q)),
+            "lost_today_usd": str(max(Decimal(0), -today_pnl).quantize(q)),
+            "budget_usd": str(budget.quantize(q)),
+            "remaining_usd": str(remaining.quantize(q)),
+            "limit_r": str(gates["daily_loss_r"])}
+
+
 def _envelope_config(con, eq: float) -> dict:
     """The envelope of the book being DISPLAYED — the paper book — plus the
     dispatch mode's R as separate, labelled information.
@@ -1171,6 +1201,12 @@ def portfolio():
                 "journal": journal,
                 "journal_total": len(journal),
                 "performance_summary": _journal_performance_summary(journal, baseline),
+                # One authority for "today's losses against the halt" — the
+                # risk-budget panel reads this, and /api/operations reports
+                # the same helper's answer. See _daily_budget.
+                "daily_loss": _daily_budget(
+                    journal, Decimal(str(eq)),
+                    risk.gates_for_mode(risk.AutomationMode.PAPER)),
                 "config": _envelope_config(con, eq)}
     finally:
         con.close()
@@ -3110,9 +3146,50 @@ def _scanner_status() -> dict:
         hb = json.loads(HEARTBEAT.read_text(encoding="utf-8"))
         age = max(0, int(time.time() - float(hb["ts"])))
         return {"state": "SCANNING" if age < SCANNER_STALE_S else "STALE",
-                "age_s": age, "stage": hb.get("phase")}
+                "age_s": age, "stage": hb.get("phase"),
+                "pid": hb.get("pid"), "cycles": hb.get("cycles")}
     except (OSError, ValueError, KeyError, TypeError):
-        return {"state": "OFFLINE", "age_s": None, "stage": None}
+        return {"state": "OFFLINE", "age_s": None, "stage": None,
+                "pid": None, "cycles": None}
+
+
+def _pid_alive(pid) -> bool:
+    """Is a process with this id running? The heartbeat's AGE says whether
+    the scanner is busy; only its PID says whether it exists. A scanner in
+    its nap, in an 8 s ntfy post, or in a long import beats nothing for up
+    to a minute or more, and 'STALE' must not be read as 'gone'."""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        SYNCHRONIZE = 0x00100000
+        handle = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+        if not handle:
+            return False
+        try:
+            # A handle opens on a zombie too; WaitForSingleObject with a zero
+            # timeout tells them apart (WAIT_TIMEOUT = 258 means still alive).
+            return ctypes.windll.kernel32.WaitForSingleObject(handle, 0) == 258
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def _scanner_alive(status: dict | None = None) -> bool:
+    """A supervised scanner exists — busy or napping — and must own every
+    cycle. Decided by the heartbeat's pid, never by its age."""
+    status = status or _scanner_status()
+    return status["state"] != "OFFLINE" and _pid_alive(status.get("pid"))
 
 
 @app.get("/api/command")
@@ -3197,13 +3274,8 @@ def operations_read_model():
         _gates = risk.gates_for_mode(risk.AutomationMode.PAPER)
         _dispatch_pct = risk.MODE_RISK_PCT[automation.current(con)[0]]
         total_budget = (equity * _gates["max_total_open_risk_pct"])
-        utc_day_start = int(time.time()) // 86_400 * 86_400
-        today_pnl = sum((Decimal(str(row.get("pnl_usd") or 0))
-                         for row in pf.get("journal", [])
-                         if int(row.get("ts") or 0) >= utc_day_start), Decimal(0))
-        day_open_equity = equity - today_pnl
-        daily_budget = day_open_equity * _gates["daily_loss_limit_pct"]
-        daily_remaining = max(Decimal(0), daily_budget + min(Decimal(0), today_pnl))
+        daily = _daily_budget(pf.get("journal", []), equity, _gates)
+        daily_remaining = Decimal(daily["remaining_usd"])
         account = {
                 "equity": str(equity.quantize(Decimal("0.01"))),
                 "risk_per_trade_pct": str(_gates["risk_pct"] * 100),
@@ -3765,9 +3837,22 @@ def adopt_position(payload: dict):
                 note=str(payload.get("note") or ""))
         except manual.IntentRejected as exc:
             raise HTTPException(400, str(exc))
-        manual.run(con, pos["symbol"], pos["tf"],
-                   importer.TF_SECONDS[pos["tf"]])
         from engine.runlog import get_logger
+        # The adoption is on the book once adopt_position returns — its commit
+        # has happened. A resolver failure after that point must not turn into
+        # a 500, because the ticket would then report a refusal while the
+        # record says adopted, and the operator would adopt twice or trust
+        # the wrong one. Resolve if we can; say so if we cannot.
+        resolver_error = None
+        try:
+            manual.run(con, pos["symbol"], pos["tf"],
+                       importer.TF_SECONDS[pos["tf"]])
+        except Exception as exc:
+            resolver_error = f"{type(exc).__name__}: {exc}"
+            get_logger().warning(
+                f"OPERATOR ADOPTED {pos['symbol']} {pos['tf']} but the first "
+                f"resolve failed ({resolver_error}); the scanner's next cycle "
+                f"resolves it")
         get_logger().info(
             f"OPERATOR ADOPTED {pos['symbol']} {pos['tf']} — sl {out['sl']} "
             f"tp {out['tp']}"
@@ -3775,7 +3860,8 @@ def adopt_position(payload: dict):
             + ("".join(f" scale={r['fraction']}@{r['price']}"
                        for r in (out.get("partials") or [])))
             + f"; engine simulation of {sid} continues on its own plan")
-        return {"ok": True, "adopted": out}
+        return {"ok": True, "adopted": out,
+                **({"resolver_error": resolver_error} if resolver_error else {})}
     finally:
         con.close()
 
@@ -3939,6 +4025,10 @@ def manual_live():
         return {"version": manual.MANUAL_VERSION, "open": rows,
                 "n_pending": sum(1 for r in rows if r["state"] == "PENDING"),
                 "n_open": sum(1 for r in rows if r["state"] == "OPEN"),
+                # Orders whose market could not be resolved this pass. They
+                # are on the book and in `open`, and they are counted as what
+                # they are rather than folded into either figure above.
+                "n_unresolved": sum(1 for r in rows if r["state"] == "UNRESOLVED"),
                 "pending_risk_usd": str(pending_risk),
                 "open_risk_usd": str(open_risk),
                 "measured_at": int(time.time())}
@@ -4093,14 +4183,87 @@ def reset_baseline(payload: dict):
         con.close()
 
 
+# PRAGMA quick_check walks every page. On the 7.3 GB store it took 27.3 s
+# (measured 2026-09-10), longer than the Diagnose wizard's 25 s client
+# timeout, so the one tool that reads this field timed out on it — and every
+# health poll pinned a read snapshot for those 27 s, which is exactly the
+# window the scanner's WAL checkpoint cannot run in (see store.connect). The
+# answer does not change between polls; it is cached for INTEGRITY_TTL_S and
+# refreshed off the request thread once the store is big enough to hurt.
+INTEGRITY_TTL_S = 6 * 3600
+INTEGRITY_SYNC_MAX_BYTES = 256 * 1024 * 1024
+_integrity = {"value": None, "checked_at": 0, "running": False}
+_integrity_lock = threading.Lock()
+
+
+def _quick_check_on(con) -> str:
+    import time as _t
+    try:
+        value = con.execute("PRAGMA quick_check").fetchone()[0]
+    except Exception as exc:
+        value = f"check failed: {type(exc).__name__}: {exc}"
+    with _integrity_lock:
+        _integrity.update(value=value, checked_at=int(_t.time()), running=False)
+    return value
+
+
+def _quick_check_in_background(db_path):
+    # Its OWN connection: the request's one is closed when the request ends.
+    # Everything inside the try, connect() included: it runs the schema DDL
+    # and can raise on a busy store, and a raise that skipped the reset would
+    # leave `running` True forever — every later poll "checking", reported
+    # OK, with no line in the log.
+    import time as _t
+    con = None
+    try:
+        con = store.connect(db_path)
+        _quick_check_on(con)
+    except Exception as exc:
+        with _integrity_lock:
+            _integrity.update(value=f"check failed: {type(exc).__name__}: {exc}",
+                              checked_at=int(_t.time()), running=False)
+        from engine.runlog import get_logger
+        get_logger().warning(f"integrity check could not run: {exc}")
+    finally:
+        if con is not None:
+            con.close()
+
+
+def db_integrity(con, deep: bool = False) -> str:
+    """quick_check's verdict, cached. `deep=True` forces a fresh run on the
+    caller's connection. On a store small enough to check in well under the
+    client timeout the check runs on the caller's connection too; on a big
+    one it runs once in the background and this returns 'checking' until it
+    lands — reported as what it is, never as 'ok'."""
+    import time as _t
+    with _integrity_lock:
+        fresh = (_integrity["value"] is not None
+                 and _t.time() - _integrity["checked_at"] < INTEGRITY_TTL_S)
+        if fresh and not deep:
+            return _integrity["value"]
+        try:
+            small = store.DB_PATH.stat().st_size <= INTEGRITY_SYNC_MAX_BYTES
+        except OSError:
+            small = True
+        if not (deep or small):
+            if not _integrity["running"]:
+                _integrity["running"] = True
+                threading.Thread(target=_quick_check_in_background,
+                                 args=(store.DB_PATH,), daemon=True).start()
+            return _integrity["value"] or "checking"
+        _integrity["running"] = True
+    return _quick_check_on(con)
+
+
 @app.get("/api/health")
-def health():
-    """Operational health is explicit; the UI must not infer it from silence."""
+def health(deep: bool = Query(False)):
+    """Operational health is explicit; the UI must not infer it from silence.
+    `?deep=1` forces a fresh integrity check on the request thread."""
     import time as _t
     now = int(_t.time())
     con = store.connect()
     try:
-        integrity = con.execute("PRAGMA quick_check").fetchone()[0]
+        integrity = db_integrity(con, deep=deep)
         rows = con.execute(
             "SELECT symbol, tf, MAX(open_ts) FROM candles GROUP BY symbol, tf"
         ).fetchall()
@@ -4145,9 +4308,14 @@ def health():
         quarantined = con.execute(
             "SELECT COUNT(*), COALESCE(SUM(n_gaps),0) FROM import_log "
             "WHERE range_start < ?", (importer.PRE_2000,)).fetchone()
-        return {"status": "OK" if integrity == "ok" and not stale_maintained
-                          else "DEGRADED",
-                "database": integrity, "bad_candles_rejected": bad,
+        # 'checking' is unknown, not failed: the first poll after a boot must
+        # not paint the chip amber for a verdict nobody has reached yet. The
+        # field itself says 'checking', so nothing is hidden.
+        return {"status": "OK" if integrity in ("ok", "checking")
+                          and not stale_maintained else "DEGRADED",
+                "database": integrity,
+                "database_checked_at": _integrity["checked_at"] or None,
+                "bad_candles_rejected": bad,
                 "gaps_logged": gaps,
                 "quarantined_gap_rows": quarantined[0],
                 "quarantined_gaps": quarantined[1],
@@ -4306,7 +4474,27 @@ def scan_state():
     The console was the bloat; the scan state is not, and it needed its own
     door rather than dying with the room it happened to be standing in.
     """
-    return dict(_scan)
+    state = dict(_scan)
+    # A woken scanner reports back through its heartbeat: the pass is done
+    # when its cycle counter has moved on from the value at the press. The
+    # server never ran anything, so this is the only place it can learn that.
+    woken = state.pop("woken_cycles", None)
+    if state.get("running") and woken is not None:
+        hb = _scanner_status()
+        cycles = hb.get("cycles")
+        if not _scanner_alive(hb):
+            state.update(running=False,
+                         detail="scanner went away before it could run the pass")
+            _scan.update(running=False, woken_cycles=None, detail=state["detail"])
+        elif cycles is not None and cycles > woken:
+            state.update(running=False,
+                         detail=f"pass complete (cycle {cycles})")
+            _scan.update(running=False, woken_cycles=None, detail=state["detail"])
+        elif time.time() - float(state.get("started_at") or 0) > 1800:
+            state.update(running=False,
+                         detail="no cycle completed in 30 minutes after the press")
+            _scan.update(running=False, woken_cycles=None, detail=state["detail"])
+    return state
 
 
 @app.get("/api/console")
@@ -4352,11 +4540,47 @@ def console(offset: int = -1, limit: int = Query(400, ge=1, le=2000)):
 
 @app.post("/api/scan", status_code=202)
 def scan_now(response: Response):
-    """Run one real scan cycle on demand — the same code path the live loop
-    runs, so a manual scan can never diverge from an automatic one. Facts are
-    content-hashed and idempotent, so overlapping with the scanner's own tick
-    duplicates nothing."""
+    """Ask for a scan cycle now.
+
+    While the supervised scanner is alive this WAKES it and runs nothing here.
+    The old behaviour — a second live.cycle() inside this process, on its own
+    clock — was not harmless: facts are content-hashed, but the quality verdict
+    is not. On 2026-09-10 00:21 the cockpit-run cycle imported past the
+    scanner's candle boundary, judged 37 healthy 5m series DEVELOPING against
+    the scanner's older clock, persisted a BLOCKED verdict into quality_runs
+    as if the scanner had said it (CLAUDE.md: the scanner-recorded report is
+    the operator verdict; nothing else may write one), and its writes collided
+    with the scanner's for a 46-lock storm that aborted the next cycle too.
+
+    Only when no scanner is running (a bare `uvicorn server:app` for a dev
+    check) does this process run the cycle itself — then it IS the only
+    writer, and the verdict it records is the only one there is.
+    """
     import time as _t
+    import live
+    scanner = _scanner_status()
+    # Alive means the PROCESS exists, not that it beat recently. A scanner
+    # napping, posting to ntfy or deep in an import reads STALE for a minute
+    # or more, and running a cycle here on that reading is exactly the
+    # concurrent-cycle fault this branch exists to prevent.
+    if _scanner_alive(scanner):
+        try:
+            live.WAKE_REQUEST.parent.mkdir(parents=True, exist_ok=True)
+            live.WAKE_REQUEST.touch()
+        except OSError as exc:
+            response.status_code = 503
+            return {"ok": False, "detail": f"could not signal the scanner: {exc}"}
+        # `running` stays True until the scanner's cycle counter moves — see
+        # scan_state — so the button's "Scanning…" -> result transition,
+        # which is the only feedback Check-now gives, still happens.
+        with _scan_lock:
+            _scan.update(running=True, started_at=int(_t.time()),
+                         woken_cycles=scanner.get("cycles"),
+                         detail=("scanner woken — it runs the pass after its "
+                                 "current one" if scanner["state"] == "SCANNING"
+                                 and scanner.get("stage") != "idle"
+                                 else "scanner woken — the pass starts now"))
+        return {"ok": True, "detail": _scan["detail"], "ran_here": False}
     with _scan_lock:
         if _scan["running"]:
             response.status_code = 409
@@ -4381,7 +4605,7 @@ def scan_now(response: Response):
             _scan["running"] = False
 
     threading.Thread(target=_run, daemon=True).start()
-    return {"ok": True, "detail": "scan started"}
+    return {"ok": True, "detail": "scan started", "ran_here": True}
 
 
 @app.get("/api/state")

@@ -156,13 +156,20 @@
      Fires immediately with cached data when there is some, so a late-arriving
      subscriber paints from the same payload its neighbours are showing rather
      than triggering a fetch that would give it a different one. */
-  function subscribe(path, fn, everyMs) {
+  function subscribe(path, fn, everyMs, opts) {
     const e = entry(path);
     e.subs.add(fn);
     if (everyMs) {
       e.everyMs = e.everyMs ? Math.min(e.everyMs, everyMs) : everyMs;
       if (!e.nextAt) e.nextAt = Date.now() + e.everyMs;
     }
+    /* `opts.when` — poll only while it returns true. shell.js gates its own
+       loaders by the surface on screen; a module subscribing here had no way
+       to say the same, so funnel.js refetched 500 rows of telemetry every
+       30 s on every surface, including an idle Command (~32 GETs a minute
+       measured 2026-09-10). The predicate is checked at fetch time, so a
+       surface coming back gets the next tick, not a stale cadence. */
+    if (opts && typeof opts.when === 'function') e.when = opts.when;
     if (e.data !== undefined || e.err) {
       try { fn(e.data, e.err); } catch (err) { console.error('[ssdata]', err); }
     } else if (marketAllows(path)) {
@@ -186,6 +193,10 @@
                                : !path.startsWith('/api/stocks/');
   }
 
+  /* Declare that what get(path) returns is ON SCREEN, so health() reports its
+     failures and its age. The poller calls this; a one-off reader does not. */
+  function watch(path) { entry(path).watched = true; }
+
   // Force the next read to hit the network — for after a POST changes state.
   function invalidate(path) {
     if (path == null) { for (const e of entries.values()) e.at = 0; return; }
@@ -208,6 +219,7 @@
     const now = Date.now();
     for (const e of entries.values()) {
       if (!e.everyMs || !e.subs.size || e.inflight || !marketAllows(e.path)) continue;
+      if (e.when && !e.when()) continue;
       if (e.nextAt && now >= e.nextAt) fetchNow(e.path).catch(() => {});
     }
   }, TICK);
@@ -248,7 +260,14 @@
     let staleSince = null;      // oldest good among the paths NOT refreshing
     let neverLoaded = false;
     for (const e of entries.values()) {
-      if (!e.subs.size) continue;             // nothing on screen depends on it
+      /* Watched = subscribed, or declared watched by its poller. shell.js
+         reads through get(), never subscribe(), so counting subscriptions
+         alone left every one of its paths unwatched: a partial server failure
+         reported "Nothing on this page has loaded successfully yet" over a
+         screen full of numbers, with their age unknown. A one-off get() — a
+         chart browsed away from — still does not alarm; the poller has to
+         say the path is on screen (watch()). */
+      if (!e.subs.size && !e.watched) continue;
       watched++;
       if (e.at && (lastGoodAt === null || e.at > lastGoodAt)) lastGoodAt = e.at;
       if (!e.err) continue;
@@ -267,7 +286,7 @@
   }
 
   window.SSData = {
-    get, subscribe, invalidate, refresh, health,
+    get, subscribe, watch, invalidate, refresh, health,
     // introspection, for tests and for the request-rate work in the audit
     _stats: () => [...entries.values()].map(e =>
       ({path: e.path, subs: e.subs.size, everyMs: e.everyMs, ageMs: e.at ? Date.now() - e.at : null})),

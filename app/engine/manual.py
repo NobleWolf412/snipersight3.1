@@ -939,9 +939,25 @@ def live(con) -> list[dict]:
         tf_seconds = _tf_seconds_of(tf)
         try:
             run(con, symbol, tf, tf_seconds)
-        except Exception:
+        except Exception as exc:
             # One unreadable market must not blank the whole panel. The rows
-            # that CAN be resolved are still worth showing.
+            # that CAN be resolved are still worth showing — but the ones
+            # that cannot must not VANISH. This is the one surface built to
+            # answer "what orders do I have out?", and a silent `continue`
+            # made an armed order disappear from it whenever its resolver
+            # threw, with nothing in the payload or the log. Loud-fallback
+            # rule: the row stays, marked as unresolved, and the log says why.
+            from .runlog import get_logger
+            get_logger().warning(
+                f"manual.live: {symbol} {tf} could not be resolved "
+                f"({type(exc).__name__}: {exc}); reporting its stored state")
+            for p in unresolved(con).get((symbol, tf), []):
+                out.append({"symbol": symbol, "tf": tf, "tf_seconds": tf_seconds,
+                            **{k: p.get(k) for k in ("intent_id", "direction",
+                                                     "entry", "sl", "tp",
+                                                     "armed_at", "risk_usd")},
+                            "state": "UNRESOLVED",
+                            "resolver_error": f"{type(exc).__name__}: {exc}"})
             continue
         for row in status(con, symbol, tf, tf_seconds):
             out.append({"symbol": symbol, "tf": tf,
