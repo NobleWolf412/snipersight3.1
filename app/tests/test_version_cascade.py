@@ -53,7 +53,9 @@ OPERATIONAL_EXPECTED = {
     # v0.3 repairs missing execution work. It leaves every engine's own rules
     # alone — research versions deliberately stay unchanged — but a pinned exit
     # now emits cooldowns, which risk reads, so the bump is not cosmetic.
-    "live": "live-v0.3-draft",
+    # live-v0.4: the cycle imports the real funding series into its own
+    # table. Durable output grew; nothing reads it yet.
+    "live": "live-v0.4-draft",
     # contracts-v0.4: a RiskDecision states the equity basis its size is a
     # percentage of, and where that figure was read. Nothing converted the
     # ACCOUNT between the paper replay and a dispatched order.
@@ -616,7 +618,12 @@ EXPECTED = {
     "edgestats": "edgestats-v0.4-draft",
     "entrystats": "entrystats-v0.3-draft",
     "factorstats": "factorstats-v0.2-draft",
-    "funding": "funding-v0.1-draft",
+    # funding-v0.2: the settlements are STORED, not just reported on. A rate
+    # fetched at simulate time makes a fact depend on when it was computed;
+    # and Kraken serves a rolling 365-day window, so the history is
+    # perishable. 222,454 settlements imported 2026-09-10, covering 91.5%
+    # of the settled book. Nothing charges from it yet.
+    "funding": "funding-v0.2-draft",
     "achievements": "achievements-v0.1-draft",
     "analyst_context": "analyst-context-v0.2-draft",
     "chart_insight": "chart-insight-v0.1-draft",

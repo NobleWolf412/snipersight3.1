@@ -14,6 +14,7 @@ to see the measurement in the same breath.
 """
 import tempfile
 import unittest
+from unittest import mock
 from decimal import Decimal
 from pathlib import Path
 
@@ -39,6 +40,97 @@ class Accrual(unittest.TestCase):
     def test_three_settlements_a_day_on_phemex(self):
         day = venues.funding_cost_rate("BTCUSDT", Decimal("0.001"), Decimal(24))
         self.assertEqual(day, Decimal("0.003"))
+
+
+class StoredSeries(unittest.TestCase):
+    """funding-v0.2: the settlements live in the store, not in a fetch.
+
+    A rate fetched at simulate time makes a fact depend on WHEN it was
+    computed, which no engine here is allowed to do. Storing it also freezes
+    history the venue is actively losing: Kraken serves a rolling 365-day
+    window, so 25 recorded fills are already past it and that becomes 55
+    within six months.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.con = store.connect(Path(self.tmp.name) / "f.db")
+        self.rows = [(1_000_000, Decimal("0.0001")),
+                     (1_003_600, Decimal("-0.0002")),   # negative: shorts are paid
+                     (1_007_200, Decimal("0"))]         # zero: a real reading
+
+    def tearDown(self):
+        self.con.close()
+        self.tmp.cleanup()
+
+    def _store(self, as_of=2_000_000, symbol="PF_XBTUSD"):
+        with mock.patch.object(funding, "history", return_value=self.rows):
+            return funding.store_history(self.con, symbol, as_of=as_of, deep=True)
+
+    def test_it_stores_what_the_venue_served_and_reads_it_back(self):
+        out = self._store()
+        self.assertEqual(out["stored"], 3)
+        self.assertEqual(funding.series(self.con, "PF_XBTUSD"), self.rows)
+        self.assertEqual(funding.coverage(self.con, "PF_XBTUSD"),
+                         (1_000_000, 1_007_200))
+
+    def test_zero_and_negative_rates_survive_the_round_trip(self):
+        """They are the reason this is not a `candles` row: quality enforces
+        low > 0 on every candle at rung HALT, and 53% of PF_SOLUSD
+        settlements are negative."""
+        self._store()
+        got = dict(funding.series(self.con, "PF_XBTUSD"))
+        self.assertEqual(got[1_003_600], Decimal("-0.0002"))
+        self.assertEqual(got[1_007_200], Decimal("0"))
+
+    def test_re_import_is_idempotent(self):
+        self._store(); self._store()
+        self.assertEqual(
+            self.con.execute("SELECT COUNT(*) FROM funding_rates").fetchone()[0], 3)
+
+    def test_a_settled_rate_is_never_rewritten(self):
+        """INSERT OR IGNORE, not REPLACE. A settlement already past is final;
+        silently restating one would re-price a trade the exec book has
+        already settled, with no version to mark it."""
+        self._store()
+        self.rows = [(1_000_000, Decimal("999"))]
+        out = self._store()
+        self.assertEqual(out["conflicts"], 1, "a changed rate must be noticed")
+        self.assertEqual(dict(funding.series(self.con, "PF_XBTUSD"))[1_000_000],
+                         Decimal("0.0001"), "the stored value must win")
+
+    def test_nothing_later_than_the_cycle_clock_is_stored(self):
+        """The same rule the candle importer obeys, for the same reason."""
+        self._store(as_of=1_003_600)
+        self.assertEqual(funding.coverage(self.con, "PF_XBTUSD")[1], 1_003_600)
+
+    def test_the_interval_is_observed_not_taken_from_the_venue_record(self):
+        """`venues` says 8-hourly for every Phemex market and is wrong for
+        ENAUSDT and TAOUSDT, which quote 4-hourly."""
+        with mock.patch.object(funding, "history", return_value=[
+                (0, Decimal("0.0001")), (14400, Decimal("0.0001")),
+                (28800, Decimal("0.0001"))]):
+            out = funding.store_history(self.con, "TAOUSDT", as_of=99_999, deep=True)
+        self.assertEqual(out["interval"], 14400)
+        self.assertEqual(venues.venue_for("TAOUSDT").funding_settlements_per_day, 3,
+                         "the venue constant is still 8-hourly — that is the point")
+
+    def test_spot_and_reference_keys_are_refused_by_asking_venues(self):
+        self.assertIn("no funding",
+                      funding.store_history(self.con, "BTC-USD", as_of=1)["skipped"])
+        self.assertIn("reference",
+                      funding.store_history(self.con, "BICOUSDT@binance-spot",
+                                            as_of=1)["skipped"])
+        self.assertEqual(
+            self.con.execute("SELECT COUNT(*) FROM funding_rates").fetchone()[0], 0)
+
+    def test_the_stored_series_is_the_shape_charge_already_takes(self):
+        """One function prices a hold, not two implementations of one rule."""
+        self._store()
+        out = funding.charge(funding.series(self.con, "PF_XBTUSD"), "SHORT",
+                             1_000_000, Decimal(2), Decimal(100))
+        self.assertEqual(out["settlements"], 2)
+        self.assertEqual(out["rate_sum"], Decimal("0.0001"))   # -(0.0001) + 0.0002
 
 
 class ChargedInSimulation(unittest.TestCase):

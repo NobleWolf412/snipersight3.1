@@ -65,10 +65,22 @@ import urllib.request
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from . import edgestats, venues
-from .execsim import EXEC_VERSION, FUNDING_RATE_PER_SETTLEMENT
+from . import venues
 
-FUNDING_VERSION = "funding-v0.1-draft"
+FUNDING_VERSION = "funding-v0.2-draft"
+# v0.2: the series is STORED, not just reported on. `execsim` charged a flat
+# modelled 0.0001 per settlement; measured against the venues' own published
+# history on 2026-09-10 that overcharged the recorded book by 42.05 R across
+# 732 trades — 20x, and more than half the book's entire loss. A rate fetched
+# at simulate time would make a fact depend on WHEN it was computed, so it is
+# imported and stored like a candle and the engines read the store.
+#
+# Time-sensitive, and that is the venue's doing rather than anyone's mistake:
+# Kraken serves a ROLLING 365-day window. 25 recorded fills are already older
+# than it and that becomes 55 within six months. Every day it forgets a day.
+#
+# `edgestats` and `execsim` are imported lazily below. Both import this module
+# (or will), and at module scope that is a cycle.
 
 _KRAKEN = "https://futures.kraken.com/derivatives/api/v4/historicalfundingrates"
 _PHEMEX = "https://api.phemex.com/api-data/public/data/funding-rate-history"
@@ -81,10 +93,23 @@ def _now() -> int:
     return int(time.time())
 
 
+def _modelled_rate():
+    from .execsim import FUNDING_RATE_PER_SETTLEMENT   # lazy: import cycle
+    return FUNDING_RATE_PER_SETTLEMENT
+
+
 def _get(url: str) -> dict:
+    """`parse_float=Decimal`, for the reason importer._fetch gives.
+
+    A rate arrives as JSON `3.4202833333333e-05`. Parsed as a float and then
+    handed to `Decimal(str(...))` it carries the float's artefact into a
+    number that gets multiplied by a price — a float in the price path, which
+    is rule 5. This was harmless while the module only reported; it stops
+    being harmless the moment the series is stored and charged from.
+    """
     with urllib.request.urlopen(
             urllib.request.Request(url, headers=_UA), timeout=_TIMEOUT) as r:
-        return json.loads(r.read().decode())
+        return json.loads(r.read().decode(), parse_float=Decimal)
 
 
 def kraken_history(symbol: str) -> list[tuple[int, Decimal]]:
@@ -177,6 +202,97 @@ def history(symbol: str, since_ts: int | None = None) -> list[tuple[int, Decimal
     raise ValueError(f"no funding source wired for venue {v.key!r} ({symbol})")
 
 
+def _observed_interval(rows: list[tuple[int, Decimal]], symbol: str) -> int:
+    """Seconds between settlements, READ OFF the series.
+
+    Not taken from `venues.funding_settlements_per_day`, which is a
+    per-VENUE constant and is wrong for at least two markets: Phemex quotes
+    ENAUSDT and TAOUSDT 4-hourly while the venue record says 8. Storing the
+    observed figure means the series can price those correctly even while
+    that constant is still wrong elsewhere.
+    """
+    diffs = [b - a for (a, _), (b, _) in zip(rows, rows[1:]) if b > a]
+    if diffs:
+        return min(diffs, key=lambda d: (-diffs.count(d), d))
+    per_day = venues.venue_for(symbol).funding_settlements_per_day
+    return int(24 * 3600 / per_day) if per_day else 0
+
+
+def store_history(con, symbol: str, *, as_of: int, deep: bool = False) -> dict:
+    """Import this symbol's real funding settlements. Returns what it did.
+
+    Append-only and idempotent: INSERT OR IGNORE, never REPLACE. A settlement
+    already past is final, and silently rewriting one would re-price a trade
+    the exec book has already settled with no version to mark it. A venue
+    serving a DIFFERENT rate for a stored settlement is therefore kept as a
+    loud warning rather than applied.
+
+    `as_of` is the cycle's clock snapshot and nothing later than it is
+    stored — the same rule the candle importer obeys, for the same reason.
+    """
+    from .runlog import get_logger
+    if venues.is_reference_key(symbol):
+        return {"stored": 0, "skipped": "reference key"}
+    try:
+        v = venues.venue_for(symbol)
+    except ValueError as exc:
+        return {"stored": 0, "skipped": f"no venue: {exc}"}
+    if not v.funding_settlements_per_day:
+        return {"stored": 0, "skipped": "venue charges no funding"}
+
+    have_from, have_to = coverage(con, symbol)
+    # Incremental once the tail is in: Kraken serves its whole rolling window
+    # on every call regardless, and Phemex pages BACKWARDS until it reaches
+    # `since_ts`, so passing the newest stored settlement stops it after one
+    # page instead of forty. A deep pass asks for everything.
+    since = None if (deep or have_to is None) else have_to
+    rows = [(ts, r) for ts, r in history(symbol, since_ts=since) if ts <= as_of]
+    if not rows:
+        return {"stored": 0, "skipped": "venue served nothing"}
+
+    interval = _observed_interval(rows, symbol)
+    existing = {ts: Decimal(r) for ts, r in con.execute(
+        "SELECT settlement_ts, rate FROM funding_rates WHERE symbol=? "
+        "AND settlement_ts>=? AND settlement_ts<=?",
+        (symbol, rows[0][0], rows[-1][0]))}
+    changed = [(ts, existing[ts], r) for ts, r in rows
+               if ts in existing and existing[ts] != r]
+    for ts, was, now_ in changed[:3]:
+        get_logger().warning(
+            f"funding: {symbol} settlement {ts} was stored as {was} and the "
+            f"venue now serves {now_} — KEEPING the stored value; a settled "
+            f"rate is final and rewriting it would re-price settled trades")
+    imported_at = int(time.time())
+    con.executemany(
+        "INSERT OR IGNORE INTO funding_rates "
+        "(symbol, settlement_ts, rate, interval_seconds, source, imported_at) "
+        "VALUES (?,?,?,?,?,?)",
+        [(symbol, ts, format(r, "f"), interval, v.key, imported_at)
+         for ts, r in rows])
+    con.commit()
+    after_from, after_to = coverage(con, symbol)
+    return {"stored": len(rows), "new": con.total_changes, "interval": interval,
+            "conflicts": len(changed), "from": after_from, "to": after_to,
+            "grew_by": 0 if have_from is None else max(0, (have_from or 0) - (after_from or 0))}
+
+
+def coverage(con, symbol: str) -> tuple[int | None, int | None]:
+    """(oldest, newest) stored settlement for this symbol, or (None, None)."""
+    row = con.execute(
+        "SELECT MIN(settlement_ts), MAX(settlement_ts) FROM funding_rates "
+        "WHERE symbol=?", (symbol,)).fetchone()
+    return (row[0], row[1]) if row else (None, None)
+
+
+def series(con, symbol: str) -> list[tuple[int, Decimal]]:
+    """The stored settlements for one symbol, oldest first — the shape
+    `charge()` takes, so the engine and this module price a hold with one
+    function rather than two implementations of one rule."""
+    return [(ts, Decimal(r)) for ts, r in con.execute(
+        "SELECT settlement_ts, rate FROM funding_rates WHERE symbol=? "
+        "ORDER BY settlement_ts", (symbol,))]
+
+
 def charge(series: list[tuple[int, Decimal]], direction: str,
            start_ts: int, holding_hours: Decimal,
            entry: Decimal) -> dict:
@@ -215,6 +331,8 @@ def report(con, *, algo_version: str | None = None,
     store — one authority for every number this shares with the edge report
     (§6), so the two can be compared line for line.
     """
+    from . import edgestats                     # lazy: see the version note
+    from .execsim import EXEC_VERSION
     algo_version = algo_version or EXEC_VERSION
     trades, counts, warnings = edgestats.load_trades(
         con, algo_version=algo_version, symbol=symbol)
@@ -292,7 +410,7 @@ def report(con, *, algo_version: str | None = None,
     return {
         "funding_version": FUNDING_VERSION,
         "algo_version": algo_version,
-        "modelled_rate_per_settlement": str(FUNDING_RATE_PER_SETTLEMENT),
+        "modelled_rate_per_settlement": str(_modelled_rate()),
         "counts": {**counts, "priced": n, "skipped": len(skipped)},
         "skipped": skipped[:20],
         "warnings": warnings,

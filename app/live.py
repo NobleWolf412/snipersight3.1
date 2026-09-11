@@ -26,10 +26,14 @@ from pathlib import Path
 import notify
 from engine import (automation, autotrader, broker_factory, execution, positions, store,
                     importer, aggregator, execsim, risk, universe, ingest, quality,
-                    listings, marketdata, pipeline, venues, cooldowns)
+                    listings, marketdata, pipeline, venues, cooldowns, funding)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.3-draft"
+LIVE_VERSION = "live-v0.4-draft"
+# v0.4: the cycle imports real funding settlements into `funding_rates`,
+# on the same clock snapshot as the candles. The cycle's durable output
+# grew a table, which is what earned the v0.2 bump too. Nothing reads the
+# series yet — the charge is a separate, deliberate act (see funding.py).
 # v0.3: recover baseline plans missing their current execution generation,
 # including off-universe markets. UNI's older-version close was invisible to
 # the order-only recovery pass and risk kept reserving the sole position slot.
@@ -487,6 +491,18 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
                     new_candles += r["candles"]
                     if r["gaps"]:
                         log.warning(f"live import {sym} {tf}: {r['gaps']} gaps")
+            # Real funding settlements, on the SAME clock snapshot. Stored
+            # rather than fetched at simulate time, because a fact that
+            # depends on when it was computed is not replayable — and
+            # urgently, because Kraken serves a rolling 365-day window and
+            # forgets a day every day. Incremental once the tail is in; the
+            # first sight of a symbol pulls its whole history. Spot, and the
+            # reference keys, are refused inside `store_history` by asking
+            # `venues` rather than re-deciding here.
+            f = funding.store_history(con, sym, as_of=now)
+            if f.get("conflicts"):
+                log.warning(f"funding {sym}: {f['conflicts']} settlement(s) "
+                            f"re-served with a different rate — stored values kept")
         except Exception as exc:
             log.warning(f"import skipped {sym}: {type(exc).__name__} {exc}")
             continue

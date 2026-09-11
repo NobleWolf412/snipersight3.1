@@ -36,6 +36,31 @@ CREATE TABLE IF NOT EXISTS candles (
     PRIMARY KEY (symbol, tf, open_ts)
 );
 
+-- Real funding settlements, as the venue published them. A raw venue time
+-- series, so it lives beside `candles` rather than in `facts`: it carries no
+-- algo_version because nothing derived it, and a fact would need a `tf` that
+-- has no meaning here (the settlement interval is a property of the SYMBOL —
+-- Phemex quotes 8-hourly on most markets and 4-hourly on ENAUSDT/TAOUSDT).
+--
+-- It cannot live in `candles` either, and not for tidiness: quality enforces
+-- `low > 0` on every candle row at rung HALT, and a funding rate is regularly
+-- zero and negative — 53% of PF_SOLUSD settlements are negative. The first
+-- row would halt the store.
+--
+-- Written with INSERT OR IGNORE, never REPLACE. A re-served candle is
+-- identical by construction; a settlement that is already past is final, and
+-- silently rewriting one would re-price a trade the exec book has already
+-- settled, with no version to mark it.
+CREATE TABLE IF NOT EXISTS funding_rates (
+    symbol           TEXT NOT NULL,
+    settlement_ts    INTEGER NOT NULL,   -- settlement moment, epoch seconds UTC
+    rate             TEXT NOT NULL,      -- signed, per settlement, as TEXT
+    interval_seconds INTEGER NOT NULL,   -- observed, not assumed from `venues`
+    source           TEXT NOT NULL,      -- 'kraken-perp' | 'phemex-perp'
+    imported_at      INTEGER NOT NULL,
+    PRIMARY KEY (symbol, settlement_ts)
+);
+
 CREATE TABLE IF NOT EXISTS facts (
     id            INTEGER PRIMARY KEY,
     symbol        TEXT NOT NULL,
@@ -286,6 +311,24 @@ def _migrate(con: sqlite3.Connection) -> None:
         con.execute(
             "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
             (7, "quality_runs_full_report"))
+    if 8 not in applied:
+        # REAL FUNDING, STORED. `execsim` charged a flat modelled 0.0001 per
+        # settlement; measured against the venues' published history on
+        # 2026-09-10 that overcharged the recorded book by 42.05 R across 732
+        # trades — 20x, and more than half the book's entire loss. The rate
+        # cannot be fetched at simulate time without making facts depend on
+        # when they were computed, so it is imported and stored like candles.
+        #
+        # URGENT for a reason that is nobody's fault: Kraken serves a ROLLING
+        # 365-day window. 25 recorded fills are already older than it, and
+        # that grows to 55 within six months. Every day the venue forgets a
+        # day. The table exists so the history stops being perishable.
+        #
+        # DDL lives in SCHEMA (CREATE TABLE IF NOT EXISTS), so this is a
+        # marker — the same shape as migrations 2, 3 and 5.
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (8, "funding_rates_series"))
     con.commit()
 
 
