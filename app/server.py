@@ -588,6 +588,107 @@ def _trace_stage(key: str, label: str, status: str, value=None,
             "facts": facts or {}}
 
 
+#: Outbox states, in the order a paper attempt passes through them, with the
+#: plain sentence each one earns. The order is the trace: an attempt that never
+#: reached a state shows that state as "skip", which is what makes "it stopped
+#: here" readable at a glance.
+_PAPER_STEPS = (
+    ("PENDING", "Queued", "the intent exists and is waiting to route"),
+    ("PAPER_ROUTED", "Routed to the paper broker", "the order is resting"),
+    ("PAPER_FILLED", "Filled", "price traded through the entry"),
+    ("PAPER_CLOSED", "Closed", "the position reached a stop, target or timeout"),
+)
+
+#: Terminal refusals. These are not steps an attempt passes THROUGH — reaching
+#: one ends it — so they render as their own final row rather than leaving the
+#: reader to infer a stop from three skips in a line.
+_PAPER_REFUSALS = {
+    "RISK_REJECTED": ("Refused by risk", "the paper account would not fund it"),
+    "HELD_OFF": ("Held", "automation was off when the setup confirmed"),
+    "PAPER_EXPIRED": ("Expired unfilled",
+                      "price never came back to the entry before the window shut"),
+    "SUBMIT_FAILED": ("Refused before the wire", "nothing was sent"),
+}
+
+
+def _paper_trace(con, setup_id: str) -> dict:
+    """What the PAPER BOOK did with this setup, as distinct from the replay.
+
+    The stages above this one are the research simulator's account: it trades
+    everything, including setups risk refused, because a rejected population is
+    how you find out whether the filter helps. This section is the forward
+    book — what was actually queued, routed, filled and closed.
+
+    They are rendered separately and never interleaved, deliberately. Reading
+    one as the other is the mistake that ran through this entire project until
+    2026-09-11, and a single merged timeline would invite it back.
+    """
+    from engine import riskpaper
+    verdict = None
+    for (raw,) in con.execute(
+            "SELECT payload FROM facts WHERE kind=? AND algo_version=? "
+            "ORDER BY confirmed_at, id", (riskpaper.PAPER_RISK_KIND,
+                                          riskpaper.PAPER_RISK_VERSION)):
+        payload = json.loads(raw)
+        if payload.get("setup_id") == setup_id and payload.get("event") == "DECISION":
+            verdict = payload
+    try:
+        intents = con.execute(
+            "SELECT intent_id,state,created_at,updated_at FROM execution_outbox "
+            "WHERE mode='PAPER' AND setup_id=? ORDER BY updated_at, id",
+            (setup_id,)).fetchall()
+    except Exception:
+        intents = []
+    seen = {str(row[1] or "").upper() for row in intents}
+    events: dict[str, dict] = {}
+    position = None
+    if intents:
+        intent_id = intents[-1][0]
+        for event, occurred_at, raw in con.execute(
+                "SELECT event,occurred_at,payload FROM execution_events "
+                "WHERE intent_id=? ORDER BY id", (intent_id,)):
+            events[str(event).upper()] = {"at": occurred_at,
+                                          "payload": json.loads(raw)}
+        seen |= set(events)
+        row = con.execute(
+            "SELECT state,entry,stop,target,exit_price,outcome,r_multiple,"
+            "entry_role,filled_at,closed_at FROM paper_positions "
+            "WHERE intent_id=?", (intent_id,)).fetchone()
+        if row:
+            position = dict(zip(
+                ("state", "entry", "stop", "target", "exit_price", "outcome",
+                 "r_multiple", "entry_role", "filled_at", "closed_at"), row))
+
+    stages = [_trace_stage(
+        "PAPER_RISK", "Paper account approved it",
+        "pass" if verdict and verdict["decision"] != "REJECTED" else (
+            "fail" if verdict else "skip"),
+        value=(f"{verdict['decision']} · {verdict['risk_usd']} at risk"
+               if verdict else None),
+        expected="the paper ledger can fund this size",
+        detail=("; ".join(verdict["reasons"]) if verdict else
+                "the paper book has not ruled on this setup"),
+        facts={"equity_at": (verdict or {}).get("equity_at"),
+               "committed_risk_usd": (verdict or {}).get("committed_risk_usd"),
+               "open_positions": (verdict or {}).get("open_positions"),
+               "basis": (verdict or {}).get("pct_basis")})]
+
+    for state, label, detail in _PAPER_STEPS:
+        reached = state in seen
+        stages.append(_trace_stage(
+            state, label, "pass" if reached else "skip",
+            value=(events.get(state, {}).get("at") if reached else None),
+            detail=detail if reached else "not reached",
+            facts=events.get(state, {}).get("payload") or {}))
+    for state, (label, detail) in _PAPER_REFUSALS.items():
+        if state in seen:
+            stages.append(_trace_stage(
+                state, label, "fail", value=events.get(state, {}).get("at"),
+                detail=detail, facts=events.get(state, {}).get("payload") or {}))
+    return {"domain": "PAPER", "verdict": verdict, "position": position,
+            "intents": len(intents), "stages": stages}
+
+
 @app.get("/api/setup-trace/{setup_id}")
 def setup_trace(setup_id: str):
     """One setup's stage-by-stage journey — "why didn't THIS one fire?".
@@ -815,6 +916,12 @@ def setup_trace(setup_id: str):
 
         return {
             "diagnostic_only": True,
+            # WHOSE ACCOUNT the stages below describe. They have always been
+            # the research replay's — it trades everything, including setups
+            # risk refused — and saying so is the difference between a trace
+            # and a misreading. `paper` carries the forward book separately.
+            "domain": "RESEARCH",
+            "paper": _paper_trace(con, setup_id),
             "setup_id": setup_id,
             "symbol": setup["symbol"], "tf": setup["tf"],
             "market_time": setup["market_time"],

@@ -129,7 +129,7 @@ class TheLedger(unittest.TestCase):
         _intent(con, "i-2", "s-1|ADD", Decimal("100"))
         _position(con, "i-2", state="CLOSED", closed_at=T0, r="-1.0")
         snap = paperbook.snapshot(con)
-        self.assertEqual(sum(snap["losses_by_day_side"].values()), 1)
+        self.assertEqual(sum(snap["side_losses"].values()), 1)
 
     def test_the_daily_loss_limit_halts_that_day_only(self):
         con = _con(self)

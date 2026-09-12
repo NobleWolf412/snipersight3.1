@@ -162,7 +162,10 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
     peak = opening
     realised_by_day: dict[str, Decimal] = {}
     day_start_equity: dict[str, Decimal] = {}
-    losses_by_day_side: dict[tuple, int] = {}
+    #: Named `side_losses` to match `risk.decide`'s account contract exactly.
+    #: One name for one thing: a snapshot key that has to be translated on the
+    #: way into the rules is a rename waiting to be got wrong.
+    side_losses: dict[tuple, int] = {}
     halted_days: set[str] = set()
     drawdown: dict | None = None
     dd_limit = Decimal(str(max_drawdown_pct or 0)) / Decimal(100)
@@ -182,7 +185,7 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
         if trade["r_multiple"] < 0 and trade["direction"] and \
                 "|ADD" not in trade["setup_id"]:
             key = (day, str(trade["direction"]).upper())
-            losses_by_day_side[key] = losses_by_day_side.get(key, 0) + 1
+            side_losses[key] = side_losses.get(key, 0) + 1
         # Total-drawdown guardrail. The daily halt catches a bad DAY; this
         # catches a bad month that never trips it — a slow bleed of small
         # losses can drain the account without any single day breaching the
@@ -216,7 +219,7 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
         "reservations": len(reserved),
         "realised_by_day": realised_by_day,
         "day_start_equity": day_start_equity,
-        "losses_by_day_side": losses_by_day_side,
+        "side_losses": side_losses,
         "closed_count": len(closed),
         #: Loud, per the fallback rule: intents whose stored plan carried no
         #: `risk_usd` contribute nothing to exposure or P&L, and a reader that
