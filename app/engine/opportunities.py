@@ -118,6 +118,23 @@ def attempt_id_for(setup_id: str, payload: dict) -> str | None:
     value to paper over — an unconfirmed setup is not yet an attempt, and the
     store agrees exactly: `confirmed_bar_ts` is present on every VALIDATED and
     EXPIRED fact and absent from every FORMING, CONFIRMING and CANCELLED one.
+
+    **THIS IS LINEAGE, NOT A KEY — nothing is stored under it.** Read that
+    before building on it. `execution_outbox`, `paper_positions` and
+    `managed_positions` are all keyed on `setup_id`, which names the zone; no
+    table carries an attempt. So this identifies an attempt for a READER, and
+    what actually stops an old finished attempt from suppressing a later
+    retest of the same zone is `_describes_an_earlier_attempt` below — a
+    comparison of the record's timestamp against the setup's own confirmation,
+    pinned by its own test.
+
+    That is sufficient while one attempt means one intent, which is true
+    today. It stops being sufficient the moment several intents can belong to
+    one attempt — partial fills, a resize, a replacement order — because then
+    "which attempt is this record about" can no longer be inferred from time
+    alone. At that point store the attempt on the row and key on it; until
+    then a migration would buy nothing. `test_execution_domains.py` fails if
+    anything starts keying off this before that day comes.
     """
     bar = payload.get("confirmed_bar_ts")
     if bar is None or not setup_id:

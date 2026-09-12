@@ -212,6 +212,55 @@ class AttemptIdentity(unittest.TestCase):
         self.assertIsNone(opportunities.attempt_id_for("BTCUSDT|1H|PULLBACK|z|v",
                                                        {"state": "FORMING"}))
 
+    def test_nothing_keys_off_the_attempt_while_nothing_stores_it(self):
+        """The one real trap left in this design, converted into a failure.
+
+        `attempt_id` is LINEAGE. Every table that holds a domain record —
+        `execution_outbox`, `paper_positions`, `managed_positions` — is keyed
+        on `setup_id`, which names the ZONE. No table carries an attempt. What
+        actually stops an old finished attempt suppressing a later retest is
+        the timestamp comparison in `_describes_an_earlier_attempt`, and that
+        is pinned by its own test above.
+
+        The hazard is a reader who sees an identity function and starts
+        joining, deduping or looking up on it — which would silently match
+        nothing, because nothing was ever written under it.
+
+        If you are here because this failed, the question is: does an attempt
+        now need to be a stored key? It does once several intents can belong
+        to one attempt — partial fills, a resize, a replacement order. If so,
+        add the column, write it at dispatch, and key on it. If not, you are
+        about to look something up that was never written.
+        """
+        import ast
+        import pathlib
+        root = pathlib.Path(opportunities.__file__).resolve().parent
+        sql = {"SELECT", "WHERE", "INSERT", "UPDATE", "JOIN", "DELETE"}
+        offences = []
+        for path in sorted(root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+            for node in ast.walk(tree):
+                # AST rather than text, so prose in a docstring cannot trip
+                # this and a real use cannot hide behind one.
+                if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                    continue
+                text = node.value
+                if "attempt_id" not in text:
+                    continue
+                if any(word in text.upper() for word in sql):
+                    offences.append(
+                        f"{path.name}:{node.lineno}: SQL naming attempt_id")
+                elif len(text) < 40:
+                    # A short bare string is a dict key or column name — the
+                    # lookup shape. Prose is long; keys are not.
+                    offences.append(
+                        f"{path.name}:{node.lineno}: {text!r} used as a key")
+        self.assertEqual(
+            offences, [],
+            "something is keying off the attempt. No table stores it, so a "
+            "lookup matches nothing and fails silently:\n  "
+            + "\n  ".join(offences))
+
     def test_every_candidate_carries_its_attempt(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
