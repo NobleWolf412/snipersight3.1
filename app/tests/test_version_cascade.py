@@ -64,7 +64,9 @@ OPERATIONAL_EXPECTED = {
     # returns an account. Locked anyway, for the reason `agg` is — it sits
     # upstream of every paper sizing decision, so a rule change here changes
     # their output while every version constant they import stays put.
-    "paperbook": "paperbook-v0.1-draft",
+    # paperbook-v0.2: realised money decomposes by outcome class, so a
+    # bad day can be diagnosed rather than only counted.
+    "paperbook": "paperbook-v0.2-draft",
     # contracts-v0.4: a RiskDecision states the equity basis its size is a
     # percentage of, and where that figure was read. Nothing converted the
     # ACCOUNT between the paper replay and a dispatched order.

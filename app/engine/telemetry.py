@@ -19,6 +19,62 @@ NORMAL_OUTCOMES = {
     "WAITING_FOR_FILL", "AWAITING_RISK", "RISK_REJECTED",
 }
 
+#: WHAT KIND OF THING HAPPENED — a SECOND dimension, never a replacement for
+#: the outcome. A trade is `SL` and a `MARKET_LOSS`; a partial fill that later
+#: wins is both a win and an execution event. Collapsing the two is how "we
+#: lost money today" stops being answerable as "and here is which of those was
+#: the market, and which was us".
+#:
+#: The distinction that has to be made explicitly, because it is the one
+#: everybody gets wrong: **a limit that expires unfilled is not a failure.**
+#: It is the strategy declining to chase, working exactly as designed. An
+#: EXECUTION_FAILURE means the machinery broke — a broker rejection, a
+#: transport error, a lost confirmation, a reconciliation mismatch.
+OUTCOME_CLASSES = (
+    "MARKET_WIN",          # a valid trade, correctly executed, that worked
+    "MARKET_LOSS",         # a valid trade, correctly executed; the market went the other way
+    "STRATEGY_REJECTION",  # no trade: a rule refused it, and that rule is the product
+    "NO_FILL",             # no trade: the entry never triggered. NORMAL.
+    "EXECUTION_FAILURE",   # the machinery failed. Someone has to fix something.
+    "SYSTEM_FAILURE",      # the system could not safely decide: stale data, disconnect
+    "IN_FLIGHT",           # not resolved yet — not an outcome at all
+)
+
+#: `failure_code` -> outcome class. Everything `classify_failure` can emit
+#: appears here; an unmapped code is a defect rather than a default, and
+#: `outcome_class` says so out loud instead of guessing.
+_CLASS_BY_CODE = {
+    "WINNER": "MARKET_WIN",
+    "STOP_LOSS": "MARKET_LOSS",
+    "LOSING_EXIT": "MARKET_LOSS",
+    "TIMEOUT_EXIT": "MARKET_LOSS",
+    # The trade was right and the costs ate it. Still the market's arithmetic
+    # rather than a broken machine — but it is the one MARKET_LOSS that names
+    # a lever the operator can actually pull.
+    "COSTS_ERASED_EDGE": "MARKET_LOSS",
+    "ENTRY_NOT_FILLED": "NO_FILL",
+    "RISK_REJECTED": "STRATEGY_REJECTION",
+    "OPEN_POSITION": "IN_FLIGHT",
+    "WAITING_FOR_FILL": "IN_FLIGHT",
+    "AWAITING_RISK": "IN_FLIGHT",
+}
+
+#: Risk reasons that are NOT the strategy declining a trade. A refusal because
+#: the data could not be trusted is a system fault wearing a risk reason, and
+#: counting it as a strategy rejection would credit the strategy with judgement
+#: it never exercised.
+_SYSTEM_REFUSALS = ("DATA_HEALTH_BLOCKED",)
+
+
+def outcome_class(lifecycle: dict, risk: dict | None = None) -> str:
+    """Which KIND of thing happened, beside the outcome of what happened."""
+    code = lifecycle.get("failure_code")
+    if code == "RISK_REJECTED":
+        for reason in (risk or {}).get("reasons") or ():
+            if str(reason).split("(")[0] in _SYSTEM_REFUSALS:
+                return "SYSTEM_FAILURE"
+    return _CLASS_BY_CODE.get(code, "EXECUTION_FAILURE")
+
 
 def classify_failure(risk: dict | None, order: dict | None,
                      execution: dict | None) -> dict:
@@ -88,6 +144,11 @@ def build_record(setup: dict, risk: dict | None = None,
         **setup,
         **lifecycle,
         "classification": "EXPECTED_ATTRITION" if lifecycle["failure_code"] in NORMAL_OUTCOMES else "DEFECT",
+        # The second dimension. `classification` answers "was this expected";
+        # this answers "what KIND of thing was it", and the two are not the
+        # same question — an unfilled limit is both expected and a non-trade,
+        # and a stop-out is both expected and a real loss of money.
+        "outcome_class": outcome_class(lifecycle, risk),
         "stop_distance": round(stop_distance, 10),
         "reward_distance": round(reward_distance, 10),
         "computed_rr": round(reward_distance / stop_distance, 2) if stop_distance else None,

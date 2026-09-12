@@ -48,13 +48,19 @@ def _intent(con, intent_id, setup_id, risk_usd, state="PAPER_ROUTED",
 
 
 def _position(con, intent_id, *, direction="LONG", state="OPEN",
-              filled_at=T0, closed_at=None, r=None, symbol="BTCUSDT"):
+              filled_at=T0, closed_at=None, r=None, symbol="BTCUSDT",
+              outcome=None):
+    # The outcome follows the R unless a test names one. Recording a winner as
+    # an SL is not a shortcut — it is a fixture that lies, and it hid a real
+    # assertion in the outcome-class decomposition until this was fixed.
+    if outcome is None and r is not None:
+        outcome = "TP" if Decimal(str(r)) > 0 else "SL"
     con.execute(
         "INSERT INTO paper_positions(intent_id,symbol,tf,direction,quantity,"
         "entry,stop,target,state,filled_at,closed_at,outcome,exit_price,"
         "r_multiple) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (intent_id, symbol, "1H", direction, "1", "50000", "49000", "52000",
-         state, filled_at, closed_at, None if r is None else "SL", None,
+         state, filled_at, closed_at, outcome, None,
          None if r is None else str(r)))
     con.commit()
 
@@ -155,6 +161,54 @@ class TheLedger(unittest.TestCase):
         self.assertIsNotNone(snap["drawdown"])
         self.assertGreaterEqual(Decimal(snap["drawdown"]["drawdown_pct"]),
                                 Decimal(20))
+
+
+class TheDayDecomposes(unittest.TestCase):
+    """A bad day has to be diagnosable, not only countable.
+
+    "We lost $84 today" is not an answer anyone can act on. "$84 of market
+    losses, nothing broken" and "$84 because two orders were rejected" call
+    for completely different responses.
+    """
+
+    def test_the_parts_sum_to_the_whole_with_no_residual(self):
+        """The property that makes a decomposition worth having. Every closed
+        trade lands in exactly one bucket, so a missing class would show up
+        here as money that went somewhere nobody can name."""
+        con = _con(self)
+        for i, r in enumerate(("-1.0", "2.0", "-1.0", "1.5")):
+            _intent(con, f"i-{i}", f"s-{i}", Decimal("200"))
+            _position(con, f"i-{i}", state="CLOSED",
+                      closed_at=T0 + i * 3600, r=r)
+        snap = paperbook.snapshot(con)
+        parts = sum((b["pnl_usd"] for b in snap["by_outcome_class"].values()),
+                    Decimal(0))
+        whole = snap["equity"] - snap["opening_equity"]
+        self.assertEqual(parts, whole, snap["by_outcome_class"])
+        self.assertEqual(
+            sum(b["trades"] for b in snap["by_outcome_class"].values()),
+            snap["closed_count"])
+
+    def test_wins_and_losses_land_in_different_buckets(self):
+        con = _con(self)
+        _intent(con, "i-1", "s-1", Decimal("200"))
+        _position(con, "i-1", state="CLOSED", closed_at=T0, r="-1.0")
+        _intent(con, "i-2", "s-2", Decimal("200"))
+        _position(con, "i-2", state="CLOSED", closed_at=T0 + 3600, r="2.0")
+        classes = paperbook.snapshot(con)["by_outcome_class"]
+        self.assertIn("MARKET_LOSS", classes)
+        self.assertIn("MARKET_WIN", classes)
+        self.assertEqual(classes["MARKET_LOSS"]["pnl_usd"], Decimal("-200"))
+        self.assertEqual(classes["MARKET_WIN"]["pnl_usd"], Decimal("400"))
+
+    def test_the_classification_is_not_restated_here(self):
+        """One authority. A second copy of the class map is how two surfaces
+        come to disagree about what kind of day it was."""
+        import inspect
+        src = inspect.getsource(paperbook._by_outcome_class)
+        self.assertIn("telemetry.outcome_class", src)
+        self.assertNotIn("MARKET_LOSS", src.split('"""')[2],
+                         "the class names are spelled out here as well")
 
 
 class OneRulebookTwoBooks(unittest.TestCase):

@@ -40,7 +40,12 @@ from decimal import Decimal
 from .contracts import AutomationMode
 
 
-PAPERBOOK_VERSION = "paperbook-v0.1-draft"
+PAPERBOOK_VERSION = "paperbook-v0.2-draft"
+# v0.2: the book decomposes its realised money by OUTCOME CLASS.
+# "We lost $84 today" is not an answer anyone can act on; "$84 of
+# market losses, nothing broken" and "$84 because two orders were
+# rejected" call for completely different responses. The
+# classification is telemetry's, not restated here.
 
 #: What the paper book opens with.
 #:
@@ -95,6 +100,34 @@ _RESERVED = ("PENDING", "SUBMITTING", "SUBMITTED", "PAPER_ROUTED",
              "SHADOW_RECORDED", "PARTIALLY_FILLED")
 
 
+def _by_outcome_class(closed: list[dict]) -> dict[str, dict]:
+    """The book's realised money, split by WHAT KIND of thing happened.
+
+    "We lost $84 today" is not an answer anyone can act on. "$84 of market
+    losses, nothing broken" and "$84 because two orders were rejected" call
+    for completely different responses, and the only way to tell them apart
+    after the fact is to have recorded which it was.
+
+    The classification is `telemetry`'s and is not restated here — one
+    authority. This decomposes; it does not judge. Every closed trade lands in
+    exactly one bucket, so the parts sum to the whole with no residual, and
+    the test that matters asserts precisely that.
+    """
+    from . import telemetry
+    out: dict[str, dict] = {}
+    for trade in closed:
+        life = telemetry.classify_failure(
+            None, None, {"outcome": trade["outcome"],
+                         "r_multiple": str(trade["r_multiple"])})
+        bucket = out.setdefault(telemetry.outcome_class(life),
+                                {"trades": 0, "pnl_usd": Decimal(0),
+                                 "r": Decimal(0)})
+        bucket["trades"] += 1
+        bucket["pnl_usd"] += trade["pnl_usd"]
+        bucket["r"] += trade["r_multiple"]
+    return out
+
+
 def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
              gates: dict | None = None,
              max_drawdown_pct: float | Decimal = 0) -> dict:
@@ -143,7 +176,7 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
         setup_id = setup_of.get(intent_id, "")
         if str(state or "").upper() == "CLOSED" and r is not None:
             closed.append({"intent_id": intent_id, "setup_id": setup_id,
-                           "symbol": symbol,
+                           "symbol": symbol, "outcome": outcome,
                            "direction": direction, "closed_at": int(closed_at or 0),
                            "r_multiple": Decimal(str(r)),
                            "pnl_usd": Decimal(str(r)) * risk_usd})
@@ -206,6 +239,7 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
         "mode": mode.value,
         "halted_days": halted_days,
         "drawdown": drawdown,
+        "by_outcome_class": _by_outcome_class(closed),
         "opening_equity": opening,
         "equity": equity,
         "peak_equity": peak,

@@ -756,7 +756,7 @@ def setup_trace(setup_id: str):
         record = telemetry.build_record(setup, risk_fact, order_fact, exec_fact)
         lifecycle = {k: record[k] for k in
                      ("stage", "failure_code", "failure_owner", "detail",
-                      "classification")}
+                      "classification", "outcome_class")}
 
         state = setup.get("state")
         rr = record.get("computed_rr")
@@ -3441,6 +3441,12 @@ def _paper_account(con) -> dict:
         "closed_trades": book["closed_count"],
         "halted_today": today in book["halted_days"],
         "drawdown": book["drawdown"],
+        # A bad day, diagnosable rather than only counted. Parts sum to the
+        # whole with no residual, which is what makes it worth reading.
+        "by_outcome_class": {
+            name: {"trades": part["trades"], "pnl_usd": str(part["pnl_usd"]),
+                   "r": str(part["r"])}
+            for name, part in book["by_outcome_class"].items()},
         # Loud: intents whose stored plan carries no risk_usd contribute
         # nothing to exposure, so the budget silently widens.
         "unpriced_intents": book["unpriced_intents"],
