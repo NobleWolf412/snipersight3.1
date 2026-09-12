@@ -309,7 +309,7 @@ label is the defect the entire store design exists to prevent.
 `tests/test_version_cascade.py` is the lockfile — it fails when a version moves
 without its consumers.
 
-Nine rules about how the system behaves, and what actually holds each one up:
+Ten rules about how the system behaves, and what actually holds each one up:
 
 1. **Facts are append-only, content-hash idempotent, and carry an
    `algo_version`.** The schema enforces it — `UNIQUE (content_hash)` — so
@@ -340,6 +340,26 @@ Nine rules about how the system behaves, and what actually holds each one up:
    `venues.liquidation_price` so the order ticket can warn without a round
    trip, and a test pins the two to agree. **A second exception is precisely
    how two surfaces come to disagree.** Do not add one.
+10. **Research and paper share logic, never state.** A domain's routing state
+    comes from that domain's own records, and **the absence of a record means
+    that domain has not acted** — never a reason to consult another one. Same
+    for the account: two books may open at the same balance and must never
+    share what happens to it afterwards.
+
+    This is rule 7 in the place it had not been applied. The research replay
+    is evidence, and it was *filtering*: it reached every setup first and
+    stamped it POSITION_OPEN or CLOSED for every caller including the
+    dispatcher, so only a setup the simulator had never touched could be
+    READY. Measured 2026-09-11 — 1035 setups in the live baseline, 40 claimed
+    by the replay's own exits, **zero reaching READY**, all 37 risk-approved
+    among the 40 — and `autotrader.run` dispatches READY only. The paper book
+    had never been offered a single order. Sizing was the same defect in the
+    account: every decision was a percentage of a balance that existed only
+    inside a backtest, honestly labelled `PAPER_REPLAY` and read by nobody.
+
+    The whole suite was green throughout. It could not see this, because
+    every engine was individually correct and nothing asserted whose book
+    each one was describing.
 
 And one rule about writing rather than behaviour, which no test will ever
 catch: **comments explain _why_, and carry the measurement that motivated
