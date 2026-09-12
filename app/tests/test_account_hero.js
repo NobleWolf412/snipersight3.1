@@ -144,9 +144,13 @@ ok('nothing closed today is a result, not a broken tile', () => {
      as "this is not working" — which is precisely what the tile WAS while its
      renderer never ran — and a green $0.00 is the confident-looking zero the
      portfolio loader refuses everywhere else. */
+  /* Two empty states now, and both owe the same treatment: the paper book's
+     quiet day — the tile's authority since the 2026-09-11 domain separation,
+     because the journal it used to sum is the research replay's — and the
+     legacy journal path behind it. Asserted over the whole renderer rather
+     than one branch, or the rule holds only in the half nobody reads. */
   const at = SHELL.indexOf('function renderTodayTile');
-  const fn = SHELL.slice(at, SHELL.indexOf('\n  }', at));
-  const empty = fn.slice(fn.indexOf('if(!rows.length)'), fn.indexOf('return;'));
+  const empty = SHELL.slice(at, SHELL.indexOf('\n  }', at));
   assert(!/textContent = '—'/.test(empty),
     'the empty state is an em-dash again — indistinguishable from the ' +
     'renderer having never run, which is the bug that hid here for months');
@@ -169,12 +173,17 @@ ok('balance is read from the payload, never re-derived', () => {
      -5.84% forty pixels above a card rendering the same field as -5.8%. */
   const at = SHELL.indexOf("$('mBalance').textContent");
   assert(at > 0, 'balance is not rendered');
-  const region = SHELL.slice(at, at + 700);
-  assert(/money\(p\.equity\)/.test(region),
-    'balance is not money(p.equity) — the top bar renders exactly that, and ' +
-    'two spellings of one number is how two surfaces come to disagree');
-  assert(/pct\(p\.return_pct\)/.test(region),
-    'the return is not passed through pct(), the shared helper every other ' +
+  const region = SHELL.slice(at, at + 1800);
+  /* The hero reads the PAPER book; the top bar and Results read the research
+     replay. Two populations, deliberately — but still exactly one authority
+     each, and still through the shared helpers. `book.equity` arrives from
+     `paperbook.snapshot` via /api/command and is never recomputed here. */
+  assert(/money\(book \? book\.equity : p\.equity\)/.test(region),
+    'balance is not read straight from a payload — two spellings of one ' +
+    'number is how two surfaces come to disagree');
+  assert(/pct\(book\.return_pct\)/.test(region)
+    && /pct\(p\.return_pct\)/.test(region),
+    'a return is not passed through pct(), the shared helper every other ' +
     'reader of that field uses');
   assert(!/toFixed\(/.test(region),
     'the hero formats a figure itself instead of using the shared helpers');
@@ -182,10 +191,17 @@ ok('balance is read from the payload, never re-derived', () => {
 
 ok('a window with no ruled decisions does not show a confident return', () => {
   const at = SHELL.indexOf("const balSub = $('mBalanceSub')");
-  const region = SHELL.slice(at, at + 600);
+  const region = SHELL.slice(at, at + 1600);
+  /* BOTH books owe this. The paper branch gates on `traded` (closed paper
+     trades) and the research branch on `ruled` (risk decisions) — two counts
+     of the same idea: a window with no observations must not render +0% as
+     though it were a result. */
+  assert(/traded\s*\n\s*\?/.test(region) || /traded\s*\?/.test(region),
+    'the paper sub-line does not branch on `traded` — a book that has taken ' +
+    'no trades would render +0% as a result');
   assert(/ruled\s*\?/.test(region),
-    'the sub-line does not branch on `ruled` — a forward window where the ' +
-    'risk authority has ruled on nothing would render +0% as a result');
+    'the research sub-line does not branch on `ruled` — a forward window ' +
+    'where the risk authority has ruled on nothing would render +0%');
 });
 
 ok('the funnel keeps its three distinct stage names', () => {

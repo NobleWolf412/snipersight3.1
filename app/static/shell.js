@@ -3295,8 +3295,26 @@ weighed in. Name the facts you used.`;
   function renderTodayTile(journal){
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const cut = today.getTime() / 1000;
-    const rows = journal.filter(j => j.ts >= cut);
     const tile = $('mTodayTile'), val = $('mToday'), sub = $('mTodaySub');
+    /* THE PAPER BOOK'S DAY, beside the paper balance above it. The journal
+       this used to sum is the research replay's, so "Today" reported trades
+       the operator's book never took — two different populations stacked in
+       one hero, both reading as the account. Which they are is now stated on
+       the tile itself rather than left to be inferred. */
+    const book = ((window.SSOperationsData || {}).account || {}).paper;
+    if(book){
+      const closed = Number(book.closed_trades || 0);
+      const pnl = Number(book.realised_today || 0);
+      tile.classList.toggle('up', pnl > 0);
+      tile.classList.toggle('down', pnl < 0);
+      val.classList.toggle('is-flat', pnl === 0);
+      val.textContent = signedMoney(pnl);
+      sub.textContent = closed
+        ? `paper book · ${closed} trade${closed === 1 ? '' : 's'} closed`
+        : 'paper book · nothing closed yet today';
+      return;
+    }
+    const rows = journal.filter(j => j.ts >= cut);
     if(!rows.length){
       tile.classList.remove('up', 'down');
       /* NOT an em-dash. Zero closed trades is a real answer to "how did today
@@ -3386,15 +3404,44 @@ weighed in. Name the facts you used.`;
        rendered in three places now and `pct()` is why they agree — this file
        already carries the scar of `p.return_pct + '%'` printing -5.84% forty
        pixels above a card saying -5.8%. Nothing here re-derives; §6 rule 9. */
-    $('mBalance').textContent = money(p.equity);
+    /* THE COMMAND HERO READS THE PAPER BOOK, not the research replay.
+       `p.equity` above is the replay's — it re-derives from simulated exits
+       every scan and moves with no trade closing, which its own rebuild note
+       says out loud. That figure belongs on Results, where it is labelled as
+       research. On the landing screen, under the word "Balance", it was
+       answering "how am I doing" with a backtest.
+
+       The two populations were indistinguishable everywhere until the domain
+       separation of 2026-09-11, and this tile is where it mattered most:
+       it is the first thing on the screen. `/api/command` now carries
+       `account.paper` from the one authority for that number
+       (`paperbook.snapshot`); nothing here re-derives it — §6 rule 9. */
+    const book = ((window.SSOperationsData || {}).account || {}).paper;
+    $('mBalance').textContent = money(book ? book.equity : p.equity);
     const balSub = $('mBalanceSub');
     if(balSub){
-      balSub.textContent = ruled
-        ? `${(up ? '+' : '') + pct(p.return_pct)} since ${money(p.start_equity)}`
-          + (rebuilding ? ' · provisional, record rebuilding' : '')
-        : `started at ${money(p.start_equity)} · no trades ruled on yet`;
-      balSub.classList.toggle('is-up', ruled && up);
-      balSub.classList.toggle('is-down', ruled && !up);
+      if(book){
+        const traded = Number(book.closed_trades || 0);
+        const bookUp = Number(book.return_pct || 0) >= 0;
+        /* A count of no observations must not wear the treatment of a
+           result — the same empty-window rule the Today tile states. Zero
+           closed trades is a real, actionable answer; dressing it as a
+           flat return in green is not. */
+        balSub.textContent = traded
+          ? `${(bookUp ? '+' : '') + pct(book.return_pct)} since `
+            + `${money(book.opening_equity)} · ${traded} paper trade`
+            + (traded === 1 ? '' : 's')
+          : `started at ${money(book.opening_equity)} · no paper trades yet`;
+        balSub.classList.toggle('is-up', !!traded && bookUp);
+        balSub.classList.toggle('is-down', !!traded && !bookUp);
+      } else {
+        balSub.textContent = ruled
+          ? `${(up ? '+' : '') + pct(p.return_pct)} since ${money(p.start_equity)}`
+            + (rebuilding ? ' · provisional, record rebuilding' : '')
+          : `started at ${money(p.start_equity)} · no trades ruled on yet`;
+        balSub.classList.toggle('is-up', ruled && up);
+        balSub.classList.toggle('is-down', ruled && !up);
+      }
     }
 
     const journal = p.journal || [];

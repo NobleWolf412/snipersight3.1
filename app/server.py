@@ -3405,6 +3405,59 @@ def _scanner_alive(status: dict | None = None) -> bool:
     return status["state"] != "OFFLINE" and _pid_alive(status.get("pid"))
 
 
+def _paper_account(con) -> dict:
+    """The paper book's balance and today, in the shape a screen wants.
+
+    Reads `paperbook` and re-derives nothing. Equity, exposure and realised
+    P&L have exactly one authority, and a cockpit that recomputed any of them
+    would be the second one convention 9 exists to forbid.
+
+    Every count here names its population. "Trades" without a population is
+    the word that let a research backtest be read as the operator's book for
+    weeks — see the domain separation of 2026-09-11.
+    """
+    from datetime import datetime, timezone
+    from engine import paperbook, riskpaper
+    from engine import settings as settings_engine
+    gates = risk.gates_for_mode(contracts.AutomationMode.PAPER)
+    try:
+        max_dd = settings_engine.all_settings(con)["max_drawdown_pct"]
+    except Exception:
+        # The drawdown halt simply does not trip rather than reporting a false
+        # one — and the halt itself is enforced by the risk pass, not here.
+        max_dd = 0
+    book = paperbook.snapshot(con, gates=gates, max_drawdown_pct=max_dd)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    opening = book["opening_equity"]
+    return {
+        "population": "PAPER",
+        "equity": str(book["equity"]),
+        "opening_equity": str(opening),
+        "realised_today": str(book["realised_by_day"].get(today, 0)),
+        "return_pct": str(((book["equity"] / opening - 1) * 100).quantize(
+            Decimal("0.01"))) if opening else None,
+        "open_positions": book["concurrent"],
+        "committed_risk_usd": str(book["committed_risk_usd"]),
+        "closed_trades": book["closed_count"],
+        "halted_today": today in book["halted_days"],
+        "drawdown": book["drawdown"],
+        # Loud: intents whose stored plan carries no risk_usd contribute
+        # nothing to exposure, so the budget silently widens.
+        "unpriced_intents": book["unpriced_intents"],
+        "authority": f"{book['version']} / {riskpaper.PAPER_RISK_VERSION}",
+    }
+
+
+@app.get("/api/paper-book")
+def paper_book_read_model():
+    """The paper account on its own, for anything that wants only the book."""
+    con = store.connect()
+    try:
+        return _paper_account(con)
+    finally:
+        con.close()
+
+
 @app.get("/api/command")
 def command_read_model():
     """Fast first paint: what needs the operator, before the full book loads."""
@@ -3438,9 +3491,16 @@ def command_read_model():
         summary = opportunities.summary(rows)
         counts = summary.get("counts") or {}
         account = {"open_positions": int(counts.get("POSITION_OPEN") or 0),
-                   "working_orders": int(counts.get("ORDER_WORKING") or 0)}
+                   "working_orders": int(counts.get("ORDER_WORKING") or 0),
+                   # The BOOK, not the replay. This is the answer to "did it
+                   # trade, and how did it go" — the first thing the operator
+                   # asked to see on opening the app — and until the ledger
+                   # existed there was nothing here that described the account
+                   # an order would actually hit.
+                   "paper": _paper_account(con)}
         citadel = _citadel_status()
         return {"generated_at": int(time.time()), "automation": mode,
+                "domain": contracts.domain_for_mode(mode_name).value,
                 "account": account, "scanner": scanner,
                 "data": {"status": quality_status,
                          "observed_at": quality_row[1] if quality_row else None,
