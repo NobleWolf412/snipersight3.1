@@ -19,7 +19,15 @@ from .contracts import (AutomationMode, BrokerExecution, BrokerOrder, DecisionRe
                         RiskDecision, to_wire)
 
 
-EXECUTION_CORE_VERSION = "execution-core-v0.7-draft"
+EXECUTION_CORE_VERSION = "execution-core-v0.8-draft"
+# v0.8: the PAPER exit walk is `execsim.walk_exit`, not a private copy of it.
+# The copy had drifted in the one direction that matters: it closed a stop at
+# the stop price even when the bar GAPPED THROUGH it, while research pays that
+# bar's open (`execsim.stop_gap_fill`, exec-v0.26). So paper flattered exactly
+# the losses that hurt most, and a rehearsal more optimistic than the backtest
+# it rehearses is worse than no rehearsal. Paper closes now also record
+# `ambiguous_bar` — a bar that reached the stop AND the target, which both
+# engines settle as the stop and only the shared walk was counting.
 # v0.7: a LIVE dispatch is refused unless its size was measured against the
 # funded account's own balance (contracts-v0.4 `equity_basis_source`). Until
 # now every dispatched size descended from the paper book's replayed equity,
@@ -508,25 +516,34 @@ def monitor_paper(con) -> dict:
             "TAKER" if intent.order_kind == OrderKind.MARKET else "MAKER")
         target = None if raw_target is None else Decimal(raw_target)
         held = [c for c in candles if c[0] >= filled_at]
-        close = None
-        for index, candle in enumerate(held):
-            high, low = Decimal(candle[2]), Decimal(candle[3])
-            stop_hit = (low <= intent.stop if intent.direction == "LONG"
-                        else high >= intent.stop)
-            target_hit = bool(target is not None and (
-                high >= target if intent.direction == "LONG" else low <= target))
-            if stop_hit:
-                close = ("SL", intent.stop, candle[0]); break
-            if target_hit:
-                close = ("TP", target, candle[0]); break
-            if index + 1 >= PAPER_MAX_HOLDING_BARS:
-                close = ("TIMEOUT", Decimal(candle[4]), candle[0]); break
-        if close is None:
+        from . import costs, execsim, importer, volatility
+        long = intent.direction == "LONG"
+        # THE SHARED EXIT WALK. This used to be re-implemented here, and the
+        # copy had drifted: it closed a stop at `intent.stop` even when the bar
+        # GAPPED THROUGH it, while research pays that bar's open
+        # (`execsim.stop_gap_fill`). Paper therefore flattered exactly the
+        # losses that hurt most, and a paper book more optimistic than the
+        # backtest it rehearses is worse than no rehearsal.
+        #
+        # `walk_exit` also flags a bar that reaches BOTH levels. Both engines
+        # settle those as the stop — sub-bar sequencing needs data we do not
+        # have, and flattering an ambiguous bar is how a backtest lies — but
+        # only the shared one records that it happened.
+        #
+        # A plan with no target is walked stop-or-timeout, as it always was:
+        # an unreachable target expresses that without a second code path.
+        tp_effective = target if target is not None else (
+            Decimal("Infinity") if long else Decimal("-Infinity"))
+        walked = execsim.walk_exit(
+            [{"open": c[1], "high": c[2], "low": c[3], "close": c[4]}
+             for c in held],
+            0, intent.stop, tp_effective, long, max_bars=PAPER_MAX_HOLDING_BARS)
+        if walked is None:
             updated.append({"intent_id": intent_id, "state": "PAPER_FILLED"})
             continue
-        outcome, exit_price, closed_at = close
+        outcome, exit_price, exit_index, ambiguous = walked
+        closed_at = held[exit_index][0]
         risk_per_unit = abs(entry - intent.stop)
-        from . import costs, execsim, importer, volatility
         profile = costs.profile_for(intent.symbol)
         atr_exit = None
         try:
@@ -542,8 +559,7 @@ def monitor_paper(con) -> dict:
             atr_exit = None
         settlement = execsim.settle(
             profile, intent.symbol, entry, exit_price, risk_per_unit,
-            intent.direction == "LONG", outcome, held.index(next(
-                candle for candle in held if candle[0] == closed_at)),
+            long, outcome, exit_index,
             importer.TF_SECONDS[tf], atr_exit,
             entry_role=entry_role)
         if settlement["slip_missing"]:
@@ -560,6 +576,11 @@ def monitor_paper(con) -> dict:
              str(settlement["fees"]), str(settlement["funding"]),
              str(settlement["slip"]), profile.version, intent_id))
         payload = {"environment": "paper", "outcome": outcome,
+                   # A bar that reached the stop AND the target. Settled as the
+                   # stop by both engines; recorded so the count is knowable
+                   # rather than an assumption about how often it happens.
+                   "ambiguous_bar": ambiguous,
+                   "bars_held": exit_index,
                    "exit_price": str(exit_price),
                    "effective_exit_price": str(settlement["eff_exit"]),
                    "r_gross": str(settlement["r_gross"]),

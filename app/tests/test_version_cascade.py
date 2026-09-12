@@ -93,7 +93,11 @@ OPERATIONAL_EXPECTED = {
     # boot-id evidence.
     # execution-core-v0.7: LIVE refuses a size not measured against the
     # funded account's own balance. TESTNET unchanged.
-    "execution_core": "execution-core-v0.7-draft",
+    # execution-core-v0.8: the PAPER exit walk is `execsim.walk_exit` rather
+    # than a private copy. The copy closed a gapped-through stop AT the stop
+    # price while research pays that bar's open — paper flattered exactly the
+    # losses that hurt most.
+    "execution_core": "execution-core-v0.8-draft",
     "positions": "positions-v0.3-draft",
     # phemex-private-v0.4: the stop (sent on every order) and every target
     # are tick-validated for all order kinds; submit() sets the leverage the
