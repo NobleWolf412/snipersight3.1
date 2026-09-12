@@ -2823,10 +2823,32 @@ def automation_mode(payload: dict):
 
 @app.get("/api/automation/drills")
 def automation_drills():
+    """The ladder to live, and exactly how far up it the system has climbed.
+
+    `items` is what has been recorded. `ladder` is every required drill WITH
+    its status, including the ones that have never been run — which is the
+    whole point: a list of completed drills that happens to be empty looks
+    identical to a system with no drills, and those are very different
+    positions to be in. Measured 2026-09-11: none of the seven had ever run.
+
+    A drill can only be staged in TESTNET mode and none of them perform the
+    fault. Someone has to pull the plug, reject the order, or kill the
+    process — which is what makes them evidence rather than a checkbox.
+    """
     con = store.connect()
     try:
+        runs = {d.get("drill"): d for d in automation.safety_drills(con)}
+        ladder = [{"drill": name,
+                   "status": (runs.get(name) or {}).get("status", "NEVER_RUN"),
+                   "run": runs.get(name)}
+                  for name in sorted(automation.REQUIRED_SAFETY_DRILLS)]
+        passed = [d for d in ladder if d["status"] == "PASSED"]
         return {"items": automation.safety_drills(con),
                 "required": sorted(automation.REQUIRED_SAFETY_DRILLS),
+                "ladder": ladder,
+                "passed": len(passed), "total": len(ladder),
+                "mode": automation.current(con)[0].value,
+                "stageable": automation.current(con)[0] == contracts.AutomationMode.TESTNET,
                 "authority": automation.AUTOMATION_VERSION}
     finally:
         con.close()
