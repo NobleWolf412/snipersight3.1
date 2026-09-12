@@ -19,7 +19,7 @@ import unittest
 from decimal import Decimal
 from pathlib import Path
 
-from engine import execution, paperbook, risk, riskpaper, store
+from engine import cooldowns, execution, paperbook, risk, riskpaper, store
 from engine.contracts import AutomationMode
 
 
@@ -161,6 +161,79 @@ class TheLedger(unittest.TestCase):
         self.assertIsNotNone(snap["drawdown"])
         self.assertGreaterEqual(Decimal(snap["drawdown"]["drawdown_pct"]),
                                 Decimal(20))
+
+
+class ReEntryLocksAreThisBooksOwn(unittest.TestCase):
+    """The last input the domain separation missed.
+
+    Equity, concurrency and the same-side governor were moved onto the paper
+    ledger; cooldowns were not, and the paper risk pass kept reading the
+    research locks. Measured 2026-09-11, three days after the rest of the work
+    and still live: PF_PUMPUSD LONG was locked for another three hours off a
+    stop-out the paper book had never taken.
+    """
+
+    def test_a_paper_stop_out_earns_a_paper_lock(self):
+        con = _con(self)
+        _intent(con, "i-1", "s-1", Decimal("200"))
+        _position(con, "i-1", state="CLOSED", closed_at=T0, r="-1.0")
+        locks = paperbook.snapshot(con)["cooldowns"]
+        self.assertEqual(len(locks), 1)
+        self.assertEqual(locks[0]["outcome"], "SL")
+        self.assertTrue(locks[0]["invalidating"])
+
+    def test_a_research_stop_out_does_not_lock_the_paper_book(self):
+        """The defect itself. An empty paper book earns no locks whatever the
+        replay has been doing."""
+        con = _con(self)
+        self.assertEqual(paperbook.snapshot(con)["cooldowns"], [])
+
+    def test_the_lock_starts_at_the_exit_not_at_the_reading(self):
+        """A lock that began when the snapshot was taken would refuse
+        different trades on a replay than it did live."""
+        con = _con(self)
+        _intent(con, "i-1", "s-1", Decimal("200"))
+        _position(con, "i-1", state="CLOSED", closed_at=T0, r="-1.0")
+        lock = paperbook.snapshot(con)["cooldowns"][0]
+        self.assertEqual(lock["market_time"], T0)
+        self.assertEqual(lock["expires_at"],
+                         int(T0 + lock["hours"] * cooldowns.HOUR))
+
+    def test_the_duration_rules_are_reused_not_restated(self):
+        """Copying the table is how the two books would start cooling for
+        different lengths of time."""
+        con = _con(self)
+        _intent(con, "i-1", "s-1", Decimal("200"))
+        _position(con, "i-1", state="CLOSED", closed_at=T0, r="-1.0")
+        lock = paperbook.snapshot(con)["cooldowns"][0]
+        self.assertEqual(lock["hours"], cooldowns.duration_hours("SL", "1H"))
+        import inspect
+        src = inspect.getsource(paperbook._cooldowns)
+        self.assertIn("rules.duration_hours", src)
+
+    def test_the_shared_evaluator_reads_these_unchanged(self):
+        """Only the SOURCE differs. `blocked_at` owns what "blocking right
+        now" means — overlapping locks, point-in-time, later-expiry-wins."""
+        con = _con(self)
+        _intent(con, "i-1", "s-1", Decimal("200"))
+        _position(con, "i-1", state="CLOSED", closed_at=T0, r="-1.0",
+                  direction="LONG")
+        locks = paperbook.snapshot(con)["cooldowns"]
+        self.assertIsNotNone(
+            cooldowns.blocked_at(locks, T0 + 60, "BTCUSDT", "LONG"))
+        self.assertIsNone(
+            cooldowns.blocked_at(locks, T0 + 60, "BTCUSDT", "SHORT"),
+            "a lock is per direction")
+        self.assertIsNone(
+            cooldowns.blocked_at(locks, T0 + 99 * DAY, "BTCUSDT", "LONG"),
+            "the lock expires")
+
+    def test_the_paper_risk_pass_uses_them(self):
+        import inspect
+        src = inspect.getsource(riskpaper.run)
+        self.assertIn('account["cooldowns"]', src,
+                      "the paper book must cool on its own stop-outs")
+        self.assertIn("blocked_at", src, "the evaluator stays shared")
 
 
 class TheDayDecomposes(unittest.TestCase):

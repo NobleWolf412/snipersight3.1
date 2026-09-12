@@ -40,7 +40,14 @@ from decimal import Decimal
 from .contracts import AutomationMode
 
 
-PAPERBOOK_VERSION = "paperbook-v0.2-draft"
+PAPERBOOK_VERSION = "paperbook-v0.3-draft"
+# v0.3: RE-ENTRY LOCKS ARE THIS BOOK'S OWN. The last input the domain
+# separation missed: equity, concurrency and the same-side governor moved
+# onto the ledger, cooldowns did not, and the paper risk pass kept reading
+# locks derived from the replay's exits. Measured 2026-09-11, with the rest
+# of the work already done and this still live: PF_PUMPUSD LONG locked for
+# three more hours off a stop-out the paper book had never taken. Rules and
+# evaluator stay shared (`cooldowns`); only the source differs.
 # v0.2: the book decomposes its realised money by OUTCOME CLASS.
 # "We lost $84 today" is not an answer anyone can act on; "$84 of
 # market losses, nothing broken" and "$84 because two orders were
@@ -98,6 +105,49 @@ def _plan_risk_usd(raw: str | None) -> Decimal:
 #: one has already claimed but not yet filled.
 _RESERVED = ("PENDING", "SUBMITTING", "SUBMITTED", "PAPER_ROUTED",
              "SHADOW_RECORDED", "PARTIALLY_FILLED")
+
+
+def _cooldowns(closed: list[dict]) -> list[dict]:
+    """Re-entry locks earned by THIS book's own stop-outs.
+
+    `cooldowns.run` derives the research replay's locks from its `exec` facts,
+    and until this existed the paper risk pass read those — so a paper entry
+    could be refused because the SIMULATOR had stopped out on that symbol.
+    Measured 2026-09-11, three days after the domain separation and still
+    live: PF_PUMPUSD LONG locked for another three hours off a trade the paper
+    book had never taken.
+
+    The RULES are not restated. Duration, the invalidating-outcome set and the
+    key all come from `cooldowns`, and the payloads are shaped so
+    `cooldowns.blocked_at` evaluates them unchanged — one evaluator, one rule
+    table, two sources. Copying the duration table here is how the two books
+    would start cooling for different lengths of time.
+
+    Derived in memory rather than written as facts, like every other paper
+    halt in this module: a lock is a pure function of closes that already
+    exist, and state that is mutated as trades close cannot be replayed.
+    """
+    from . import cooldowns as rules
+    out = []
+    for trade in closed:
+        outcome, tf = trade.get("outcome"), trade.get("tf")
+        if not outcome or outcome == "MISSED" or not trade.get("direction"):
+            continue                     # no position was taken; nothing to cool
+        hours = rules.duration_hours(outcome, tf)
+        exit_ts = int(trade["closed_at"])
+        out.append({
+            "key": rules.key(trade["symbol"], trade["direction"]),
+            "symbol": trade["symbol"], "direction": trade["direction"],
+            "tf": tf, "outcome": outcome, "hours": hours,
+            # The EXIT time, not the moment this ran. A lock that began when
+            # the snapshot was taken would refuse different trades on a replay
+            # than it did live.
+            "market_time": exit_ts,
+            "expires_at": int(exit_ts + hours * rules.HOUR),
+            "setup_id": trade.get("setup_id"),
+            "invalidating": outcome in rules.INVALIDATING,
+        })
+    return out
 
 
 def _by_outcome_class(closed: list[dict]) -> dict[str, dict]:
@@ -165,9 +215,10 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
     open_positions: list[dict] = []
     closed: list[dict] = []
     for row in con.execute(
-            "SELECT intent_id,symbol,direction,state,filled_at,closed_at,"
+            "SELECT intent_id,symbol,tf,direction,state,filled_at,closed_at,"
             "outcome,r_multiple FROM paper_positions ORDER BY filled_at, rowid"):
-        intent_id, symbol, direction, state, filled_at, closed_at, outcome, r = row
+        (intent_id, symbol, tf, direction, state, filled_at, closed_at,
+         outcome, r) = row
         if intent_id not in plans:
             # A paper position whose intent is not in the PAPER outbox belongs
             # to another mode's book. Never silently pooled.
@@ -176,7 +227,7 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
         setup_id = setup_of.get(intent_id, "")
         if str(state or "").upper() == "CLOSED" and r is not None:
             closed.append({"intent_id": intent_id, "setup_id": setup_id,
-                           "symbol": symbol, "outcome": outcome,
+                           "symbol": symbol, "tf": tf, "outcome": outcome,
                            "direction": direction, "closed_at": int(closed_at or 0),
                            "r_multiple": Decimal(str(r)),
                            "pnl_usd": Decimal(str(r)) * risk_usd})
@@ -239,6 +290,9 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
         "mode": mode.value,
         "halted_days": halted_days,
         "drawdown": drawdown,
+        #: Re-entry locks this book earned itself, in the shape
+        #: `cooldowns.blocked_at` evaluates.
+        "cooldowns": _cooldowns(closed),
         "by_outcome_class": _by_outcome_class(closed),
         "opening_equity": opening,
         "equity": equity,

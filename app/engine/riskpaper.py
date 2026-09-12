@@ -109,6 +109,19 @@ def run(con, *, now: int | None = None) -> dict:
         account = paperbook.snapshot(
             con, mode=AutomationMode.PAPER, gates=gates,
             max_drawdown_pct=policy["max_drawdown_pct"])
+        # THE COOLDOWNS ARE THIS BOOK'S, not the replay's. `policy_for` loads
+        # the research locks — derived from `exec` facts — and reading those
+        # here would refuse a paper entry because the SIMULATOR stopped out on
+        # that symbol. Measured 2026-09-11, with the rest of the separation
+        # already done and this input still missed: PF_PUMPUSD LONG locked for
+        # three more hours off a trade the paper book had never taken.
+        #
+        # The evaluator stays shared. `cooldowns.blocked_at` owns what
+        # "blocking at this instant" means — overlapping locks, the
+        # point-in-time rule, later-expiry-wins — and only the SOURCE differs.
+        from . import cooldowns as _cooldowns
+        policy = dict(policy, cooldown=lambda ts, sym, side: _cooldowns.blocked_at(
+            account["cooldowns"], ts, sym, side))
         intents = live_intents(con, baseline_start, now)
         rec.n_inputs = len(intents)
         previous = _latest(con)
