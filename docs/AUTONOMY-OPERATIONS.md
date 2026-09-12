@@ -33,6 +33,52 @@ submission to differ from the one observed at recovery: resolving a lost
 response inside one process is disconnect recovery, not a restart, and until
 automation-v0.5 it wrongly passed this drill.
 
+### The drills have no testnet to run on (2026-09-12)
+
+All seven are staged in TESTNET, and TESTNET means one venue: `broker_factory`
+builds a Phemex client and nothing else. Three things closed that door at once.
+
+- **Phemex is unavailable to this operator.** US resident; repeated login and
+  password-reset failures over months. The testnet *API* is up — a public
+  products call returns 200 — but an account cannot be obtained.
+- **Kraken's demo was decommissioned at 13 UTC on 14 July 2026**, with no
+  announced replacement. It was the obvious alternative.
+- **Coinbase has a sandbox but it does not execute.** Its own documentation:
+  *"All responses are static and pre-defined."* Perpetual endpoints exist
+  (`/intx/portfolio`, positions, balances) and an `X-Sandbox` header triggers
+  chosen error conditions, but nothing fills.
+
+`universe.py` anticipated the venue risk on 2026-07-30 and warmed Kraken as a
+SHADOW venue so a switch would be "a flag, not a project". That hedge is
+weaker than it looks here: the warmed `PF_*` series are Kraken's GLOBAL
+futures product, and US perps launched June 2026 through a different stack —
+Kraken Derivatives US, NinjaTrader Clearing, contracts on Bitnomial Exchange.
+Different entity, and the API and symbology need verifying before anyone
+assumes the data carries over.
+
+**What follows is a split, not a delay.** Read what each drill actually
+proves:
+
+| drill | proves | needs a venue that fills? |
+|---|---|---|
+| restart, disconnect, stale_data, kill_switch, rejected_order | SniperSight's own behaviour under fault | no |
+| partial_fill, protective_stop | a real fill sequence | **yes** |
+
+Five of the seven are about this system, not the exchange. They can be earned
+against a local broker that implements the same seven-method contract and
+injects faults on demand — real evidence, available now, no account needed.
+The two that cannot are the two that require something to actually fill.
+
+What that local broker would NOT prove is that the venue behaves as assumed.
+That gap closes only on a real fill, and with no executing sandbox anywhere it
+realistically closes on a small live position rather than a rehearsal. Say so
+plainly when the time comes; a drill passed against a stub is evidence about
+the stub unless its scope is stated.
+
+Nothing here is built. It is recorded because the promotion ladder below still
+reads "all safety drills passing" as though a testnet existed, and the next
+person to plan against it deserves to know it does not.
+
 `closed candles → market context → playbook → opportunity → risk decision → execution plan → broker → fill → protected position → exit → reconciliation`
 
 A rejection or `NO_TRADE` result is recorded as a valid decision. The browser
@@ -102,7 +148,9 @@ grade never overrides market conflict, stale data, costs, expiry, or risk.
 3. TESTNET must run for at least 30 calendar days and complete 100 order
    qualified, distinct bot-owned order lifecycles, with at least 99.9%
    TESTNET reconciliation and all safety drills passing. Duplicate or legacy
-   flat-only events do not count.
+   flat-only events do not count. **Unreachable as written** — see "The
+   drills have no testnet to run on" above. This rung needs a venue decision
+   before it needs a schedule.
 4. LIVE additionally requires the forward evidence gate and an independently
    tradeable verdict for each enabled playbook.
 
