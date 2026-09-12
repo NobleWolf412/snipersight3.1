@@ -28,7 +28,7 @@ import live
 
 from engine import (aggregator, basis, bias, breakout, cooldowns, cycles,
                     execsim, venues, liquidity, ma, manual, momentum, ranges,
-                    regime, risk, scalein, sessions, setups, structure, swings,
+                    regime, risk, riskpaper, scalein, sessions, setups, structure, swings,
                     importer, volatility, volume, zones, trend, regimeread,
                     htfread, chartread)
 from engine import (automation, autotrader, contracts, execution, lifecycle,
@@ -55,7 +55,16 @@ OPERATIONAL_EXPECTED = {
     # now emits cooldowns, which risk reads, so the bump is not cosmetic.
     # live-v0.4: the cycle imports the real funding series into its own
     # table. Durable output grew; nothing reads it yet.
-    "live": "live-v0.4-draft",
+    # live-v0.5: the cycle runs the paper book's risk authority, AFTER the
+    # paper book settles and BEFORE the dispatcher reads it. Order is part of
+    # the behaviour: settle, then size, then dispatch — sizing first means
+    # every decision is made against the previous cycle's account.
+    "live": "live-v0.5-draft",
+    # Not a fact producer: it reads `paper_positions` and the PAPER outbox and
+    # returns an account. Locked anyway, for the reason `agg` is — it sits
+    # upstream of every paper sizing decision, so a rule change here changes
+    # their output while every version constant they import stays put.
+    "paperbook": "paperbook-v0.1-draft",
     # contracts-v0.4: a RiskDecision states the equity basis its size is a
     # percentage of, and where that figure was read. Nothing converted the
     # ACCOUNT between the paper replay and a dispatched order.
@@ -168,9 +177,10 @@ OPERATIONAL_EXPECTED = {
 
 
 def operational_versions():
-    from engine import opportunities
+    from engine import opportunities, paperbook
     return {
         "live": live.LIVE_VERSION,
+        "paperbook": paperbook.PAPERBOOK_VERSION,
         "contracts": contracts.CONTRACT_VERSION,
         "automation": automation.AUTOMATION_VERSION,
         "autotrader": autotrader.AUTOTRADER_VERSION,
@@ -224,6 +234,12 @@ LOCKED = {
     "setup": setups.SETUP_VERSION,
     "exec": execsim.EXEC_VERSION,
     "risk": risk.RISK_VERSION,
+    # The PAPER BOOK's risk authority. Same rules (both call `risk.decide`),
+    # its own account (`paperbook`), its own fact kind `risk_paper` — because
+    # the store has no domain column, so the domain has to live in the kind.
+    # Locked from its first commit: a version whose early facts nobody can
+    # place is a version that cannot force a question.
+    "riskpaper": riskpaper.PAPER_RISK_VERSION,
     "scale": scalein.SCALE_VERSION,
     "cooldown": cooldowns.COOLDOWN_VERSION,
     "breakout": breakout.BREAKOUT_VERSION,
@@ -496,6 +512,13 @@ EXPECTED = {
     # logic moved in any of the three — they read exec facts, and those facts
     # now carry a corrected stop fill.
     "risk": "risk-v0.28-draft",
+    # riskpaper-v0.1: the PAPER BOOK's own risk authority, born with this
+    # separation. It rules only on setups that are still live, against
+    # `paperbook`'s ledger — balance, exposure, reservations, cooldowns and
+    # halts derived from paper fills, not from the replay's simulated account.
+    # Both books call `risk.decide`, so a rule change still moves exactly one
+    # thing; what differs is whose money the percentage is of.
+    "riskpaper": "riskpaper-v0.1-draft",
     "scale": "scale-v0.21-draft",
     "cooldown": "cooldown-v0.15-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
@@ -726,9 +749,9 @@ CONSUMERS = {
     # one and this map must already have said so. A consumer added in the same
     # commit as the bump it was supposed to warn about warns nobody.
     "bias": ("trend", "breakout", "setup"),
-    "setup": ("exec", "risk", "scale"),
-    "exec": ("risk", "scale", "cooldown"),
-    "cooldown": ("risk",),
+    "setup": ("exec", "risk", "riskpaper", "scale"),
+    "exec": ("risk", "riskpaper", "scale", "cooldown"),
+    "cooldown": ("risk", "riskpaper"),
     # CODE-level coupling, same class as "ma": setups.py calls
     # risk.size_order() at arming time and bakes units/risk_usd/notional into
     # every FORMING payload. No setup ever reads a risk FACT — which is why
@@ -765,7 +788,8 @@ class VersionLockfile(unittest.TestCase):
         engine stops reading an upstream version this catches the stale entry;
         if it starts reading a new one, the map has to say so."""
         import inspect
-        sources = {"exec": execsim, "risk": risk, "scale": scalein,
+        sources = {"exec": execsim, "risk": risk, "riskpaper": riskpaper,
+                   "scale": scalein,
                    "regime": regime, "setup": setups, "momentum": momentum,
                    "regimeread": regimeread, "htfread": htfread}
         pins = {"setup": "SETUP_VERSION", "exec": "EXEC_VERSION",

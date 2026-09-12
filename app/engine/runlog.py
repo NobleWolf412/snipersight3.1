@@ -47,6 +47,11 @@ AUDIT_PREFIXES = (
     "RETENTION",
     "AUTOTRADER",
     "REGRADE",
+    # The paper book changing its mind about what it will fund. Evidence for
+    # the same reason AUTOTRADER is: it is the record of what the account
+    # permitted at a moment, and "why did nothing fire at 14:05" is only
+    # answerable if it survives rotation.
+    "PAPER RISK",
 )
 
 

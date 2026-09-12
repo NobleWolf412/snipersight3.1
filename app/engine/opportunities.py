@@ -567,6 +567,24 @@ _CUSTODY_LIFECYCLE = {
 }
 
 
+def risk_source(domain: str) -> tuple[str, str]:
+    """Which (kind, version) holds THIS domain's risk verdicts.
+
+    The replay's `risk` facts size against a simulated account that has never
+    held an order; the paper ledger's `risk_paper` facts size against the book
+    that actually will. Reading the wrong one is not a display bug — it is the
+    dispatcher approving an order against someone else's balance, and it is
+    the single biggest hazard in this whole separation. A paper order routed
+    on the replay's approval while the paper ledger sits halted or already at
+    `MAX_CONCURRENT` shows up as two open positions at once, with both
+    surfaces internally consistent and disagreeing.
+    """
+    if domain == ExecutionDomain.RESEARCH.value:
+        return "risk", risk.RISK_VERSION
+    from . import riskpaper
+    return riskpaper.PAPER_RISK_KIND, riskpaper.PAPER_RISK_VERSION
+
+
 def _missing_table(exc: Exception) -> bool:
     """True only for "this table was never created", never for a read failure.
 
@@ -713,7 +731,8 @@ def list_candidates(con, *, domain: str = ExecutionDomain.RESEARCH.value,
     baseline = store.get_active_baseline(con)
     since = int(baseline["started_at"])
     setups_by_id = _latest_by_setup(con, "setup", setups.SETUP_VERSION, since)
-    risk_by_id = _latest_by_setup(con, "risk", risk.RISK_VERSION, since)
+    risk_kind, risk_version = risk_source(domain)
+    risk_by_id = _latest_by_setup(con, risk_kind, risk_version, since)
     # The replay is read for EVERY domain, and consulted as state for exactly
     # one. Elsewhere it travels as `research_story`: visible, labelled, inert.
     research = _research_records(con, since)

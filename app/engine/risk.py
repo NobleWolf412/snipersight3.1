@@ -359,6 +359,266 @@ def size_order(*, equity, entry, sl, direction, symbol, risk_pct=None,
             "intended_risk_usd": str(intended)}
 
 
+def load_intents(con, baseline_start: int) -> list[dict]:
+    """Every VALIDATED setup the book may rule on, in strict time order.
+
+    Shared by both producers so neither can silently rule on a different set
+    of setups than the other. execsim owns the definition of what the book
+    trades; risk sizes exactly that set and never a wider one.
+    """
+    intents: list[dict] = []
+    for sym in _symbols(con):
+        for tf in TFS:
+            for ver in execsim_plan_versions():
+                for r in store.get_facts(con, sym, tf, "setup", ver):
+                    p = json.loads(r["payload"])
+                    if (p["state"] == "VALIDATED" and
+                            r["confirmed_at"] >= baseline_start):
+                        intents.append({"symbol": sym, "tf": tf,
+                                        "market_time": r["market_time"],
+                                        "confirmed_at": r["confirmed_at"],
+                                        "universe_eligible": admitted_at(
+                                            con, sym, r["confirmed_at"]), **p})
+    intents.sort(key=lambda i: (i["confirmed_at"], i["market_time"], i["setup_id"]))
+    return intents
+
+
+def policy_for(con, gates: dict, baseline_start: int) -> dict:
+    """Everything `decide()` needs that is NOT the book.
+
+    Read once per run, all of it, so a mid-run edit cannot govern half the
+    intents under one policy and half under another. Both producers call this
+    for the same reason and get the same answer — the operator's switches are
+    not per-book.
+    """
+    # A halt blocks NEW entries only — open positions still settle, because
+    # refusing to close a position is not a safety feature.
+    from . import settings as _settings
+    opcfg = _settings.all_settings(con)
+    # Cooldowns are loaded ONCE and evaluated in memory. `active_at` runs a
+    # query; calling it per intent inside the decision loop would issue two
+    # round-trips per candidate across hundreds of intents, on the hot path of
+    # every scan cycle.
+    from . import cooldowns as _cooldowns
+    cd_facts = _cooldowns.load(con, baseline_start=baseline_start)
+    # 24h volume per symbol, read from the latest universe fact. One
+    # authority: `universe.py` already measures this to decide admission, and
+    # re-deriving it here would give two numbers that drift.
+    vol24: dict = {}
+    try:
+        from .universe import UNIVERSE_VERSION
+        row = con.execute(
+            "SELECT payload FROM facts WHERE kind='universe' AND algo_version=? "
+            "ORDER BY id DESC LIMIT 1", (UNIVERSE_VERSION,)).fetchone()
+        if row:
+            for member in json.loads(row[0])["members"]:
+                if member.get("vol_usd"):
+                    vol24[member["symbol"]] = member["vol_usd"]
+    except Exception:
+        vol24 = {}          # no universe fact yet -> cap simply inert
+    # Data-health gate. Trading on data the audit says is BROKEN produces a
+    # forward record that proves nothing — the results would be attributable to
+    # the corruption as much as to the strategy.
+    data_blocked = False
+    if opcfg["halt_on_data_blocked"]:
+        try:
+            from . import quality
+            rep = quality.cached_audit(con)
+            data_blocked = bool(rep) and not rep.get("evaluation_allowed", True)
+        except Exception:
+            data_blocked = False          # never block on the gate itself failing
+    return {
+        "gates": gates,
+        "operator_halted": bool(opcfg["halted"]),
+        "data_blocked": data_blocked,
+        "strategy_enabled": {"PULLBACK": opcfg["strategy_pullback"],
+                             "REVERSAL": opcfg["strategy_reversal"],
+                             "SCALE_IN": opcfg["strategy_scale_in"]},
+        "cooldown": lambda ts, sym, side: _cooldowns.blocked_at(
+            cd_facts, ts, sym, side),
+        "vol24": vol24,
+        # Read once, like the halt: a mid-run edit must not govern half the
+        # day under one limit and half under another. 0 disables.
+        "same_side_limit": int(opcfg.get("same_side_session_losses") or 0),
+        "max_drawdown_pct": opcfg["max_drawdown_pct"],
+        "settings": opcfg,
+    }
+
+
+def decide(intent: dict, account: dict, policy: dict) -> dict:
+    """One sizing decision, for whichever book supplied the account.
+
+    THE RULES LIVE HERE AND NOWHERE ELSE. `run()` is the research replay and
+    holds its own simulated account; the paper producer holds the paper
+    ledger's. Both call this. That is the whole shape of the separation the
+    2026-09-11 review arrived at — *research and paper share logic, never
+    state* — and it only holds while this stays the single copy.
+
+    Extracted from `run()`'s loop verbatim, deliberately: the gate ORDER is
+    behaviour, not style. `OPERATOR_HALT` before `DATA_HEALTH_BLOCKED` before
+    the drawdown halt before cooldown before the daily and same-side halts
+    before eligibility before sizing — a reordering changes which reason an
+    operator is shown for a refusal that was over-determined, and the funnel
+    is the surface that has to stay honest.
+
+    `account` is the book: equity, open positions with their risk, which days
+    are halted, losses by (day, side), and the drawdown verdict.
+    `policy` is everything that is not the book: the gates, the operator's
+    switches, the cooldown lookup, 24h volume, the same-side limit.
+
+    Returns the decision as data. Each producer serialises its own fact, so
+    this owns no `algo_version` and writes nothing.
+    """
+    gates = policy["gates"]
+    equity = account["equity"]
+    open_pos = account["open_positions"]
+    entry, sl = Decimal(intent["entry"]), Decimal(intent["sl"])
+    stop_dist = abs(entry - sl)
+    ts = intent["confirmed_at"]
+    day = _day(ts)
+    reasons: list[str] = []
+    decision = "APPROVED"
+    is_add = intent["strategy"] == "SCALE_IN"
+    intended = (equity * (gates["scale_risk_pct"] if is_add
+                          else gates["risk_pct"])).quantize(QC)
+    risk_usd = intended
+    same_side_limit = policy["same_side_limit"]
+    side_losses = account["side_losses"]
+    drawdown = account.get("drawdown")
+    cooldown = policy["cooldown"](ts, intent["symbol"], intent["direction"])
+
+    parents_open = {p["setup_id"] for p in open_pos}
+    if policy["operator_halted"]:
+        decision, reasons = "REJECTED", ["OPERATOR_HALT"]
+    elif policy["data_blocked"]:
+        decision, reasons = "REJECTED", ["DATA_HEALTH_BLOCKED"]
+    elif drawdown:
+        decision, reasons = "REJECTED", [
+            f"DRAWDOWN_HALT({drawdown['drawdown_pct']}%)"]
+    elif not policy["strategy_enabled"].get(intent["strategy"], True):
+        decision, reasons = "REJECTED", [f"STRATEGY_DISABLED({intent['strategy']})"]
+    elif cooldown is not None:
+        # Re-entry control. Nothing stopped this system from buying a
+        # level again the bar after it stopped out — tolerable while
+        # REVERSAL fired 5 times in four years, not once it fires 471.
+        # The cooldown FACT is carried into the reason so the operator
+        # sees which exit caused the lockout, not just that one exists.
+        decision = "REJECTED"
+        reasons = [f"COOLDOWN({cooldown['outcome']},{cooldown['hours']}h)"]
+    elif day in account["halted_days"]:
+        decision, reasons = "REJECTED", ["DAILY_LOSS_HALT"]
+    elif (same_side_limit > 0
+          and side_losses.get((day, intent["direction"]), 0) >= same_side_limit):
+        # The side has been wrong N times today. Sits with the other
+        # portfolio controls, before eligibility: a market that would
+        # otherwise qualify is refused on the DAY's evidence, and the
+        # reason carries the side and the count so the funnel can say
+        # "two losing shorts already today" rather than a bare enum.
+        decision, reasons = "REJECTED", [
+            f"SAME_SIDE_HALT({intent['direction']},"
+            f"{side_losses[(day, intent['direction'])]})"]
+    elif not intent["universe_eligible"]:
+        decision, reasons = "REJECTED", ["NOT_IN_POINT_IN_TIME_UNIVERSE"]
+    elif stop_dist <= 0:
+        decision, reasons = "REJECTED", ["INVALID_STOP_DISTANCE"]
+    elif intent["direction"] == "SHORT" and not _venue_allows_shorts(intent["symbol"]):
+        decision, reasons = "REJECTED", ["SHORT_UNSUPPORTED_COINBASE_SPOT"]
+    elif is_add and gates["scale_risk_pct"] <= 0:
+        # The 0R gate, stated. Without this branch a permitted add
+        # fell through to intended = equity * 0 and booked APPROVED
+        # at zero size — the arithmetic enforced the contract and
+        # nothing said so (audit 2026-08-08, finding 4).
+        decision, reasons = "REJECTED", ["SCALE_IN_FORBIDDEN(0R)"]
+    elif is_add and intent.get("parent_setup_id") not in parents_open:
+        decision, reasons = "REJECTED", ["PARENT_CLOSED"]
+    elif not is_add and sum(1 for p in open_pos
+                            if "|ADD" not in p["setup_id"]) >= gates["max_concurrent"]:
+        decision, reasons = "REJECTED", [f"CONCURRENT_LIMIT({gates['max_concurrent']})"]
+    else:
+        # The inline sizer. NOT `size_order()`, and that is a known defect
+        # rather than a decision: risk.py has carried two implementations of
+        # this arithmetic since before the extraction, they differ at least in
+        # shape (`size_order` budgets `MAX_OPEN_R * base_pct * equity`, this
+        # budgets `max_total_open_risk_pct * equity`, equal only when
+        # base_pct == pct), and nothing pins them together —
+        # `test_mode_sizing.py` says so out loud. Reconciling them changes
+        # output and is therefore a RISK_VERSION bump; this extraction is
+        # deliberately a no-op and does not attempt it.
+        open_risk = sum(p["risk_usd"] for p in open_pos)
+        budget = (gates["max_total_open_risk_pct"] * equity - open_risk).quantize(QC)
+        if budget < intended:
+            if budget < intended * MIN_REDUCED_FRACTION:
+                decision, reasons = "REJECTED", ["EXPOSURE_LIMIT"]
+            else:
+                decision, reasons = "REDUCED", ["EXPOSURE_LIMIT"]
+                risk_usd = budget
+        venue_lev = _venue_max_leverage(intent["symbol"])
+        if decision != "REJECTED" and stop_dist > 0:
+            units = risk_usd / stop_dist
+            notional = units * entry
+            lev = notional / equity
+            if lev > venue_lev:
+                scale = venue_lev / lev
+                risk_usd = (risk_usd * scale).quantize(QC)
+                units = risk_usd / stop_dist
+                notional = units * entry
+                lev = venue_lev
+                if decision == "APPROVED":
+                    decision = "REDUCED"
+                reasons.append(f"LEVERAGE_CAP({venue_lev}x)")
+
+            # Liquidation gate. On a leveraged perp the exchange can
+            # close the position before the stop is reached, at a loss
+            # LARGER than the one that was risked — which makes the stop
+            # decorative and every R-multiple downstream fiction.
+            ok, liq = venues.stop_survives_liquidation(
+                entry, sl, lev, intent["direction"])
+            if not ok:
+                decision = "REJECTED"
+                reasons = [f"STOP_BEYOND_LIQUIDATION({liq.quantize(QC)}"
+                           f"@{lev.quantize(QC)}x)"]
+
+        if decision != "REJECTED" and risk_usd > 0:
+            units = risk_usd / stop_dist
+            if units * entry < MIN_NOTIONAL_USD:
+                decision, reasons = "REJECTED", ["BELOW_MIN_NOTIONAL"]
+
+        # Participation cap. REDUCES rather than rejects: a position too
+        # large for the book is not a bad trade, it is a bad SIZE, and
+        # the correct answer to a bad size is a smaller one.
+        vol24 = policy["vol24"].get(intent["symbol"])
+        if decision != "REJECTED" and vol24 and risk_usd > 0:
+            units = risk_usd / stop_dist
+            notional = units * entry
+            cap = MAX_PARTICIPATION * Decimal(str(vol24))
+            if notional > cap > 0:
+                risk_usd = (risk_usd * cap / notional).quantize(QC)
+                if decision == "APPROVED":
+                    decision = "REDUCED"
+                reasons.append(
+                    f"PARTICIPATION_CAP({float(MAX_PARTICIPATION)*100:.1f}%_of_24h)")
+                if risk_usd < intended * MIN_REDUCED_FRACTION:
+                    decision, reasons = "REJECTED", ["PARTICIPATION_TOO_THIN"]
+                    risk_usd = Decimal(0)
+
+    if decision != "REJECTED" and risk_usd <= 0:
+        # Belt and braces: no zero-size position may ever book as
+        # APPROVED. Every legitimate zero already carries a REJECTED
+        # above; reaching here means a new code path leaked one.
+        decision, reasons = "REJECTED", ["ZERO_RISK_SIZE"]
+    if decision == "REJECTED":
+        risk_usd = Decimal(0)
+    result = {"decision": decision, "reasons": reasons or ["WITHIN_LIMITS"],
+              "intended_risk_usd": intended, "risk_usd": risk_usd,
+              "units": None, "notional_usd": None, "implied_leverage": None}
+    if decision != "REJECTED" and stop_dist > 0:
+        units = risk_usd / stop_dist
+        result.update({"units": units,
+                       "notional_usd": (units * entry).quantize(QC),
+                       "implied_leverage": (units * entry / equity).quantize(QC)})
+    return result
+
+
 def _symbols(con):
     """Every symbol with stored candles — portfolio scope spans the universe."""
     from .universe import all_tracked_symbols
@@ -379,27 +639,15 @@ def run(con) -> dict:
         # append a second full generation of DECISIONs under this one version
         # label. Mode is operational state; it never rewrites research.
         gates = gates_for_mode(AutomationMode.PAPER)
-        intents, exits = [], {}
+        intents = load_intents(con, baseline_start)
+        exits = {}
         for sym in _symbols(con):
             for tf in TFS:
-                # execsim owns the definition of what the book trades; risk
-                # sizes exactly that set and never a wider one.
-                for ver in execsim_plan_versions():
-                    for r in store.get_facts(con, sym, tf, "setup", ver):
-                        p = json.loads(r["payload"])
-                        if (p["state"] == "VALIDATED" and
-                                r["confirmed_at"] >= baseline_start):
-                            intents.append({"symbol": sym, "tf": tf,
-                                            "market_time": r["market_time"],
-                                            "confirmed_at": r["confirmed_at"],
-                                            "universe_eligible": admitted_at(
-                                                con, sym, r["confirmed_at"]), **p})
                 for r in store.get_facts(con, sym, tf, "exec", EXEC_VERSION):
                     p = json.loads(r["payload"])
                     exits[p["setup_id"]] = {"exit_ts": r["confirmed_at"],
                                             "r_net": Decimal(p["r_multiple"]),
                                             "outcome": p["outcome"]}
-        intents.sort(key=lambda i: (i["confirmed_at"], i["market_time"], i["setup_id"]))
         rec.n_inputs = len(intents)
 
         equity = START_EQUITY
@@ -520,189 +768,46 @@ def run(con) -> dict:
                                      "reason": "daily loss limit reached — no new entries today"}):
                         n_new_facts += 1
 
-        # Operator halt and strategy toggles. Read once per run so a mid-run
-        # edit cannot approve half the intents under one policy and half under
-        # another. A halt blocks NEW entries only — open positions still settle,
-        # because refusing to close a position is not a safety feature.
-        from . import settings as _settings
-        opcfg = _settings.all_settings(con)
-        # Read once, like the halt: a mid-run edit must not govern half the
-        # day under one limit and half under another. 0 disables.
-        same_side_limit = int(opcfg.get("same_side_session_losses") or 0)
-        # Cooldowns are loaded ONCE and evaluated in memory. `active_at` runs a
-        # query; calling it per intent inside the loop below would issue two
-        # round-trips per candidate across hundreds of intents, on the hot path
-        # of every scan cycle.
-        from . import cooldowns as _cooldowns
-        _cd_facts = _cooldowns.load(con, baseline_start=baseline_start)
-        # 24h volume per symbol, read from the latest universe fact. One
-        # authority: `universe.py` already measures this to decide admission,
-        # and re-deriving it here would give two numbers that drift.
-        _vol24: dict = {}
-        try:
-            from .universe import UNIVERSE_VERSION
-            _row = con.execute(
-                "SELECT payload FROM facts WHERE kind='universe' AND algo_version=? "
-                "ORDER BY id DESC LIMIT 1", (UNIVERSE_VERSION,)).fetchone()
-            if _row:
-                for _m in json.loads(_row[0])["members"]:
-                    if _m.get("vol_usd"):
-                        _vol24[_m["symbol"]] = _m["vol_usd"]
-        except Exception:
-            _vol24 = {}          # no universe fact yet -> cap simply inert
-        # Data-health gate. Trading on data the audit says is BROKEN produces a
-        # forward record that proves nothing — the results would be attributable
-        # to the corruption as much as to the strategy.
-        data_blocked = False
-        if opcfg["halt_on_data_blocked"]:
-            try:
-                from . import quality
-                rep = quality.cached_audit(con)
-                data_blocked = bool(rep) and not rep.get("evaluation_allowed", True)
-            except Exception:
-                data_blocked = False          # never block on the gate itself failing
-        _strategy_on = {
-            "PULLBACK": opcfg["strategy_pullback"],
-            "REVERSAL": opcfg["strategy_reversal"],
-            "SCALE_IN": opcfg["strategy_scale_in"],
-        }
+        # Everything that is not the book, read once (see `policy_for`).
+        policy = policy_for(con, gates, baseline_start)
+        opcfg = policy["settings"]
+        same_side_limit = policy["same_side_limit"]
 
         for it in intents:
             ts = it["confirmed_at"]
             settle(ts)
-            entry, sl = Decimal(it["entry"]), Decimal(it["sl"])
-            stop_dist = abs(entry - sl)
-            reasons, decision = [], "APPROVED"
-            is_add = it["strategy"] == "SCALE_IN"
-            intended = (equity * (gates["scale_risk_pct"] if is_add
-                                  else gates["risk_pct"])).quantize(QC)
-            risk_usd = intended
-
-            parents_open = {p["setup_id"] for p in open_pos}
-            if opcfg["halted"]:
-                decision, reasons = "REJECTED", ["OPERATOR_HALT"]
-            elif data_blocked:
-                decision, reasons = "REJECTED", ["DATA_HEALTH_BLOCKED"]
-            elif _dd_halted():
-                decision, reasons = "REJECTED", [
-                    f"DRAWDOWN_HALT({_dd_box[0]['drawdown_pct']}%)"]
-            elif not _strategy_on.get(it["strategy"], True):
-                decision, reasons = "REJECTED", [f"STRATEGY_DISABLED({it['strategy']})"]
-            elif _cooldowns.blocked_at(_cd_facts, ts, it["symbol"],
-                                       it["direction"]) is not None:
-                # Re-entry control. Nothing stopped this system from buying a
-                # level again the bar after it stopped out — tolerable while
-                # REVERSAL fired 5 times in four years, not once it fires 471.
-                # The cooldown FACT is carried into the reason so the operator
-                # sees which exit caused the lockout, not just that one exists.
-                _cd = _cooldowns.blocked_at(_cd_facts, ts, it["symbol"],
-                                            it["direction"])
-                decision = "REJECTED"
-                reasons = [f"COOLDOWN({_cd['outcome']},{_cd['hours']}h)"]
-            elif _day(ts) in halted:
-                decision, reasons = "REJECTED", ["DAILY_LOSS_HALT"]
-            elif (same_side_limit > 0
-                  and side_losses.get((_day(ts), it["direction"]), 0) >= same_side_limit):
-                # The side has been wrong N times today. Sits with the other
-                # portfolio controls, before eligibility: a market that would
-                # otherwise qualify is refused on the DAY's evidence, and the
-                # reason carries the side and the count so the funnel can say
-                # "two losing shorts already today" rather than a bare enum.
-                decision, reasons = "REJECTED", [
-                    f"SAME_SIDE_HALT({it['direction']},"
-                    f"{side_losses[(_day(ts), it['direction'])]})"]
-            elif not it["universe_eligible"]:
-                decision, reasons = "REJECTED", ["NOT_IN_POINT_IN_TIME_UNIVERSE"]
-            elif stop_dist <= 0:
-                decision, reasons = "REJECTED", ["INVALID_STOP_DISTANCE"]
-            elif it["direction"] == "SHORT" and not _venue_allows_shorts(it["symbol"]):
-                decision, reasons = "REJECTED", ["SHORT_UNSUPPORTED_COINBASE_SPOT"]
-            elif is_add and gates["scale_risk_pct"] <= 0:
-                # The 0R gate, stated. Without this branch a permitted add
-                # fell through to intended = equity * 0 and booked APPROVED
-                # at zero size — the arithmetic enforced the contract and
-                # nothing said so (audit 2026-08-08, finding 4).
-                decision, reasons = "REJECTED", ["SCALE_IN_FORBIDDEN(0R)"]
-            elif is_add and it.get("parent_setup_id") not in parents_open:
-                decision, reasons = "REJECTED", ["PARENT_CLOSED"]
-            elif not is_add and sum(1 for p in open_pos if "|ADD" not in p["setup_id"]) >= gates["max_concurrent"]:
-                decision, reasons = "REJECTED", [f"CONCURRENT_LIMIT({gates['max_concurrent']})"]
-            else:
-                open_risk = sum(p["risk_usd"] for p in open_pos)
-                budget = (gates["max_total_open_risk_pct"] * equity - open_risk).quantize(QC)
-                if budget < intended:
-                    if budget < intended * MIN_REDUCED_FRACTION:
-                        decision, reasons = "REJECTED", ["EXPOSURE_LIMIT"]
-                    else:
-                        decision, reasons = "REDUCED", ["EXPOSURE_LIMIT"]
-                        risk_usd = budget
-                venue_lev = _venue_max_leverage(it["symbol"])
-                if decision != "REJECTED" and stop_dist > 0:
-                    units = risk_usd / stop_dist
-                    notional = units * entry
-                    lev = notional / equity
-                    if lev > venue_lev:
-                        scale = venue_lev / lev
-                        risk_usd = (risk_usd * scale).quantize(QC)
-                        units = risk_usd / stop_dist
-                        notional = units * entry
-                        lev = venue_lev
-                        if decision == "APPROVED":
-                            decision = "REDUCED"
-                        reasons.append(f"LEVERAGE_CAP({venue_lev}x)")
-
-                    # Liquidation gate. On a leveraged perp the exchange can
-                    # close the position before the stop is reached, at a loss
-                    # LARGER than the one that was risked — which makes the stop
-                    # decorative and every R-multiple downstream fiction.
-                    ok, liq = venues.stop_survives_liquidation(
-                        entry, sl, lev, it["direction"])
-                    if not ok:
-                        decision = "REJECTED"
-                        reasons = [f"STOP_BEYOND_LIQUIDATION({liq.quantize(QC)}"
-                                   f"@{lev.quantize(QC)}x)"]
-
-                if decision != "REJECTED" and risk_usd > 0:
-                    units = risk_usd / stop_dist
-                    if units * entry < MIN_NOTIONAL_USD:
-                        decision, reasons = "REJECTED", ["BELOW_MIN_NOTIONAL"]
-
-                # Participation cap. REDUCES rather than rejects: a position too
-                # large for the book is not a bad trade, it is a bad SIZE, and
-                # the correct answer to a bad size is a smaller one.
-                vol24 = _vol24.get(it["symbol"])
-                if decision != "REJECTED" and vol24 and risk_usd > 0:
-                    units = risk_usd / stop_dist
-                    notional = units * entry
-                    cap = MAX_PARTICIPATION * Decimal(str(vol24))
-                    if notional > cap > 0:
-                        risk_usd = (risk_usd * cap / notional).quantize(QC)
-                        if decision == "APPROVED":
-                            decision = "REDUCED"
-                        reasons.append(
-                            f"PARTICIPATION_CAP({float(MAX_PARTICIPATION)*100:.1f}%_of_24h)")
-                        if risk_usd < intended * MIN_REDUCED_FRACTION:
-                            decision, reasons = "REJECTED", ["PARTICIPATION_TOO_THIN"]
-                            risk_usd = Decimal(0)
-
-            if decision != "REJECTED" and risk_usd <= 0:
-                # Belt and braces: no zero-size position may ever book as
-                # APPROVED. Every legitimate zero already carries a REJECTED
-                # above; reaching here means a new code path leaked one.
-                decision, reasons = "REJECTED", ["ZERO_RISK_SIZE"]
-            if decision == "REJECTED":
-                risk_usd = Decimal(0)
+            # The REPLAY's own account, handed to the shared rules. The
+            # paper producer builds the same shape from `paperbook.snapshot`
+            # and calls the same function — one rulebook, two books.
+            verdict = decide(
+                it,
+                {"equity": equity, "open_positions": open_pos,
+                 "halted_days": halted, "side_losses": side_losses,
+                 "drawdown": _dd_box[0] if _dd_halted() else None},
+                policy)
+            decision = verdict["decision"]
+            reasons = verdict["reasons"]
+            intended = verdict["intended_risk_usd"]
+            risk_usd = verdict["risk_usd"]
             payload = {"event": "DECISION", "setup_id": it["setup_id"],
                        "decision": decision, "reasons": reasons or ["WITHIN_LIMITS"],
                        "intended_risk_usd": str(intended), "risk_usd": str(risk_usd),
+                       # "PAPER" here has always meant "the paper research
+                       # book" — the replay's own simulated account. It is not
+                       # the paper BOOK that paperbook.py owns, and the two
+                       # must not be read as the same thing.
                        "risk_pct": str(gates["risk_pct"]), "pct_basis": "PAPER",
                        "equity_at": str(equity), "baseline_id": baseline["id"],
                        "baseline_started_at": baseline_start}
-            if decision != "REJECTED" and stop_dist > 0:
-                units = (risk_usd / stop_dist)
-                payload.update({"units": str(units.quantize(Decimal("0.00000001"))),
-                                "notional_usd": str((units * entry).quantize(QC)),
-                                "implied_leverage": str((units * entry / equity).quantize(QC))})
+            if verdict["units"] is not None:
+                # Read from the verdict rather than recomputed: `decide()` has
+                # already done this arithmetic, and a second copy of it here
+                # is exactly the "one authority per number" defect — two
+                # expressions that agree today and drift on the first edit.
+                payload.update({
+                    "units": str(verdict["units"].quantize(Decimal("0.00000001"))),
+                    "notional_usd": str(verdict["notional_usd"]),
+                    "implied_leverage": str(verdict["implied_leverage"])})
                 ex = exits.get(it["setup_id"])
                 payload["fill_outcome"] = ex["outcome"] if ex else "PENDING"
                 if ex is None or ex["outcome"] != "MISSED":

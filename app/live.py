@@ -25,11 +25,18 @@ from pathlib import Path
 
 import notify
 from engine import (automation, autotrader, broker_factory, execution, positions, store,
-                    importer, aggregator, execsim, risk, universe, ingest, quality,
-                    listings, marketdata, pipeline, venues, cooldowns, funding)
+                    importer, aggregator, execsim, risk, riskpaper, universe, ingest,
+                    quality, listings, marketdata, pipeline, venues, cooldowns, funding)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.4-draft"
+LIVE_VERSION = "live-v0.5-draft"
+# v0.5: the cycle runs the PAPER book's own risk authority, after the paper
+# book settles and before the dispatcher reads it. Until now the only risk
+# pass was the research replay, whose account has never held an order, and the
+# dispatcher sized paper orders against it — 23 refusals on the live store for
+# a slot held by a simulated position, 19 for same-day losses nothing had
+# actually taken, against an empty paper book (2026-09-11). Order is part of
+# the behaviour: settle, then size, then dispatch.
 # v0.4: the cycle imports real funding settlements into `funding_rates`,
 # on the same clock snapshot as the candles. The cycle's durable output
 # grew a table, which is what earned the v0.2 bump too. Nothing reads the
@@ -659,6 +666,29 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     _beat("autonomous intents")
     try:
         execution.monitor_paper(con)
+        # ORDER MATTERS, and it is the whole reason this sits here rather than
+        # beside risk.run above. `monitor_paper` is what fills, closes and
+        # settles the paper book; the paper risk authority sizes against the
+        # balance and exposure that leaves behind. Run before it and every
+        # decision is made against the PREVIOUS cycle's account — a trade that
+        # closed at a loss two minutes ago would not yet have reduced the
+        # equity the next one is sized from, and a slot that just freed would
+        # still read as occupied.
+        _beat("paper risk")
+        _paper_risk = riskpaper.run(con)
+        if _paper_risk["written"]:
+            log.info(f"PAPER RISK {_paper_risk['written']} verdict(s) moved: "
+                     f"{_paper_risk['APPROVED']} approved, "
+                     f"{_paper_risk['REDUCED']} reduced, "
+                     f"{_paper_risk['REJECTED']} rejected; equity "
+                     f"{_paper_risk['equity']}, committed "
+                     f"{_paper_risk['committed_risk_usd']}")
+        if _paper_risk["unpriced_intents"]:
+            # Loud fallback: an intent whose stored plan carries no risk_usd
+            # contributes nothing to exposure, so the budget silently widens.
+            log.warning(f"paper book holds {_paper_risk['unpriced_intents']} "
+                        "intent(s) with no recorded risk_usd; their exposure "
+                        "is not counted against the budget")
         private_broker = None
         active_mode = automation.current(con)[0]
         custody_environments = positions.private_environments_with_exposure(con)
