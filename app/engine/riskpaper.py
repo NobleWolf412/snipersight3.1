@@ -35,7 +35,18 @@ from .runlog import RunRecorder
 from .setups import SETUP_VERSION
 
 
-PAPER_RISK_VERSION = "riskpaper-v0.1-draft"
+PAPER_RISK_VERSION = "riskpaper-v0.2-draft"
+# v0.2: three corrections found by review, all of which let the book
+# approve more than it could fund.
+#  - RESERVATIONS COUNT. Budget and slots now include money an unfilled
+#    order has already claimed. Without it a second trade was approved
+#    against a budget the first was holding.
+#  - EACH CANDIDATE SEES THE ONES BEFORE IT. The snapshot is taken once,
+#    so every candidate in a scan was sized against the same untouched
+#    balance — with MAX_CONCURRENT=1 that is a deck of orders for one slot.
+#  - THE CLOCK IS NOW, not the setup's confirmation. Cooldowns, the daily
+#    halt and the same-side governor were read at the moment the setup
+#    confirmed, so a stop-out since would not block the next entry.
 
 #: The fact kind. Separate from "risk" rather than a field on it, because
 #: `_latest_by_setup` selects on (kind, algo_version) and nothing in the store
@@ -120,16 +131,40 @@ def run(con, *, now: int | None = None) -> dict:
         # "blocking at this instant" means — overlapping locks, the
         # point-in-time rule, later-expiry-wins — and only the SOURCE differs.
         from . import cooldowns as _cooldowns
-        policy = dict(policy, cooldown=lambda ts, sym, side: _cooldowns.blocked_at(
-            account["cooldowns"], ts, sym, side))
+        policy = dict(
+            policy,
+            cooldown=lambda ts, sym, side: _cooldowns.blocked_at(
+                account["cooldowns"], ts, sym, side),
+            # THIS BOOK RULES NOW. The replay's clock is each setup's own
+            # `confirmed_at`, which is right for history and wrong here: a
+            # stop-out an hour ago would not count against today for a setup
+            # that confirmed yesterday, and a cooldown started since would not
+            # block. The loss controls have to be read at the moment of the
+            # decision, which is this instant.
+            decision_at=now)
         intents = live_intents(con, baseline_start, now)
         rec.n_inputs = len(intents)
         previous = _latest(con)
         counts = {"APPROVED": 0, "REDUCED": 0, "REJECTED": 0}
         written = 0
 
+        # EVERY CANDIDATE IN A SCAN SEES WHAT THE ONES BEFORE IT CLAIMED.
+        # The snapshot is taken once, so without this each candidate is sized
+        # against the same untouched balance and a scan can approve the whole
+        # deck against one budget — with MAX_CONCURRENT=1 that is several
+        # orders for a single slot. The claims are intra-cycle bookkeeping
+        # only: nothing is dispatched until `autotrader.run`, and next cycle
+        # the snapshot rebuilds from what the outbox and the book actually
+        # hold. So an approval that never routes releases itself.
+        book = dict(account)
         for intent in intents:
-            verdict = risk.decide(intent, account, policy)
+            verdict = risk.decide(intent, book, policy)
+            if verdict["decision"] != "REJECTED":
+                book = dict(book,
+                            reserved_risk_usd=(book.get("reserved_risk_usd", Decimal(0))
+                                               + verdict["risk_usd"]),
+                            reserved_slots=(book.get("reserved_slots", 0)
+                                            + (0 if intent["strategy"] == "SCALE_IN" else 1)))
             payload = {
                 "event": "DECISION", "setup_id": intent["setup_id"],
                 "decision": verdict["decision"], "reasons": verdict["reasons"],
@@ -175,7 +210,7 @@ def run(con, *, now: int | None = None) -> dict:
         return {"equity": str(account["equity"]),
                 "committed_risk_usd": str(account["committed_risk_usd"]),
                 "open_positions": account["concurrent"],
-                "reservations": account["reservations"],
+                "reserved_slots": account["reserved_slots"],
                 "unpriced_intents": account["unpriced_intents"],
                 "live_intents": len(intents), "written": written,
                 "version": PAPER_RISK_VERSION, **counts}

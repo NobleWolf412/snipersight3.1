@@ -212,25 +212,24 @@ class AttemptIdentity(unittest.TestCase):
         self.assertIsNone(opportunities.attempt_id_for("BTCUSDT|1H|PULLBACK|z|v",
                                                        {"state": "FORMING"}))
 
-    def test_nothing_keys_off_the_attempt_while_nothing_stores_it(self):
-        """The one real trap left in this design, converted into a failure.
+    def test_nothing_looks_the_attempt_up_in_a_table_that_lacks_it(self):
+        """No COLUMN holds an attempt, so no query may ask for one.
 
-        `attempt_id` is LINEAGE. Every table that holds a domain record —
-        `execution_outbox`, `paper_positions`, `managed_positions` — is keyed
-        on `setup_id`, which names the ZONE. No table carries an attempt. What
-        actually stops an old finished attempt suppressing a later retest is
-        the timestamp comparison in `_describes_an_earlier_attempt`, and that
-        is pinned by its own test above.
+        `execution_outbox`, `paper_positions` and `managed_positions` are all
+        keyed on `setup_id`, which names the ZONE. A `WHERE attempt_id=?`
+        against any of them matches nothing and fails silently — the exact
+        shape of failure this whole separation was about.
 
-        The hazard is a reader who sees an identity function and starts
-        joining, deduping or looking up on it — which would silently match
-        nothing, because nothing was ever written under it.
+        What IS allowed, and is why this test narrowed: feeding the attempt
+        into a DERIVED identity that gets stored. `execution.intent_key`
+        hashes it into the idempotency key, which is how a later retest of a
+        zone stops inheriting the previous attempt's terminal state. The
+        attempt is persisted there — inside the hash — so nothing has to look
+        it up.
 
-        If you are here because this failed, the question is: does an attempt
-        now need to be a stored key? It does once several intents can belong
-        to one attempt — partial fills, a resize, a replacement order. If so,
-        add the column, write it at dispatch, and key on it. If not, you are
-        about to look something up that was never written.
+        If you are here because this failed, you are about to query a column
+        that does not exist. Either add it and write it at dispatch, or use
+        the derived key.
         """
         import ast
         import pathlib
@@ -239,7 +238,20 @@ class AttemptIdentity(unittest.TestCase):
         offences = []
         for path in sorted(root.rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+            # Docstrings are Constants too, and this file's own prose quotes
+            # the very query it forbids. Skip them by identity rather than by
+            # guessing from length — a rule that cannot describe itself is
+            # a rule nobody can read.
+            docstrings = {
+                id(n.body[0].value) for n in ast.walk(tree)
+                if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                                  ast.AsyncFunctionDef))
+                and n.body and isinstance(n.body[0], ast.Expr)
+                and isinstance(n.body[0].value, ast.Constant)
+                and isinstance(n.body[0].value.value, str)}
             for node in ast.walk(tree):
+                if id(node) in docstrings:
+                    continue
                 # AST rather than text, so prose in a docstring cannot trip
                 # this and a real use cannot hide behind one.
                 if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
@@ -250,11 +262,6 @@ class AttemptIdentity(unittest.TestCase):
                 if any(word in text.upper() for word in sql):
                     offences.append(
                         f"{path.name}:{node.lineno}: SQL naming attempt_id")
-                elif len(text) < 40:
-                    # A short bare string is a dict key or column name — the
-                    # lookup shape. Prose is long; keys are not.
-                    offences.append(
-                        f"{path.name}:{node.lineno}: {text!r} used as a key")
         self.assertEqual(
             offences, [],
             "something is keying off the attempt. No table stores it, so a "

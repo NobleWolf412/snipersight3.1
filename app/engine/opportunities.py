@@ -119,22 +119,23 @@ def attempt_id_for(setup_id: str, payload: dict) -> str | None:
     store agrees exactly: `confirmed_bar_ts` is present on every VALIDATED and
     EXPIRED fact and absent from every FORMING, CONFIRMING and CANCELLED one.
 
-    **THIS IS LINEAGE, NOT A KEY — nothing is stored under it.** Read that
-    before building on it. `execution_outbox`, `paper_positions` and
-    `managed_positions` are all keyed on `setup_id`, which names the zone; no
-    table carries an attempt. So this identifies an attempt for a READER, and
-    what actually stops an old finished attempt from suppressing a later
-    retest of the same zone is `_describes_an_earlier_attempt` below — a
-    comparison of the record's timestamp against the setup's own confirmation,
-    pinned by its own test.
+    **NO COLUMN HOLDS THIS, so no query may ask for one.** `execution_outbox`,
+    `paper_positions` and `managed_positions` are all keyed on `setup_id`,
+    which names the zone; a `WHERE attempt_id=?` against any of them matches
+    nothing and fails silently. A test fails on exactly that.
 
-    That is sufficient while one attempt means one intent, which is true
-    today. It stops being sufficient the moment several intents can belong to
-    one attempt — partial fills, a resize, a replacement order — because then
-    "which attempt is this record about" can no longer be inferred from time
-    alone. At that point store the attempt on the row and key on it; until
-    then a migration would buy nothing. `test_execution_domains.py` fails if
-    anything starts keying off this before that day comes.
+    Where it IS load-bearing is `execution.intent_key`, which hashes it into
+    the idempotency key. Without that, a zone retested weeks later at the same
+    size minted the PREVIOUS attempt's key, read back that attempt's terminal
+    state, and never routed — a fresh valid setup answering PAPER_EXPIRED for
+    ever. The attempt is persisted there, inside the hash, so nothing needs to
+    look it up.
+
+    Separately, `_describes_an_earlier_attempt` below keeps an old terminal
+    RECORD from claiming a fresh candidate, by comparing the record's
+    timestamp against the setup's own confirmation. Two mechanisms, two jobs:
+    one stops a stale record being read as current, the other stops a new
+    order being mistaken for an old one.
     """
     bar = payload.get("confirmed_bar_ts")
     if bar is None or not setup_id:

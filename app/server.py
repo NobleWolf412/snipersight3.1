@@ -3588,6 +3588,14 @@ def operations_read_model():
         daily = _daily_budget(pf.get("journal", []), equity, _gates)
         daily_remaining = Decimal(daily["remaining_usd"])
         account = {
+                # The PAPER BOOK, carried here as well as on /api/command.
+                # Both endpoints paint the same cockpit and both overwrite the
+                # shared payload, so an account shape present on only one of
+                # them means the hero shows the book after one refresh and
+                # silently falls back to the research replay after the other.
+                # One contract on both, rather than a merge that would keep
+                # stale figures alive when a field legitimately disappears.
+                "paper": _paper_account(con),
                 "equity": str(equity.quantize(Decimal("0.01"))),
                 "risk_per_trade_pct": str(_gates["risk_pct"] * 100),
                 "next_risk_usd": str((equity * _gates["risk_pct"]).quantize(Decimal("0.01"))),

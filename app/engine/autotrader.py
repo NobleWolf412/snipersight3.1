@@ -17,7 +17,13 @@ from .contracts import (AutomationMode, DecisionReason, ExecutionPlan,
                         OrderIntent, OrderKind, RiskDecision, domain_for_mode)
 
 
-AUTOTRADER_VERSION = "autotrader-v0.6-draft"
+AUTOTRADER_VERSION = "autotrader-v0.7-draft"
+# v0.7: two wire corrections. `equity_basis_source` is read from the
+# decision instead of hardcoded "PAPER_REPLAY" — true while the replay was
+# the only risk authority, a lie once the paper ledger started sizing, and
+# the dispatch gate trusts that field. And the idempotency key carries the
+# ATTEMPT: without it a zone retested at the same size minted the previous
+# attempt's key and read back its terminal state instead of routing.
 # v0.6: the candidates are read in the ACTIVE MODE'S OWN DOMAIN. Until now
 # this asked for the default read model, which derived lifecycle from the
 # research replay — so a setup the simulator had already exited could not be
@@ -35,6 +41,15 @@ AUTOTRADER_VERSION = "autotrader-v0.6-draft"
 # order sent to TESTNET/LIVE must carry that mode's R (0.25%) or the first
 # real order goes out 8x oversize. risk.dispatch_scale() owns the ratio —
 # the number still has exactly one authority.
+
+
+#: `pct_basis` on a risk decision -> the equity basis the wire records.
+#: The replay writes "PAPER" meaning its own simulated book; the paper ledger
+#: writes "PAPER_LEDGER". Neither is "VENUE_BALANCE", which is the only value
+#: `execution.Coordinator.dispatch` accepts for a LIVE order — so this mapping
+#: cannot accidentally unlock live routing, and an unrecognised basis falls
+#: back to the most restrictive answer rather than the most permissive.
+_EQUITY_BASIS = {"PAPER": "PAPER_REPLAY", "PAPER_LEDGER": "PAPER_LEDGER"}
 
 
 def _d(value, default="0") -> Decimal:
@@ -62,9 +77,12 @@ def build_plan(row: dict, mode: AutomationMode) -> ExecutionPlan:
         raise ValueError("risk authority returned no positive quantity")
     entry = None if kind == OrderKind.MARKET else _d(
         recommendation.get("limit_price") or setup.get("entry"))
+    # The ATTEMPT, not just the zone. Without it a later retest of the same
+    # zone at the same size mints the key of the previous attempt, reads back
+    # that attempt's terminal state, and never routes.
     key = execution.intent_key(
         setup["setup_id"], mode, kind.value, str(quantity),
-        None if entry is None else str(entry))
+        None if entry is None else str(entry), setup.get("attempt_id"))
     intent_id = "auto-" + hashlib.sha256(
         f"{AUTOTRADER_VERSION}|{key}".encode()).hexdigest()[:32]
     intent = OrderIntent(
@@ -89,14 +107,17 @@ def build_plan(row: dict, mode: AutomationMode) -> ExecutionPlan:
         # TESTNET/LIVE plan — a durable wire record contradicting its own
         # risk_usd, and a trap for any future gate that reads it.
         implied_leverage=(_d(risk.get("implied_leverage")) * scale).quantize(Decimal("0.01")),
-        # The account this size is a percentage of. `equity_at` is the risk
-        # replay's own figure for the PAPER book; scaling the R does not
-        # change whose equity it was. Stated on the wire so the dispatch gate
-        # can refuse a real-money order sized against the wrong account —
-        # see contracts.RiskDecision.
+        # WHOSE account this size is a percentage of, read from the decision
+        # rather than assumed. This said "PAPER_REPLAY" unconditionally, which
+        # was true while the replay was the only risk authority and became a
+        # lie the moment the paper ledger started sizing: the number came from
+        # a real book and the wire kept naming the backtest. A provenance
+        # field that does not track its own source is worse than none, because
+        # the dispatch gate trusts it — see contracts.RiskDecision.
         equity_basis_usd=(_d(risk.get("equity_at"))
                           if risk.get("equity_at") is not None else None),
-        equity_basis_source="PAPER_REPLAY",
+        equity_basis_source=_EQUITY_BASIS.get(
+            str(risk.get("pct_basis") or ""), "PAPER_REPLAY"),
         reasons=tuple(DecisionReason(str(reason), str(reason))
                       for reason in risk.get("reasons") or ["WITHIN_LIMITS"]))
     return ExecutionPlan(

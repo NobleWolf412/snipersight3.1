@@ -40,7 +40,10 @@ from decimal import Decimal
 from .contracts import AutomationMode
 
 
-PAPERBOOK_VERSION = "paperbook-v0.3-draft"
+PAPERBOOK_VERSION = "paperbook-v0.4-draft"
+# v0.4: the reservation count is named `reserved_slots`, matching
+# `risk.decide`'s account contract exactly. A key that has to be translated
+# on the way into the rules is a rename waiting to be got wrong.
 # v0.3: RE-ENTRY LOCKS ARE THIS BOOK'S OWN. The last input the domain
 # separation missed: equity, concurrency and the same-side governor moved
 # onto the ledger, cooldowns did not, and the paper risk pass kept reading
@@ -304,7 +307,10 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
         #: the market PLUS money an unfilled intent has already claimed.
         "committed_risk_usd": open_risk + reserved_risk,
         "concurrent": len(open_positions),
-        "reservations": len(reserved),
+        #: Named `reserved_slots` to match `risk.decide`'s account contract.
+        #: One name for one thing — a key that has to be translated on the
+        #: way into the rules is a rename waiting to be got wrong.
+        "reserved_slots": len(reserved),
         "realised_by_day": realised_by_day,
         "day_start_equity": day_start_equity,
         "side_losses": side_losses,

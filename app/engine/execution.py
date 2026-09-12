@@ -19,7 +19,13 @@ from .contracts import (AutomationMode, BrokerExecution, BrokerOrder, DecisionRe
                         RiskDecision, to_wire)
 
 
-EXECUTION_CORE_VERSION = "execution-core-v0.8-draft"
+EXECUTION_CORE_VERSION = "execution-core-v0.9-draft"
+# v0.9: `intent_key` accepts the ATTEMPT. `setup_id` names the zone, not the
+# occurrence, so a zone retested weeks later at the same quantity and entry
+# minted the same key, found the old row, and returned that attempt's
+# terminal state as though this one were already handled — a fresh valid
+# setup answering PAPER_EXPIRED for ever. Optional, so the SHADOW pairing
+# (which mirrors an existing intent) keeps its identity unchanged.
 # v0.8: the PAPER exit walk is `execsim.walk_exit`, not a private copy of it.
 # The copy had drifted in the one direction that matters: it closed a stop at
 # the stop price even when the bar GAPPED THROUGH it, while research pays that
@@ -70,9 +76,25 @@ class DispatchRejected(RuntimeError):
 
 
 def intent_key(setup_id: str, mode: AutomationMode, order_kind: str,
-               quantity: str, entry: str | None) -> str:
-    raw = "|".join((setup_id, mode.value, order_kind, quantity, entry or "MARKET"))
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+               quantity: str, entry: str | None,
+               attempt_id: str | None = None) -> str:
+    """The identity that makes a re-dispatch a no-op instead of a second order.
+
+    `attempt_id` is what stops it doing that to a DIFFERENT trade. `setup_id`
+    names the zone, not the occurrence, so a zone retested weeks later
+    re-validates under the same id — and at the same quantity and entry it
+    minted the same key, found the old row, and returned that attempt's
+    terminal state as though this one had already been handled. A fresh valid
+    setup reading back PAPER_EXPIRED, silently, forever.
+
+    Optional so the key is unchanged for callers that have no attempt — the
+    SHADOW pairing below mirrors an existing intent and must not mint a new
+    identity for it.
+    """
+    parts = [setup_id, mode.value, order_kind, quantity, entry or "MARKET"]
+    if attempt_id:
+        parts.append(attempt_id)
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
 
 def _ensure(con) -> None:

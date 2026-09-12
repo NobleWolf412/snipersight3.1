@@ -3435,10 +3435,17 @@ weighed in. Name the facts you used.`;
         balSub.classList.toggle('is-up', !!traded && bookUp);
         balSub.classList.toggle('is-down', !!traded && !bookUp);
       } else {
-        balSub.textContent = ruled
+        /* NO PAPER BOOK IN THE PAYLOAD — so this is the research replay, and
+           it says so. Falling back silently is the exact defect: the figure
+           changes meaning, the label does not, and the operator reads a
+           backtest as their balance. Both painters carry `account.paper`, so
+           this branch means something is genuinely wrong rather than merely
+           unrefreshed. Loud fallback, §6 rule 6. */
+        balSub.textContent = (ruled
           ? `${(up ? '+' : '') + pct(p.return_pct)} since ${money(p.start_equity)}`
             + (rebuilding ? ' · provisional, record rebuilding' : '')
-          : `started at ${money(p.start_equity)} · no trades ruled on yet`;
+          : `started at ${money(p.start_equity)} · no trades ruled on yet`)
+          + ' · RESEARCH REPLAY, not the paper book';
         balSub.classList.toggle('is-up', ruled && up);
         balSub.classList.toggle('is-down', ruled && !up);
       }

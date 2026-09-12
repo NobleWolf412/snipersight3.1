@@ -68,7 +68,9 @@ OPERATIONAL_EXPECTED = {
     # bad day can be diagnosed rather than only counted.
     # paperbook-v0.3: re-entry locks come from this book's own stop-outs,
     # not the replay's. The rules and the evaluator stay shared.
-    "paperbook": "paperbook-v0.3-draft",
+    # paperbook-v0.4: the reservation count is `reserved_slots`, the name
+    # `risk.decide` reads. One name for one thing.
+    "paperbook": "paperbook-v0.4-draft",
     # contracts-v0.4: a RiskDecision states the equity basis its size is a
     # percentage of, and where that figure was read. Nothing converted the
     # ACCOUNT between the paper replay and a dispatched order.
@@ -90,7 +92,9 @@ OPERATIONAL_EXPECTED = {
     # risk-approved setups in the live baseline read CLOSED because the
     # simulator had settled them, none reached READY, and nothing was ever
     # dispatched. No sizing or routing rule moved; it asks the right book.
-    "autotrader": "autotrader-v0.6-draft",
+    # autotrader-v0.7: equity_basis_source is read from the decision rather
+    # than hardcoded, and the idempotency key carries the attempt.
+    "autotrader": "autotrader-v0.7-draft",
     # execution-core-v0.6: private entries honour expires_at (cancel at the
     # venue), a proven pre-wire refusal is SUBMIT_FAILED and retryable
     # instead of stuck-SUBMITTING-forever, and RESTART_RECOVERED carries
@@ -101,7 +105,9 @@ OPERATIONAL_EXPECTED = {
     # than a private copy. The copy closed a gapped-through stop AT the stop
     # price while research pays that bar's open — paper flattered exactly the
     # losses that hurt most.
-    "execution_core": "execution-core-v0.8-draft",
+    # execution-core-v0.9: `intent_key` accepts the attempt, so a retested
+    # zone stops inheriting the previous attempt's terminal state.
+    "execution_core": "execution-core-v0.9-draft",
     "positions": "positions-v0.3-draft",
     # phemex-private-v0.4: the stop (sent on every order) and every target
     # are tick-validated for all order kinds; submit() sets the leverage the
@@ -526,7 +532,11 @@ EXPECTED = {
     # halts derived from paper fills, not from the replay's simulated account.
     # Both books call `risk.decide`, so a rule change still moves exactly one
     # thing; what differs is whose money the percentage is of.
-    "riskpaper": "riskpaper-v0.1-draft",
+    # riskpaper-v0.2: reservations count against budget AND slots; each
+    # candidate in a scan sees what the ones before it claimed; and the
+    # loss controls are read at the moment of decision, not at the setup's
+    # confirmation. All three let the book approve more than it could fund.
+    "riskpaper": "riskpaper-v0.2-draft",
     "scale": "scale-v0.21-draft",
     "cooldown": "cooldown-v0.15-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on

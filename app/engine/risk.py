@@ -474,7 +474,15 @@ def decide(intent: dict, account: dict, policy: dict) -> dict:
     open_pos = account["open_positions"]
     entry, sl = Decimal(intent["entry"]), Decimal(intent["sl"])
     stop_dist = abs(entry - sl)
-    ts = intent["confirmed_at"]
+    # WHEN THIS DECISION IS BEING MADE, which is not always when the setup
+    # confirmed. The replay rules on history, so its clock is the setup's own
+    # `confirmed_at` — anything else would let it act on knowledge the moment
+    # did not have. A forward book rules NOW, and using the setup's clock
+    # there reads the loss controls at the wrong instant: a stop-out an hour
+    # ago would not close today for a setup that confirmed yesterday, and a
+    # cooldown started since would not block. Producers state which they are;
+    # absent, the point-in-time reading stands, so the replay is unchanged.
+    ts = int(policy.get("decision_at") or intent["confirmed_at"])
     day = _day(ts)
     reasons: list[str] = []
     decision = "APPROVED"
@@ -531,8 +539,13 @@ def decide(intent: dict, account: dict, policy: dict) -> dict:
         decision, reasons = "REJECTED", ["SCALE_IN_FORBIDDEN(0R)"]
     elif is_add and intent.get("parent_setup_id") not in parents_open:
         decision, reasons = "REJECTED", ["PARENT_CLOSED"]
-    elif not is_add and sum(1 for p in open_pos
-                            if "|ADD" not in p["setup_id"]) >= gates["max_concurrent"]:
+    elif not is_add and (sum(1 for p in open_pos
+                             if "|ADD" not in p["setup_id"])
+                         + account.get("reserved_slots", 0)
+                         ) >= gates["max_concurrent"]:
+        # Reservations occupy a slot. An unfilled order is a position waiting
+        # to happen, and approving a second against MAX_CONCURRENT=1 opens two.
+        # The replay passes no reservations, so its count is unchanged.
         decision, reasons = "REJECTED", [f"CONCURRENT_LIMIT({gates['max_concurrent']})"]
     else:
         # The inline sizer. NOT `size_order()`, and that is a known defect
@@ -544,7 +557,14 @@ def decide(intent: dict, account: dict, policy: dict) -> dict:
         # `test_mode_sizing.py` says so out loud. Reconciling them changes
         # output and is therefore a RISK_VERSION bump; this extraction is
         # deliberately a no-op and does not attempt it.
-        open_risk = sum(p["risk_usd"] for p in open_pos)
+        # COMMITTED, not merely open. Money an unfilled order has already
+        # claimed is spent as far as the next decision is concerned — ignoring
+        # it lets a second trade be approved against a budget the first is
+        # holding, and with several candidates in one scan it lets all of them
+        # be approved against the same balance. `paperbook` computes the
+        # reservation; the replay passes none, so its budget is unchanged.
+        open_risk = (sum(p["risk_usd"] for p in open_pos)
+                     + account.get("reserved_risk_usd", Decimal(0)))
         budget = (gates["max_total_open_risk_pct"] * equity - open_risk).quantize(QC)
         if budget < intended:
             if budget < intended * MIN_REDUCED_FRACTION:

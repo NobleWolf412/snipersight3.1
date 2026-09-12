@@ -198,6 +198,36 @@
     </div>`;
   }
 
+  /* What the PAPER BOOK did with this setup, as its own section.
+
+     Honest empty state, deliberately: a book that has not ruled on a setup
+     says so, rather than rendering nothing and letting the research ladder
+     below read as the whole story. That silence is what made a backtest look
+     like the operator's record for weeks. */
+  function paperChain(paper, stageHtml) {
+    if (!paper) return '';
+    const stages = paper.stages || [];
+    const reached = stages.filter(s => s.status === 'pass').length;
+    const pos = paper.position || null;
+    const verdict = paper.verdict || null;
+    const head = verdict
+      ? `${esc(verdict.decision)} · ${esc(String(verdict.risk_usd))} at risk`
+      : 'the paper book has not ruled on this setup';
+    const outcome = pos && pos.outcome
+      ? `<span class="dx-chip">${esc(pos.outcome)}` +
+        (pos.r_multiple ? ' · ' + esc(String(pos.r_multiple)) + 'R' : '') + '</span>'
+      : '';
+    return `<div class="dx-flagged">
+      <div class="dx-flagged-t">Paper book — ${esc(head)} ${outcome}</div>
+      <div class="dx-trace">${stages.length
+        ? stages.map(s => stageHtml(s, true)).join('')
+        : '<div class="dx-empty">no paper record for this setup</div>'}</div>
+      <div class="dx-note-what">${reached} of ${stages.length} steps reached.
+        This is the forward book. The checks below are the research
+        simulator's, which trades setups this book never funded.</div>
+    </div>`;
+  }
+
   function render(t) {
     const life = t.lifecycle || {};
     const verdictChip = life.failure_code === 'WINNER' ? 'chip-green'
@@ -279,8 +309,17 @@
            "ADAUSDT · 4H · reversal short". Its one irreducible fact — the
            outcome — is now a chip on the summary line; who a failure is
            attributed to is developer detail and belongs with the ladder. -->
+      <!-- THE PAPER BOOK'S OWN CHAIN, above the research ladder and never
+           merged into it. The stages below are the SIMULATOR's account: it
+           trades everything, including setups risk refused, because a
+           rejected population is how you learn whether the filter helps.
+           This one is what the book actually queued, routed, filled and
+           closed. Reading either as the other is the mistake that ran
+           through this project for weeks; one interleaved timeline would
+           invite it straight back. -->
+      ${paperChain(t.paper, stageHtml)}
       <details class="dx-all">
-        <summary>Every check (${all.length})</summary>
+        <summary>Every check (${all.length}) · research replay</summary>
         <div class="dx-verdict">
           <span class="dx-verdict-line">${esc(life.detail || 'no lifecycle verdict recorded')}</span>
           <span class="dx-verdict-owner">${life.failure_owner
