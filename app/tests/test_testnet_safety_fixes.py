@@ -448,6 +448,17 @@ class EveryDrillNamesItsEvidence(unittest.TestCase):
 
 
 class CustodyOverridesTheSimulatorsStory(unittest.TestCase):
+    """Real venue exposure outranks whatever domain a SCREEN is scoped to.
+
+    Since opportunity-v0.8 a read model answers for one execution domain, and
+    the dispatcher reads its own and nothing else. An operator screen is the
+    one deliberate exception (`opportunities.real_exposure`): money at a venue
+    does not stop existing because the mode was set back to PAPER, and a
+    cockpit reading "scanning continues" over an open testnet position is the
+    defect v0.3 fixed. Hence `show_real_exposure=True` on every call below —
+    that flag IS the display path, and its absence is the dispatch path.
+    """
+
     def _store_with_ready_setup(self):
         import tempfile
         from pathlib import Path
@@ -482,7 +493,8 @@ class CustodyOverridesTheSimulatorsStory(unittest.TestCase):
             "protection_status,state,updated_at) VALUES('i-1','i-1','BTCUSDT',"
             "'LONG','0.004','50000','49000','bot',NULL,'CONFIRMED','OPEN',2)")
         con.commit()
-        rows = opportunities.list_candidates(con, include_history=False)
+        rows = opportunities.list_candidates(
+            con, include_history=False, show_real_exposure=True)
         states = {r["setup"]["setup_id"]: r["state"] for r in rows}
         self.assertEqual(states.get("s-1"), "POSITION_OPEN")
 
@@ -502,7 +514,8 @@ class CustodyOverridesTheSimulatorsStory(unittest.TestCase):
             "'LONG','0.004','50000','49000','bot',NULL,'CONFIRMED','OPEN',2)")
         con.commit()
         summary = opportunities.summary(
-            opportunities.list_candidates(con, include_history=False))
+            opportunities.list_candidates(
+            con, include_history=False, show_real_exposure=True))
         self.assertIn("Managing 1 open position", summary["narrative"],
                       "the operator must never read 'scanning continues' "
                       "over an open real position")
@@ -522,7 +535,8 @@ class CustodyOverridesTheSimulatorsStory(unittest.TestCase):
             "VALUES('k','i-1','TESTNET','s-1','BTCUSDT','{}',"
             "'LIFECYCLE_COMPLETE',1,1)")          # updated_at=1: long ago
         con.commit()
-        rows = opportunities.list_candidates(con, include_history=False)
+        rows = opportunities.list_candidates(
+            con, include_history=False, show_real_exposure=True)
         states = {r["setup"]["setup_id"]: r["state"] for r in rows}
         self.assertIn("s-1", states, "the fresh validation must be visible")
         self.assertNotEqual(states["s-1"], "CLOSED")
@@ -544,13 +558,15 @@ class CustodyOverridesTheSimulatorsStory(unittest.TestCase):
             "protection_status,state,updated_at) VALUES('i-1','i-1','BTCUSDT',"
             "'LONG','0.004','50000','49000','bot',NULL,'CONFIRMED','OPEN',1)")
         con.commit()
-        rows = opportunities.list_candidates(con, include_history=False)
+        rows = opportunities.list_candidates(
+            con, include_history=False, show_real_exposure=True)
         states = {r["setup"]["setup_id"]: r["state"] for r in rows}
         self.assertEqual(states.get("s-1"), "POSITION_OPEN")
 
     def test_paper_read_model_is_unchanged_when_no_private_custody_exists(self):
         con = self._store_with_ready_setup()
-        rows = opportunities.list_candidates(con, include_history=False)
+        rows = opportunities.list_candidates(
+            con, include_history=False, show_real_exposure=True)
         self.assertEqual(len(rows), 1)
         self.assertNotIn(rows[0]["state"],
                          ("POSITION_OPEN", "ORDER_WORKING", "CLOSED"))

@@ -2626,6 +2626,32 @@ def live_gate():
         con.close()
 
 
+def _active_domain(con) -> str:
+    """Whose book the operator surfaces describe, unless one asks for another.
+
+    The default is the dispatcher's own domain — PAPER today — because that is
+    the book the operator is running. RESEARCH stays reachable by asking for
+    it: the replay is the larger and more interesting population, and hiding
+    it would be as dishonest as letting it masquerade as the book. What it may
+    never do is answer a question nobody scoped to it, which is exactly what
+    it used to do here.
+    """
+    mode, _revision, _at = automation.current(con)
+    return contracts.domain_for_mode(mode).value
+
+
+def _requested_domain(con, domain: str | None) -> str:
+    """Validate an operator-supplied domain, or fall back to the active one."""
+    if not domain:
+        return _active_domain(con)
+    try:
+        return contracts.ExecutionDomain(str(domain).strip().upper()).value
+    except ValueError:
+        raise HTTPException(
+            400, f"unknown execution domain {domain!r}; expected one of "
+            + ", ".join(d.value for d in contracts.ExecutionDomain))
+
+
 def _live_gate_from(con, pf: dict) -> dict:
     """Evaluate the gate from an already-authoritative portfolio payload."""
     from engine import livegate
@@ -2781,11 +2807,20 @@ def opportunity_list(
         state: str | None = Query(None),
         horizon: str | None = Query(None),
         include_history: bool = Query(True),
+        domain: str | None = Query(None),
         limit: int = Query(200, ge=1, le=500)):
-    """Ranked, server-owned setup read model; legacy volume rank is ignored."""
+    """Ranked, server-owned setup read model; legacy volume rank is ignored.
+
+    `domain` is the research/paper toggle: omit it for the book the
+    dispatcher is actually running, pass RESEARCH for the replay's account of
+    the same setups. Every row states which one answered it.
+    """
     con = store.connect()
     try:
-        rows = opportunities.list_candidates(con, include_history=include_history)
+        scope = _requested_domain(con, domain)
+        rows = opportunities.list_candidates(
+            con, domain=scope, include_history=include_history,
+            show_real_exposure=True)
         if state:
             wanted = {s.strip().upper() for s in state.split(",") if s.strip()}
             rows = [row for row in rows if row["state"] in wanted]
@@ -2794,7 +2829,7 @@ def opportunity_list(
             rows = [row for row in rows
                     if str(row["setup"].get("horizon") or "").lower() in wanted_h]
         rows = rows[:limit]
-        return {"generated_at": int(time.time()),
+        return {"generated_at": int(time.time()), "domain": scope,
                 "summary": opportunities.summary(rows), "items": rows,
                 "authority": opportunities.OPPORTUNITY_VERSION}
     finally:
@@ -2815,11 +2850,14 @@ def market_context_snapshot(symbol: str, tf: str = Query("15m")):
 
 
 @app.get("/api/opportunities/{setup_id}")
-def opportunity_detail(setup_id: str):
+def opportunity_detail(setup_id: str, domain: str | None = Query(None)):
     """The same record used by card, chart, ticket and later attribution."""
     con = store.connect()
     try:
-        for row in opportunities.list_candidates(con, include_history=True):
+        scope = _requested_domain(con, domain)
+        for row in opportunities.list_candidates(
+                con, domain=scope, include_history=True,
+                show_real_exposure=True):
             if row["setup"]["setup_id"] == setup_id:
                 return row
         raise HTTPException(404, "opportunity not found in the current baseline")
@@ -3266,8 +3304,10 @@ def command_read_model():
     from engine import settings as settings_engine
     con = store.connect()
     try:
-        rows = opportunities.list_candidates(con, include_history=False)
         mode_name, revision, _ = automation.current(con)
+        rows = opportunities.list_candidates(
+            con, domain=contracts.domain_for_mode(mode_name).value,
+            include_history=False, show_real_exposure=True)
         try:
             halted = bool(settings_engine.all_settings(con)["halted"])
         except Exception:
@@ -3316,7 +3356,9 @@ def operations_read_model():
     try:
         gate = _live_gate_from(con, pf)
         mode, operational = _automation_read(con, gate)
-        rows = opportunities.list_candidates(con, include_history=False)
+        rows = opportunities.list_candidates(
+            con, domain=_active_domain(con), include_history=False,
+            show_real_exposure=True)
         opp_summary = opportunities.summary(rows)
 
         quality_row = con.execute(

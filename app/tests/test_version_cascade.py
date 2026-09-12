@@ -59,7 +59,10 @@ OPERATIONAL_EXPECTED = {
     # contracts-v0.4: a RiskDecision states the equity basis its size is a
     # percentage of, and where that figure was read. Nothing converted the
     # ACCOUNT between the paper replay and a dispatched order.
-    "contracts": "contracts-v0.4-draft",
+    # contracts-v0.5: an opportunity carries the execution DOMAIN its state
+    # came from, an `attempt_id` for the occurrence, and the replay's account
+    # as an inert `research_story`. Wire grew; no number changed.
+    "contracts": "contracts-v0.5-draft",
     # automation-v0.5: every drill names and enforces its required evidence;
     # restart demands a boot-id change, so lost-response recovery inside one
     # process can no longer pass one of the seven TESTNET->LIVE gates.
@@ -68,7 +71,13 @@ OPERATIONAL_EXPECTED = {
     # risk.dispatch_scale() — the risk fact sizes the paper book (2%), an
     # order sent to TESTNET/LIVE carries 0.25%'s quantity (x0.125).
     # autotrader-v0.5: records that basis on every plan (contracts-v0.4).
-    "autotrader": "autotrader-v0.5-draft",
+    # autotrader-v0.6: reads candidates in the ACTIVE MODE's own domain
+    # (opportunity-v0.8). It had been asking the default read model, which
+    # derived lifecycle from the research replay — so every one of the 37
+    # risk-approved setups in the live baseline read CLOSED because the
+    # simulator had settled them, none reached READY, and nothing was ever
+    # dispatched. No sizing or routing rule moved; it asks the right book.
+    "autotrader": "autotrader-v0.6-draft",
     # execution-core-v0.6: private entries honour expires_at (cancel at the
     # venue), a proven pre-wire refusal is SUBMIT_FAILED and retryable
     # instead of stuck-SUBMITTING-forever, and RESTART_RECOVERED carries
@@ -91,7 +100,17 @@ OPERATIONAL_EXPECTED = {
     # Action stopped saying "a position is open" for a trade already off the
     # book. Same zone key and the same for-the-life-of-the-zone rule as the
     # portfolio join; CLOSED_EARLY only, never over real custody.
-    "opportunities": "opportunity-v0.7-draft",
+    # opportunity-v0.8: lifecycle belongs to ONE execution domain, and the
+    # research replay is no longer any domain's authority but its own. It
+    # reaches every setup first (execsim.run at live.py:629, before risk.run
+    # at :658) and stamped it POSITION_OPEN or CLOSED for every caller,
+    # including the dispatcher. Measured 2026-09-11 on the live baseline:
+    # 1035 setups, 40 claimed by the replay's exits, ZERO reaching READY, all
+    # 37 risk-approved among the 40, paper book empty in consequence. The rule
+    # a later edit must not undo: a domain's routing state comes from that
+    # domain's own records, and the absence of a record means that domain has
+    # not acted — never a reason to consult another one.
+    "opportunities": "opportunity-v0.8-draft",
     # quality-v0.5: staleness floored at 30 minutes. 2 x tf on a 5m series is
     # ten minutes, and a scan cycle is eleven to twelve, so every 5m feed was
     # DEGRADED near the end of every cycle and healed on the next import — the
@@ -109,7 +128,11 @@ OPERATIONAL_EXPECTED = {
     # never universe membership: `members` is the top_n slice, and keying on it
     # demoted 81 live perps (reverted, ba9d8fb). v0.2: acknowledged venue voids
     # are durable notes, not warnings; gaps on a LIVE market still block.
-    "quality": "quality-v0.5-draft",
+    # quality-v0.6: the ACCOUNTING reconciliation pins the `account` summary
+    # to the same generation as the `risk` rows it is checked against. One
+    # half of that pair was already pinned; a loose other half compares two
+    # generations on the first version bump.
+    "quality": "quality-v0.6-draft",
     # listings-v0.1: the venue product sweep, appended one fact per venue per
     # run. Locked from birth — quality's verdict now depends on it, and a
     # version nobody tracks until something reads it leaves its early facts

@@ -8,16 +8,41 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import sqlite3
 import time
 from decimal import Decimal, InvalidOperation
 
 from . import bias, execsim, registry, risk, setups, store, venues
-from .contracts import (DecisionReason, EntryRecommendation, FactorGrade,
-                        OpportunityCandidate, OpportunityState, OrderKind,
-                        TopDownDecision, TopDownState, TradeSetup, to_wire)
+from .runlog import get_logger
+from .contracts import (DecisionReason, EntryRecommendation, ExecutionDomain,
+                        FactorGrade, OpportunityCandidate, OpportunityState,
+                        OrderKind, TopDownDecision, TopDownState, TradeSetup,
+                        to_wire)
 
 
-OPPORTUNITY_VERSION = "opportunity-v0.7-draft"
+OPPORTUNITY_VERSION = "opportunity-v0.8-draft"
+# v0.8: lifecycle belongs to ONE execution domain, and the research simulator
+# is no longer any domain's authority but its own.
+#
+# Until now `lifecycle()` took the replay's `order` and `exec` facts for every
+# caller, so the simulator decided whether a setup could route. It reaches
+# every setup first — `execsim.run` at live.py:629, before `risk.run` at :658
+# — and stamps it POSITION_OPEN or CLOSED, and only a setup with no research
+# record at all could be READY. Measured on the live store 2026-09-11, in the
+# active baseline: 1035 setups, 189 risk-rejected, **40 claimed by the
+# replay's own exits, and zero reaching READY**. All 37 risk-APPROVED setups
+# were in those 40. `autotrader.run` dispatches READY only, so the paper book
+# had never been offered a single setup and `paper_positions` was empty.
+#
+# The rule this version encodes, and the one a future edit must not quietly
+# undo: **a domain's routing state comes from that domain's own records, and
+# the absence of a record means that domain has not acted.** Never fall back
+# to another domain. The research story survives as `research_story`, which
+# is display and reaches neither `state` nor `eligible`.
+#
+# This is convention 7 ("evidence is recorded, not filtered on, until it has
+# been graded") applied where it had not been: the replay is evidence, and it
+# was filtering.
 # v0.7: an engine position the OPERATOR closed by hand is CLOSED here too.
 # /api/portfolio has joined `manual.overridden_setups` since the override
 # existed; this read model never did, so after pressing Close on a mission
@@ -65,6 +90,40 @@ def _decimal(value, default="0") -> Decimal:
         return Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
         return Decimal(default)
+
+
+def attempt_id_for(setup_id: str, payload: dict) -> str | None:
+    """The identity of one ATTEMPT at a zone, or None before one exists.
+
+    `setup_id` names the zone, not the occurrence: it is
+    `symbol|tf|strategy|zone_id|version`, and `zone_id` carries the zone's own
+    FORMATION bar (`zones.py`), so every later retest of a persistent zone
+    re-derives the same id, and so does every engine generation. Both failure
+    modes follow from that, and they point opposite ways:
+
+    · **Over-splitting**, which has actually happened. One UNIUSDT 4H REVERSAL
+      touch minted five ids across setup-v0.13 to v0.17 with byte-identical
+      entry/sl/tp and one `confirmed_at`; a position the operator had closed
+      came back as live exposure under the new tag (`manual.setup_zone_key`,
+      2026-08-06).
+    · **Under-splitting**, which has not. No `setup_id` has ever VALIDATED
+      twice under one version (833 facts, 833 distinct ids, measured
+      2026-09-11) — so the merge half of this key is evidenced and the split
+      half is sound by construction and untested. Do not claim otherwise.
+
+    So: the version-stripped zone plus the CONFIRMING bar. Both describe the
+    market rather than the code, which is why they survive an engine bump.
+
+    Returns None for a setup that has not confirmed. That is not a missing
+    value to paper over — an unconfirmed setup is not yet an attempt, and the
+    store agrees exactly: `confirmed_bar_ts` is present on every VALIDATED and
+    EXPIRED fact and absent from every FORMING, CONFIRMING and CANCELLED one.
+    """
+    bar = payload.get("confirmed_bar_ts")
+    if bar is None or not setup_id:
+        return None
+    from . import manual as _manual
+    return f"{_manual.setup_zone_key(setup_id)}|{int(bar)}"
 
 
 def top_down(payload: dict) -> TopDownDecision:
@@ -121,25 +180,24 @@ def top_down(payload: dict) -> TopDownDecision:
 
 
 def lifecycle(setup_state: str, risk_fact: dict | None = None,
-              order: dict | None = None, execution: dict | None = None) -> OpportunityState:
+              record: OpportunityState | None = None) -> OpportunityState:
+    """Where one setup stands, for ONE execution domain.
+
+    `record` is that domain's own account of the attempt — what its orders and
+    positions prove — or `None` when it holds no record. `None` means **this
+    domain has not acted**; it is never permission to read another domain's
+    history, which is precisely the defect v0.8 exists to remove.
+
+    Risk still outranks a record, because risk is the authority on whether an
+    attempt was ever allowed to become exposure. A domain that recorded a fill
+    against a rejected decision is describing a bug, not a position.
+    """
     state = (setup_state or "").upper()
-    # Risk is the authority for whether a shadow order was ever allowed to
-    # become exposure. execsim deliberately records counterfactual fills even
-    # when risk rejects them; those facts remain evidence, not custody.
     decision = str((risk_fact or {}).get("decision") or "").upper()
     if decision == "REJECTED":
         return OpportunityState.BLOCKED
-    if execution and execution.get("outcome") not in (None, "PENDING"):
-        return OpportunityState.CLOSED
-    event = str((order or {}).get("event") or "").upper()
-    if event == "FILLED":
-        return OpportunityState.POSITION_OPEN
-    if event in ("PLACED", "PARTIALLY_FILLED", "UNTRIGGERED"):
-        return OpportunityState.ORDER_WORKING
-    if event in ("CANCELLED", "CANCELED"):
-        return OpportunityState.CANCELLED
-    if event == "MISSED":
-        return OpportunityState.EXPIRED
+    if record is not None:
+        return record
     if state == "VALIDATED":
         return OpportunityState.READY
     if state in ("FORMING", "CONFIRMING"):
@@ -290,9 +348,11 @@ def _risk_reason_summary(code: str, symbol: str, decision: str = "REJECTED") -> 
 
 
 def candidate(payload: dict, *, risk_fact: dict | None = None,
-              order: dict | None = None, execution: dict | None = None,
+              record: OpportunityState | None = None,
+              domain: str = ExecutionDomain.RESEARCH.value,
+              research_story: dict | None = None,
               now: int | None = None) -> OpportunityCandidate:
-    state = lifecycle(payload.get("state", "WATCHING"), risk_fact, order, execution)
+    state = lifecycle(payload.get("state", "WATCHING"), risk_fact, record)
     risk_rejected = str((risk_fact or {}).get("decision") or "").upper() == "REJECTED"
     expiry_issue = None
     expires_at = payload.get("expires_at_ts") or payload.get("expires_at")
@@ -342,6 +402,7 @@ def candidate(payload: dict, *, risk_fact: dict | None = None,
         venue = "UNKNOWN"
     setup = TradeSetup(
         setup_id=setup_id,
+        attempt_id=attempt_id_for(setup_id, payload),
         symbol=symbol, venue=venue,
         timeframe=timeframe, horizon=horizon,
         strategy=strategy_name, direction=str(payload.get("direction") or ""),
@@ -416,7 +477,9 @@ def candidate(payload: dict, *, risk_fact: dict | None = None,
         strongest_counterargument=counterargument,
         reasons=tuple(reasons),
         legacy_rank=_decimal(payload.get("rank")) if payload.get("rank") is not None else None,
-        version=OPPORTUNITY_VERSION)
+        version=OPPORTUNITY_VERSION,
+        domain=str(domain),
+        research_story=research_story)
 
 
 _STATE_ORDER = {
@@ -454,48 +517,212 @@ def _latest_by_setup(con, kind: str, version: str, since: int) -> dict[str, dict
     return out
 
 
-def _private_custody_by_setup(con) -> dict[str, tuple]:
-    """Real-venue lifecycle state per setup_id, from the custody authority.
+#: The research simulator's order events, mapped to the lifecycle each one
+#: proves. These describe the REPLAY and nothing else; `_research_records` is
+#: the only reader, and only the RESEARCH domain consults it as state.
+_RESEARCH_LIFECYCLE = {
+    "FILLED": OpportunityState.POSITION_OPEN,
+    "PLACED": OpportunityState.ORDER_WORKING,
+    "PARTIALLY_FILLED": OpportunityState.ORDER_WORKING,
+    "UNTRIGGERED": OpportunityState.ORDER_WORKING,
+    "CANCELLED": OpportunityState.CANCELLED,
+    "CANCELED": OpportunityState.CANCELLED,
+    "MISSED": OpportunityState.EXPIRED,
+}
 
-    Latest outbox row per setup (several intents can share a setup when the
-    quantity changed), overlaid with the managed position keyed by intent_id.
-    Only TESTNET/LIVE rows — paper stays with the simulator's account of
-    itself. Missing tables mean no private path has ever run: empty overlay.
+#: Outbox states mapped to the lifecycle they prove. `execution._event` writes
+#: the event name straight into `execution_outbox.state`, so these ARE the
+#: event names. The outbox is the lifecycle authority for a dispatched intent
+#: — its own docstring says so ("the outbox state is the retry authority") —
+#: which is why nothing here reads `paper_positions.state` as well. That table
+#: owns the ACCOUNT (entry, exit, R, costs); this one owns the ORDER. One
+#: authority per number, and they are two different numbers.
+_OUTBOX_LIFECYCLE = {
+    "PENDING": OpportunityState.ORDER_WORKING,
+    "SUBMITTING": OpportunityState.ORDER_WORKING,
+    "SUBMITTED": OpportunityState.ORDER_WORKING,
+    "PARTIALLY_FILLED": OpportunityState.ORDER_WORKING,
+    "PAPER_ROUTED": OpportunityState.ORDER_WORKING,
+    "SHADOW_RECORDED": OpportunityState.ORDER_WORKING,
+    "PAPER_FILLED": OpportunityState.POSITION_OPEN,
+    "PAPER_EXPIRED": OpportunityState.EXPIRED,
+    "PAPER_CLOSED": OpportunityState.CLOSED,
+    "LIFECYCLE_COMPLETE": OpportunityState.CLOSED,
+    "ORDER_LIFECYCLE_COMPLETE": OpportunityState.CLOSED,
+    "CUSTODY_CLOSED": OpportunityState.CLOSED,
+    # Queued and refused before the wire. Neither is exposure, and neither is
+    # "no attempt" — the domain acted and declined, which is a lifecycle fact.
+    "RISK_REJECTED": OpportunityState.BLOCKED,
+    "HELD_OFF": OpportunityState.BLOCKED,
+    "SUBMIT_FAILED": OpportunityState.BLOCKED,
+}
+
+#: managed_positions speaks for a REAL position, outranking the outbox's
+#: account of the order that opened it. Private domains only.
+_CUSTODY_LIFECYCLE = {
+    "OPEN": OpportunityState.POSITION_OPEN,
+    "UNPROTECTED": OpportunityState.POSITION_OPEN,
+    "EMERGENCY_CLOSE": OpportunityState.POSITION_OPEN,
+    "CLOSED": OpportunityState.CLOSED,
+}
+
+
+def _missing_table(exc: Exception) -> bool:
+    """True only for "this table was never created", never for a read failure.
+
+    The distinction is load-bearing and it is why this is not a bare `except`.
+    A domain with no records reads as "has not acted", and the autotrader is
+    allowed to route into it. A swallowed read error would produce the exact
+    same empty dict and hand the dispatcher a green light off a database
+    hiccup — the loud-fallback rule, in the one place where breaking it costs
+    an order.
     """
+    return isinstance(exc, sqlite3.OperationalError) and "no such table" in str(exc)
+
+
+def _research_records(con, since: int) -> dict[str, tuple]:
+    """The replay's account of every setup, as `(state, at, story)`.
+
+    Authority for the RESEARCH domain; DISPLAY for every other one. `story`
+    travels to the wire as `research_story` so a screen can still say "the
+    simulator closed this at +1.2R" beside a PAPER setup that is correctly
+    READY — two populations, one row, neither pretending to be the other.
+    """
+    orders = _latest_by_setup(con, "order", execsim.EXEC_VERSION, since)
+    exits = _latest_by_setup(con, "exec", execsim.EXEC_VERSION, since)
+    out: dict[str, tuple] = {}
+    for sid in set(orders) | set(exits):
+        order, exit_fact = orders.get(sid) or {}, exits.get(sid) or {}
+        event = str(order.get("event") or "").upper()
+        story = {"order_event": order.get("event"),
+                 "outcome": exit_fact.get("outcome"),
+                 "r_multiple": exit_fact.get("r_multiple"),
+                 "exec_version": execsim.EXEC_VERSION}
+        if exit_fact.get("outcome") not in (None, "PENDING"):
+            state, at = OpportunityState.CLOSED, exit_fact.get("confirmed_at")
+        else:
+            state, at = _RESEARCH_LIFECYCLE.get(event), order.get("confirmed_at")
+            if event and state is None:
+                get_logger().warning(
+                    f"opportunities: unmapped research order event {event!r} "
+                    f"for {sid} — treated as no record")
+        out[sid] = (state, int(at or 0), story)
+    return out
+
+
+def _outbox_records(con, mode: str) -> dict[str, tuple]:
+    """One dispatch domain's own account of each setup, as `(state, at)`.
+
+    Reads only rows written under `mode`, which is what makes the domain rule
+    structural rather than a convention somebody has to remember: PAPER cannot
+    see TESTNET's orders because the query cannot return them.
+    """
+    private = mode in (ExecutionDomain.TESTNET.value, ExecutionDomain.LIVE.value)
+    sql = ("SELECT o.setup_id, o.state, m.state, "
+           "COALESCE(m.updated_at, o.updated_at) "
+           "FROM execution_outbox o "
+           "LEFT JOIN managed_positions m ON m.position_id = o.intent_id "
+           "WHERE o.mode=? ORDER BY o.updated_at, o.id") if private else (
+           "SELECT setup_id, state, NULL, updated_at FROM execution_outbox "
+           "WHERE mode=? ORDER BY updated_at, id")
     try:
-        rows = con.execute(
-            "SELECT o.setup_id, o.state, m.state, "
-            "COALESCE(m.updated_at, o.updated_at) "
-            "FROM execution_outbox o "
-            "LEFT JOIN managed_positions m ON m.position_id = o.intent_id "
-            "WHERE o.mode IN ('TESTNET','LIVE') "
-            "ORDER BY o.updated_at, o.id").fetchall()
-    except Exception:
-        return {}
-    overlay: dict[str, tuple] = {}
+        rows = con.execute(sql, (mode,)).fetchall()
+    except Exception as exc:
+        if _missing_table(exc):
+            return {}
+        raise
+    out: dict[str, tuple] = {}
     for setup_id, outbox_state, custody_state, updated_at in rows:
-        # last row per id wins. managed_positions speaks for the position
-        # (OPEN / UNPROTECTED / EMERGENCY_CLOSE / CLOSED); the outbox speaks
-        # for the order (SUBMITTING through LIFECYCLE_COMPLETE).
-        if custody_state in ("OPEN", "UNPROTECTED", "EMERGENCY_CLOSE"):
-            overlay[setup_id] = (OpportunityState.POSITION_OPEN, updated_at)
-        elif custody_state == "CLOSED" or outbox_state in (
-                "LIFECYCLE_COMPLETE", "CUSTODY_CLOSED"):
-            overlay[setup_id] = (OpportunityState.CLOSED, updated_at)
-        elif outbox_state in ("SUBMITTED", "PARTIALLY_FILLED", "SUBMITTING"):
-            overlay[setup_id] = (OpportunityState.ORDER_WORKING, updated_at)
-    return overlay
+        # Last row per setup wins: several intents share a setup when the
+        # quantity changed, and the newest is the live one.
+        state = _CUSTODY_LIFECYCLE.get(custody_state) if custody_state else None
+        if state is None:
+            state = _OUTBOX_LIFECYCLE.get(str(outbox_state or "").upper())
+        if state is None:
+            get_logger().warning(
+                f"opportunities: unmapped {mode} outbox state "
+                f"{outbox_state!r} for {setup_id} — treated as no record")
+            continue
+        out[setup_id] = (state, int(updated_at or 0))
+    return out
 
 
-def list_candidates(con, *, include_history: bool = True, now: int | None = None) -> list[dict]:
+def real_exposure(con) -> dict[str, tuple]:
+    """Every setup with a REAL order or position, across TESTNET and LIVE.
+
+    DISPLAY ONLY, and the one deliberate crossing of the domain boundary.
+    Money at a venue is a present-tense fact about the operator's account: it
+    does not stop existing because the dispatcher was set back to PAPER, and a
+    cockpit that answered "no setup currently meets entry rules, scanning
+    continues" over an open testnet position was the defect opportunity-v0.3
+    was written to fix. Restoring the domain rule must not restore that.
+
+    What keeps it honest is the direction of travel — this can only ever
+    REMOVE eligibility, never grant it — and that the dispatcher never asks
+    for it. `autotrader.run` reads its own domain and nothing else.
+    """
+    merged: dict[str, tuple] = {}
+    for mode in (ExecutionDomain.TESTNET.value, ExecutionDomain.LIVE.value):
+        for sid, (state, at) in _outbox_records(con, mode).items():
+            if sid not in merged or at >= merged[sid][1]:
+                merged[sid] = (state, at)
+    return merged
+
+
+#: A lifecycle nothing can leave. A record in one of these states describes a
+#: FINISHED attempt, which is the only kind that can belong to an earlier
+#: touch of the same zone — hence the staleness rule below.
+_TERMINAL = {OpportunityState.CLOSED, OpportunityState.EXPIRED,
+             OpportunityState.CANCELLED, OpportunityState.REJECTED,
+             OpportunityState.BLOCKED}
+
+
+def _describes_an_earlier_attempt(state: OpportunityState, at: int,
+                                  payload: dict) -> bool:
+    """True when a domain's record finished BEFORE this setup confirmed.
+
+    Both tables holding domain records are keyed on `setup_id`, which names
+    the zone rather than the occurrence (`attempt_id_for`). So a completed
+    lifecycle from a retest weeks ago sits on exactly the same key as a fresh
+    validation of that zone, and left alone it stamps the new candidate CLOSED
+    forever (audit 2026-08-08).
+
+    Only a terminal record can be stale. A working order or an open position
+    is a present-tense fact about the account and overrides unconditionally —
+    whatever the setup fact says, that exposure exists right now.
+    """
+    if state not in _TERMINAL:
+        return False
+    return int(at or 0) < int(payload.get("confirmed_at") or 0)
+
+
+def list_candidates(con, *, domain: str = ExecutionDomain.RESEARCH.value,
+                    include_history: bool = True, now: int | None = None,
+                    show_real_exposure: bool = False) -> list[dict]:
+    """The read model for ONE execution domain.
+
+    `domain` decides whose order records answer "where does this setup
+    stand" — and nothing else changes: strategy, risk, ranking and copy are
+    shared, because sharing logic was never the problem. Sharing STATE was.
+
+    `show_real_exposure` adds TESTNET/LIVE positions to an operator SCREEN
+    (see `real_exposure`). It is off by default so the dispatch path cannot
+    reach it by forgetting an argument, and it can only take eligibility away.
+    """
     observed_at = int(time.time()) if now is None else int(now)
     baseline = store.get_active_baseline(con)
     since = int(baseline["started_at"])
     setups_by_id = _latest_by_setup(con, "setup", setups.SETUP_VERSION, since)
     risk_by_id = _latest_by_setup(con, "risk", risk.RISK_VERSION, since)
-    order_by_id = _latest_by_setup(con, "order", execsim.EXEC_VERSION, since)
-    exec_by_id = _latest_by_setup(con, "exec", execsim.EXEC_VERSION, since)
-    custody = _private_custody_by_setup(con)
+    # The replay is read for EVERY domain, and consulted as state for exactly
+    # one. Elsewhere it travels as `research_story`: visible, labelled, inert.
+    research = _research_records(con, since)
+    is_research = domain == ExecutionDomain.RESEARCH.value
+    records = ({sid: (state, at) for sid, (state, at, _story) in research.items()
+                if state is not None} if is_research
+               else _outbox_records(con, domain))
+    exposure = (real_exposure(con) if show_real_exposure and domain not in (
+        ExecutionDomain.TESTNET.value, ExecutionDomain.LIVE.value) else {})
     # The operator's early closes, keyed on the version-free zone — the
     # portfolio's rule, reused rather than restated (see the v0.7 note).
     # CLOSED_EARLY only: an ADOPTED position is still open, under the
@@ -508,34 +735,33 @@ def list_candidates(con, *, include_history: bool = True, now: int | None = None
     items = []
     for sid, payload in setups_by_id.items():
         payload.setdefault("setup_id", sid)
-        item = candidate(payload, risk_fact=risk_by_id.get(sid),
-                         order=order_by_id.get(sid), execution=exec_by_id.get(sid),
-                         now=observed_at)
-        # Real custody outranks the simulator's story about the same setup:
-        # a real order or position IS the lifecycle state, whatever the
-        # paper book thinks. The overlay never touches READY, so the
-        # autotrader's dispatch condition is unaffected.
-        #
-        # Except a TERMINAL overlay older than the setup fact itself.
-        # setup_id embeds zone and version, so a persistent zone retested
-        # weeks later re-validates under the SAME id — and an old completed
-        # lifecycle stamping the fresh candidate CLOSED would hide a valid,
-        # tradeable setup forever (audit 2026-08-08). A live order or open
-        # position overlays unconditionally: it is a present-tense fact.
-        if sid in custody:
-            _cstate, _cts = custody[sid]
-            if (_cstate != OpportunityState.CLOSED or
-                    int(_cts or 0) >= int(payload.get("confirmed_at") or 0)):
-                item = dataclasses.replace(
-                    item, state=_cstate, eligible=False,
-                    entry_recommendation=recommend_entry(payload, _cstate))
+        record = records.get(sid)
+        state = None
+        if record is not None and not _describes_an_earlier_attempt(
+                record[0], record[1], payload):
+            state = record[0]
+        item = candidate(
+            payload, risk_fact=risk_by_id.get(sid), record=state, domain=domain,
+            research_story=None if is_research else research.get(sid, (None, 0, None))[2],
+            now=observed_at)
+        # Real money outranks the screen's chosen domain, and only downward.
+        held = exposure.get(sid)
+        if held is not None and not _describes_an_earlier_attempt(
+                held[0], held[1], payload):
+            item = dataclasses.replace(
+                item, state=held[0], eligible=False,
+                entry_recommendation=recommend_entry(payload, held[0]))
         # The portfolio suppresses a hand-closed zone for the life of the
         # zone (manual.setup_zone_key explains why: the same zone re-derives
         # under every later setup version), and this model must say the
-        # same thing or the chip and the directive disagree. Real custody
-        # outranks the paper book here as everywhere: a TESTNET/LIVE
-        # position is not closed by a paper close.
-        if (sid not in custody
+        # same thing or the chip and the directive disagree. A domain holding
+        # its own record outranks the override, exactly as real custody used
+        # to: an open TESTNET position is not closed by a paper close.
+        # Deliberately NOT `_TERMINAL`: that set includes BLOCKED, and a
+        # hand-closed zone whose candidate is merely risk-blocked has always
+        # rendered CLOSED here. Widening the guard would have changed that
+        # silently, which is not this version's business.
+        if (sid not in records and sid not in exposure
                 and _manual.setup_zone_key(sid) in closed_zones
                 and item.state not in (OpportunityState.CLOSED,
                                        OpportunityState.EXPIRED,

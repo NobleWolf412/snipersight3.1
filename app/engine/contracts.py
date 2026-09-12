@@ -15,7 +15,17 @@ from enum import Enum
 from typing import Any
 
 
-CONTRACT_VERSION = "contracts-v0.4-draft"
+CONTRACT_VERSION = "contracts-v0.5-draft"
+# v0.5: an opportunity states WHICH EXECUTION DOMAIN its lifecycle came from,
+# and carries an `attempt_id` for the occurrence rather than the zone. Before
+# this the read model derived ORDER_WORKING / POSITION_OPEN / CLOSED from the
+# research simulator's facts for every caller including the autotrader, so a
+# setup the replay had already exited could never be READY. Measured
+# 2026-09-11: all 37 risk-approved setups in the live baseline read CLOSED
+# because the simulator had settled them, zero reached READY, and the paper
+# book was empty in consequence. `domain` is what makes "absence of a record
+# means this domain has not acted" expressible; without it the sentence has no
+# subject.
 # v0.4: a RiskDecision states its EQUITY BASIS — the account balance the size
 # is a percentage of, and where that figure was read. Every dispatched size
 # descends from the paper research book's replayed equity ($9,317 today);
@@ -37,6 +47,44 @@ class AutomationMode(StrEnum):
     SHADOW = "SHADOW"
     TESTNET = "TESTNET"
     LIVE = "LIVE"
+
+
+class ExecutionDomain(StrEnum):
+    """Whose order records decide an opportunity's lifecycle.
+
+    NOT the same axis as `AutomationMode`, and the difference is the whole
+    reason this exists. A mode says what the dispatcher is allowed to do;
+    a domain says whose account of an attempt you are reading. RESEARCH is a
+    domain and never a mode — the replay simulates continuously whatever the
+    dispatcher is set to. SHADOW is a mode and never a domain — it writes
+    PAPER records. Collapsing the two is what let the simulator's exits
+    decide whether the paper book could trade.
+
+    The rule every reader here obeys: **absence of a record in a domain means
+    that domain has not acted.** It is never a reason to consult another one.
+    """
+
+    RESEARCH = "RESEARCH"
+    PAPER = "PAPER"
+    TESTNET = "TESTNET"
+    LIVE = "LIVE"
+
+
+def domain_for_mode(mode: AutomationMode) -> ExecutionDomain:
+    """Whose records a dispatcher running in `mode` reads and writes.
+
+    SHADOW maps to PAPER because that is literally what it writes — the
+    coordinator mints a paper intent alongside every shadow one, so the paper
+    outbox is where a SHADOW dispatcher's account of itself lives. OFF maps to
+    PAPER for the same reason: an OFF dispatcher still queues the intent and
+    records HELD_OFF against the paper book.
+
+    RESEARCH is deliberately unreachable from any mode. The replay is not a
+    dispatcher and no dispatcher may read its records as its own.
+    """
+    if mode in (AutomationMode.TESTNET, AutomationMode.LIVE):
+        return ExecutionDomain(mode.value)
+    return ExecutionDomain.PAPER
 
 
 class OpportunityState(StrEnum):
@@ -144,6 +192,17 @@ class FactorGrade:
 @dataclass(frozen=True)
 class TradeSetup:
     setup_id: str
+    #: The occurrence, where `setup_id` is only the zone. `setup_id` is
+    #: `symbol|tf|strategy|zone_id|version` and the zone carries its own
+    #: FORMATION time, so one zone touch re-derives under the same id at every
+    #: engine bump — UNIQUE per attempt in practice today (833 VALIDATED facts,
+    #: 833 distinct ids), but five ids for one touch across v0.13-v0.17, which
+    #: brought a hand-closed position back as live exposure (manual.py, audit
+    #: 2026-08-06). So this is built to MERGE: version-stripped zone plus the
+    #: CONFIRMING bar, which describes the market and survives an engine bump.
+    #: Required rather than defaulted — an identity that can silently go
+    #: missing is worse than one that fails loudly at construction.
+    attempt_id: str
     symbol: str
     venue: str
     timeframe: str
@@ -190,6 +249,17 @@ class OpportunityCandidate:
     reasons: tuple[DecisionReason, ...]
     legacy_rank: Decimal | None = None
     version: str = CONTRACT_VERSION
+    #: Which domain's records produced `state`. A reader that shows a state
+    #: without showing this is the defect convention 9 forbids: two surfaces
+    #: reporting different lifecycles for one setup, both correct, neither
+    #: saying whose account it is reading.
+    domain: str = ExecutionDomain.RESEARCH.value
+    #: What the research replay believes happened to this setup, when the
+    #: domain above is not RESEARCH. DISPLAY ONLY — it never reaches `state`
+    #: and never reaches `eligible`. This is the field that lets a screen keep
+    #: showing "the simulator closed this at +1.2R" while the paper domain
+    #: correctly reports the same setup as READY.
+    research_story: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

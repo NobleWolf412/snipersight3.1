@@ -249,9 +249,15 @@ class TestPipelineContracts(QualityStoreCase):
         self.assertIn("CAUSALITY_VIOLATION", {c["code"] for c in report["blockers"]})
 
     def test_equity_summary_must_reconcile_to_ledger(self):
+        # Written under the REAL risk tag, not a fabricated one: since
+        # quality-v0.6 the reconciliation reads the account summary of the
+        # same generation as the risk decisions it checks, so a made-up
+        # version now describes a generation the audit is not looking at.
+        from engine import risk as risk_engine
         store.insert_fact(
             self.con, symbol="PORTFOLIO", tf="ALL", kind="account",
-            market_time=10, confirmed_at=10, algo_version="risk-test",
+            market_time=10, confirmed_at=10,
+            algo_version=risk_engine.RISK_VERSION,
             payload={"start_equity": "10000", "final_equity": "9000",
                      "curve": [{"ts": 10, "equity": "9500"}]})
         self.con.commit()

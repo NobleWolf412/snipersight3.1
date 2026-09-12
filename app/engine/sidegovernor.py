@@ -80,9 +80,17 @@ def load(con, *, funded_only: bool = False) -> list[dict]:
     baseline = store.get_active_baseline(con)
     approved = set()
     if funded_only:
+        # Pinned to the CURRENT risk version. Unpinned, the day a version moves
+        # this pools two generations of decision for the same setup_id — the
+        # old REJECTED and the new APPROVED both land in one set — and the
+        # "funded" book silently inflates. Every neighbouring reader already
+        # pins (`exec` below, `factorstats.load_candidates`); this one did not,
+        # which made it merely loose while nothing moved and would have made it
+        # wrong on the first bump.
+        from .risk import RISK_VERSION
         for (p,) in con.execute(
-                "SELECT payload FROM facts WHERE kind='risk' AND confirmed_at>=?",
-                (baseline["started_at"],)):
+                "SELECT payload FROM facts WHERE kind='risk' AND algo_version=? "
+                "AND confirmed_at>=?", (RISK_VERSION, baseline["started_at"])):
             d = json.loads(p)
             if d.get("event") == "DECISION" and d.get("decision") in ("APPROVED", "REDUCED"):
                 approved.add(d["setup_id"])

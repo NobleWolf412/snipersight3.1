@@ -17,7 +17,14 @@ from . import aggregator, importer, listings, venues
 # stale near the end of every cycle (measured: 640 s cycles vs a 600 s bar).
 STALE_FLOOR_S = 1800
 
-QUALITY_VERSION = "quality-v0.5-draft"
+QUALITY_VERSION = "quality-v0.6-draft"
+# v0.6: the ACCOUNTING reconciliation reads the account summary of the same
+# generation as the risk decisions it is checked against. Both halves of that
+# pair now pin to the active chain; the summary side was loose, which changed
+# nothing while risk sat still and would have compared two generations on the
+# first bump. No verdict moves on today's store (the newest `account` fact is
+# already under the current risk tag) — the version is for the rule, which is
+# what the convention asks.
 # v0.5: staleness has a floor. A series was DEGRADED (STALE_SERIES /
 # REFERENCE_STALE_SERIES) once its newest closed bar was older than 2 x tf.
 # On 5m that is ten minutes — and a scan cycle takes eleven to twelve (mean
@@ -924,11 +931,16 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
             _issue(checks, "EXECUTION", "BLOCKED", "EXIT_BEFORE_FILL",
                    f"execution {sid} exits before its fill", sym, tf)
 
-    # deliberately unversioned: a summary that fails to reconcile to its own
-    # curve is corrupt whatever generation wrote it (internal consistency,
-    # not a cross-generation comparison)
+    # The reconciliation below IS generation-agnostic — a summary whose
+    # final_equity misses its own curve is corrupt whatever wrote it — and
+    # this read was left unversioned for that reason. What that reasoning
+    # missed is the PAIR: `risk_rows` above is pinned to the active chain, so
+    # leaving this side loose makes the two halves speak about different
+    # generations the moment a version moves. `risk` writes the `account`
+    # fact, so it is pinned to the same tag and the two move together.
     account = con.execute(
-        "SELECT payload FROM facts WHERE kind='account' ORDER BY id DESC LIMIT 1").fetchone()
+        "SELECT payload FROM facts WHERE kind='account' AND algo_version=? "
+        "ORDER BY id DESC LIMIT 1", (cur["risk"][0],)).fetchone()
     if risk_rows and account is None:
         _issue(checks, "ACCOUNTING", "BLOCKED", "ACCOUNT_SUMMARY_MISSING",
                "risk decisions exist without an authoritative account summary")

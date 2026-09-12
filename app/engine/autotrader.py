@@ -14,10 +14,17 @@ from decimal import Decimal
 
 from . import automation, execution, opportunities
 from .contracts import (AutomationMode, DecisionReason, ExecutionPlan,
-                        OrderIntent, OrderKind, RiskDecision)
+                        OrderIntent, OrderKind, RiskDecision, domain_for_mode)
 
 
-AUTOTRADER_VERSION = "autotrader-v0.5-draft"
+AUTOTRADER_VERSION = "autotrader-v0.6-draft"
+# v0.6: the candidates are read in the ACTIVE MODE'S OWN DOMAIN. Until now
+# this asked for the default read model, which derived lifecycle from the
+# research replay — so a setup the simulator had already exited could not be
+# READY and could not be dispatched. Measured 2026-09-11: every one of the 37
+# risk-approved setups in the live baseline read CLOSED for that reason, none
+# reached READY, and the paper book had never received an order. No sizing or
+# routing rule changed here; this asks the right book.
 # v0.5: the plan states the equity basis its size is a percentage of
 # (contracts-v0.4). No arithmetic changed — `dispatch_scale` still converts
 # the R and nothing converts the account — but the wire record now says
@@ -101,7 +108,8 @@ def build_plan(row: dict, mode: AutomationMode) -> ExecutionPlan:
 def run(con, *, broker=None, live_gate: dict | None = None) -> dict:
     operational = automation.operational_evidence(con)
     active = automation.status(con, live_gate=live_gate, operational=operational)
-    rows = opportunities.list_candidates(con, include_history=False)
+    rows = opportunities.list_candidates(
+        con, domain=domain_for_mode(active.mode).value, include_history=False)
     coordinator = execution.Coordinator(broker)
     routed, refused = [], []
     for row in rows:

@@ -112,11 +112,13 @@ def test_blocked_candidate_recommends_no_trade():
 
 
 def test_rejected_risk_outranks_shadow_fill_and_explains_the_real_reason():
+    # A domain that recorded a fill against a REJECTED decision is describing
+    # a bug, not a position, so risk still outranks the record.
     item = opportunities.candidate(
         setup(),
         risk_fact={"decision": "REJECTED",
                    "reasons": ["NOT_IN_POINT_IN_TIME_UNIVERSE"]},
-        order={"event": "FILLED"})
+        record=OpportunityState.POSITION_OPEN)
     assert item.state == OpportunityState.BLOCKED
     assert item.eligible is False
     assert item.entry_recommendation.order_kind == OrderKind.NONE
