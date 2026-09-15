@@ -31,6 +31,16 @@ LOCK_PORT = 8423
 # memory; if it does not answer, the process is gone.
 SERVER_URL = "http://127.0.0.1:8422/api/scan/state"
 AUDIT_INTERVAL_SEC = 60           # kill-switch audit cadence (SQLite read)
+# How old the scanner's recorded verdict may be and still justify a restart.
+#
+# The supervisor now DISPATCHES on `quality.last_persisted` rather than its own
+# `quality.audit` (see `audit_tick`), so the verdict is only as fresh as the
+# scanner's last write — a few minutes on a healthy cycle. Past that, the
+# reading describes a store the scanner has since moved on from, and acting on
+# it would restart a process over conditions that may already be gone. A
+# scanner that has genuinely stopped writing is the liveness checks' problem,
+# not the audit's; they can see a dead child, and this cannot.
+VERDICT_MAX_AGE_SEC = 900
 
 # A restart must never be able to prevent the work it is restarting.
 #
@@ -53,12 +63,16 @@ QUARANTINE_CLIMB_TICKS = 3        # consecutive audits elevated-and-not-recoveri
 # but interrupt the cycle. `UNKNOWN_TIMEFRAME` is the concrete case, and the
 # reason is that THIS process reads the timeframe list, not the child it kills.
 #
-# `quality.audit()` runs here, in the supervisor, against
-# `importer.TF_SECONDS` — imported once and held for the life of the process.
-# The scanner restarts constantly and therefore always runs current code; the
-# supervisor can be days old. Add a timeframe and the two disagree, and every
-# series on the new timeframe reads as UNKNOWN to the only process that can
-# act on it.
+# THE ORIGINAL CAUSE IS GONE; the entry is not. `quality.audit()` used to run
+# here, in the supervisor, against `importer.TF_SECONDS` — imported once and
+# held for the life of the process. The scanner restarts constantly and
+# therefore always runs current code; the supervisor can be days old. Add a
+# timeframe and the two disagree, and every series on the new timeframe read as
+# UNKNOWN to the only process that could act on it. `audit_tick` now dispatches
+# on the scanner's recorded verdict, so the supervisor no longer holds a
+# timeframe list at all and cannot manufacture this code. Kept because the
+# scanner can still RECORD it, and a restart still cannot clear it — see the
+# paragraph below, which is the reason that survives.
 #
 # Measured 2026-08-08. The supervisor had been up since 06 Aug 17:40, from a
 # commit whose TF_SECONDS was {15m,1H,4H,1D,1W}; `5m` was added after. 27
@@ -310,7 +324,35 @@ def retention_tick(live_child, server_child, *, external_server: bool,
 
 
 def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
-    """Call quality.audit() and dispatch by Kill-Switch rung.
+    """Dispatch by Kill-Switch rung on THE SCANNER'S RECORDED VERDICT.
+
+    IT READS `last_persisted`, NEVER `audit`. This process used to compute its
+    own report, and computing one is how it came to kill the scanner for a
+    fault that did not exist. `quality.audit()` takes a `now` and this caller
+    passed none, so it stamped wall-clock at the moment the walk STARTED and
+    then spent ~72s traversing every series while the scanner wrote into them.
+    Any bar that closed inside that window read as `r[0] + sec > now` —
+    DEVELOPING_CANDLES, a HALT-rung code, absent from UNHEALABLE_HALT_CODES —
+    and the supervisor restarted the scanner mid-cycle, losing the pass.
+
+    Seven times, in data/watchdog.log: 2026-08-11 (x3), 08-27, 09-04 (x2). The
+    2026-09-04 pair is the proof, because the scanner's own snapshot-pinned
+    audit recorded NO developing-candle finding that day. The supervisor
+    manufactured the verdict it acted on.
+
+    This is the 2026-08-04 defect `quality.last_persisted` was written for,
+    surviving in the one process that can kill things: "a read-only surface
+    must never publish a verdict the engine never acted on." Acting on one is
+    worse than publishing it. The scanner pins its audit to the same clock
+    snapshot its cycle used, so reading its record is the only way this
+    process can hold the same opinion as the engine it supervises.
+
+    Two consequences of reading a record rather than taking a reading. A
+    verdict is dispatched ONCE — `observed_at` is carried in state, and a tick
+    that sees the same stamp returns without re-dispatching, or the 60s cadence
+    would count one report as three and inflate the QUARANTINE streak into a
+    restart. And a verdict older than VERDICT_MAX_AGE_SEC is not acted on at
+    all; see that constant.
 
     HALT present or QUARANTINE count climbing vs prior tick → toast + restart
     live-scanner (the process that ingests). SERVE_FLAG → log summary. SERVE →
@@ -335,12 +377,32 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
         log(f"audit: db skip ({e})")
         return {**state, "at": now_mono}
     try:
-        report = quality.audit(con)
+        report = quality.last_persisted(con)
     except Exception as e:
         log(f"audit: failed ({e})")
         return {**state, "at": now_mono}
     finally:
         con.close()
+
+    if report is None:
+        # Before the scanner's first recorded audit. Nothing to dispatch, and
+        # inventing a reading here is the whole defect this function avoids.
+        log("audit: no scanner verdict recorded yet — skip")
+        return {**state, "at": now_mono}
+
+    observed_at = report.get("observed_at")
+    if observed_at is not None and observed_at == state.get("observed_at"):
+        # Already dispatched. The audit cadence (60s) is faster than the
+        # scanner writes, so without this the same verdict arrives repeatedly
+        # and the QUARANTINE climb hysteresis measures the cadence, not the
+        # data.
+        return {**state, "at": now_mono}
+
+    age_s = int(report.get("age_s") or 0)
+    if age_s > VERDICT_MAX_AGE_SEC:
+        log(f"audit: scanner verdict is {age_s}s old (limit "
+            f"{VERDICT_MAX_AGE_SEC}s) — not dispatching a stale reading")
+        return {**state, "at": now_mono, "observed_at": observed_at}
 
     worst = report.get("worst_rung", "SERVE")
     counts = report.get("rung_counts", {}) or {}
@@ -449,7 +511,7 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
                 f"{RESTART_GRACE_SEC}s; "
                 f"deferring restart (codes={codes[:6]})")
             return {"counts": counts, "at": now_mono, "q_streak": streak,
-                    "q_toast": q_toast}
+                    "q_toast": q_toast, "observed_at": observed_at}
         log(f"audit: worst={worst} counts={counts} — restart live ({reason}, "
             f"codes={codes[:6]})")
         toast("⚠ SniperSight audit restart",
@@ -468,7 +530,7 @@ def audit_tick(state: dict, live_child: "Child", warmup: bool = False) -> dict:
         log(f"audit: worst={worst} — clean")
 
     return {"counts": counts, "at": now_mono, "q_streak": streak,
-            "q_toast": q_toast}
+            "q_toast": q_toast, "observed_at": observed_at}
 
 
 class Child:

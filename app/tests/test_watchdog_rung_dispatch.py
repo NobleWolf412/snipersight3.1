@@ -15,6 +15,33 @@ if str(APP) not in sys.path:
 import watchdog  # noqa: E402
 
 
+def _recorded(report, seq=0):
+    """Stamp a report the way `quality.last_persisted` returns one.
+
+    `seq` must ADVANCE across the ticks of one test. `audit_tick` dispatches a
+    given `observed_at` once and returns early on a repeat, because its 60s
+    cadence outruns the scanner's writes and a re-dispatched verdict would let
+    one report count as three against the QUARANTINE climb hysteresis. A loop
+    that reused a stamp would therefore exercise the early return, not the
+    dispatch it means to test.
+    """
+    return {"observed_at": 1_700_000_000 + seq, "age_s": 0, **report}
+
+
+def _fake_quality(report, seq=0):
+    """A quality module that has RECORDED a verdict and refuses to compute one.
+
+    The `audit` stub is the assertion: the supervisor computing its own report
+    is the defect (7 scanner kills, `watchdog.audit_tick`), so any future edit
+    that reaches for it fails here rather than in production.
+    """
+    return MagicMock(
+        last_persisted=MagicMock(return_value=_recorded(report, seq)),
+        audit=MagicMock(side_effect=AssertionError(
+            "the supervisor recomputed a verdict instead of reading the one "
+            "the scanner recorded")))
+
+
 class _FakeChild:
     def __init__(self, alive=True):
         self._alive = alive
@@ -33,13 +60,23 @@ class _FakeChild:
 
 
 class TestWatchdogRungDispatch(unittest.TestCase):
-    def _run(self, report, prior=None):
+    def _run(self, report, prior=None, state=None):
+        """Drive one tick over a verdict the SCANNER is pretending to have
+        recorded.
+
+        `last_persisted`, not `audit` — the supervisor computing its own
+        report is the defect (7 scanner kills; see `watchdog.audit_tick`), so
+        a harness that stubbed `audit` would keep testing the shape of the
+        bug. Every report is stamped fresh and unseen unless a caller says
+        otherwise, because those are the two conditions under which a verdict
+        is dispatched at all.
+        """
         prior = prior or {}
-        state = {"counts": prior, "at": 0.0}
+        state = state if state is not None else {"counts": prior, "at": 0.0}
         child = _FakeChild(alive=True)
         fake_con = MagicMock()
         fake_store = MagicMock(connect=MagicMock(return_value=fake_con))
-        fake_quality = MagicMock(audit=MagicMock(return_value=report))
+        fake_quality = _fake_quality(report)
         with patch.dict("sys.modules",
                         {"engine": MagicMock(store=fake_store, quality=fake_quality),
                          "engine.store": fake_store,
@@ -185,13 +222,13 @@ class TestQuarantinePersistence(unittest.TestCase):
         fake_con = MagicMock()
         fake_store = MagicMock(connect=MagicMock(return_value=fake_con))
         kills = []
-        for q in quarantines:
+        for _tick, q in enumerate(quarantines):
             report = {"worst_rung": "QUARANTINE" if q else "SERVE",
                       "rung_counts": {"HALT": 0, "QUARANTINE": q, "SERVE_FLAG": 0,
                                        "AUTO_DISABLE": 0, "SERVE": 0},
                       "blockers": [],
                       "warnings": [{"code": "STALE_SERIES", "rung": "QUARANTINE"}] * q}
-            fake_quality = MagicMock(audit=MagicMock(return_value=report))
+            fake_quality = _fake_quality(report, _tick)
             with patch.dict("sys.modules",
                             {"engine": MagicMock(store=fake_store, quality=fake_quality),
                              "engine.store": fake_store,
@@ -237,13 +274,13 @@ class TestQuarantinePersistence(unittest.TestCase):
         state = {"counts": {}, "at": 0.0}
         fake_store = MagicMock(connect=MagicMock(return_value=MagicMock()))
         toasts = []
-        for q in (0, 3, 3, 3):
+        for _tick, q in enumerate((0, 3, 3, 3)):
             report = {"worst_rung": "QUARANTINE" if q else "SERVE",
                       "rung_counts": {"HALT": 0, "QUARANTINE": q, "SERVE_FLAG": 0,
                                        "AUTO_DISABLE": 0, "SERVE": 0},
                       "blockers": [],
                       "warnings": [{"code": "STALE_SERIES", "rung": "QUARANTINE"}] * q}
-            fake_quality = MagicMock(audit=MagicMock(return_value=report))
+            fake_quality = _fake_quality(report, _tick)
             with patch.dict("sys.modules",
                             {"engine": MagicMock(store=fake_store, quality=fake_quality),
                              "engine.store": fake_store, "engine.quality": fake_quality}):
@@ -277,7 +314,7 @@ class TestAuditWarmup(unittest.TestCase):
         child = _FakeChild(alive=True)
         fake_con = MagicMock()
         fake_store = MagicMock(connect=MagicMock(return_value=fake_con))
-        fake_quality = MagicMock(audit=MagicMock(return_value=report))
+        fake_quality = _fake_quality(report)
         with patch.dict("sys.modules",
                         {"engine": MagicMock(store=fake_store, quality=fake_quality),
                          "engine.store": fake_store,
@@ -636,7 +673,7 @@ class TestKillAttribution(unittest.TestCase):
                                    "AUTO_DISABLE": 0, "SERVE": 0},
                   "blockers": [{"code": "X", "rung": "HALT"}], "warnings": []}
         fake_store = MagicMock(connect=MagicMock(return_value=MagicMock()))
-        fake_quality = MagicMock(audit=MagicMock(return_value=report))
+        fake_quality = _fake_quality(report)
         with patch.dict("sys.modules",
                         {"engine": MagicMock(store=fake_store, quality=fake_quality),
                          "engine.store": fake_store, "engine.quality": fake_quality}):
@@ -718,6 +755,103 @@ class TestTakeoverHysteresis(unittest.TestCase):
         # HALT into a five-day restart loop.
         self.assertGreater(watchdog.RESTART_GRACE_SEC, 800,
                            "the grace window is under a cycle time already seen")
+
+
+class TestTheSupervisorHoldsNoOpinionOfItsOwn(unittest.TestCase):
+    """The supervisor dispatches the SCANNER'S verdict or none at all.
+
+    It used to compute its own. `quality.audit()` takes a `now` and this
+    caller passed none, so the report was stamped when the ~72s walk STARTED
+    and every bar that closed during it read as not-yet-closed. That is
+    DEVELOPING_CANDLES, a HALT-rung code and not in UNHEALABLE_HALT_CODES, so
+    the supervisor killed the scanner mid-cycle over a bar the scanner had
+    just correctly imported.
+
+    Seven times in data/watchdog.log: 2026-08-11 (x3), 08-27, 09-04 (x2). On
+    2026-09-04 the scanner's own snapshot-pinned audit recorded no such
+    finding at all — the supervisor manufactured the verdict it acted on.
+    `quality.last_persisted` was written for this exact failure one process
+    over; the rule is that a read-only surface must not publish a verdict the
+    engine never acted on, and this process ACTS on one.
+
+    Nothing above catches this: every test there hands `audit_tick` a report
+    and asks what it does with it, which is the same answer either way. The
+    question is where the report came from.
+    """
+
+    def _tick(self, state, report, child=None):
+        child = child or _FakeChild(alive=True)
+        fake_store = MagicMock(connect=MagicMock(return_value=MagicMock()))
+        quality = MagicMock(last_persisted=MagicMock(return_value=report),
+                            audit=MagicMock(side_effect=AssertionError(
+                                "recomputed instead of reading the record")))
+        with patch.dict("sys.modules",
+                        {"engine": MagicMock(store=fake_store, quality=quality),
+                         "engine.store": fake_store, "engine.quality": quality}):
+            with patch.object(watchdog, "toast"), patch.object(watchdog, "log"):
+                new_state = watchdog.audit_tick(state, child)
+        return new_state, child, quality
+
+    @staticmethod
+    def _halt(**over):
+        return {**_recorded({
+            "worst_rung": "HALT",
+            "rung_counts": {"HALT": 1, "QUARANTINE": 0, "SERVE_FLAG": 0,
+                            "AUTO_DISABLE": 0, "SERVE": 0},
+            "blockers": [{"code": "DEVELOPING_CANDLES", "rung": "HALT"}],
+            "warnings": []}), **over}
+
+    def test_it_reads_the_recorded_verdict_and_never_computes_one(self):
+        _, child, quality = self._tick({"counts": {}, "at": 0.0}, self._halt())
+        quality.last_persisted.assert_called_once()
+        quality.audit.assert_not_called()
+        child.proc.terminate.assert_called_once()   # a FRESH verdict still acts
+
+    def test_a_verdict_is_dispatched_once_however_often_it_is_read(self):
+        """The cadence must not become the evidence.
+
+        Audits tick every 60s; the scanner records every few minutes. Without
+        this, one report is dispatched repeatedly — and three reads of a single
+        elevated QUARANTINE reading satisfy QUARANTINE_CLIMB_TICKS, which is a
+        restart manufactured out of nothing but the polling rate.
+        """
+        report = self._halt()
+        state, child, _ = self._tick({"counts": {}, "at": 0.0}, report)
+        self.assertEqual(state["observed_at"], report["observed_at"])
+        self.assertEqual(child.proc.terminate.call_count, 1)
+
+        again = _FakeChild(alive=True)
+        self._tick(state, report, child=again)
+        again.proc.terminate.assert_not_called()
+
+    def test_a_stale_verdict_is_not_acted_on(self):
+        """Past VERDICT_MAX_AGE_SEC the report describes a store the scanner
+        has moved on from. A dead scanner is the liveness checks' problem —
+        they can see a dead child and this cannot."""
+        stale = self._halt(age_s=watchdog.VERDICT_MAX_AGE_SEC + 1)
+        state, child, _ = self._tick({"counts": {}, "at": 0.0}, stale)
+        child.proc.terminate.assert_not_called()
+        self.assertEqual(state["observed_at"], stale["observed_at"],
+                         "a skipped verdict must still be marked seen, or the "
+                         "next tick re-examines it forever")
+
+    def test_no_recorded_verdict_yet_is_not_a_fault(self):
+        """Fresh install, or a store whose scanner has not completed a pass."""
+        state, child, _ = self._tick({"counts": {}, "at": 0.0}, None)
+        child.proc.terminate.assert_not_called()
+        self.assertGreater(state["at"], 0.0)
+
+    def test_developing_candles_from_the_scanner_is_still_actionable(self):
+        """The fix is the CLOCK, not an exemption.
+
+        Adding DEVELOPING_CANDLES to UNHEALABLE_HALT_CODES would have silenced
+        the symptom and kept the second authority. A developing-candle finding
+        the scanner records against its own pinned snapshot is a real reading
+        about a real pipeline, and it still restarts.
+        """
+        self.assertNotIn("DEVELOPING_CANDLES", watchdog.UNHEALABLE_HALT_CODES)
+        _, child, _ = self._tick({"counts": {}, "at": 0.0}, self._halt())
+        child.proc.terminate.assert_called_once()
 
 
 if __name__ == "__main__":
