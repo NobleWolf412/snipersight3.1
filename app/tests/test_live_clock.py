@@ -25,6 +25,27 @@ class _Connection:
 
 
 class LiveClockContract(unittest.TestCase):
+    def test_trial_feed_survives_removal_and_idle_pass_updates_trial(self):
+        calls = []
+        with patch.object(live.time, "time", return_value=599), \
+             patch.object(live.universe, "scan_symbols", return_value=[]), \
+             patch.object(live.execsim, "unresolved", return_value={}), \
+             patch.object(live, "execution_rebuild_work", return_value={}), \
+             patch.object(live.stopstudy, "exists", return_value=True), \
+             patch.object(live.stopstudy, "unresolved", return_value=set()), \
+             patch.object(live.stopstudy, "run"), \
+             patch.object(live.forwardtrial, "exists", return_value=True), \
+             patch.object(live.forwardtrial, "unresolved", return_value={("BTCUSDT", "15m")}), \
+             patch.object(live.forwardtrial, "run") as run, \
+             patch.object(live.importer, "native_tfs", return_value={"5m": 300}), \
+             patch.object(live.importer, "backfill", side_effect=lambda *args, **kwargs: calls.append(args[1]) or {"candles": 0, "gaps": 0}), \
+             patch.object(live.ingest, "history_floor", return_value=0), \
+             patch.object(live.venues, "REFERENCE", {}), \
+             patch("engine.manual.unresolved", return_value={}):
+            self.assertEqual(live.cycle(_Connection(), Mock()), (0, []))
+        self.assertEqual(calls, ["BTCUSDT"])
+        run.assert_called_once()
+
     def test_cycle_passes_its_opening_clock_to_the_importer(self):
         calls = []
 
@@ -42,6 +63,12 @@ class LiveClockContract(unittest.TestCase):
              patch.object(live.venues, "REFERENCE", {}), \
              patch.object(live.execsim, "unresolved", return_value={}), \
              patch.object(live, "execution_rebuild_work", return_value={}), \
+             patch.object(live.stopstudy, "exists", return_value=True), \
+             patch.object(live.stopstudy, "unresolved", return_value=set()), \
+             patch.object(live.stopstudy, "run"), \
+             patch.object(live.forwardtrial, "exists", return_value=True), \
+             patch.object(live.forwardtrial, "unresolved", return_value=set()), \
+             patch.object(live.forwardtrial, "run"), \
              patch("engine.manual.unresolved", return_value={}):
             self.assertEqual(live.cycle(_Connection(), Mock()), (0, []))
 
@@ -61,6 +88,12 @@ class LiveClockContract(unittest.TestCase):
                           return_value=["BTCUSDT"]), \
              patch.object(live.execsim, "unresolved", return_value=pinned), \
              patch.object(live, "execution_rebuild_work", return_value={}), \
+             patch.object(live.stopstudy, "exists", return_value=True), \
+             patch.object(live.stopstudy, "unresolved", return_value=set()), \
+             patch.object(live.stopstudy, "run"), \
+             patch.object(live.forwardtrial, "exists", return_value=True), \
+             patch.object(live.forwardtrial, "unresolved", return_value=set()), \
+             patch.object(live.forwardtrial, "run"), \
              patch.object(live.importer, "native_tfs",
                           return_value={"5m": 300}), \
              patch.object(live.importer, "backfill", side_effect=backfill), \

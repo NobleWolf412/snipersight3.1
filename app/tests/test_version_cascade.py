@@ -59,7 +59,9 @@ OPERATIONAL_EXPECTED = {
     # paper book settles and BEFORE the dispatcher reads it. Order is part of
     # the behaviour: settle, then size, then dispatch — sizing first means
     # every decision is made against the previous cycle's account.
-    "live": "live-v0.6-draft",
+    "live": "live-v0.8-draft",
+    "stopstudy": "stop-study-v0.1-draft",
+    "forwardtrial": "forward-trial-v0.1-draft",
     # Not a fact producer: it reads `paper_positions` and the PAPER outbox and
     # returns an account. Locked anyway, for the reason `agg` is — it sits
     # upstream of every paper sizing decision, so a rule change here changes
@@ -193,9 +195,11 @@ OPERATIONAL_EXPECTED = {
 
 
 def operational_versions():
-    from engine import opportunities, paperbook, shared_account
+    from engine import opportunities, paperbook, shared_account, forwardtrial, stopstudy
     return {
         "live": live.LIVE_VERSION,
+        "forwardtrial": forwardtrial.TRIAL_VERSION,
+        "stopstudy": stopstudy.STOP_STUDY_VERSION,
         "paperbook": paperbook.PAPERBOOK_VERSION,
         "contracts": contracts.CONTRACT_VERSION,
         "automation": automation.AUTOMATION_VERSION,
@@ -349,7 +353,7 @@ RETIRED_MANUAL = tuple(v for v in manual.MANUAL_VERSIONS
 ATR_CONSUMERS = (
     "abtest", "breakout", "chartread", "execsim", "fvg", "liquidity", "ma",
     "manual", "momentum", "ranges", "regimeread", "scalein", "setups",
-    "structure", "trend", "volatility", "volume", "zones", "shared_account",
+    "structure", "trend", "volatility", "volume", "zones", "shared_account", "forwardtrial", "stopstudy",
 )
 
 

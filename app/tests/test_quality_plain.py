@@ -70,3 +70,14 @@ def test_pass_headline_calls_notes_records_not_work():
     headline = server._quality_headline(report)
     assert "passed" in headline
     assert "not work" in headline
+
+
+def test_single_market_blocker_explains_account_wide_entry_restriction():
+    report = {"status": "BLOCKED", "blockers": [
+        {"code": "SEQUENCE_GAPS", "symbol": "CAP-USD", "tf": "5m"}],
+        "warnings": [], "notes": []}
+    headline = server._quality_headline(report)
+    assert "across the account" in headline
+    assert "data-health protection enabled" in headline
+    assert "CAP-USD" in headline
+    assert "stopped on the affected data" not in headline

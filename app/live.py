@@ -26,10 +26,12 @@ from pathlib import Path
 import notify
 from engine import (automation, autotrader, broker_factory, execution, positions, store,
                     importer, aggregator, execsim, risk, riskpaper, universe, ingest,
-                    quality, listings, marketdata, pipeline, venues, cooldowns, funding)
+                    quality, listings, marketdata, pipeline, venues, cooldowns, funding, forwardtrial, stopstudy)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.6-draft"
+LIVE_VERSION = "live-v0.8-draft"
+# v0.8: paired prospective stop comparison; all arms retain their data feed.
+# v0.7: isolated prospective breakout trial; unresolved trials retain data feeds.
 # v0.5: the cycle runs the PAPER book's own risk authority, after the paper
 # book settles and before the dispatcher reads it. Until now the only risk
 # pass was the research replay, whose account has never held an order, and the
@@ -470,9 +472,22 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
             "baseline plan(s) missing current execution records; "
             "recovering with quality-gated simulation")
     scan_set = set(scan)
+    if not stopstudy.exists(con):
+        try:
+            stopstudy.run(con)
+        except Exception:
+            log.exception("Stop comparison activation failed")
+    if not forwardtrial.exists(con):
+        # Freeze the activation watermark before this pass generates setups.
+        try:
+            forwardtrial.run(con, scan_set)
+        except Exception:
+            log.exception("Forward strategy trial activation failed")
     pinned_exec = {key: value for key, value in unresolved_exec.items()
                    if key[0] not in scan_set}
-    import_symbols = sorted(scan_set | {symbol for symbol, _tf in pinned_exec})
+    trial_pins = forwardtrial.unresolved(con) | stopstudy.unresolved(con)
+    import_symbols = sorted(scan_set | {symbol for symbol, _tf in pinned_exec}
+                            | {symbol for symbol, _tf in trial_pins})
     if pinned_exec:
         log.debug(
             f"execution pin: {len(pinned_exec)} unresolved market/timeframe "
@@ -586,6 +601,14 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     # A migration may need replay over candles already held. An idle feed
     # must not prevent recovery of a missing execution generation.
     if not new_candles and not rebuild_exec:
+        try:
+            stopstudy.run(con)
+        except Exception:
+            log.exception("Stop comparison update failed")
+        try:
+            forwardtrial.run(con, scan_set)
+        except Exception:
+            log.exception("Forward strategy trial update failed")
         return 0, []
 
     before = con.execute("SELECT COALESCE(MAX(id),0) FROM facts").fetchone()[0]
@@ -595,7 +618,7 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     # no 4H candle, which the audit correctly reports as a permanent blocker
     # (ONDO-USD, 2026-07-26). Aggregation is a cheap roll-up of candles we
     # already hold; engines and scanning stay scoped to the admitted set.
-    tracked = universe.all_tracked_symbols(con)
+    tracked = sorted(set(universe.all_tracked_symbols(con)) | {symbol for symbol, _tf in trial_pins})
     for i, sym in enumerate(tracked, 1):
         _beat(f"aggregate {sym} ({i}/{len(tracked)})")
         for tf in ("4H", "1W"):
@@ -660,6 +683,12 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
         log.warning(f"market-data quality blocked {len(blocked_syms)}/{len(scan)} "
                     f"symbols this cycle (engines skipped, rest of the scan "
                     f"continued): {'; '.join(blocked_syms[:4])}")
+
+    _beat("forward strategy trial")
+    try:
+        forwardtrial.run(con, scan_set)
+    except Exception:
+        log.exception("Forward strategy trial failed; main account processing continues")
 
     _beat("risk")
     risk.run(con)
@@ -733,6 +762,12 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
         # A private execution fault is operational state to fix, never a reason
         # to stop recording the market.
         log.error(f"autotrader failed closed: {type(exc).__name__}: {exc}")
+    _beat("stop comparison")
+    try:
+        stopstudy.run(con)
+    except Exception:
+        log.exception("Stop comparison failed; account processing is unaffected")
+
     _beat("audit")
     quality.audit(con, now=now, persist=True)
 

@@ -3235,7 +3235,7 @@ def _quality_headline(report: dict) -> str:
                      "notes are kept for audit — they are records, not work.")
     if blockers:
         cause = _quality_cause(blockers)
-        return (f"New entries are stopped on the affected data. "
+        return (f"With data-health protection enabled, new entries are stopped across the account. "
                 f"{cause['sentence']}")
     cause = _quality_cause(warnings)
     lead = cause["sentence"] if cause else "A check is flagged."
@@ -3322,7 +3322,7 @@ def _next_action(*, rows: list[dict], mode: dict, scanner: dict,
                    "not readable right now. Diagnostics has the full list.")
         return {"state": "CHECK", "title": title,
                 "summary": summary,
-                "bot_handling": "New trades on the affected data are refused "
+                "bot_handling": "With data-health protection enabled, new trades across the account are refused "
                                 "automatically; scanning and protection of "
                                 "anything open continue. " +
                                 (cause["action"] if cause else ""),

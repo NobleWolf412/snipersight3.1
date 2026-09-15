@@ -233,7 +233,11 @@ def diagnosis(intent_id: str, workspace: str = "CRYPTO"):
         row = next((r for r in rows if r["intent_id"] == intent_id), None)
         if row is None:
             raise HTTPException(404, "Account trade not found")
+        from engine import stopstudy, tradevisuals
+        row["price_format"] = tradevisuals.chart_format(row)
+        row["excursion"] = tradevisuals.excursion(con, row)
         return {"trade": row, "authority": "RECORDED_EXECUTION", "advisory_only": True,
+                "stop_comparison": stopstudy.report(con, key="paper:"+intent_id),
                 "facts": [f"Origin: {row['origin']}. Current controller: {row['controller']}.",
                     f"Recorded outcome: {row['outcome'] or row['state']}.",
                     f"Net result: {row['r_multiple']} R." if row['r_multiple'] is not None else "No settled R result yet.",
@@ -257,6 +261,36 @@ def market_pulse(workspace: str = "CRYPTO"):
     workspace_scope(workspace)
     from engine import marketpulse
     return marketpulse.current()
+
+
+@router.get("/forward-trial")
+def forward_trial(workspace: str = "CRYPTO"):
+    from engine import forwardtrial
+    if workspace_scope(workspace) != "CRYPTO":
+        return {"state": "UNAVAILABLE", "items": [], "note": "This trial uses crypto markets."}
+    con = store.connect()
+    try:
+        con.execute("PRAGMA query_only=ON")
+        con.execute("BEGIN")
+        return forwardtrial.report(con)
+    finally:
+        con.rollback()
+        con.close()
+
+
+@router.get("/stop-comparison")
+def stop_comparison(workspace: str = "CRYPTO"):
+    from engine import stopstudy
+    if workspace_scope(workspace) != "CRYPTO":
+        return {"state": "UNAVAILABLE", "items": [], "note": "This comparison uses crypto paper trades."}
+    con = store.connect()
+    try:
+        con.execute("PRAGMA query_only=ON")
+        con.execute("BEGIN")
+        return stopstudy.report(con)
+    finally:
+        con.rollback()
+        con.close()
 
 
 @router.get("/candles")

@@ -3,6 +3,7 @@ const {test,expect}=require('@playwright/test');
 const AxeBuilder=require('@axe-core/playwright').default;
 
 test.beforeEach(async({page,request})=>{
+  await page.route('**/api/command',route=>route.fulfill({json:{generated_at:Math.floor(Date.now()/1000),scanner:{state:'SCANNING',age_s:2,stage:'idle',cycles:3},automation:{mode:'PAPER',halted:false},opportunities:{counts:{}},data:{}}}));
   const response=await request.get('/api/ui/v1/context');
   expect((await response.json()).epoch.label).toBe('Isolated preview · synthetic');
   // Protected effects are blocked twice: in this browser and in the harness.
@@ -21,6 +22,21 @@ async function ticket(page){
 }
 
 function preview(){return {request:{workspace:'CRYPTO',symbol:'BTCUSDT',tf:'1H',direction:'LONG',entry:'100',sl:'98',tp:'104',risk_usd:'25',created_at:Math.floor(Date.now()/1000),expected_epoch:'fixture'},quantity:'12.5',risk_usd:'25',rr:'2',expires_at:Math.floor(Date.now()/1000)+120,note:'Preview fixture'};}
+
+test('forward trial separates new evidence and expands trade reasons',async({page},info)=>{
+  const now=Math.floor(Date.now()/1000);
+  await page.route('**/api/ui/v1/forward-trial*',route=>route.fulfill({json:{state:'COLLECTING',started_at:now-86400,checked_at:now,starting_balance:'10000',balance:'10123.45',pnl_usd:'123.45',risk_usd:'100',max_slots:5,counts:{PLACED:1,FILLED:1,CLOSED:1,SKIPPED:1,EXPIRED:0},curve:[{time:now-86400,value:'10000'},{time:now,value:'10123.45'}],items:[{symbol:'BTCUSDT',tf:'15m',observed_at:now,state:'SKIPPED',entry:'100',sl:'98',tp:'104',direction:'LONG',reason:'The trial is already watching a trade in this market.'}]}}));
+  await page.goto('/#research');
+  await expect(page.locator('.trial-balance')).toHaveText('$10,123.45');
+  await expect(page.locator('.trial-curve')).toBeVisible();
+  await page.locator('.trial-trade summary').click();
+  await expect(page.getByText('The trial is already watching a trade in this market.')).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Simulation results & setup decisions'})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+  const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();
+  expect(audit.violations.map(v=>v.id)).toEqual([]);
+  await page.screenshot({path:info.outputPath('forward-trial.png'),fullPage:true});
+});
 
 test('six screens, chart, keyboard navigation and accessibility',async({page},info)=>{
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
@@ -252,4 +268,111 @@ test('trade journey loads historical candles around the recorded fill',async({pa
   await page.screenshot({path:info.outputPath('trade-history.png')});
   await page.getByRole('button',{name:'Close details'}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('journal shows profit given back and distinct sub-dollar chart labels',async({page},info)=>{
+  const start=1789000200;
+  const trade={intent_id:'precise',symbol:'ENAUSDT',timeframe:'15m',direction:'LONG',origin:'BOT',controller:'BOT',grade_eligible:true,filled_at:start,closed_at:start+3600,entry:'0.13910',exit_price:'0.13851',planned_stop:'0.13852',targets:['0.14100'],realised_usd:'-176.47',r_multiple:'-1.18',outcome:'SL',price_format:{type:'price',precision:6,minMove:'0.000001'},excursion:{state:'LOWER_BOUND',peak_at:start+1800,peak_price:'0.1406',peak_gain_usd:'386.375',peak_gain_r:'2.58',given_back_usd:'386.375',note:'Entry and exit candle extremes are excluded. Before fees and funding.'}};
+  await page.route('**/api/ui/v1/journal?*',r=>r.fulfill({json:{items:[trade],scope:'EXECUTED_ACCOUNT',note:'Recorded trades'}}));
+  await page.route('**/api/ui/v1/trades/precise/diagnosis?*',r=>r.fulfill({json:{trade,stop_comparison:{state:'COLLECTING',started_at:start+86400,items:[]}}}));
+  await page.route('**/api/candles?*',r=>r.fulfill({json:Array.from({length:22},(_,i)=>({time:start+(i-6)*900,open:.139,high:.1406,low:.1385,close:.1395,volume:10}))}));
+  await page.goto('/#journal');
+  await page.evaluate(()=>{
+    const lib=window.LightweightCharts;
+    window.LightweightCharts={...lib,createChart(...args){
+      const chart=lib.createChart(...args),add=chart.addCandlestickSeries.bind(chart);
+      chart.addCandlestickSeries=(options)=>{
+        const series=add(options);
+        window.__journalPriceLabels=['0.13910','0.13852','0.14100','0.13851'].map(p=>series.priceFormatter().format(Number(p)));
+        return series;
+      };
+      return chart;
+    }};
+  });
+  await page.getByRole('button',{name:'View ENAUSDT trade details'}).click();
+  await expect(page.locator('.trade-history-chart canvas').first()).toBeVisible();
+  await expect(page.locator('.excursion-panel')).toContainText('At least $386.38');
+  await expect(page.locator('.excursion-panel')).toContainText('Profit given back');
+  const labels=await page.evaluate(()=>window.__journalPriceLabels);
+  expect(labels).toEqual(['0.139100','0.138520','0.141000','0.138510']);
+  expect(await page.locator('.trade-dialog').evaluate(n=>n.scrollWidth<=n.clientWidth)).toBeTruthy();
+  await page.screenshot({path:info.outputPath('precise-journal.png')});
+});
+
+test('stop comparison counts only completed triplets and explains pending arms',async({page},info)=>{
+  const now=Math.floor(Date.now()/1000);
+  const rules={HOLD:'Original stop',COST_COVER:'Cover costs after +1R',STRUCTURE:'Follow confirmed swings'};
+  await page.route('**/api/ui/v1/stop-comparison*',r=>r.fulfill({json:{state:'COLLECTING',started_at:now-86400,checked_at:now,rules,paired_count:2,pending_count:3,excluded_count:1,totals:{HOLD:{pnl_usd:'-200',difference_usd:'0'},COST_COVER:{pnl_usd:'50',difference_usd:'250',better:1,worse:0},STRUCTURE:{pnl_usd:'-25',difference_usd:'175',better:1,worse:1}},items:[]}}));
+  await page.goto('/#research');
+  await expect(page.locator('.study-panel')).toContainText('3 still being followed');
+  await expect(page.locator('.study-cost')).toContainText('$250.00 versus the original stop');
+  await page.getByText('What each rule does',{exact:true}).click();
+  await expect(page.locator('.study-panel')).toContainText('Changes take effect on the next candle');
+  const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();
+  expect(audit.violations.map(v=>v.id)).toEqual([]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+  await page.screenshot({path:info.outputPath('stop-study.png'),fullPage:true});
+});
+
+test('open simulated stop paths extend beyond the recorded exit',async({page})=>{
+  const now=Math.floor(Date.now()/1000),start=Math.floor((now-86400)/900)*900;
+  const trade={intent_id:'still-following',symbol:'ENAUSDT',timeframe:'15m',direction:'LONG',origin:'BOT',controller:'BOT',filled_at:start,closed_at:start+900,entry:'100',exit_price:'98',planned_stop:'98',targets:['110'],price_format:{type:'price',precision:2,minMove:'.01'}};
+  const comparison={state:'COLLECTING',rules:{HOLD:'Original stop',COST_COVER:'Cover costs after +1R',STRUCTURE:'Follow confirmed swings'},items:[{state:'OPEN',results:{HOLD:{at:start+900,outcome:'SL',pnl_usd:'-20'},COST_COVER:null,STRUCTURE:null},moves:{COST_COVER:[{at:start+36000,price:'100.2'}],STRUCTURE:[]}}]};
+  await page.route('**/api/ui/v1/journal?*',r=>r.fulfill({json:{items:[trade],scope:'EXECUTED_ACCOUNT',note:''}}));
+  await page.route('**/api/ui/v1/trades/still-following/diagnosis?*',r=>r.fulfill({json:{trade,stop_comparison:comparison}}));
+  await page.route('**/api/candles?*',r=>{
+    const end=Number(new URL(r.request().url()).searchParams.get('end_ts'));
+    expect(end).toBeGreaterThanOrEqual(now-5);
+    return r.fulfill({json:Array.from({length:96},(_,i)=>({time:start+i*900,open:101,high:105,low:99,close:102,volume:1}))});
+  });
+  await page.goto('/#journal');
+  await page.evaluate(()=>{
+    const lib=window.LightweightCharts;
+    window.__studyTraces=[];
+    window.LightweightCharts={...lib,createChart(...args){const chart=lib.createChart(...args),add=chart.addLineSeries.bind(chart);chart.addLineSeries=options=>{const series=add(options),set=series.setData.bind(series);series.setData=data=>{if(options.title?.includes('simulated'))window.__studyTraces.push(data);return set(data);};return series;};return chart;}};
+  });
+  await page.getByRole('button',{name:'View ENAUSDT trade details'}).click();
+  await expect(page.locator('.trade-history-chart canvas').first()).toBeVisible();
+  await expect(page.locator('.study-timeline')).toContainText('100.2');
+  expect(await page.evaluate(()=>window.__studyTraces[0].some(p=>p.value===100.2))).toBeTruthy();
+});
+
+
+test('bot view separates fresh scanning, paused entries and delayed updates',async({page},info)=>{
+  await page.clock.install();
+  let status={generated_at:Math.floor(Date.now()/1000),scanner:{state:'SCANNING',age_s:3,stage:'engines LINKUSDT (12/40)',cycles:7},automation:{mode:'PAPER',halted:true},opportunities:{counts:{WATCHING:2,READY:1,BLOCKED:4}},data:{headline:'Affected market: CAP-USD has missing price data.',observed_at:1789401600}};
+  await page.route('**/api/command',route=>route.fulfill({json:status}));
+  await page.goto('/#home');
+  await expect(page.locator('#bot-status')).toContainText('Checking strategies');
+  await page.getByRole('link',{name:'Open Bot view'}).click();
+  await expect(page.locator('#bot-status')).toContainText('New entries paused');
+  await expect(page.locator('progress')).toHaveAttribute('value','12');
+  await expect(page.locator('#bot-status')).toContainText('CAP-USD');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+  const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();expect(audit.violations.map(v=>v.id)).toEqual([]);
+  await page.screenshot({path:info.outputPath('bot-view.png'),fullPage:true});
+  status={...status,scanner:{...status.scanner,state:'STALE',age_s:240}};
+  await page.clock.fastForward(15000);
+  await expect(page.locator('#bot-status')).toContainText('Scanner update overdue');
+  await expect(page.locator('progress')).toHaveCount(0);
+  await expect(page.locator('.bot-signal.reporting')).toHaveCount(0);
+  await page.route('**/api/command',route=>route.fulfill({status:503,json:{detail:'Unavailable'}}));
+  await page.clock.fastForward(15000);
+  await expect(page.locator('#bot-status')).toContainText('Bot status unavailable');
+});
+
+test('blocked count opens searchable reasons and links to the setup chart',async({page},info)=>{
+  await page.route('**/api/ui/v1/opportunities?*',route=>{
+    const query=new URL(route.request().url()).searchParams;expect(query.get('state')).toBe('BLOCKED');
+    return route.fulfill({json:{total:query.get('search')?0:345,items:query.get('search')?[]:[{state:'BLOCKED',setup:{setup_id:'blocked-fixture',symbol:'BCHUSDT',timeframe:'15m',strategy:'PULLBACK',direction:'LONG',entry:'0',stop:'0',targets:[],confirmed_at:1789401600},strongest_counterargument:'The setup has no expiry, so the entry window cannot be verified.',primary_explanation:'Waiting for confirmation.',reasons:[]}]}});
+  });
+  await page.goto('/#bot');await page.getByRole('link',{name:'View blocked setups and reasons'}).click();
+  await expect(page.getByRole('heading',{name:'Why setups are blocked.'})).toBeVisible();
+  await expect(page.locator('#blocked-list')).toContainText('No entry deadline is recorded');
+  await expect(page.locator('#blocked-list')).toContainText('1 of 345');
+  await expect(page.getByRole('button',{name:'View chart'})).toBeVisible();
+  const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();expect(audit.violations.map(v=>v.id)).toEqual([]);
+  await page.screenshot({path:info.outputPath('blocked-reasons.png'),fullPage:true});
+  await page.getByRole('textbox',{name:'Market'}).fill('XYZ');await page.getByRole('button',{name:'Search',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'No blocked setups found'})).toBeVisible();
 });
