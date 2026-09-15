@@ -331,8 +331,15 @@ def request_cutover(con, action, expected_epoch=None):
                 raise AdmissionRejected("CUTOVER_WAITING: " + ", ".join(blockers))
             con.execute("UPDATE account_epochs SET state='SEALED',active=0,closed_at=? WHERE id=?",
                         (now, epoch["id"]))
+            # ONE SPELLING OF THE OPENING BALANCE. This was the literal
+            # "10000" while the legacy epoch nineteen lines above asked
+            # `paperbook.opening_equity()`. Equal today, because
+            # `risk.START_EQUITY` is Decimal("10000") — and silently different
+            # the day that constant moves, which is exactly the divergence
+            # `paperbook.opening_equity` exists to prevent.
             con.execute("INSERT INTO account_epochs VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                (uuid.uuid4().hex, "CRYPTO", "PAPER", now, "10000", PROFILE_VERSION,
+                (uuid.uuid4().hex, "CRYPTO", "PAPER", now,
+                 str(paperbook.opening_equity()), PROFILE_VERSION,
                  epoch["risk_pct"], 1, None, "Current paper account", "OPEN"))
         else:
             raise AdmissionRejected("action must be drain, resume, or complete")

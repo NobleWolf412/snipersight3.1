@@ -68,6 +68,20 @@ MIN_FORWARD_TRADES = 100
 #: the figure on screen is never mistaken for the deeper one.
 RESAMPLES = 5000
 
+#: WHY LIVE IS LOCKED, in one place. Every surface that tells the operator why
+#: real-money routing is unavailable reads this string.
+#:
+#: `ui_api.context_model` used to carry its own wording — "Required venue
+#: safety drills are not complete" — which is a different claim from the true
+#: one, and one that would go on being displayed after the drills passed. Both
+#: fail closed, so the duplicate could only ever mislead about the reason, never
+#: unlock anything; that is exactly the kind of second authority §6 rule 9 is
+#: about, and a safety statement is the worst place to keep one.
+BUILD_NOTE = ("Even with every criterion met, this system cannot send a "
+              "real-money order: mainnet order routing is build-locked. "
+              "Unlocking it is a deliberate build decision, not something "
+              "the record earns.")
+
 
 def _drawdown_limit(con) -> float:
     """The operator's own total-drawdown guardrail, not a second opinion.
@@ -206,10 +220,7 @@ def evaluate(con, *, journal: list[dict], max_drawdown_pct: float,
         "ready": ready,
         "enabled": False,
         "blocked_by_build": True,
-        "build_note": ("Even with every criterion met, this system cannot send "
-                       "a real-money order: mainnet order routing is "
-                       "build-locked. Unlocking it is a deliberate build "
-                       "decision, not something the record earns."),
+        "build_note": BUILD_NOTE,
         "headline": (
             "Evidence bar met — live execution still needs an order router"
             if ready else

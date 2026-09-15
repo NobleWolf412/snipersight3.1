@@ -303,3 +303,42 @@ def test_risk_decision_records_changed_percentage_even_when_size_is_capped():
     assert riskpaper._moved(old, {**old, "risk_pct":"0.005"})
     assert riskpaper._moved(old, {**old, "account_epoch_id":"two"})
     assert not riskpaper._moved(old, dict(old))
+
+
+def test_the_account_gates_are_the_ones_the_surfaces_read(tmp_path):
+    """The read models must describe the envelope the bot ENFORCES.
+
+    `riskpaper.run` gates on `gates_for_account`, which overrides risk_pct and
+    the three limits derived from it off the active epoch. Six server read
+    models asked `risk.gates_for_mode(PAPER)` instead — the fixed 2% default.
+    They agreed only while no epoch row existed, which was true right up until
+    the operator used the risk control that shipped with this account layer.
+
+    At 0.25% the real daily-loss limit is 1% of day-start equity and the
+    surfaces reported 8%. The order ticket was the one that costs a trade
+    rather than a wrong label: it would size against a budget the book then
+    refuses.
+    """
+    from engine import risk
+    from engine.contracts import AutomationMode as Mode
+
+    con = account(tmp_path)
+    default = risk.gates_for_mode(Mode.PAPER)
+    assert shared_account.gates_for_account(con) == default, (
+        "with no epoch the account gates ARE the mode default — that fallback "
+        "is what makes reading the account authority safe everywhere")
+
+    shared_account.set_risk_percent(con, "0.25", "legacy", str(default["risk_pct"]))
+    gates = shared_account.gates_for_account(con)
+
+    assert gates["risk_pct"] == Decimal("0.0025")
+    assert gates != default, "the epoch must actually move the envelope"
+    for limit in ("daily_loss_limit_pct", "max_total_open_risk_pct"):
+        assert gates[limit] != default[limit], (
+            f"{limit} is derived from risk_pct and must move with it — a "
+            f"surface reading the default reports it eight times too wide")
+    # `scale_risk_pct` is SCALE_ADD_R x risk_pct and SCALE_ADD_R is zero
+    # (pyramiding forbidden by contract, risk.py), so it is zero at every
+    # percentage. It moves with risk_pct the day that contract changes, which
+    # is why it is derived rather than pinned.
+    assert gates["scale_risk_pct"] == 0 == default["scale_risk_pct"]

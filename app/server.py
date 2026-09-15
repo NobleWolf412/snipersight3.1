@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from engine import registry, store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
 from engine import momentum, volatility, volume, ma, fvg, volprofile, ranges
 from engine import costs, venues, stocks
-from engine import achievements, automation, broker_factory, contracts, execution, learning, market_context, opportunities, positions, venues
+from engine import achievements, automation, broker_factory, contracts, execution, learning, market_context, opportunities, positions, shared_account, venues
 from engine import factorgrade as factorgrade_engine, factorstats as factorstats_engine
 from engine import edgestats
 
@@ -1082,7 +1082,12 @@ def _envelope_config(con, eq: float) -> dict:
     is reported alongside, never mixed into the arithmetic.
     """
     mode = automation.current(con)[0]
-    g = risk.gates_for_mode(risk.AutomationMode.PAPER)
+    # THE ACCOUNT'S gates, not the mode defaults. `riskpaper.run` enforces
+    # `shared_account.gates_for_account`, which overrides risk_pct and the
+    # three limits derived from it off the active epoch. Reading the mode
+    # default here made every surface below describe a 2% envelope while the
+    # bot enforced whatever the operator had actually saved.
+    g = shared_account.gates_for_account(con)
     dispatch_pct = risk.MODE_RISK_PCT[mode]
     return {"mode": mode.value,
             "risk_pct": float(g["risk_pct"]) * 100,
@@ -1357,7 +1362,7 @@ def portfolio():
                 # the same helper's answer. See _daily_budget.
                 "daily_loss": _daily_budget(
                     journal, Decimal(str(eq)),
-                    risk.gates_for_mode(risk.AutomationMode.PAPER)),
+                    shared_account.gates_for_account(con)),
                 "config": _envelope_config(con, eq)}
     finally:
         con.close()
@@ -2658,7 +2663,18 @@ def trade_config(symbol: str | None = None):
     # PAPER basis: the manual order ticket arms the operator's paper book,
     # so its sizing constants are that book's. (The dispatch mode's R never
     # applies here — manual arms do not cross to a real venue.)
-    g = risk.gates_for_mode(risk.AutomationMode.PAPER)
+    #
+    # And they are THAT ACCOUNT'S gates, not the mode defaults. This is the
+    # endpoint that sizes the order, so a ticket reading the 2% default while
+    # `riskpaper.run` enforced the epoch's saved percentage would offer the
+    # operator a position the book then refuses — the one place the split
+    # costs a trade rather than a wrong label. `gates_for_account` falls back
+    # to the mode default when no epoch exists, so this is a strict superset.
+    con = store.connect()
+    try:
+        g = shared_account.gates_for_account(con)
+    finally:
+        con.close()
     return {
         "risk_pct": float(g["risk_pct"]),
         "max_total_risk_pct": float(g["max_total_open_risk_pct"]),
@@ -3441,7 +3457,7 @@ def _paper_account(con) -> dict:
     from datetime import datetime, timezone
     from engine import paperbook, riskpaper
     from engine import settings as settings_engine
-    gates = risk.gates_for_mode(contracts.AutomationMode.PAPER)
+    gates = shared_account.gates_for_account(con)
     try:
         max_dd = settings_engine.all_settings(con)["max_drawdown_pct"]
     except Exception:
@@ -3581,7 +3597,7 @@ def operations_read_model():
         # equity, open_risk and the journal all come from the research book,
         # and one basis per calculation is the rule. The dispatch mode's R is
         # reported as its own labelled field, never subtracted from paper's.
-        _gates = risk.gates_for_mode(risk.AutomationMode.PAPER)
+        _gates = shared_account.gates_for_account(con)
         _dispatch_pct = risk.MODE_RISK_PCT[automation.current(con)[0]]
         # The reachable budget, not the headline — see _effective_open_risk.
         total_budget = (equity * _effective_open_risk(_gates))
@@ -4427,7 +4443,7 @@ def get_settings():
         # the guardrail panel shows engine-owned limits beside operator ones;
         # it must read them, never restate them. PAPER basis: these are the
         # limits enforced on the book the panel sits beside.
-        _g = risk.gates_for_mode(risk.AutomationMode.PAPER)
+        _g = shared_account.gates_for_account(con)
         values["risk_config"] = {
             "daily_loss_pct": float(_g["daily_loss_limit_pct"]) * 100,
             "max_total_risk_pct": float(_g["max_total_open_risk_pct"]) * 100,

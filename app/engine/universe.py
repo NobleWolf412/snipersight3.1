@@ -82,6 +82,12 @@ ENABLE_KRAKEN = True
 # admission — that is the one-line switch this exists to make cheap.
 KRAKEN_SHADOW_ONLY = True
 LAST_RANK_HEALTH = {"attempted": 0, "succeeded": 0, "failed": 0}
+# Which venue rankers actually returned rows on the last `rank_all_venues`.
+# The recorded `source` used to be the constant "coinbase", which stayed
+# "coinbase" on a refresh where the Coinbase listing call had failed and every
+# member came from Phemex or Kraken. A provenance label that cannot be wrong is
+# not a label — and this one sits next to the fallback it would have to report.
+LAST_RANK_SOURCES: set[str] = set()
 _UA = {"User-Agent": "snipersight/0.1"}
 # stablecoin bases have no tradeable structure (ported from prior project's
 # _is_stable_base) — a ~$1 pegged asset must never enter the universe.
@@ -186,9 +192,28 @@ def rank_by_volume(progress=None) -> list[tuple[str, float]]:
     makes this a ~40s blocking call, which is long enough that a caller's
     liveness heartbeat needs to tick inside it rather than around it.
     """
+    global LAST_RANK_HEALTH
     try:
         prods = coinbase_products()
-    except Exception:
+    except Exception as exc:
+        # LOUD, AND IT MUST RESET THE HEALTH GLOBAL. This returned [] silently
+        # and — because it returned BEFORE the assignment below — left
+        # LAST_RANK_HEALTH holding the PREVIOUS refresh's numbers. The coverage
+        # floor in `refresh()` exists precisely to refuse a partial ranking,
+        # and it reads that global: stale-healthy coverage waved a universe
+        # with zero Coinbase spot members straight through. Phemex and Kraken
+        # still returning rows kept `ranked` non-empty, so the "rank source
+        # unavailable" branch never fired either, and nothing anywhere said a
+        # venue had dropped out. On a long-lived scanner the stale reading is
+        # the NORMAL case; only a cold process failed closed, which is why this
+        # was never seen.
+        from .runlog import get_logger
+        get_logger().warning(
+            f"universe rank: coinbase product listing failed "
+            f"({type(exc).__name__}: {exc}) — spot ranking contributes "
+            f"nothing this refresh")
+        LAST_RANK_HEALTH = {"attempted": 0, "succeeded": 0, "failed": 0,
+                            "source_error": f"{type(exc).__name__}: {exc}"[:200]}
         return []
     # Ranking eligibility is NARROWER than listing, deliberately. A limit_only
     # or auction_mode pair is still listed and still serves history — it just
@@ -201,7 +226,6 @@ def rank_by_volume(progress=None) -> list[tuple[str, float]]:
     # /products is NOT volume-ordered, so we must stat every online USD pair to
     # rank correctly (missing a high-volume pair like SOL/XRP would silently
     # shrink the universe). ~388 calls, hourly refresh — well within limits.
-    global LAST_RANK_HEALTH
     rows, failed = [], []
 
     def stat(pid):
@@ -264,12 +288,18 @@ def rank_all_venues(progress=None, enable_perps: bool | None = None) -> list[tup
 
     Spot-only assets are kept — they are still the only venue for those coins.
     """
+    global LAST_RANK_SOURCES
+    sources: set[str] = set()
     merged: dict[str, tuple[str, float]] = {}
-    for pid, vol in rank_by_volume(progress):          # coinbase spot
+    spot = rank_by_volume(progress)                    # coinbase spot
+    if spot:
+        sources.add("coinbase")
+    for pid, vol in spot:
         merged[_base_asset(pid)] = (pid, vol)
     if ENABLE_PERPS if enable_perps is None else enable_perps:
         try:
             for pid, vol in phemex.rank_by_volume():
+                sources.add("phemex")
                 base = _base_asset(pid)
                 # perp replaces spot for the same underlying; keeps its own
                 # (deeper or shallower) volume figure for the liquidity gate
@@ -289,6 +319,7 @@ def rank_all_venues(progress=None, enable_perps: bool | None = None) -> list[tup
         # inaccessible venue is not a trade at all.
         try:
             for pid, vol in kraken.rank_by_volume():
+                sources.add("kraken")
                 merged[_base_asset(pid)] = (pid, vol)
         except Exception as exc:
             from .runlog import get_logger
@@ -296,6 +327,7 @@ def rank_all_venues(progress=None, enable_perps: bool | None = None) -> list[tup
                 f"kraken ranking unavailable this refresh; the universe keeps "
                 f"its Phemex/spot membership, which may include venues the "
                 f"operator cannot access: {exc}")
+    LAST_RANK_SOURCES = sources
     out = sorted(merged.values(), key=lambda r: -r[1])
     return out
 
@@ -490,4 +522,9 @@ def refresh(con, ranked: list[tuple[str, float]] | None = None,
         rec.n_new_facts = 1
         n_adm = sum(1 for m in members if m["state"] == "ADMITTED")
         rec.notes = f"admitted={n_adm} warming={len(warming)}"
-        return {"members": members, "warming": warming, "source": "coinbase"}
+        # NAME THE VENUES THAT ACTUALLY CONTRIBUTED — see LAST_RANK_SOURCES.
+        # An injected ranking never called the rankers, so the global describes
+        # some earlier refresh and must not be reported as this one's.
+        return {"members": members, "warming": warming,
+                "source": "injected" if injected
+                else "+".join(sorted(LAST_RANK_SOURCES)) or "none"}

@@ -114,7 +114,7 @@ class CoverageGateTest(unittest.TestCase):
         universe.LAST_RANK_HEALTH = {"attempted": 3, "succeeded": 3, "failed": 0}
         with mock.patch.object(universe, "rank_by_volume", return_value=ranked):
             out = universe.refresh(self.con)
-        self.assertEqual(out["source"], "coinbase")
+        self.assertIn("coinbase", out["source"])
         self.assertEqual(self._snapshots(), 1)
 
     def test_partial_coverage_refuses_to_overwrite(self):
@@ -141,7 +141,7 @@ class CoverageGateTest(unittest.TestCase):
         with mock.patch.object(universe, "rank_by_volume",
                                return_value=[("BTC-USD", 5e8)]):
             out = universe.refresh(self.con)
-        self.assertEqual(out["source"], "coinbase")
+        self.assertIn("coinbase", out["source"])
 
     def test_boundary_just_below_floor_is_refused(self):
         universe.LAST_RANK_HEALTH = {"attempted": 100, "succeeded": 96, "failed": 4}
@@ -150,12 +150,50 @@ class CoverageGateTest(unittest.TestCase):
             out = universe.refresh(self.con)
         self.assertEqual(out["source"], "low_coverage")
 
+    def test_a_dead_listing_call_cannot_wave_a_partial_universe_through(self):
+        """THE STALE-HEALTH LEAK. `rank_by_volume` returned [] on a failed
+        `coinbase_products()` — but it returned BEFORE assigning
+        LAST_RANK_HEALTH, so the global kept the PREVIOUS refresh's healthy
+        numbers and the coverage floor, whose entire job is refusing a partial
+        ranking, read those and passed.
+
+        Nothing else caught it: the other venues still returned rows, so
+        `ranked` was non-empty and the "rank source unavailable" branch never
+        fired either. On a long-lived scanner the stale global is the normal
+        case; only a cold process failed closed, which is why this was never
+        seen in the wild.
+        """
+        good = [("BTC-USD", 5e8), ("ETH-USD", 2e8), ("AAA-USD", 9e6)]
+        universe.LAST_RANK_HEALTH = {"attempted": 3, "succeeded": 3, "failed": 0}
+        with mock.patch.object(universe, "rank_by_volume", return_value=good):
+            universe.refresh(self.con)
+        self.assertEqual(self._snapshots(), 1)
+
+        with mock.patch.object(universe, "coinbase_products",
+                               side_effect=RuntimeError("coinbase 503")):
+            self.assertEqual(universe.rank_by_volume(), [])
+            self.assertEqual(
+                universe.LAST_RANK_HEALTH["attempted"], 0,
+                "a failed listing must reset the health global, or the "
+                "coverage floor judges this refresh on the last one's numbers")
+            out = universe.refresh(self.con)
+
+        self.assertNotEqual(out["source"], "coinbase",
+                            "a refresh coinbase contributed nothing to must "
+                            "not be labelled as coming from coinbase")
+        self.assertEqual(self._snapshots(), 1,
+                         "must NOT overwrite the good universe")
+        self.assertTrue(universe.admitted_at(self.con, "AAA-USD", 10 ** 10),
+                        "the previous universe stays authoritative")
+
     def test_injected_rankings_bypass_the_gate(self):
         """Tests and replays inject a ranking directly; it is complete by
         construction and must not be judged against network coverage."""
         universe.LAST_RANK_HEALTH = {"attempted": 300, "succeeded": 1, "failed": 299}
         out = universe.refresh(self.con, ranked=[("BTC-USD", 5e8)])
-        self.assertEqual(out["source"], "coinbase")
+        # An injected ranking called no ranker, so LAST_RANK_SOURCES describes
+        # some earlier refresh and must not be reported as this one's.
+        self.assertEqual(out["source"], "injected")
         self.assertEqual(self._snapshots(), 1)
 
 

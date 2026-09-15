@@ -6,7 +6,7 @@ import json
 import time
 
 from fastapi import APIRouter, HTTPException, Query
-from engine import automation, importer, manual, opportunities, settings, shared_account, stocks, store
+from engine import automation, importer, livegate, manual, opportunities, settings, shared_account, stocks, store
 from engine.contracts import to_wire
 
 router = APIRouter(prefix="/api/ui/v1")
@@ -48,8 +48,11 @@ def context_model(con):
     model["risk_percent_label"] = format((Decimal(model["risk_pct"]) * 100).normalize(), "f") + "%"
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     model["today_realised_usd"] = model["account"]["realised_by_day"].get(today, "0")
+    # `live_reason` is READ from the authority, never restated here. This used
+    # to say "Required venue safety drills are not complete", which is not why
+    # live is locked and would have kept saying it after the drills passed.
     model["capabilities"] = {"paper": True, "live": False,
-        "live_reason": "Live execution is locked. Required venue safety drills are not complete.",
+        "live_reason": livegate.BUILD_NOTE,
         "scale_in": False, "spotter": "ADVISORY_ONLY"}
     model["version"] = VERSION
     return model
