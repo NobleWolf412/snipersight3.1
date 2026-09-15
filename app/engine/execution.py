@@ -19,7 +19,7 @@ from .contracts import (AutomationMode, BrokerExecution, BrokerOrder, DecisionRe
                         RiskDecision, to_wire)
 
 
-EXECUTION_CORE_VERSION = "execution-core-v0.9-draft"
+EXECUTION_CORE_VERSION = "execution-core-v0.10-draft"
 # v0.9: `intent_key` accepts the ATTEMPT. `setup_id` names the zone, not the
 # occurrence, so a zone retested weeks later at the same quantity and entry
 # minted the same key, found the old row, and returned that attempt's
@@ -98,6 +98,28 @@ def intent_key(setup_id: str, mode: AutomationMode, order_kind: str,
 
 
 def _ensure(con) -> None:
+    # Migration is exclusive across the scanner and API processes. Once the
+    # columns exist, read paths do not take a writer lock merely to inspect them.
+    outbox = {r[1] for r in con.execute("PRAGMA table_info(execution_outbox)")}
+    paper = {r[1] for r in con.execute("PRAGMA table_info(paper_positions)")}
+    if {"attempt_id", "account_epoch_id", "origin", "controller", "grade_eligible"} <= outbox and {
+            "entry_role", "r_multiple", "fees_price_units", "funding_price_units",
+            "slippage_price_units", "cost_profile_version", "realised_usd"} <= paper:
+        return
+    owns_transaction = not con.in_transaction
+    if owns_transaction:
+        con.execute("BEGIN IMMEDIATE")
+    try:
+        _ensure_schema(con)
+        if owns_transaction:
+            con.commit()
+    except BaseException:
+        if owns_transaction:
+            con.rollback()
+        raise
+
+
+def _ensure_schema(con) -> None:
     con.execute("""CREATE TABLE IF NOT EXISTS execution_outbox (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         idempotency_key TEXT NOT NULL UNIQUE,
@@ -132,12 +154,26 @@ def _ensure(con) -> None:
     paper_columns = {row[1] for row in con.execute(
         "PRAGMA table_info(paper_positions)").fetchall()}
     for name in ("entry_role", "r_multiple", "fees_price_units", "funding_price_units",
-                 "slippage_price_units", "cost_profile_version"):
+                 "slippage_price_units", "cost_profile_version", "realised_usd"):
         if name not in paper_columns:
             con.execute(f"ALTER TABLE paper_positions ADD COLUMN {name} TEXT")
+    columns = {r[1] for r in con.execute("PRAGMA table_info(execution_outbox)")}
+    for name, definition in {
+            "attempt_id": "TEXT", "account_epoch_id": "TEXT",
+            "origin": "TEXT NOT NULL DEFAULT 'BOT'",
+            "controller": "TEXT NOT NULL DEFAULT 'BOT'",
+            "grade_eligible": "INTEGER NOT NULL DEFAULT 1"}.items():
+        if name not in columns:
+            con.execute(f"ALTER TABLE execution_outbox ADD COLUMN {name} {definition}")
+    if "origin" not in columns:
+        # Existing manual order identity explicitly records provenance; this
+        # is a proven metadata migration, not guessed ancestry.
+        con.execute("UPDATE execution_outbox SET origin='OPERATOR',controller='OPERATOR',"
+                    "grade_eligible=0 WHERE setup_id LIKE 'manual:%'")
 
 
-def enqueue(con, intent: OrderIntent, *, plan: ExecutionPlan | None = None) -> dict:
+def enqueue(con, intent: OrderIntent, *, plan: ExecutionPlan | None = None,
+            commit: bool = True) -> dict:
     """Persist once. Repeated delivery returns the original row unchanged.
 
     Store the complete server-approved plan when one is available so restart
@@ -150,19 +186,22 @@ def enqueue(con, intent: OrderIntent, *, plan: ExecutionPlan | None = None) -> d
                          sort_keys=True, separators=(",", ":"))
     con.execute(
         "INSERT OR IGNORE INTO execution_outbox(idempotency_key,intent_id,mode,"
-        "setup_id,symbol,payload,state,created_at,updated_at) "
-        "VALUES(?,?,?,?,?,?,?, ?,?)",
+        "setup_id,symbol,payload,state,created_at,updated_at,attempt_id,account_epoch_id,"
+        "origin,controller,grade_eligible) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (intent.idempotency_key, intent.intent_id, intent.mode.value,
-         intent.setup_id, intent.symbol, payload, "PENDING", now, now))
+         intent.setup_id, intent.symbol, payload, "PENDING", now, now,
+         intent.attempt_id, intent.account_epoch_id, intent.origin, intent.origin,
+         int(intent.origin == "BOT")))
     row = con.execute(
         "SELECT intent_id,state,created_at,updated_at FROM execution_outbox "
         "WHERE idempotency_key=?", (intent.idempotency_key,)).fetchone()
-    con.commit()
+    if commit:
+        con.commit()
     return {"intent_id": row[0], "state": row[1], "created_at": row[2],
             "updated_at": row[3], "duplicate": row[0] != intent.intent_id}
 
 
-def _event(con, intent_id: str, event: str, payload: dict) -> None:
+def _event(con, intent_id: str, event: str, payload: dict, *, commit=True) -> None:
     now = int(time.time())
     con.execute(
         "INSERT INTO execution_events(intent_id,event,occurred_at,payload) "
@@ -170,16 +209,29 @@ def _event(con, intent_id: str, event: str, payload: dict) -> None:
                             json.dumps(payload, sort_keys=True)))
     con.execute("UPDATE execution_outbox SET state=?,updated_at=? WHERE intent_id=?",
                 (event, now, intent_id))
-    con.commit()
+    if commit:
+        con.commit()
 
 
-def _audit_event(con, intent_id: str, event: str, payload: dict) -> None:
+def _route_paper(con, intent_id, payload=None):
+    """Recovery may already have advanced a committed reservation."""
+    from . import shared_account
+    with shared_account.immediate(con):
+        state = con.execute("SELECT state FROM execution_outbox WHERE intent_id=?", (intent_id,)).fetchone()[0]
+        if state == "PENDING":
+            _event(con, intent_id, "PAPER_ROUTED", payload or {"submitted": False}, commit=False)
+            state = "PAPER_ROUTED"
+        return state
+
+
+def _audit_event(con, intent_id: str, event: str, payload: dict, *, commit=True) -> None:
     """Append evidence without changing the outbox lifecycle state."""
     con.execute(
         "INSERT INTO execution_events(intent_id,event,occurred_at,payload) "
         "VALUES(?,?,?,?)", (intent_id, event, int(time.time()),
                             json.dumps(payload, sort_keys=True)))
-    con.commit()
+    if commit:
+        con.commit()
 
 
 def _decision_hash(plan: ExecutionPlan) -> str:
@@ -194,7 +246,7 @@ def _decision_hash(plan: ExecutionPlan) -> str:
 
 
 def _complete_shadow_comparison(con, paper_intent_id: str,
-                                paper_result: dict) -> None:
+                                paper_result: dict, *, commit=True) -> None:
     for shadow_intent_id, raw in con.execute(
             "SELECT intent_id,payload FROM execution_events "
             "WHERE event='SHADOW_PAIRED'").fetchall():
@@ -224,7 +276,7 @@ def _complete_shadow_comparison(con, paper_intent_id: str,
                 "paper_intent_id": paper_intent_id,
                 "expected_decision_hash": expected_hash,
                 "paper_decision_hash": actual_hash,
-                "paper_result": paper_result})
+                "paper_result": paper_result}, commit=commit)
         return
 
 
@@ -246,7 +298,9 @@ def _plan_from_wire(raw: str) -> ExecutionPlan | None:
             version=i.get("version") or EXECUTION_CORE_VERSION,
             timeframe=i.get("timeframe"), expires_at=i.get("expires_at"),
             entry_model=i.get("entry_model"),
-            maker_wait_bars=i.get("maker_wait_bars"))
+            maker_wait_bars=i.get("maker_wait_bars"),
+            attempt_id=i.get("attempt_id"), account_epoch_id=i.get("account_epoch_id"),
+            origin=i.get("origin", "BOT"))
         risk = RiskDecision(
             approved=bool(r["approved"]), decision=r["decision"],
             risk_usd=Decimal(r["risk_usd"]), quantity=Decimal(r["quantity"]),
@@ -255,7 +309,10 @@ def _plan_from_wire(raw: str) -> ExecutionPlan | None:
             reasons=tuple(DecisionReason(x["code"], x["summary"],
                                          x.get("severity", "INFO"))
                           for x in r.get("reasons") or []),
-            version=r.get("version") or EXECUTION_CORE_VERSION)
+            version=r.get("version") or EXECUTION_CORE_VERSION,
+            equity_basis_usd=(Decimal(r["equity_basis_usd"])
+                              if r.get("equity_basis_usd") is not None else None),
+            equity_basis_source=r.get("equity_basis_source", "PAPER_REPLAY"))
         return ExecutionPlan(
             intent=intent, risk=risk, venue=payload["venue"],
             margin_mode=payload["margin_mode"],
@@ -443,8 +500,23 @@ def monitor_paper(con) -> dict:
     ambiguity resolves stop-first. Every transition stays in the outbox log.
     """
     _ensure(con)
+    from . import shared_account
+    shared_account.sync_manual(con)
+    shared_account.recover_pending(con)
+    with shared_account.immediate(con):
+        return _monitor_paper_locked(con)
+
+
+def _monitor_paper_locked(con):
+    def event(connection, iid, state, payload):
+        _event(connection, iid, state, payload, commit=False)
+
+    def complete(connection, iid, payload):
+        _complete_shadow_comparison(connection, iid, payload, commit=False)
+
     rows = con.execute(
         "SELECT intent_id,payload,state FROM execution_outbox WHERE mode='PAPER' "
+        "AND origin='BOT' AND setup_id NOT LIKE 'manual:%' "
         "AND state IN ('PAPER_ROUTED','PAPER_FILLED') ORDER BY id").fetchall()
     updated, refused = [], []
     for intent_id, raw_plan, state in rows:
@@ -469,10 +541,10 @@ def monitor_paper(con) -> dict:
                         c[0] < intent.expires_at]
             if not eligible:
                 expired_at = intent.expires_at or candles[0][0]
-                _event(con, intent_id, "PAPER_EXPIRED", {
+                event(con, intent_id, "PAPER_EXPIRED", {
                     "environment": "paper", "expired_at": expired_at})
                 updated.append({"intent_id": intent_id, "state": "PAPER_EXPIRED"})
-                _complete_shadow_comparison(con, intent_id, {
+                complete(con, intent_id, {
                     "state": "PAPER_EXPIRED", "expired_at": expired_at})
                 continue
             paper_candles = [
@@ -505,11 +577,11 @@ def monitor_paper(con) -> dict:
             if simulation["status"] == "MISSED":
                 expired_at = (intent.expires_at or
                               eligible[-1][0])
-                _event(con, intent_id, "PAPER_EXPIRED", {
+                event(con, intent_id, "PAPER_EXPIRED", {
                     "environment": "paper", "expired_at": expired_at,
                     "entry_model": entry_model})
                 updated.append({"intent_id": intent_id, "state": "PAPER_EXPIRED"})
-                _complete_shadow_comparison(con, intent_id, {
+                complete(con, intent_id, {
                     "state": "PAPER_EXPIRED", "expired_at": expired_at})
                 continue
             fill_row = eligible[simulation["fill_i"]]
@@ -524,7 +596,7 @@ def monitor_paper(con) -> dict:
                  str(fill_price), str(intent.stop),
                  None if target is None else str(target), "OPEN", fill_row[0],
                  entry_role))
-            _event(con, intent_id, "PAPER_FILLED", {
+            event(con, intent_id, "PAPER_FILLED", {
                 "environment": "paper", "price": str(fill_price),
                 "quantity": str(intent.quantity), "filled_at": fill_row[0],
                 "entry_role": entry_role, "entry_model": entry_model})
@@ -590,14 +662,19 @@ def monitor_paper(con) -> dict:
                 f"paper {intent.symbol} {tf}: no ATR at exit for {intent_id}; "
                 "slippage recorded as unavailable")
         r_multiple = settlement["r_mult"]
-        con.execute(
+        realised_usd = (((settlement["eff_exit"] - entry) * (1 if long else -1))
+                        - settlement["fees"] - settlement["funding"]) * intent.quantity
+        closed = con.execute(
             "UPDATE paper_positions SET state='CLOSED',closed_at=?,outcome=?,"
             "exit_price=?,r_multiple=?,fees_price_units=?,funding_price_units=?,"
-            "slippage_price_units=?,cost_profile_version=? WHERE intent_id=?",
+            "slippage_price_units=?,cost_profile_version=?,realised_usd=? WHERE intent_id=? AND state='OPEN'",
             (closed_at, outcome, str(settlement["eff_exit"]), str(r_multiple),
              str(settlement["fees"]), str(settlement["funding"]),
-             str(settlement["slip"]), profile.version, intent_id))
+             str(settlement["slip"]), profile.version, str(realised_usd), intent_id))
+        if not closed.rowcount:
+            continue  # Another process closed the position while this walk ran.
         payload = {"environment": "paper", "outcome": outcome,
+                   "realised_usd": str(realised_usd),
                    # A bar that reached the stop AND the target. Settled as the
                    # stop by both engines; recorded so the count is knowable
                    # rather than an assumption about how often it happens.
@@ -613,9 +690,9 @@ def monitor_paper(con) -> dict:
                    "slippage_missing": settlement["slip_missing"],
                    "cost_profile_version": profile.version,
                    "closed_at": closed_at}
-        _event(con, intent_id, "PAPER_CLOSED", payload)
-        _event(con, intent_id, "ORDER_LIFECYCLE_COMPLETE", payload)
-        _complete_shadow_comparison(con, intent_id, {
+        event(con, intent_id, "PAPER_CLOSED", payload)
+        event(con, intent_id, "ORDER_LIFECYCLE_COMPLETE", payload)
+        complete(con, intent_id, {
             "state": "PAPER_CLOSED", **payload})
         updated.append({"intent_id": intent_id, "state": "PAPER_CLOSED",
                         "outcome": outcome, "r_multiple": str(r_multiple)})
@@ -637,12 +714,16 @@ class Coordinator:
 
     def dispatch(self, con, plan: ExecutionPlan, *, live_gate: dict | None = None,
                  operational: dict | None = None) -> dict:
-        queued = enqueue(con, plan.intent, plan=plan)
         mode = plan.intent.mode
         state = automation.status(con, live_gate=live_gate, operational=operational)
         if mode != state.mode:
             raise DispatchRejected(
                 f"intent mode {mode.value} does not match active mode {state.mode.value}")
+        if mode == AutomationMode.PAPER and plan.risk.approved and plan.risk.quantity > 0 and plan.risk.quantity == plan.intent.quantity:
+            from . import shared_account
+            plan, queued = shared_account.admit_plan(con, plan)
+        else:
+            queued = enqueue(con, plan.intent, plan=plan)
         # The outbox state is the retry authority. Once an intent has crossed a
         # routing boundary, an identical scan/retry returns that recorded state
         # and must never call the broker a second time. SUBMIT_FAILED is the
@@ -663,23 +744,34 @@ class Coordinator:
             _event(con, plan.intent.intent_id, "HELD_OFF", {"submitted": False})
             return {"submitted": False, "state": "HELD_OFF", "queue": queued}
         if mode == AutomationMode.PAPER:
-            _event(con, plan.intent.intent_id, "PAPER_ROUTED", {"submitted": False})
-            return {"submitted": False, "state": "PAPER_ROUTED", "queue": queued}
+            routed_state = _route_paper(con, plan.intent.intent_id)
+            return {"submitted": False, "state": routed_state, "queue": queued}
         if mode == AutomationMode.SHADOW:
             paper_key = intent_key(
                 plan.intent.setup_id, AutomationMode.PAPER,
                 plan.intent.order_kind.value, str(plan.intent.quantity),
-                None if plan.intent.entry is None else str(plan.intent.entry))
+                None if plan.intent.entry is None else str(plan.intent.entry),
+                attempt_id=plan.intent.attempt_id)
             paper_intent = replace(
                 plan.intent, mode=AutomationMode.PAPER,
                 intent_id="paper-" + hashlib.sha256(
                     f"shadow|{plan.intent.intent_id}".encode()).hexdigest()[:32],
                 idempotency_key=paper_key)
             paper_plan = replace(plan, intent=paper_intent)
-            paper_queue = enqueue(con, paper_intent, plan=paper_plan)
+            from . import shared_account
+            paper_plan, paper_queue = shared_account.admit_plan(con, paper_plan)
+            # Both sides of the comparison name the account-approved decision.
+            # Admission can reduce size; comparing it to the pre-admission
+            # request would manufacture a shadow integrity failure.
+            plan = replace(plan, intent=replace(plan.intent, quantity=paper_plan.intent.quantity),
+                           risk=paper_plan.risk)
+            con.execute("UPDATE execution_outbox SET payload=? WHERE intent_id=?",
+                        (json.dumps(to_wire(plan), sort_keys=True, separators=(",", ":")),
+                         plan.intent.intent_id))
+            con.commit()
             paper_intent_id = paper_queue["intent_id"]
             if paper_queue["state"] == "PENDING":
-                _event(con, paper_intent_id, "PAPER_ROUTED", {
+                _route_paper(con, paper_intent_id, {
                     "submitted": False, "shadow_intent_id": plan.intent.intent_id})
             _audit_event(con, plan.intent.intent_id, "SHADOW_PAIRED", {
                 "paper_intent_id": paper_intent_id,

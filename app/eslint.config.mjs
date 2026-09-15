@@ -146,6 +146,10 @@ export default [
     },
   },
   {
+    files: ['static/cockpit/**/*.js'],
+    languageOptions: {sourceType: 'module'},
+  },
+  {
     /* ticket-math.js carries a CommonJS export shim so test_ticket_math.js can
        require it. It is the one file that runs in both a browser and node —
        which is the point: it decides how big a trade is and re-implements
@@ -155,7 +159,7 @@ export default [
     languageOptions: {globals: readonly(['module', 'exports', 'require'])},
   },
   {
-    files: ['tests/**/*.js'],
+    files: ['tests/**/*.js', 'tests/**/*.cjs', 'playwright.config.cjs'],
     languageOptions: {
       ecmaVersion: 2024,
       sourceType: 'commonjs',
@@ -163,7 +167,7 @@ export default [
         'require', 'module', 'exports', '__dirname', '__filename',
         'console', 'process', 'Buffer', 'setTimeout', 'setInterval',
         'clearTimeout', 'clearInterval', 'setImmediate', 'global',
-        'structuredClone', 'URL', 'queueMicrotask',
+        'structuredClone', 'URL', 'queueMicrotask', 'AbortController',
       ]),
     },
     ...js.configs.recommended,

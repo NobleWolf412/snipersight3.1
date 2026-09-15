@@ -243,8 +243,10 @@ ok('a cancellation is not a trade', () => {
 
 ok('a filled position cannot be cancelled', () => {
   const fn = ENGINE.slice(ENGINE.indexOf('def cancel_intent'), ENGINE.indexOf('def live(con)'));
-  assert(/w\["phase"\] == "OPEN"/.test(fn) && /IntentRejected/.test(fn),
+  assert(/w\["phase"\] != "PENDING"/.test(fn) && /IntentRejected/.test(fn),
     'resolving a filled trade at zero R would erase a real result');
+  assert(fn.includes('with shared_account.immediate(con)'),
+    'cancellation must lock before it reads fill state');
 });
 
 ok('arming refreshes the panel that shows the order', () => {

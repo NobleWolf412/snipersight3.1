@@ -118,7 +118,7 @@ from .runlog import RunRecorder
 from .execsim import (MAX_BARS, MAX_ENTRY_BARS, FUNDING_RATE_PER_SETTLEMENT,
                       stop_gap_fill)
 
-MANUAL_VERSION = "manual-v0.7-draft"
+MANUAL_VERSION = "manual-v0.8-draft"
 # v0.7: the swing-v0.11 ATR cascade. This book is excluded from CONSUMERS by design, so
 # no map prompts for it — and it puts compute_atr's output on DURABLE exit
 # facts: `atr_at_exit` prices the market-exit slippage in settle_leg and in
@@ -151,7 +151,7 @@ MANUAL_VERSION = "manual-v0.7-draft"
 #: version and would simply stop seeing them. See the module docstring.
 MANUAL_VERSIONS = ("manual-v0.1-draft", "manual-v0.2-draft",
                    "manual-v0.3-draft", "manual-v0.4-draft",
-                   "manual-v0.5-draft", "manual-v0.6-draft", MANUAL_VERSION)
+                   "manual-v0.5-draft", "manual-v0.6-draft", "manual-v0.7-draft", MANUAL_VERSION)
 Q2 = Decimal("0.01")
 
 #: Scale-out bounds. The cap is not a capacity limit — it is a statement about
@@ -465,8 +465,20 @@ def _when(ts) -> str:
 
 def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
                   created_at: int, risk_usd=None, size_units=None,
+                  note: str = "", leverage=1, trail_r=None, partials=None, max_age=None) -> dict:
+    """Every new manual order passes the cross-process shared account gate."""
+    from . import shared_account
+    try:
+        return shared_account.create_manual(con, symbol, tf, direction, entry, tp, sl,
+            created_at, risk_usd, size_units, note, leverage, trail_r, partials, max_age=max_age)
+    except shared_account.AdmissionRejected as exc:
+        raise IntentRejected(str(exc)) from exc
+
+
+def _create_intent_legacy(con, symbol: str, tf: str, direction: str, entry, tp, sl,
+                  created_at: int, risk_usd=None, size_units=None,
                   note: str = "", leverage=1, trail_r=None,
-                  partials=None) -> dict:
+                  partials=None, commit: bool = True, accepted_at=None) -> dict:
     """Record one operator intent. Validated first; nothing is written on reject.
 
     Three outcomes, and the caller can tell them apart without reading prose:
@@ -605,14 +617,15 @@ def create_intent(con, symbol: str, tf: str, direction: str, entry, tp, sl,
         # filled; keeping the plan here means an unfilled rung stays visible as
         # a decision that was made, not an absence.
         "partials": partials,
-        "armed_at": created_at,
+        "armed_at": created_at if accepted_at is None else accepted_at,
         "note": note[:280],
         "cost_manifest_hash": costs.record(con, profile),
     }
     written = store.insert_fact(
-        con, symbol=symbol, tf=tf, kind=INTENT_KIND, market_time=created_at,
-        confirmed_at=created_at, algo_version=MANUAL_VERSION, payload=payload)
-    con.commit()
+        con, symbol=symbol, tf=tf, kind=INTENT_KIND, market_time=payload["armed_at"],
+        confirmed_at=payload["armed_at"], algo_version=MANUAL_VERSION, payload=payload)
+    if commit:
+        con.commit()
     return {"intent_id": intent_id, "written": bool(written),
             "already_armed": False, **payload}
 
@@ -948,6 +961,15 @@ def cancel_intent(con, intent_id: str, at: int | None = None) -> dict:
     Refuses once the intent has FILLED. A filled position is closed, not
     cancelled, and quietly resolving one at zero R would erase a real result.
     """
+    from . import shared_account
+    shared_account.ensure(con)
+    with shared_account.immediate(con):
+        result = _cancel_locked(con, intent_id, at)
+    shared_account.sync_manual(con)
+    return result
+
+
+def _cancel_locked(con, intent_id, at):
     import time
     open_here = unresolved(con)
     for (symbol, tf), plans in open_here.items():
@@ -971,7 +993,7 @@ def cancel_intent(con, intent_id: str, at: int | None = None) -> dict:
                           res["tf_seconds"],
                           max_entry_bars=MAX_ENTRY_BARS * res["scale"],
                           max_bars=MAX_BARS * res["scale"])
-                if w["phase"] == "OPEN":
+                if w["phase"] != "PENDING":
                     raise IntentRejected(
                         f"{symbol} {tf} has already filled at {p['entry']} — "
                         f"that is an open position, not a resting order. Close "
@@ -987,7 +1009,6 @@ def cancel_intent(con, intent_id: str, at: int | None = None) -> dict:
                          "bars_held": 0, "fill_ts": None,
                          "ambiguous_bar": False,
                          "cost_manifest_hash": p.get("cost_manifest_hash")})
-            con.commit()
             return {"intent_id": intent_id, "symbol": symbol, "tf": tf,
                     "written": bool(written)}
     raise IntentRejected(
@@ -1110,7 +1131,8 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
                "resolution_tf": res["tf"],
                "resolution_tf_seconds": res["tf_seconds"],
                "resolution_degraded": degraded,
-               "last_close": str(last_close), "armed_at": p["armed_at"]}
+               "last_close": str(last_close), "armed_at": p["armed_at"],
+               "mark_at": candles[-1]["open_ts"] + res["tf_seconds"]}
         if w["phase"] == "PENDING":
             # Rounded UP, so "fills if touched within N more bars" never
             # promises less time than the order actually has.
@@ -1134,7 +1156,20 @@ def status(con, symbol: str, tf: str, tf_seconds: int) -> list[dict]:
                               / risk) for f in filled), Decimal(0))
         blended = realized + open_frac * r_open
         usd = p.get("risk_usd")
+        # Banked ladder legs use the same net cost authority as final
+        # settlement. The remaining mark is explicitly before exit costs.
+        partial_legs = [settle_leg(
+            costs.profile_for(symbol), symbol, entry, f["price"], risk, long,
+            fraction=f["fraction"], kind="PARTIAL", outcome="PARTIAL",
+            order_type="LIMIT", atr_at_exit=None,
+            bars_held=f["exit_i"] - w["fill_i"], tf_seconds=res["tf_seconds"],
+            exit_ts=candles[f["exit_i"]]["open_ts"] + res["tf_seconds"],
+            entry_role=p.get("entry_role") or "MAKER") for f in filled]
+        quantity = p.get('size_units')
+        partial_usd = settled_dollars(partial_legs, entry, quantity, long)
         row.update(state="OPEN",
+                   partial_realised_usd=None if partial_usd is None else str(partial_usd),
+                   remaining_unrealised_usd=None if quantity is None else str(open_frac * move * Decimal(str(quantity))),
                    # In the CHART's bars, not the resolving grid's. The screen
                    # prints this beside a 4H chart and "held 96 bars" of a
                    # trade opened this morning would be a true number under a
@@ -1611,6 +1646,18 @@ def blend_r(legs: list, field: str = "r_net") -> Decimal:
     return _weighted(legs, field).quantize(Q2)
 
 
+def settled_dollars(legs, entry, quantity, long):
+    """Exact cash from filled legs; rounded R is a display, never money."""
+    if quantity is None:
+        return None
+    entry, quantity = Decimal(str(entry)), Decimal(str(quantity))
+    net = sum((Decimal(str(leg["fraction"])) * (
+        (Decimal(str(leg["effective_exit_price"])) - entry) * (1 if long else -1)
+        - Decimal(str(leg["fees_price_units"])) - Decimal(str(leg["funding_price_units"])))
+        for leg in legs), Decimal(0))
+    return net * quantity
+
+
 def _weighted(legs: list, field: str) -> Decimal:
     """One leg field, summed across the position by the size each leg carried.
 
@@ -1651,210 +1698,216 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
     An ALREADY-SETTLED intent is not walked at all — it is in `done` and is
     skipped before any of this — so no stored outcome can move.
     """
+    from . import shared_account
     with RunRecorder(con, "manual", MANUAL_VERSION, symbol, tf) as rec:
-        candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
-        candle_times = [c["open_ts"] for c in candles]
-        atr = compute_atr(candles)
-        base = {"tf": tf, "tf_seconds": tf_seconds, "candles": candles,
-                "candle_times": candle_times, "scale": 1, "atr": atr}
-        # Memo, not a value: the finer series costs a whole-series read and a
-        # chart whose every intent has already settled must not pay for it.
-        # `[]` means unasked; `[None]` means asked and there is none.
-        finer_memo: list = []
-        profile = costs.profile_for(symbol)
-        cost_manifest_hash = costs.record(con, profile)
+        with shared_account.immediate(con):
+            candles = [dict(r) for r in store.get_candles(con, symbol, tf)]
+            candle_times = [c["open_ts"] for c in candles]
+            atr = compute_atr(candles)
+            base = {"tf": tf, "tf_seconds": tf_seconds, "candles": candles,
+                    "candle_times": candle_times, "scale": 1, "atr": atr}
+            # Memo, not a value: the finer series costs a whole-series read and a
+            # chart whose every intent has already settled must not pay for it.
+            # `[]` means unasked; `[None]` means asked and there is none.
+            finer_memo: list = []
+            profile = costs.profile_for(symbol)
+            cost_manifest_hash = costs.record(con, profile)
 
-        intents = {}
-        for r in _facts(con, INTENT_KIND, symbol, tf):
-            p = json.loads(r["payload"])
-            intents[p["intent_id"]] = {**p, "confirmed_at": r["confirmed_at"],
-                                       "market_time": r["market_time"]}
-        # Already-resolved intents are skipped rather than re-emitted. The
-        # content hash would dedupe a byte-identical repeat anyway, but a
-        # re-run after more candles arrive could otherwise resolve the SAME
-        # intent a second way (OPEN -> TP) and write both. Read across versions
-        # too: a trade the v0.1 book closed is closed, and a `done` set that
-        # could not see it would settle it a second time under the new tag.
-        done = set()
-        for r in _facts(con, EXEC_KIND, symbol, tf):
-            done.add(json.loads(r["payload"])["intent_id"])
-        rec.n_inputs = len(intents)
+            intents = {}
+            for r in _facts(con, INTENT_KIND, symbol, tf):
+                p = json.loads(r["payload"])
+                intents[p["intent_id"]] = {**p, "confirmed_at": r["confirmed_at"],
+                                           "market_time": r["market_time"]}
+            # Already-resolved intents are skipped rather than re-emitted. The
+            # content hash would dedupe a byte-identical repeat anyway, but a
+            # re-run after more candles arrive could otherwise resolve the SAME
+            # intent a second way (OPEN -> TP) and write both. Read across versions
+            # too: a trade the v0.1 book closed is closed, and a `done` set that
+            # could not see it would settle it a second time under the new tag.
+            done = set()
+            for r in _facts(con, EXEC_KIND, symbol, tf):
+                done.add(json.loads(r["payload"])["intent_id"])
+            rec.n_inputs = len(intents)
 
-        # SCALED is not an outcome — it counts trades that took a rung off on
-        # the way to one, so the run log says when the ladder actually fired
-        # rather than leaving it to be inferred from a payload.
-        counts = {"TP": 0, "SL": 0, "TRAIL_STOP": 0, "TIMEOUT": 0,
-                  "OPEN": 0, "MISSED": 0, "SCALED": 0}
-        # Which series each still-open intent actually got, counted so the run
-        # log says it. A fallback that only showed up as a fill arriving four
-        # hours late would be a silent degraded path, which is the thing this
-        # repo does not allow.
-        res_seen: dict = {}
-        n_out = 0
-        for iid, s in intents.items():
-            if iid in done:
-                continue
-            if not finer_memo:
-                finer_memo.append(_finer_series(con, symbol, tf, tf_seconds))
-            res, degraded = _resolution(base, finer_memo[0], s)
-            note = res["tf"] if degraded is None else f"{res['tf']}<{degraded}"
-            res_seen[note] = res_seen.get(note, 0) + 1
-            if res["atr"] is None:
-                res["atr"] = compute_atr(res["candles"])
-            candles, candle_times = res["candles"], res["candle_times"]
-            atr, res_secs = res["atr"], res["tf_seconds"]
-            direction = s["direction"]
-            long = direction == "LONG"
-            entry = Decimal(s["entry"])
-            # The denominator is the risk TAKEN, not the distance to wherever
-            # the stop now sits. Deriving it from a profit-side stop gives a
-            # negative risk and inverts the sign of the whole trade — a
-            # locked-in winner settled as r_gross -1.00.
-            risk = _risk_of(s, direction, entry, Decimal(s["sl"]))
+            # SCALED is not an outcome — it counts trades that took a rung off on
+            # the way to one, so the run log says when the ladder actually fired
+            # rather than leaving it to be inferred from a payload.
+            counts = {"TP": 0, "SL": 0, "TRAIL_STOP": 0, "TIMEOUT": 0,
+                      "OPEN": 0, "MISSED": 0, "SCALED": 0}
+            # Which series each still-open intent actually got, counted so the run
+            # log says it. A fallback that only showed up as a fill arriving four
+            # hours late would be a silent degraded path, which is the thing this
+            # repo does not allow.
+            res_seen: dict = {}
+            n_out = 0
+            for iid, s in intents.items():
+                if iid in done:
+                    continue
+                if not finer_memo:
+                    finer_memo.append(_finer_series(con, symbol, tf, tf_seconds))
+                res, degraded = _resolution(base, finer_memo[0], s)
+                note = res["tf"] if degraded is None else f"{res['tf']}<{degraded}"
+                res_seen[note] = res_seen.get(note, 0) + 1
+                if res["atr"] is None:
+                    res["atr"] = compute_atr(res["candles"])
+                candles, candle_times = res["candles"], res["candle_times"]
+                atr, res_secs = res["atr"], res["tf_seconds"]
+                direction = s["direction"]
+                long = direction == "LONG"
+                entry = Decimal(s["entry"])
+                # The denominator is the risk TAKEN, not the distance to wherever
+                # the stop now sits. Deriving it from a profit-side stop gives a
+                # negative risk and inverts the sign of the whole trade — a
+                # locked-in winner settled as r_gross -1.00.
+                risk = _risk_of(s, direction, entry, Decimal(s["sl"]))
 
-            # ONE walk settles and displays — see _walk. run() only turns its
-            # terminal phases into facts. Both windows are carried onto the
-            # resolving grid so they keep their wall-clock length.
-            w = _walk(s, candles, candle_times, res_secs,
-                      max_entry_bars=MAX_ENTRY_BARS * res["scale"],
-                      max_bars=MAX_BARS * res["scale"])
-            if w["phase"] in ("PENDING", "INVALID"):
-                if w["phase"] == "PENDING":
+                # ONE walk settles and displays — see _walk. run() only turns its
+                # terminal phases into facts. Both windows are carried onto the
+                # resolving grid so they keep their wall-clock length.
+                w = _walk(s, candles, candle_times, res_secs,
+                          max_entry_bars=MAX_ENTRY_BARS * res["scale"],
+                          max_bars=MAX_BARS * res["scale"])
+                if w["phase"] in ("PENDING", "INVALID"):
+                    if w["phase"] == "PENDING":
+                        counts["OPEN"] += 1
+                    continue
+                if w["phase"] == "OPEN":
                     counts["OPEN"] += 1
-                continue
-            if w["phase"] == "OPEN":
-                counts["OPEN"] += 1
-                continue
-            if w["phase"] == "MISSED":
-                miss_ts = candles[w["miss_i"]]["open_ts"] + res_secs
+                    continue
+                if w["phase"] == "MISSED":
+                    miss_ts = candles[w["miss_i"]]["open_ts"] + res_secs
+                    if store.insert_fact(
+                            con, symbol=symbol, tf=tf, kind=EXEC_KIND,
+                            market_time=s["market_time"], confirmed_at=miss_ts,
+                            algo_version=MANUAL_VERSION,
+                            payload={"intent_id": iid, "source": "OPERATOR",
+                                     "direction": direction, "outcome": "MISSED",
+                                     "entry": str(entry), "exit_price": None,
+                                     "r_multiple": "0", "r_gross": "0",
+                                     "bars_held": 0, "fill_ts": None,
+                                     "ambiguous_bar": False,
+                                     "resolution_tf": res["tf"],
+                                     "resolution_tf_seconds": res_secs,
+                                     "resolution_degraded": degraded,
+                                     "cost_manifest_hash": cost_manifest_hash}):
+                        n_out += 1
+                    counts["MISSED"] += 1
+                    continue
+
+                i, j = w["fill_i"], w["exit_i"]
+                outcome, exit_price = w["outcome"], w["exit_price"]
+                ambiguous = w["ambiguous"]
+                exit_ts = candles[j]["open_ts"] + res_secs
+
+                # EVERY settled trade is a list of legs, a one-item list when
+                # nothing was scaled out. One shape means one costing path and one
+                # blend, so the ordinary trade is not a special case that could
+                # drift from the scaled one — it IS the scaled one, with an empty
+                # ladder. `blend_r` over a single leg of fraction 1 is that leg's
+                # own quotient, so a trade with no partials settles to exactly the
+                # figure the pre-v0.2 resolver wrote.
+                filled = w.get("partials") or []
+                legs = [settle_leg(
+                    profile, symbol, entry, f["price"], risk, long,
+                    fraction=f["fraction"], kind="PARTIAL", outcome="PARTIAL",
+                    # A rung is a resting order at a price the operator chose. It
+                    # earns maker and pays no slippage, exactly as the target does.
+                    order_type="LIMIT", atr_at_exit=None,
+                    bars_held=f["exit_i"] - i, tf_seconds=res_secs,
+                    exit_ts=candles[f["exit_i"]]["open_ts"] + res_secs,
+                    entry_role=s.get("entry_role") or "MAKER")
+                    for f in filled]
+                remainder = Decimal(1) - sum((f["fraction"] for f in filled),
+                                             Decimal(0))
+                legs.append(settle_leg(
+                    profile, symbol, entry, exit_price, risk, long,
+                    fraction=remainder, kind="REMAINDER", outcome=outcome,
+                    # Every stop is a market order when it fires — the initial one
+                    # and the trailed one alike — and so is the timeout.
+                    order_type="LIMIT" if outcome == "TP" else "MARKET",
+                    atr_at_exit=atr[j], bars_held=j - i, tf_seconds=res_secs,
+                    exit_ts=exit_ts, entry_role=s.get("entry_role") or "MAKER"))
+                counts[outcome] += 1
+                if filled:
+                    counts["SCALED"] += 1
                 if store.insert_fact(
                         con, symbol=symbol, tf=tf, kind=EXEC_KIND,
-                        market_time=s["market_time"], confirmed_at=miss_ts,
+                        market_time=s["market_time"], confirmed_at=exit_ts,
                         algo_version=MANUAL_VERSION,
                         payload={"intent_id": iid, "source": "OPERATOR",
-                                 "direction": direction, "outcome": "MISSED",
-                                 "entry": str(entry), "exit_price": None,
-                                 "r_multiple": "0", "r_gross": "0",
-                                 "bars_held": 0, "fill_ts": None,
-                                 "ambiguous_bar": False,
+                                 "direction": direction, "outcome": outcome,
+                                 "entry": str(entry), "exit_price": str(exit_price),
+                                 "effective_exit_price":
+                                     legs[-1]["effective_exit_price"],
+                                 # DERIVED from `legs` below, by the same function
+                                 # any replay would call. See blend_r.
+                                 "r_multiple": str(blend_r(legs, "r_net")),
+                                 "realised_usd": (None if s.get("size_units") is None else
+                                     str(settled_dollars(legs, entry, s["size_units"], long))),
+                                 "r_gross": str(blend_r(legs, "r_gross")),
+                                 # Every leg, with its own price, costs and holding
+                                 # period. This is what makes the blend checkable
+                                 # from the fact alone rather than on trust.
+                                 "legs": legs,
+                                 "scaled_out": bool(filled),
+                                 "n_partials": len(filled),
+                                 # What was PLANNED, beside what filled: a rung the
+                                 # market never reached is a decision that was made,
+                                 # and its absence from `legs` should not read as if
+                                 # it was never intended.
+                                 "partials_planned": s.get("partials") or [],
+                                 # Size-weighted across the legs, so these keep
+                                 # meaning the cost the WHOLE position carried per
+                                 # unit — identical to the single exit's own costs
+                                 # when nothing was scaled out.
+                                 "fees_price_units":
+                                     str(_weighted(legs, "fees_price_units")),
+                                 "funding_price_units":
+                                     str(_weighted(legs, "funding_price_units")),
+                                 "slippage_price_units":
+                                     str(_weighted(legs, "slippage_price_units")),
+                                 # The REMAINDER's hold: the trade is not over until
+                                 # the last of it is out.
+                                 "bars_held": j - i,
+                                 "bars_to_fill": i - w["order_i"],
+                                 "fill_ts": candles[i]["open_ts"] + res_secs,
+                                 "ambiguous_bar": ambiguous,
+                                 # The grid the three fields above are counted in,
+                                 # and the real close of the real bar that filled
+                                 # it. Named on the fact rather than inferred from
+                                 # `tf`, because after this change they are not the
+                                 # same thing and a reader who assumed they were
+                                 # would be wrong by the ratio between them.
                                  "resolution_tf": res["tf"],
                                  "resolution_tf_seconds": res_secs,
+                                 # Null when the finest series was used. A string
+                                 # naming why it was not, when it was not.
                                  "resolution_degraded": degraded,
+                                 # Which exit RULE settled this — recorded so the
+                                 # book can grade trailing against holding, which
+                                 # is the only way this feature earns permanence.
+                                 # `scaled_out` is its own axis for the same
+                                 # reason: scaling out has to be gradable against
+                                 # not scaling out, and folding it into this string
+                                 # would make that a text-parsing job.
+                                 "exit_rule": ("TRAIL" if s.get("trail_r")
+                                               else "HOLD"),
+                                 "trail_r": s.get("trail_r"),
+                                 "final_stop": str(w["final_stop"]),
+                                 "size_units": s.get("size_units"),
+                                 "risk_usd": s.get("risk_usd"),
+                                 "venue": s.get("venue"),
                                  "cost_manifest_hash": cost_manifest_hash}):
                     n_out += 1
-                counts["MISSED"] += 1
-                continue
 
-            i, j = w["fill_i"], w["exit_i"]
-            outcome, exit_price = w["outcome"], w["exit_price"]
-            ambiguous = w["ambiguous"]
-            exit_ts = candles[j]["open_ts"] + res_secs
-
-            # EVERY settled trade is a list of legs, a one-item list when
-            # nothing was scaled out. One shape means one costing path and one
-            # blend, so the ordinary trade is not a special case that could
-            # drift from the scaled one — it IS the scaled one, with an empty
-            # ladder. `blend_r` over a single leg of fraction 1 is that leg's
-            # own quotient, so a trade with no partials settles to exactly the
-            # figure the pre-v0.2 resolver wrote.
-            filled = w.get("partials") or []
-            legs = [settle_leg(
-                profile, symbol, entry, f["price"], risk, long,
-                fraction=f["fraction"], kind="PARTIAL", outcome="PARTIAL",
-                # A rung is a resting order at a price the operator chose. It
-                # earns maker and pays no slippage, exactly as the target does.
-                order_type="LIMIT", atr_at_exit=None,
-                bars_held=f["exit_i"] - i, tf_seconds=res_secs,
-                exit_ts=candles[f["exit_i"]]["open_ts"] + res_secs,
-                entry_role=s.get("entry_role") or "MAKER")
-                for f in filled]
-            remainder = Decimal(1) - sum((f["fraction"] for f in filled),
-                                         Decimal(0))
-            legs.append(settle_leg(
-                profile, symbol, entry, exit_price, risk, long,
-                fraction=remainder, kind="REMAINDER", outcome=outcome,
-                # Every stop is a market order when it fires — the initial one
-                # and the trailed one alike — and so is the timeout.
-                order_type="LIMIT" if outcome == "TP" else "MARKET",
-                atr_at_exit=atr[j], bars_held=j - i, tf_seconds=res_secs,
-                exit_ts=exit_ts, entry_role=s.get("entry_role") or "MAKER"))
-            counts[outcome] += 1
-            if filled:
-                counts["SCALED"] += 1
-            if store.insert_fact(
-                    con, symbol=symbol, tf=tf, kind=EXEC_KIND,
-                    market_time=s["market_time"], confirmed_at=exit_ts,
-                    algo_version=MANUAL_VERSION,
-                    payload={"intent_id": iid, "source": "OPERATOR",
-                             "direction": direction, "outcome": outcome,
-                             "entry": str(entry), "exit_price": str(exit_price),
-                             "effective_exit_price":
-                                 legs[-1]["effective_exit_price"],
-                             # DERIVED from `legs` below, by the same function
-                             # any replay would call. See blend_r.
-                             "r_multiple": str(blend_r(legs, "r_net")),
-                             "r_gross": str(blend_r(legs, "r_gross")),
-                             # Every leg, with its own price, costs and holding
-                             # period. This is what makes the blend checkable
-                             # from the fact alone rather than on trust.
-                             "legs": legs,
-                             "scaled_out": bool(filled),
-                             "n_partials": len(filled),
-                             # What was PLANNED, beside what filled: a rung the
-                             # market never reached is a decision that was made,
-                             # and its absence from `legs` should not read as if
-                             # it was never intended.
-                             "partials_planned": s.get("partials") or [],
-                             # Size-weighted across the legs, so these keep
-                             # meaning the cost the WHOLE position carried per
-                             # unit — identical to the single exit's own costs
-                             # when nothing was scaled out.
-                             "fees_price_units":
-                                 str(_weighted(legs, "fees_price_units")),
-                             "funding_price_units":
-                                 str(_weighted(legs, "funding_price_units")),
-                             "slippage_price_units":
-                                 str(_weighted(legs, "slippage_price_units")),
-                             # The REMAINDER's hold: the trade is not over until
-                             # the last of it is out.
-                             "bars_held": j - i,
-                             "bars_to_fill": i - w["order_i"],
-                             "fill_ts": candles[i]["open_ts"] + res_secs,
-                             "ambiguous_bar": ambiguous,
-                             # The grid the three fields above are counted in,
-                             # and the real close of the real bar that filled
-                             # it. Named on the fact rather than inferred from
-                             # `tf`, because after this change they are not the
-                             # same thing and a reader who assumed they were
-                             # would be wrong by the ratio between them.
-                             "resolution_tf": res["tf"],
-                             "resolution_tf_seconds": res_secs,
-                             # Null when the finest series was used. A string
-                             # naming why it was not, when it was not.
-                             "resolution_degraded": degraded,
-                             # Which exit RULE settled this — recorded so the
-                             # book can grade trailing against holding, which
-                             # is the only way this feature earns permanence.
-                             # `scaled_out` is its own axis for the same
-                             # reason: scaling out has to be gradable against
-                             # not scaling out, and folding it into this string
-                             # would make that a text-parsing job.
-                             "exit_rule": ("TRAIL" if s.get("trail_r")
-                                           else "HOLD"),
-                             "trail_r": s.get("trail_r"),
-                             "final_stop": str(w["final_stop"]),
-                             "size_units": s.get("size_units"),
-                             "risk_usd": s.get("risk_usd"),
-                             "venue": s.get("venue"),
-                             "cost_manifest_hash": cost_manifest_hash}):
-                n_out += 1
-
-        con.commit()
-        rec.n_new_facts = n_out
-        rec.notes = " ".join(
-            [f"{k}={v}" for k, v in counts.items() if v] +
-            [f"res:{k}={v}" for k, v in sorted(res_seen.items())])
-        return {"symbol": symbol, "tf": tf, "resolution": res_seen, **counts}
+            rec.n_new_facts = n_out
+            rec.notes = " ".join(
+                [f"{k}={v}" for k, v in counts.items() if v] +
+                [f"res:{k}={v}" for k, v in sorted(res_seen.items())])
+            result = {"symbol": symbol, "tf": tf, "resolution": res_seen, **counts}
+    from . import shared_account
+    shared_account.sync_manual(con, symbol, tf)
+    return result
 
 
 def book(con, limit: int = 200) -> dict:

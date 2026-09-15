@@ -1,4 +1,4 @@
-"""The paper book's own risk authority — same rules, its own account.
+"""The paper book's own risk authority â€” same rules, its own account.
 
 `risk.py` is the RESEARCH replay: it walks a simulated account from the first
 bar of the baseline and rules on every setup in it. That is the right shape for
@@ -13,7 +13,7 @@ verdict under its own kind so nothing can confuse the two populations again.
     riskpaper.py kind "risk_paper" the paper ledger, the setups live now
 
 Both call `risk.decide`. That is deliberate and load-bearing: sharing the rules
-was never the problem — sharing STATE was, and it cost the paper book every
+was never the problem â€” sharing STATE was, and it cost the paper book every
 trade it might have taken between August and 2026-09-11.
 
 WHY THE DECISION IS NOT REWRITTEN EVERY CYCLE. A paper decision depends on the
@@ -35,7 +35,7 @@ from .runlog import RunRecorder
 from .setups import SETUP_VERSION
 
 
-PAPER_RISK_VERSION = "riskpaper-v0.2-draft"
+PAPER_RISK_VERSION = "riskpaper-v0.4-draft"
 # v0.2: three corrections found by review, all of which let the book
 # approve more than it could fund.
 #  - RESERVATIONS COUNT. Budget and slots now include money an unfilled
@@ -43,14 +43,14 @@ PAPER_RISK_VERSION = "riskpaper-v0.2-draft"
 #    against a budget the first was holding.
 #  - EACH CANDIDATE SEES THE ONES BEFORE IT. The snapshot is taken once,
 #    so every candidate in a scan was sized against the same untouched
-#    balance — with MAX_CONCURRENT=1 that is a deck of orders for one slot.
+#    balance â€” with MAX_CONCURRENT=1 that is a deck of orders for one slot.
 #  - THE CLOCK IS NOW, not the setup's confirmation. Cooldowns, the daily
 #    halt and the same-side governor were read at the moment the setup
 #    confirmed, so a stop-out since would not block the next entry.
 
 #: The fact kind. Separate from "risk" rather than a field on it, because
 #: `_latest_by_setup` selects on (kind, algo_version) and nothing in the store
-#: carries a domain column — so the domain has to live in the kind. Putting it
+#: carries a domain column â€” so the domain has to live in the kind. Putting it
 #: in `algo_version` instead would make one field answer two questions ("which
 #: rules" and "whose account"), which is how the two populations became
 #: indistinguishable in the first place.
@@ -60,7 +60,7 @@ PAPER_RISK_KIND = "risk_paper"
 #: payload: `equity_at` drifts by pennies as costs settle, and re-writing a
 #: fact because the account moved $0.03 under an unchanged decision is noise,
 #: not evidence.
-_MATERIAL = ("decision", "reasons", "risk_usd", "units")
+_MATERIAL = ("decision", "reasons", "risk_usd", "units", "risk_pct", "account_epoch_id")
 
 
 def _latest(con) -> dict[str, dict]:
@@ -88,7 +88,7 @@ def live_intents(con, baseline_start: int, now: int) -> list[dict]:
     The replay rules on everything since the baseline because it is measuring
     history. A forward book ruling on a setup whose entry window shut days ago
     would be sizing a trade nobody can take against an account that has moved
-    since — a number with no meaning and a slot it would wrongly consume.
+    since â€” a number with no meaning and a slot it would wrongly consume.
     """
     out = []
     for intent in risk.load_intents(con, baseline_start):
@@ -115,21 +115,22 @@ def run(con, *, now: int | None = None) -> dict:
         # only the R SIZE differs, so this book rehearses the live one; and
         # reading the operating mode here would let a mode flip mint a second
         # generation of verdicts under one version label.
-        gates = risk.gates_for_mode(AutomationMode.PAPER)
+        from . import shared_account
+        gates = shared_account.gates_for_account(con)
         policy = risk.policy_for(con, gates, baseline_start)
         account = paperbook.snapshot(
             con, mode=AutomationMode.PAPER, gates=gates,
             max_drawdown_pct=policy["max_drawdown_pct"])
         # THE COOLDOWNS ARE THIS BOOK'S, not the replay's. `policy_for` loads
-        # the research locks — derived from `exec` facts — and reading those
+        # the research locks â€” derived from `exec` facts â€” and reading those
         # here would refuse a paper entry because the SIMULATOR stopped out on
         # that symbol. Measured 2026-09-11, with the rest of the separation
         # already done and this input still missed: PF_PUMPUSD LONG locked for
         # three more hours off a trade the paper book had never taken.
         #
         # The evaluator stays shared. `cooldowns.blocked_at` owns what
-        # "blocking at this instant" means — overlapping locks, the
-        # point-in-time rule, later-expiry-wins — and only the SOURCE differs.
+        # "blocking at this instant" means â€” overlapping locks, the
+        # point-in-time rule, later-expiry-wins â€” and only the SOURCE differs.
         from . import cooldowns as _cooldowns
         policy = dict(
             policy,
@@ -151,7 +152,7 @@ def run(con, *, now: int | None = None) -> dict:
         # EVERY CANDIDATE IN A SCAN SEES WHAT THE ONES BEFORE IT CLAIMED.
         # The snapshot is taken once, so without this each candidate is sized
         # against the same untouched balance and a scan can approve the whole
-        # deck against one budget — with MAX_CONCURRENT=1 that is several
+        # deck against one budget â€” with MAX_CONCURRENT=1 that is several
         # orders for a single slot. The claims are intra-cycle bookkeeping
         # only: nothing is dispatched until `autotrader.run`, and next cycle
         # the snapshot rebuilds from what the outbox and the book actually
@@ -171,6 +172,7 @@ def run(con, *, now: int | None = None) -> dict:
                 "intended_risk_usd": str(verdict["intended_risk_usd"]),
                 "risk_usd": str(verdict["risk_usd"]),
                 "risk_pct": str(gates["risk_pct"]),
+                "account_epoch_id": account.get("account_epoch_id"),
                 # Not "PAPER", which the replay already uses to mean its own
                 # simulated book. This one names the ledger.
                 "pct_basis": "PAPER_LEDGER",
@@ -182,7 +184,7 @@ def run(con, *, now: int | None = None) -> dict:
                 # WHICH GENERATION THIS VERDICT IS ABOUT. The setups ruled on
                 # come from `risk.load_intents` and the ledger's P&L from exec
                 # settlement, so this book is coupled to both even though it
-                # imports neither reader directly — and a coupling the cascade
+                # imports neither reader directly â€” and a coupling the cascade
                 # map claims but the source never names is one nobody can
                 # check. Stamped rather than asserted: a fact that carries its
                 # own provenance can be placed when the tags move on.

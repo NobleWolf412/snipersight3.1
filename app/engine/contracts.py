@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Any
 
 
-CONTRACT_VERSION = "contracts-v0.5-draft"
+CONTRACT_VERSION = "contracts-v0.6-draft"
 # v0.5: an opportunity states WHICH EXECUTION DOMAIN its lifecycle came from,
 # and carries an `attempt_id` for the occurrence rather than the zone. Before
 # this the read model derived ORDER_WORKING / POSITION_OPEN / CLOSED from the
@@ -283,6 +283,9 @@ class OrderIntent:
     expires_at: int | None = None
     entry_model: str | None = None
     maker_wait_bars: int | None = None
+    attempt_id: str | None = None
+    account_epoch_id: str | None = None
+    origin: str = "BOT"
 
 
 @dataclass(frozen=True)

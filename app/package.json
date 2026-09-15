@@ -1,12 +1,15 @@
 {
   "name": "snipersight-app",
   "private": true,
-  "description": "Lint config only. This package exists so `no-undef` has a real parser; the JavaScript suites themselves still need nothing but node's built-in assert, fs and path.",
+  "description": "Lint and isolated browser verification. No frontend build step or runtime npm dependencies.",
   "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:browser": "playwright test -c playwright.config.cjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.63.0",
     "eslint": "^10.8.0"
   }
 }

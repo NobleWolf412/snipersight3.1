@@ -17,7 +17,7 @@ from .contracts import (AutomationMode, DecisionReason, ExecutionPlan,
                         OrderIntent, OrderKind, RiskDecision, domain_for_mode)
 
 
-AUTOTRADER_VERSION = "autotrader-v0.7-draft"
+AUTOTRADER_VERSION = "autotrader-v0.8-draft"
 # v0.7: two wire corrections. `equity_basis_source` is read from the
 # decision instead of hardcoded "PAPER_REPLAY" — true while the replay was
 # the only risk authority, a lie once the paper ledger started sizing, and
@@ -71,7 +71,12 @@ def build_plan(row: dict, mode: AutomationMode) -> ExecutionPlan:
     # Scale quantity and the dollar figures together so the plan stays
     # internally consistent (execution checks plan/intent quantity equality).
     from . import risk as _risk_engine
-    scale = _risk_engine.dispatch_scale(mode)
+    # The paper producer may already size a shared epoch at the live profile.
+    # Convert from the decision's recorded basis, never blindly divide twice.
+    source_pct = _d(risk.get("risk_pct"), "0.02")
+    target_pct = (_risk_engine.gates_for_mode(mode)["risk_pct"]
+                  if mode in (AutomationMode.TESTNET, AutomationMode.LIVE) else source_pct)
+    scale = target_pct / source_pct if source_pct > 0 else Decimal(1)
     quantity = (_d(risk.get("units")) * scale).quantize(Decimal("0.00000001"))
     if quantity <= 0:
         raise ValueError("risk authority returned no positive quantity")
@@ -96,7 +101,8 @@ def build_plan(row: dict, mode: AutomationMode) -> ExecutionPlan:
         idempotency_key=key, timeframe=setup.get("timeframe"),
         expires_at=setup.get("expires_at"),
         entry_model=recommendation.get("entry_model"),
-        maker_wait_bars=recommendation.get("maker_wait_bars"))
+        maker_wait_bars=recommendation.get("maker_wait_bars"),
+        attempt_id=setup.get("attempt_id"))
     decision = RiskDecision(
         approved=True, decision=risk["decision"],
         risk_usd=(_d(risk.get("risk_usd")) * scale).quantize(Decimal("0.01")),

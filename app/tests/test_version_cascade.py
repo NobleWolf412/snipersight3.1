@@ -59,7 +59,7 @@ OPERATIONAL_EXPECTED = {
     # paper book settles and BEFORE the dispatcher reads it. Order is part of
     # the behaviour: settle, then size, then dispatch — sizing first means
     # every decision is made against the previous cycle's account.
-    "live": "live-v0.5-draft",
+    "live": "live-v0.6-draft",
     # Not a fact producer: it reads `paper_positions` and the PAPER outbox and
     # returns an account. Locked anyway, for the reason `agg` is — it sits
     # upstream of every paper sizing decision, so a rule change here changes
@@ -70,14 +70,14 @@ OPERATIONAL_EXPECTED = {
     # not the replay's. The rules and the evaluator stay shared.
     # paperbook-v0.4: the reservation count is `reserved_slots`, the name
     # `risk.decide` reads. One name for one thing.
-    "paperbook": "paperbook-v0.4-draft",
+    "paperbook": "paperbook-v0.5-draft",
     # contracts-v0.4: a RiskDecision states the equity basis its size is a
     # percentage of, and where that figure was read. Nothing converted the
     # ACCOUNT between the paper replay and a dispatched order.
     # contracts-v0.5: an opportunity carries the execution DOMAIN its state
     # came from, an `attempt_id` for the occurrence, and the replay's account
     # as an inert `research_story`. Wire grew; no number changed.
-    "contracts": "contracts-v0.5-draft",
+    "contracts": "contracts-v0.6-draft",
     # automation-v0.5: every drill names and enforces its required evidence;
     # restart demands a boot-id change, so lost-response recovery inside one
     # process can no longer pass one of the seven TESTNET->LIVE gates.
@@ -94,7 +94,7 @@ OPERATIONAL_EXPECTED = {
     # dispatched. No sizing or routing rule moved; it asks the right book.
     # autotrader-v0.7: equity_basis_source is read from the decision rather
     # than hardcoded, and the idempotency key carries the attempt.
-    "autotrader": "autotrader-v0.7-draft",
+    "autotrader": "autotrader-v0.8-draft",
     # execution-core-v0.6: private entries honour expires_at (cancel at the
     # venue), a proven pre-wire refusal is SUBMIT_FAILED and retryable
     # instead of stuck-SUBMITTING-forever, and RESTART_RECOVERED carries
@@ -107,7 +107,7 @@ OPERATIONAL_EXPECTED = {
     # losses that hurt most.
     # execution-core-v0.9: `intent_key` accepts the attempt, so a retested
     # zone stops inheriting the previous attempt's terminal state.
-    "execution_core": "execution-core-v0.9-draft",
+    "execution_core": "execution-core-v0.10-draft",
     "positions": "positions-v0.3-draft",
     # phemex-private-v0.4: the stop (sent on every order) and every target
     # are tick-validated for all order kinds; submit() sets the leverage the
@@ -187,11 +187,13 @@ OPERATIONAL_EXPECTED = {
     "stock_calendar": "stock-calendar-v0.1-draft",
     "stock_demo": "stock-demo-v0.1-draft",
     "stock_store": "stock-store-v0.1-draft",
+    "shared_account": "shared-account-v0.2-draft",
+    "shared_profile": "shared-paper-profile-v0.2-draft",
 }
 
 
 def operational_versions():
-    from engine import opportunities, paperbook
+    from engine import opportunities, paperbook, shared_account
     return {
         "live": live.LIVE_VERSION,
         "paperbook": paperbook.PAPERBOOK_VERSION,
@@ -213,6 +215,8 @@ def operational_versions():
         "stock_calendar": stockcalendar.STOCK_CALENDAR_VERSION,
         "stock_demo": stockdemo.STOCK_DEMO_VERSION,
         "stock_store": stockstore.STOCK_STORE_VERSION,
+        "shared_account": shared_account.SHARED_ACCOUNT_VERSION,
+        "shared_profile": shared_account.PROFILE_VERSION,
     }
 
 # The current, deliberate state of the pipeline. Update WITH the cascade.
@@ -345,7 +349,7 @@ RETIRED_MANUAL = tuple(v for v in manual.MANUAL_VERSIONS
 ATR_CONSUMERS = (
     "abtest", "breakout", "chartread", "execsim", "fvg", "liquidity", "ma",
     "manual", "momentum", "ranges", "regimeread", "scalein", "setups",
-    "structure", "trend", "volatility", "volume", "zones",
+    "structure", "trend", "volatility", "volume", "zones", "shared_account",
 )
 
 
@@ -536,7 +540,7 @@ EXPECTED = {
     # candidate in a scan sees what the ones before it claimed; and the
     # loss controls are read at the moment of decision, not at the setup's
     # confirmation. All three let the book approve more than it could fund.
-    "riskpaper": "riskpaper-v0.2-draft",
+    "riskpaper": "riskpaper-v0.4-draft",
     "scale": "scale-v0.21-draft",
     "cooldown": "cooldown-v0.15-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
@@ -671,7 +675,7 @@ EXPECTED = {
     # fee and funding, as the engine prices its own exits; adopted positions
     # carry the engine fill's fee role into settle_leg. The operator-vs-rule
     # comparison was tilted ~0.07-0.1 R per close in the operator's favour.
-    "manual": "manual-v0.7-draft",
+    "manual": "manual-v0.8-draft",
     # Locked 2026-09-10 — see the LOCKED note. Versions recorded as found;
     # none was moved by the lock.
     "fvg": "fvg-v0.3-draft",

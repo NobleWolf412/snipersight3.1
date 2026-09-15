@@ -3795,6 +3795,68 @@ def stocks_connection_test(payload: dict):
         raise HTTPException(400, str(exc))
 
 
+@app.get("/api/account/context")
+def account_context():
+    from engine import shared_account
+    con = store.connect()
+    try:
+        return shared_account.context(con)
+    finally:
+        con.close()
+
+
+@app.post("/api/account/risk")
+def account_risk(payload: dict):
+    from engine import shared_account
+    if payload.get("workspace") != "CRYPTO":
+        raise HTTPException(400, "Paper risk settings are only available for Crypto")
+    con = store.connect()
+    try:
+        return shared_account.set_risk_percent(con, payload.get("risk_percent"),
+            payload.get("expected_epoch"), payload.get("expected_risk_pct"))
+    except shared_account.AdmissionRejected as exc:
+        raise HTTPException(409, str(exc))
+    finally:
+        con.close()
+
+
+@app.post("/api/account/cutover")
+def account_cutover(payload: dict):
+    from engine import shared_account
+    con = store.connect()
+    try:
+        return shared_account.request_cutover(con, str(payload.get("action") or ""), payload.get('expected_epoch'))
+    except shared_account.AdmissionRejected as exc:
+        raise HTTPException(409, str(exc))
+    finally:
+        con.close()
+
+
+@app.post("/api/account/control")
+def account_control(payload: dict):
+    from engine import shared_account
+    con = store.connect()
+    try:
+        return shared_account.change_controller(con, str(payload.get("intent_id") or ""),
+                                                str(payload.get("controller") or ""))
+    except shared_account.AdmissionRejected as exc:
+        raise HTTPException(409, str(exc))
+    finally:
+        con.close()
+
+
+@app.post("/api/account/close")
+def account_close(payload: dict):
+    from engine import shared_account
+    con = store.connect()
+    try:
+        return shared_account.close_paper(con, str(payload.get("intent_id") or ""))
+    except shared_account.AdmissionRejected as exc:
+        raise HTTPException(409, str(exc))
+    finally:
+        con.close()
+
+
 @app.post("/api/manual/arm")
 def manual_arm(payload: dict):
     """Arm one operator plan as a PAPER trade.
@@ -3848,14 +3910,16 @@ def manual_arm(payload: dict):
             created_at = int(supplied)
         except (TypeError, ValueError):
             raise HTTPException(400, "created_at must be a unix timestamp in seconds")
-        if abs(created_at - now) > ARM_CLOCK_SKEW_S:
-            raise HTTPException(
-                400,
-                f"created_at is {abs(created_at - now)}s from this machine's "
-                f"clock (limit {ARM_CLOCK_SKEW_S}s). Check the device's time; "
-                f"the moment a plan was authored is recorded permanently.")
     con = store.connect()
     try:
+        from engine import shared_account
+        shared_account.ensure(con)
+        existing = con.execute("SELECT 1 FROM account_requests WHERE request_id=?",
+            (f"{symbol}|{tf}|MANUAL|{created_at}",)).fetchone()
+        if not existing and abs(created_at - now) > ARM_CLOCK_SKEW_S:
+            raise HTTPException(400, f"created_at is {abs(created_at - now)}s from this machine's "
+                f"clock (limit {ARM_CLOCK_SKEW_S}s). Check the device's time; "
+                "the moment a plan was authored is recorded permanently.")
         try:
             intent = manual.create_intent(
                 con, symbol, tf,
@@ -3867,7 +3931,7 @@ def manual_arm(payload: dict):
                 leverage=payload.get("leverage") or 1,
                 trail_r=payload.get("trail_r"),
                 partials=payload.get("partials"),
-                note=str(payload.get("note") or ""))
+                note=str(payload.get("note") or ""), max_age=ARM_CLOCK_SKEW_S)
         except manual.IntentRejected as exc:
             # A refused plan is a 400 carrying the REASON. The operator needs to
             # know which rule stopped them, not that "something went wrong".
@@ -3881,48 +3945,13 @@ def manual_arm(payload: dict):
             raise HTTPException(400, str(exc))
         except (ValueError, ArithmeticError) as exc:
             raise HTTPException(400, str(exc))
-        # Manual and autonomous plans now enter the same durable intent
-        # vocabulary. The legacy manual resolver remains the PAPER fill model,
-        # but there is no second order identity or un-audited broker-shaped
-        # record. A later TESTNET/LIVE review can consume this exact contract.
-        quantity = Decimal(str(intent.get("size_units") or "0"))
-        core_key = execution.intent_key(
-            intent["intent_id"], contracts.AutomationMode.PAPER,
-            contracts.OrderKind.LIMIT.value, str(quantity), intent.get("entry"))
-        core_intent = contracts.OrderIntent(
-            intent_id=intent["intent_id"],
-            setup_id="manual:" + intent["intent_id"],
-            mode=contracts.AutomationMode.PAPER, symbol=symbol,
-            direction=intent["direction"], order_kind=contracts.OrderKind.LIMIT,
-            quantity=quantity, entry=Decimal(str(intent["entry"])),
-            stop=Decimal(str(intent["sl"])),
-            targets=(Decimal(str(intent["tp"])),), reduce_only=False,
-            created_at=created_at, playbook_version=manual.MANUAL_VERSION,
-            idempotency_key=core_key, timeframe=tf,
-            expires_at=int(intent["expires_at_ts"])
-            if intent.get("expires_at_ts") is not None else None)
-        manual_risk = Decimal(str(intent.get("risk_usd") or "0"))
-        notional = quantity * Decimal(str(intent["entry"]))
-        approved = quantity > 0 and manual_risk > 0
-        core_risk = contracts.RiskDecision(
-            approved=approved,
-            decision="APPROVED" if approved else "REJECTED",
-            risk_usd=manual_risk if approved else Decimal(0),
-            quantity=quantity, notional_usd=notional,
-            implied_leverage=Decimal(str(intent.get("leverage") or "1")),
-            reasons=(contracts.DecisionReason(
-                "MANUAL_PLAN_VALIDATED" if approved else "UNSIZED_PAPER_PLAN",
-                "The server validated the manual plan and its risk amount."
-                if approved else
-                "This paper plan has no positive risk amount and cannot be dispatched.",
-                "INFO" if approved else "WARNING"),))
-        core_plan = contracts.ExecutionPlan(
-            intent=core_intent, risk=core_risk,
-            venue=venues.venue_for(symbol).key,
-            margin_mode="ISOLATED", position_mode="ONE_WAY",
-            protection_deadline_seconds=5,
-            version=execution.EXECUTION_CORE_VERSION)
-        core_receipt = execution.enqueue(con, core_intent, plan=core_plan)
+        # Admission already persisted both the fact and approved execution plan
+        # under the same SQLite transaction. Never enqueue a second identity here.
+        core_receipt = intent["execution_receipt"]
+        stored_plan = con.execute("SELECT payload FROM execution_outbox WHERE intent_id=?",
+                                  (intent["intent_id"],)).fetchone()
+        core_plan = execution._plan_from_wire(stored_plan[0])
+        core_intent, core_risk = core_plan.intent, core_plan.risk
         from engine.runlog import get_logger
         # Resolve immediately, so the response reflects bars that have already
         # closed. Usually a no-op — the order was just placed and no eligible
@@ -4771,9 +4800,20 @@ def index():
     whatever number was last hand-edited into the file. The file on disk keeps
     plain ?v=N so it still works opened directly; the route is the authority.
     """
-    html = (STATIC / "shell.html").read_text(encoding="utf-8")
+    html = (STATIC / "cockpit.html").read_text(encoding="utf-8")
     html = re.sub(r"\?v=\d+", "?v=" + _asset_version(), html)
     return HTMLResponse(html, headers=NO_CACHE)
+
+
+@app.get("/classic")
+def classic_cockpit():
+    """UI-only rollback. Both shells retain the shared admission gate."""
+    html = (STATIC / "shell.html").read_text(encoding="utf-8")
+    return HTMLResponse(re.sub(r"\?v=\d+", "?v=" + _asset_version(), html), headers=NO_CACHE)
+
+
+from ui_api import router as cockpit_router
+app.include_router(cockpit_router)
 
 
 # /legacy retired 2026-07-29 (phase 6). Every surface it uniquely served now has

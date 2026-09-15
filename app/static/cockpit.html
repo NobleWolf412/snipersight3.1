@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0d1218"><title>SniperSight · Trading workspace</title>
+  <link rel="icon" href="/static/assets/icon-192.png"><link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/static/cockpit.css?v=1">
+  <script defer src="/static/lightweight-charts.js?v=1"></script>
+  <script type="module" src="/static/cockpit/app.js?v=1"></script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <aside class="sidebar">
+    <a class="brand" href="#home"><img src="/static/assets/icon-192.png" alt=""><span>SNIPERSIGHT<small>YOUR TRADING WORKSPACE</small></span></a>
+    <div class="workspace-picker"><label for="workspace">WORKSPACE</label><select id="workspace" aria-label="Workspace"><option value="CRYPTO">Crypto</option><option value="STOCKS">US Stocks</option></select></div>
+    <nav aria-label="Main navigation">
+      <a href="#home" data-page="home"><img src="/static/assets/ui/house.svg" alt="">Home</a>
+      <a href="#opportunities" data-page="opportunities"><img src="/static/assets/ui/radar.svg" alt="">Opportunities</a>
+      <a href="#trade" data-page="trade"><img src="/static/assets/ui/chart-candlestick.svg" alt="">Trade</a>
+      <a href="#journal" data-page="journal"><img src="/static/assets/ui/book-open.svg" alt="">Journal</a>
+      <a href="#research" data-page="research"><img src="/static/assets/ui/flask-conical.svg" alt="">Research</a>
+      <a href="#settings" data-page="settings"><img src="/static/assets/ui/settings-2.svg" alt="">Settings</a>
+      <button id="more" class="mobile-more" aria-expanded="false" aria-controls="more-menu"><img src="/static/assets/ui/settings-2.svg" alt="">More</button>
+    </nav>
+    <div id="more-menu" hidden><a href="#research">Research</a><a href="#settings">Settings</a><a href="#strategies">Strategy guide →</a></div>
+    <div class="sidebar-foot"><span class="dot"></span> Paper trading<small>Practice with simulated money.</small><a href="#strategies">Strategy guide →</a></div>
+  </aside>
+  <div class="app-body">
+    <header class="topbar"><span id="scope">Connecting to account…</span><div><span class="badge">PAPER</span><a href="#settings" class="text-link">Account settings ↗</a></div></header>
+    <main id="content" tabindex="-1"><div class="loading">Reading the account…</div></main>
+    <footer class="footnote">SniperSight · Paper trading uses completed candles and simulated orders</footer>
+  </div>
+  <div id="notice" role="status" aria-live="polite"></div>
+  <dialog id="confirm-dialog"><form method="dialog"><h2 id="confirm-title">Review action</h2><p id="confirm-detail"></p><div class="actions"><button value="cancel">Keep as is</button><button id="confirm-go" class="primary" value="confirm">Confirm</button></div></form></dialog>
+  <noscript>This workspace requires JavaScript. Enable it to view your account.</noscript>
+</body></html>

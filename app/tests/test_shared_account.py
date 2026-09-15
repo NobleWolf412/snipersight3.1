@@ -1,0 +1,305 @@
+"""Real SQLite admission seam: scratch stores only, including OS-process races."""
+import json
+import multiprocessing
+import time
+from dataclasses import replace
+from decimal import Decimal
+from pathlib import Path
+
+import pytest
+
+from engine import automation, execution, manual, paperbook, shared_account, store
+from engine.contracts import AutomationMode, DecisionReason, ExecutionPlan, OrderIntent, OrderKind, RiskDecision
+
+
+def bot_plan(key="bot", amount="200"):
+    now = int(time.time())
+    q = Decimal(amount) / Decimal(2)
+    i = OrderIntent(key, key, AutomationMode.PAPER, "BTCUSDT", "LONG", OrderKind.LIMIT,
+        q, Decimal(100), Decimal(98), (Decimal(104),), False, now, "test", key,
+        timeframe="1H", attempt_id="attempt-" + key, expires_at=now + 86400)
+    r = RiskDecision(True, "APPROVED", Decimal(amount), q, q * 100, q / 100,
+        (DecisionReason("OK", "fixture strategy approval"),), Decimal(10000), "PAPER_LEDGER")
+    return ExecutionPlan(i, r, "phemex-perp", "ISOLATED", "ONE_WAY")
+
+
+def account(tmp_path):
+    con = store.connect(tmp_path / "account.db")
+    shared_account.ensure(con)
+    automation.transition(con, "PAPER", expected_revision=0)
+    con.commit()
+    return con
+
+
+def arm(con, symbol="ETHUSDT", at=None, risk_usd="25"):
+    return manual.create_intent(con, symbol, "1H", "LONG", 100, 104, 98,
+                               at if at is not None else int(time.time()), risk_usd=risk_usd)
+
+
+def race_worker(path, origin, start, result):
+    con = store.connect(Path(path))
+    start.wait(20)
+    try:
+        if origin == "BOT":
+            shared_account.admit_plan(con, bot_plan())
+        else:
+            arm(con)
+        result.put((origin, "admitted"))
+    except (shared_account.AdmissionRejected, manual.IntentRejected) as exc:
+        result.put((origin, str(exc)))
+    finally:
+        con.close()
+
+
+def test_two_os_processes_compete_for_one_slot(tmp_path):
+    con = account(tmp_path)
+    con.close()
+    ctx = multiprocessing.get_context("spawn")
+    start, results = ctx.Barrier(3), ctx.Queue()
+    workers = [ctx.Process(target=race_worker, args=(str(tmp_path / "account.db"),
+                origin, start, results)) for origin in ("BOT", "OPERATOR")]
+    for p in workers:
+        p.start()
+    start.wait(20)
+    responses = [results.get(timeout=30) for _ in workers]
+    for p in workers:
+        p.join(30)
+        assert p.exitcode == 0
+    assert sum(message == "admitted" for _, message in responses) == 1
+    assert any("CONCURRENT_LIMIT(1)" in message for _, message in responses)
+    con = store.connect(tmp_path / "account.db")
+    assert con.execute("SELECT count(*) FROM execution_outbox").fetchone()[0] == 1
+    assert paperbook.snapshot(con)["reserved_slots"] == 1
+    con.close()
+
+
+@pytest.mark.parametrize("first", ["BOT", "OPERATOR"])
+def test_both_origins_share_gate_in_both_orders(tmp_path, first):
+    con = account(tmp_path)
+    if first == "BOT":
+        shared_account.admit_plan(con, bot_plan())
+        with pytest.raises(manual.IntentRejected, match="CONCURRENT_LIMIT"):
+            arm(con)
+    else:
+        arm(con)
+        with pytest.raises(shared_account.AdmissionRejected, match="CONCURRENT_LIMIT"):
+            shared_account.admit_plan(con, bot_plan())
+    assert con.execute("SELECT count(*) FROM execution_outbox").fetchone()[0] == 1
+
+
+def test_duplicate_is_a_receipt_even_while_draining(tmp_path):
+    con = account(tmp_path)
+    original = arm(con, at=100)
+    shared_account.request_cutover(con, "drain")
+    replay = arm(con, at=100)
+    assert replay["intent_id"] == original["intent_id"]
+    assert replay["execution_receipt"]["duplicate"]
+    with pytest.raises(manual.IntentRejected, match="REQUEST_CONFLICT"):
+        arm(con, at=100, risk_usd="24")
+    assert con.execute("SELECT count(*) FROM execution_outbox").fetchone()[0] == 1
+
+
+def test_cutover_is_explicit_resumable_and_preserves_configured_risk(tmp_path):
+    con = account(tmp_path)
+    assert shared_account.current_epoch(con) is None
+    assert shared_account.gates_for_account(con)["risk_pct"] == Decimal(".02")
+    shared_account.set_risk_percent(con, "0.25", "legacy", "0.02")
+    arm(con, at=100)
+    shared_account.request_cutover(con, "drain")
+    con.close()
+    con = store.connect(tmp_path / "account.db")
+    with pytest.raises(shared_account.AdmissionRejected, match="CUTOVER_WAITING"):
+        shared_account.request_cutover(con, "complete")
+    with pytest.raises(manual.IntentRejected, match="DRAINING"):
+        arm(con, at=101)
+    shared_account.request_cutover(con, "resume")
+    assert shared_account.current_epoch(con)["state"] == "OPEN"
+    manual.cancel_intent(con, "ETHUSDT|1H|MANUAL|100", at=102)
+    shared_account.request_cutover(con, "drain")
+    shared_account.request_cutover(con, "complete")
+    assert shared_account.gates_for_account(con)["risk_pct"] == Decimal(".0025")
+    plan, _ = shared_account.admit_plan(con, bot_plan())
+    assert plan.risk.risk_usd == Decimal(25)
+    assert plan.intent.quantity == Decimal("12.5")
+    assert con.execute("SELECT count(*) FROM account_epochs WHERE state='SEALED'").fetchone()[0] == 1
+    assert paperbook.snapshot(con)["equity"] == Decimal(10000)
+    assert len(shared_account.journal(con)) == 1
+    assert len(shared_account.journal(con, include_legacy=True)) == 2
+
+
+def test_crash_pending_recovers_without_candidate_and_expiry_releases(tmp_path):
+    con = account(tmp_path)
+    p, _ = shared_account.admit_plan(con, bot_plan())
+    con.close()
+    con = store.connect(tmp_path / "account.db")
+    assert shared_account.recover_pending(con)[0]["state"] == "PAPER_ROUTED"
+    assert shared_account.recover_pending(con) == []
+    assert paperbook.snapshot(con)["reserved_slots"] == 1
+    # Separate reservation created before a simulated downtime.
+    con.execute("UPDATE execution_outbox SET state='PAPER_CLOSED'")
+    con.commit()
+    p, _ = shared_account.admit_plan(con, bot_plan("next"))
+    raw = json.loads(con.execute("SELECT payload FROM execution_outbox WHERE intent_id='next'").fetchone()[0])
+    raw["intent"]["expires_at"] = 1
+    con.execute("UPDATE execution_outbox SET payload=? WHERE intent_id='next'", (json.dumps(raw),))
+    con.commit()
+    assert shared_account.recover_pending(con)[0]["state"] == "PAPER_EXPIRED"
+    assert paperbook.snapshot(con)["reserved_slots"] == 0
+
+
+def test_manual_resolution_settles_shared_cash_exactly_once(tmp_path):
+    con = account(tmp_path)
+    arm(con, at=0)
+    con.executemany("INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)", [
+        ("ETHUSDT", "1H", t, "100", hi, "99", "100", "1", "test", t + 3600)
+        for t, hi in [(0, "101"), (3600, "101"), (7200, "105")]])
+    con.commit()
+    manual.run(con, "ETHUSDT", "1H", 3600)
+    first = paperbook.snapshot(con)
+    assert first["closed_count"] == 1 and first["equity"] > Decimal(10000)
+    shared_account.sync_manual(con)
+    assert paperbook.snapshot(con)["equity"] == first["equity"]
+    row = shared_account.journal(con)[0]
+    assert row["origin"] == row["controller"] == "OPERATOR"
+    assert row["grade_eligible"] is False
+    assert row["state"] == "PAPER_CLOSED"
+
+
+def test_failure_between_fact_and_reservation_rolls_back_both(tmp_path, monkeypatch):
+    con = account(tmp_path)
+    def fail(*args, **kwargs):
+        raise RuntimeError("simulated crash")
+    monkeypatch.setattr(execution, "enqueue", fail)
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        arm(con)
+    assert con.execute("SELECT count(*) FROM facts WHERE kind='manual_intent'").fetchone()[0] == 0
+    assert con.execute("SELECT count(*) FROM account_requests").fetchone()[0] == 0
+
+
+def test_market_fill_cash_uses_exact_settlement_and_late_route_cannot_reopen(tmp_path, monkeypatch):
+    con = account(tmp_path)
+    plan = bot_plan('gap')
+    at = int(time.time()) - 7200
+    plan = replace(plan, intent=replace(plan.intent, created_at=at,
+        order_kind=OrderKind.MARKET, entry_model='MARKET_NEXT_OPEN'))
+    con.execute('INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)',
+        ('BTCUSDT','1H',at+3600,'102','105','101','104','1','fixture',at+7200))
+    con.commit()
+    admit = shared_account.admit_plan
+    def recovered_before_dispatch_returns(connection, candidate):
+        approved, receipt = admit(connection, candidate)
+        execution.monitor_paper(connection)
+        return approved, receipt
+    monkeypatch.setattr(shared_account, 'admit_plan', recovered_before_dispatch_returns)
+    receipt = execution.Coordinator().dispatch(con, plan)
+    assert receipt['state'] == 'ORDER_LIFECYCLE_COMPLETE'
+    position = con.execute('SELECT realised_usd,r_multiple,state FROM paper_positions').fetchone()
+    assert Decimal(position[0]) == Decimal('192.8400')
+    assert Decimal(position[1]) == Decimal('.48')
+    assert position[2] == 'CLOSED'
+    assert paperbook.snapshot(con)['equity'] == Decimal('10192.8400')
+    execution.monitor_paper(con)
+    assert con.execute('SELECT count(*) FROM paper_positions').fetchone()[0] == 1
+
+
+def test_journal_exposes_current_and_planned_protection_separately(tmp_path):
+    con = account(tmp_path)
+    shared_account.admit_plan(con, bot_plan())
+    con.execute("INSERT INTO paper_positions(intent_id,symbol,tf,direction,quantity,entry,stop,target,state,filled_at) "
+                "VALUES('bot','BTCUSDT','1H','LONG','100','100','101','104','OPEN',100)")
+    con.commit()
+    from ui_api import trade_rows
+    row = trade_rows(con)[0]
+    assert row['stop'] == '101' and row['planned_stop'] == '98'
+
+
+def test_handoff_latches_grade_ineligible(tmp_path):
+    con = account(tmp_path)
+    shared_account.admit_plan(con, bot_plan())
+    con.execute("INSERT INTO paper_positions(intent_id,symbol,tf,direction,quantity,entry,stop,target,state,filled_at) "
+                "VALUES('bot','BTCUSDT','1H','LONG','100','100','98','104','OPEN',100)")
+    con.commit()
+    shared_account.change_controller(con, "bot", "OPERATOR")
+    shared_account.change_controller(con, "bot", "BOT")
+    row = shared_account.journal(con)[0]
+    assert row["origin"] == row["controller"] == "BOT"
+    assert row["grade_eligible"] is False
+
+
+def test_untracked_legacy_manual_blocks_cutover(tmp_path):
+    con = account(tmp_path)
+    manual._create_intent_legacy(con, "ETHUSDT", "1H", "LONG", 100, 104, 98, 0, risk_usd=25)
+    shared_account.request_cutover(con, "drain")
+    with pytest.raises(shared_account.AdmissionRejected, match="legacy-manual"):
+        shared_account.request_cutover(con, "complete")
+
+
+def test_shared_bot_close_is_account_scoped_and_idempotent(tmp_path):
+    con = account(tmp_path)
+    plan = bot_plan()
+    shared_account.admit_plan(con, plan)
+    con.execute("INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)",
+                ("BTCUSDT", "1H", plan.intent.created_at + 3600,
+                 "100", "102", "99", "101", "1", "test", plan.intent.created_at + 7200))
+    con.commit()
+    execution.monitor_paper(con)
+    closed = shared_account.close_paper(con, "bot")
+    assert closed["state"] == "PAPER_CLOSED"
+    assert shared_account.close_paper(con, "bot")["duplicate"]
+    assert paperbook.snapshot(con)["closed_count"] == 1
+    assert not shared_account.journal(con)[0]["grade_eligible"]
+    assert con.execute("SELECT count(*) FROM facts WHERE kind='manual_override'").fetchone()[0] == 0
+
+
+def test_manual_partials_cash_and_close_preserve_ladder(tmp_path):
+    con = account(tmp_path)
+    manual.create_intent(con, "ETHUSDT", "1H", "LONG", 100, 108, 98, 0, risk_usd=25,
+                         partials=[{"fraction": "0.5", "price": "102"}])
+    con.executemany("INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)", [
+        ("ETHUSDT", "1H", t, "100", hi, "99", close, "1", "test", t + 3600)
+        for t, hi, close in [(0, "101", "100"), (3600, "101", "100"), (7200, "103", "103")]])
+    con.commit()
+    manual.run(con, "ETHUSDT", "1H", 3600)
+    mark = paperbook.snapshot(con)
+    assert mark["partial_realised_usd"] > 0
+    assert mark["cash"] > mark["settled_balance"]
+    assert mark["marked_equity"] > mark["cash"]
+    closed = shared_account.close_paper(con, "ETHUSDT|1H|MANUAL|0")
+    assert len(closed["result"]["legs"]) == 2
+    before = paperbook.snapshot(con)["equity"]
+    manual.run(con, "ETHUSDT", "1H", 3600)
+    assert paperbook.snapshot(con)["equity"] == before
+    assert paperbook.snapshot(con)["partial_realised_usd"] == 0
+
+
+def test_risk_change_preserves_existing_orders_and_rejects_stale_settings(tmp_path):
+    con = account(tmp_path)
+    arm(con, at=100, risk_usd="100")
+    before = con.execute("SELECT payload FROM execution_outbox").fetchone()[0]
+    shared_account.set_risk_percent(con, "0.5", "legacy", "0.02")
+    assert con.execute("SELECT payload FROM execution_outbox").fetchone()[0] == before
+    assert paperbook.snapshot(con)["reserved_risk_usd"] == Decimal("100")
+    assert shared_account.gates_for_account(con)["risk_pct"] == Decimal(".005")
+    with pytest.raises(shared_account.AdmissionRejected, match="ACCOUNT_CHANGED"):
+        shared_account.set_risk_percent(con, "1", "legacy", "0.02")
+    assert con.execute("SELECT count(*) FROM account_events WHERE event='RISK_CHANGED'").fetchone()[0] == 1
+    manual.cancel_intent(con, "ETHUSDT|1H|MANUAL|100", at=101)
+    plan, _ = shared_account.admit_plan(con, bot_plan())
+    assert plan.risk.risk_usd == Decimal("50")
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-1", "0", "101", None, "bad"])
+def test_invalid_risk_does_not_change_account(tmp_path, value):
+    con = account(tmp_path)
+    with pytest.raises(shared_account.AdmissionRejected):
+        shared_account.set_risk_percent(con, value, "legacy", "0.02")
+    assert shared_account.current_epoch(con) is None
+
+
+def test_risk_decision_records_changed_percentage_even_when_size_is_capped():
+    from engine import riskpaper
+    old = dict(decision="REDUCED", reasons=["LEVERAGE_CAP"], risk_usd="25",
+               units="12.5", risk_pct="0.0025", account_epoch_id="one")
+    assert riskpaper._moved(old, {**old, "risk_pct":"0.005"})
+    assert riskpaper._moved(old, {**old, "account_epoch_id":"two"})
+    assert not riskpaper._moved(old, dict(old))

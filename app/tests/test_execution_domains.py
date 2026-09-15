@@ -212,61 +212,15 @@ class AttemptIdentity(unittest.TestCase):
         self.assertIsNone(opportunities.attempt_id_for("BTCUSDT|1H|PULLBACK|z|v",
                                                        {"state": "FORMING"}))
 
-    def test_nothing_looks_the_attempt_up_in_a_table_that_lacks_it(self):
-        """No COLUMN holds an attempt, so no query may ask for one.
-
-        `execution_outbox`, `paper_positions` and `managed_positions` are all
-        keyed on `setup_id`, which names the ZONE. A `WHERE attempt_id=?`
-        against any of them matches nothing and fails silently — the exact
-        shape of failure this whole separation was about.
-
-        What IS allowed, and is why this test narrowed: feeding the attempt
-        into a DERIVED identity that gets stored. `execution.intent_key`
-        hashes it into the idempotency key, which is how a later retest of a
-        zone stops inheriting the previous attempt's terminal state. The
-        attempt is persisted there — inside the hash — so nothing has to look
-        it up.
-
-        If you are here because this failed, you are about to query a column
-        that does not exist. Either add it and write it at dispatch, or use
-        the derived key.
-        """
-        import ast
-        import pathlib
-        root = pathlib.Path(opportunities.__file__).resolve().parent
-        sql = {"SELECT", "WHERE", "INSERT", "UPDATE", "JOIN", "DELETE"}
-        offences = []
-        for path in sorted(root.rglob("*.py")):
-            tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
-            # Docstrings are Constants too, and this file's own prose quotes
-            # the very query it forbids. Skip them by identity rather than by
-            # guessing from length — a rule that cannot describe itself is
-            # a rule nobody can read.
-            docstrings = {
-                id(n.body[0].value) for n in ast.walk(tree)
-                if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef,
-                                  ast.AsyncFunctionDef))
-                and n.body and isinstance(n.body[0], ast.Expr)
-                and isinstance(n.body[0].value, ast.Constant)
-                and isinstance(n.body[0].value.value, str)}
-            for node in ast.walk(tree):
-                if id(node) in docstrings:
-                    continue
-                # AST rather than text, so prose in a docstring cannot trip
-                # this and a real use cannot hide behind one.
-                if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
-                    continue
-                text = node.value
-                if "attempt_id" not in text:
-                    continue
-                if any(word in text.upper() for word in sql):
-                    offences.append(
-                        f"{path.name}:{node.lineno}: SQL naming attempt_id")
-        self.assertEqual(
-            offences, [],
-            "something is keying off the attempt. No table stores it, so a "
-            "lookup matches nothing and fails silently:\n  "
-            + "\n  ".join(offences))
+    def test_attempt_is_stored_on_outbox_not_invented_on_positions(self):
+        """The explicit attempt column survives migration and supports joins."""
+        import sqlite3
+        from engine import execution
+        con = sqlite3.connect(":memory:")
+        execution._ensure(con)
+        self.assertIn("attempt_id", {r[1] for r in con.execute("PRAGMA table_info(execution_outbox)")})
+        self.assertNotIn("attempt_id", {r[1] for r in con.execute("PRAGMA table_info(paper_positions)")})
+        con.close()
 
     def test_every_candidate_carries_its_attempt(self):
         tmp = tempfile.TemporaryDirectory()

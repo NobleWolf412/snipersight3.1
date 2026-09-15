@@ -8,8 +8,12 @@ APP = Path(__file__).resolve().parents[1]
 
 class ConsolidatedCockpitTests(unittest.TestCase):
     def test_no_wrapper_files_remain(self):
-        for gone in ("cockpit_server.py", "static/cockpit.html", "static/cockpit.js"):
+        for gone in ("cockpit_server.py", "static/cockpit.js"):
             self.assertFalse((APP / gone).exists(), f"{gone} should have been removed")
+        # The overhaul reuses this HTML name, but remains on the single server.
+        html = (APP / "static/cockpit.html").read_text(encoding="utf-8")
+        self.assertNotIn("<iframe", html)
+        self.assertIn('/static/cockpit/app.js', html)
 
     def test_watchdog_and_launcher_target_the_single_app(self):
         watchdog = (APP / "watchdog.py").read_text(encoding="utf-8")

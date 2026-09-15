@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 
-from engine import automation, execution
+from engine import automation, execution, store
 from engine.contracts import (AutomationMode, AutomationStatus, BrokerOrder,
                               DecisionReason,
                               ExecutionPlan, OrderIntent, OrderKind, RiskDecision)
@@ -12,6 +12,7 @@ from engine.contracts import (AutomationMode, AutomationStatus, BrokerOrder,
 
 def memory():
     con = sqlite3.connect(":memory:")
+    con.executescript(store.SCHEMA)
     con.execute("CREATE TABLE settings(name TEXT PRIMARY KEY,value TEXT,updated_at INTEGER)")
     return con
 
@@ -226,7 +227,7 @@ def test_execution_core_refuses_unapproved_risk_decision():
 
 def test_paper_intent_fills_and_closes_from_closed_candles():
     con = memory()
-    con.execute("CREATE TABLE candles(symbol TEXT,tf TEXT,open_ts INTEGER,"
+    con.execute("CREATE TABLE IF NOT EXISTS candles(symbol TEXT,tf TEXT,open_ts INTEGER,"
                 "open TEXT,high TEXT,low TEXT,close TEXT,volume TEXT,source TEXT,"
                 "imported_at INTEGER,PRIMARY KEY(symbol,tf,open_ts))")
     con.executemany(
@@ -256,7 +257,7 @@ def test_paper_intent_fills_and_closes_from_closed_candles():
 
 def test_paper_entry_uses_shared_maker_then_market_fill_authority():
     con = memory()
-    con.execute("CREATE TABLE candles(symbol TEXT,tf TEXT,open_ts INTEGER,"
+    con.execute("CREATE TABLE IF NOT EXISTS candles(symbol TEXT,tf TEXT,open_ts INTEGER,"
                 "open TEXT,high TEXT,low TEXT,close TEXT,volume TEXT,source TEXT,"
                 "imported_at INTEGER,PRIMARY KEY(symbol,tf,open_ts))")
     con.executemany(
@@ -286,7 +287,7 @@ def test_paper_entry_uses_shared_maker_then_market_fill_authority():
 
 def test_shadow_comparison_is_earned_only_after_paired_paper_result():
     con = memory()
-    con.execute("CREATE TABLE candles(symbol TEXT,tf TEXT,open_ts INTEGER,"
+    con.execute("CREATE TABLE IF NOT EXISTS candles(symbol TEXT,tf TEXT,open_ts INTEGER,"
                 "open TEXT,high TEXT,low TEXT,close TEXT,volume TEXT,source TEXT,"
                 "imported_at INTEGER,PRIMARY KEY(symbol,tf,open_ts))")
     con.executemany(
@@ -318,7 +319,7 @@ def test_shadow_comparison_is_earned_only_after_paired_paper_result():
 
 def test_shadow_pair_mismatch_records_integrity_failure_not_result():
     con = memory()
-    con.execute("CREATE TABLE candles(symbol TEXT,tf TEXT,open_ts INTEGER,"
+    con.execute("CREATE TABLE IF NOT EXISTS candles(symbol TEXT,tf TEXT,open_ts INTEGER,"
                 "open TEXT,high TEXT,low TEXT,close TEXT,volume TEXT,source TEXT,"
                 "imported_at INTEGER,PRIMARY KEY(symbol,tf,open_ts))")
     con.executemany(
@@ -341,6 +342,7 @@ def test_shadow_pair_mismatch_records_integrity_failure_not_result():
     payload["risk"]["decision"] = "DIFFERENT_PAPER_DECISION"
     con.execute("UPDATE execution_outbox SET payload=? WHERE intent_id=?",
                 (json.dumps(payload, sort_keys=True), paper_id))
+    con.commit()
 
     execution.monitor_paper(con)
 

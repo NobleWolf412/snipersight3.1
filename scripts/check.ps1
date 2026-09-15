@@ -8,6 +8,8 @@ param(
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent $PSScriptRoot
 $App = Join-Path $Repo "app"
+$Python = Join-Path $Repo ".venv/Scripts/python.exe"
+if (-not (Test-Path -LiteralPath $Python)) { $Python = "python" }
 
 # These tests previously reached protected live effects. Refuse the full suite
 # if their self-contained safety contracts disappear.
@@ -25,7 +27,7 @@ if ($ArmTest -notmatch 'patch\("engine\.store\.connect"' -or
 if (-not $SkipPython) {
     Write-Output "Running Python suite..."
     Push-Location $App
-    try { python -m pytest tests -q; if ($LASTEXITCODE) { exit $LASTEXITCODE } }
+    try { & $Python -m pytest tests -q; if ($LASTEXITCODE) { exit $LASTEXITCODE } }
     finally { Pop-Location }
 }
 
@@ -40,16 +42,19 @@ if (-not $SkipJavaScript) {
 if (-not $SkipLint) {
     Write-Output "Running ESLint..."
     Push-Location $App
-    try { npx eslint .; if ($LASTEXITCODE) { exit $LASTEXITCODE } }
+    try { node node_modules/eslint/bin/eslint.js .; if ($LASTEXITCODE) { exit $LASTEXITCODE } }
     finally { Pop-Location }
 }
 
 Write-Output "Scanning source files for unexpected control bytes..."
 $BadFiles = @()
-$SourceFiles = @(git -C $Repo ls-files -- "app/*.js" "app/*.py" "app/*.css" "app/*.html")
+$SourceFiles = @(git -C $Repo ls-files --cached --others --exclude-standard -- "app/*.js" "app/*.cjs" "app/*.py" "app/*.css" "app/*.html")
+$StrictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
 $SourceFiles | ForEach-Object {
     $SourcePath = Join-Path $Repo $_
     $Bytes = [System.IO.File]::ReadAllBytes($SourcePath)
+    try { $null = $StrictUtf8.GetString($Bytes) }
+    catch { $BadFiles += "${SourcePath}: invalid UTF-8" }
     $BadCount = 0
     foreach ($Byte in $Bytes) {
         if ($Byte -lt 32 -and $Byte -ne 9 -and $Byte -ne 10 -and $Byte -ne 13) {

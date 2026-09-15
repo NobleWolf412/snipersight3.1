@@ -170,6 +170,9 @@ class ThePaperBookUsesIt(unittest.TestCase):
         """The structural guard. The copy is how it drifted last time."""
         import inspect
         src = inspect.getsource(execution.monitor_paper)
+        self.assertIn("shared_account.immediate(con)", src)
+        self.assertIn("_monitor_paper_locked(con)", src)
+        src += inspect.getsource(execution._monitor_paper_locked)
         self.assertIn("execsim.walk_exit", src)
         self.assertNotIn("stop_hit", src,
                          "a private stop comparison is a second exit model, "

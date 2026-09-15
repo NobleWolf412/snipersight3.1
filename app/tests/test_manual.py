@@ -26,6 +26,8 @@ PERP = "BTCUSDT"        # phemex-perp   — can short
 PERP2 = "ETHUSDT"       # a second perp, for tests that need two live orders at once
 
 
+# Historical/manual resolver fixtures deliberately use the legacy fact writer.
+# Cross-process admission, limits and receipts are covered in test_shared_account.py.
 class ManualCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -64,7 +66,7 @@ class ManualCase(unittest.TestCase):
         it is wrong in an undetectable direction.
         """
         self.load(self.flat(6) + [(100, 104, 99, 103)] + self.flat(5))
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0)
         self.run_engine()
         self.assertTrue(self.execs(), "precondition: manual facts exist")
@@ -90,7 +92,7 @@ class ManualCase(unittest.TestCase):
         past = [(100, 105, 95, 100)] * 30      # trades through entry 100 and tp 104
         after = [(88, 90, 85, 88)] * 11        # nowhere near the entry
         self.load(past + after)
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=30 * TF)
         self.run_engine()
         rows = self.execs()
@@ -115,7 +117,7 @@ class ManualCase(unittest.TestCase):
     def test_target_hit_resolves_tp_with_costs_deducted(self):
         bars = self.flat(6) + [(100, 104, 99, 103)] + self.flat(5)
         self.load(bars)
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0)
         self.run_engine()
         row = self.execs()[0]
@@ -128,7 +130,7 @@ class ManualCase(unittest.TestCase):
     def test_stop_hit_resolves_sl(self):
         bars = self.flat(4) + [(100, 101, 98, 99)] + self.flat(5)
         self.load(bars)
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0)
         self.run_engine()
         self.assertEqual(self.execs()[0]["outcome"], "SL")
@@ -142,7 +144,7 @@ class ManualCase(unittest.TestCase):
         """
         bars = self.flat(3) + [(100, 105, 97, 100)] + self.flat(4)
         self.load(bars)
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0)
         self.run_engine()
         row = self.execs()[0]
@@ -151,7 +153,7 @@ class ManualCase(unittest.TestCase):
 
     def test_entry_never_touched_within_the_window_is_missed(self):
         self.load([(120, 121, 119, 120)] * 10)
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0)
         self.run_engine()
         self.assertEqual(self.execs()[0]["outcome"], "MISSED")
@@ -159,7 +161,7 @@ class ManualCase(unittest.TestCase):
     def test_unresolved_intent_stays_open_and_writes_nothing(self):
         """Append-only: an intent that cannot resolve yet must not guess."""
         self.load(self.flat(3))
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0)
         r = self.run_engine()
         self.assertEqual(r["OPEN"], 1)
@@ -168,7 +170,7 @@ class ManualCase(unittest.TestCase):
     def test_rerunning_does_not_resolve_the_same_intent_twice(self):
         bars = self.flat(6) + [(100, 104, 99, 103)] + self.flat(5)
         self.load(bars)
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0)
         self.run_engine()
         self.run_engine()
@@ -180,7 +182,7 @@ class ManualCase(unittest.TestCase):
     def test_spot_cannot_short_and_nothing_is_written(self):
         self.load(self.flat(10))
         with self.assertRaises(manual.IntentRejected):
-            manual.create_intent(self.con, SPOT, "1H", "SHORT",
+            manual._create_intent_legacy(self.con, SPOT, "1H", "SHORT",
                                  entry=100, tp=96, sl=102, created_at=0)
         self.assertEqual(
             store.get_facts(self.con, SPOT, "1H", manual.INTENT_KIND,
@@ -188,7 +190,7 @@ class ManualCase(unittest.TestCase):
 
     def test_a_perp_may_short(self):
         self.load(self.flat(10), symbol=PERP)
-        out = manual.create_intent(self.con, PERP, "1H", "SHORT",
+        out = manual._create_intent_legacy(self.con, PERP, "1H", "SHORT",
                                    entry=100, tp=96, sl=102, created_at=0)
         self.assertEqual(out["venue"], "phemex-perp")
 
@@ -197,12 +199,12 @@ class ManualCase(unittest.TestCase):
                                          ("LONG", 100, 99, 98)):
             with self.subTest(direction=direction, sl=sl):
                 with self.assertRaises(manual.IntentRejected):
-                    manual.create_intent(self.con, SPOT, "1H", direction,
+                    manual._create_intent_legacy(self.con, SPOT, "1H", direction,
                                          entry=entry, tp=tp, sl=sl, created_at=0)
 
     def test_size_is_derived_from_risk_and_the_stop_distance(self):
         self.load(self.flat(10))
-        out = manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100,
+        out = manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100,
                                    tp=104, sl=98, created_at=0, risk_usd=200)
         # $200 risked over a $2 stop is 100 units
         self.assertEqual(Decimal(out["size_units"]), Decimal(100))
@@ -224,9 +226,9 @@ class ManualCase(unittest.TestCase):
         # prices, same bars, different leverage, one outcome.
         self.load(bars, symbol=PERP)
         self.load(bars, symbol=PERP2)
-        a = manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+        a = manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=104,
                                  sl=98, created_at=0, risk_usd=200, leverage=1)
-        b = manual.create_intent(self.con, PERP2, "1H", "LONG", entry=100, tp=104,
+        b = manual._create_intent_legacy(self.con, PERP2, "1H", "LONG", entry=100, tp=104,
                                  sl=98, created_at=0, risk_usd=200, leverage=10)
         self.assertEqual(a["size_units"], b["size_units"], "size must not move")
         # margin is what moves: notional / leverage
@@ -249,10 +251,10 @@ class ManualCase(unittest.TestCase):
         was told about.
         """
         self.load(self.flat(6), symbol=PERP)
-        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=104,
                              sl=98, created_at=0, risk_usd=200)
         with self.assertRaises(manual.IntentRejected) as cm:
-            manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+            manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=104,
                                  sl=98, created_at=TF, risk_usd=200)
         self.assertIn("already have an unresolved LONG", str(cm.exception))
 
@@ -261,19 +263,19 @@ class ManualCase(unittest.TestCase):
         different number. A rule that only caught identical levels would miss
         every case worth catching."""
         self.load(self.flat(6), symbol=PERP)
-        manual.create_intent(self.con, PERP, "1H", "SHORT", entry=100, tp=96,
+        manual._create_intent_legacy(self.con, PERP, "1H", "SHORT", entry=100, tp=96,
                              sl=102, created_at=0, risk_usd=200)
         with self.assertRaises(manual.IntentRejected):
-            manual.create_intent(self.con, PERP, "1H", "SHORT", entry=101,
+            manual._create_intent_legacy(self.con, PERP, "1H", "SHORT", entry=101,
                                  tp=95, sl=103, created_at=TF, risk_usd=200)
 
     def test_the_opposite_side_is_left_alone(self):
         """A hedge is a different argument. Refusing it here would be this
         function inventing a position policy it was never asked for."""
         self.load(self.flat(6), symbol=PERP)
-        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=104,
                              sl=98, created_at=0, risk_usd=200)
-        manual.create_intent(self.con, PERP, "1H", "SHORT", entry=100, tp=96,
+        manual._create_intent_legacy(self.con, PERP, "1H", "SHORT", entry=100, tp=96,
                              sl=102, created_at=TF, risk_usd=200)
 
     # ---------- the refusal and the book must agree ----------
@@ -295,11 +297,11 @@ class ManualCase(unittest.TestCase):
         manifest as well as the fact, and a refusal that still left a row
         behind would be the same defect one table over."""
         self.load(self.flat(6), symbol=PERP)
-        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=104,
                              sl=98, created_at=0, risk_usd=200)
         before = self._rows()
         with self.assertRaises(manual.IntentRejected):
-            manual.create_intent(self.con, PERP, "1H", "LONG", entry=101,
+            manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=101,
                                  tp=105, sl=99, created_at=TF, risk_usd=200)
         self.assertEqual(self._rows(), before,
                          "a refused arm wrote something")
@@ -310,10 +312,10 @@ class ManualCase(unittest.TestCase):
         timeframe, the entry, the stop and the moment it was armed — and leads
         with the fact that this attempt was not recorded."""
         self.load(self.flat(6), symbol=PERP)
-        manual.create_intent(self.con, PERP, "1H", "SHORT", entry=100, tp=96,
+        manual._create_intent_legacy(self.con, PERP, "1H", "SHORT", entry=100, tp=96,
                              sl=102, created_at=0, risk_usd=200)
         with self.assertRaises(manual.IntentRejected) as cm:
-            manual.create_intent(self.con, PERP, "1H", "SHORT", entry=101,
+            manual._create_intent_legacy(self.con, PERP, "1H", "SHORT", entry=101,
                                  tp=95, sl=103, created_at=TF, risk_usd=200)
         msg = str(cm.exception)
         self.assertIn("nothing was armed", msg)
@@ -328,11 +330,11 @@ class ManualCase(unittest.TestCase):
         an error while its order rested on the book."""
         self.load(self.flat(6), symbol=PERP)
         kw = dict(entry=100, tp=104, sl=98, created_at=0, risk_usd=200)
-        first = manual.create_intent(self.con, PERP, "1H", "LONG", **kw)
+        first = manual._create_intent_legacy(self.con, PERP, "1H", "LONG", **kw)
         self.assertFalse(first["already_armed"])
         self.assertTrue(first["written"])
         before = self._rows()
-        again = manual.create_intent(self.con, PERP, "1H", "LONG", **kw)
+        again = manual._create_intent_legacy(self.con, PERP, "1H", "LONG", **kw)
         self.assertTrue(again["already_armed"], "a retry was not recognised")
         self.assertFalse(again["written"], "a retry wrote a second intent")
         self.assertEqual(again["intent_id"], first["intent_id"])
@@ -343,8 +345,8 @@ class ManualCase(unittest.TestCase):
         ticket would read back a number that was never armed."""
         self.load(self.flat(6), symbol=PERP)
         kw = dict(entry=100, tp=104, sl=98, created_at=0, risk_usd=200)
-        manual.create_intent(self.con, PERP, "1H", "LONG", note="first", **kw)
-        again = manual.create_intent(self.con, PERP, "1H", "LONG",
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", note="first", **kw)
+        again = manual._create_intent_legacy(self.con, PERP, "1H", "LONG",
                                      note="typed something else", **kw)
         self.assertEqual(again["note"], "first")
 
@@ -352,11 +354,11 @@ class ManualCase(unittest.TestCase):
         """Same second, different levels — a nudge between two taps. That is
         not the order on the book and must not be reported as it."""
         self.load(self.flat(6), symbol=PERP)
-        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=104,
                              sl=98, created_at=0, risk_usd=200)
         before = self._rows()
         with self.assertRaises(manual.IntentRejected):
-            manual.create_intent(self.con, PERP, "1H", "LONG", entry=100.5,
+            manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100.5,
                                  tp=104, sl=98, created_at=0, risk_usd=200)
         self.assertEqual(self._rows(), before)
 
@@ -368,12 +370,12 @@ class ManualCase(unittest.TestCase):
         bars = self.flat(2) + [(100, 105, 99, 104)] + self.flat(3)
         self.load(bars, symbol=PERP)
         kw = dict(entry=100, tp=104, sl=98, created_at=0, risk_usd=200)
-        manual.create_intent(self.con, PERP, "1H", "LONG", **kw)
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", **kw)
         self.run_engine(symbol=PERP)
         self.assertTrue(self.execs(symbol=PERP), "fixture did not settle")
         before = self._rows()
         with self.assertRaises(manual.IntentRejected) as cm:
-            manual.create_intent(self.con, PERP, "1H", "LONG", **kw)
+            manual._create_intent_legacy(self.con, PERP, "1H", "LONG", **kw)
         self.assertIn("has since settled", str(cm.exception))
         self.assertEqual(self._rows(), before)
 
@@ -386,11 +388,11 @@ class ManualCase(unittest.TestCase):
         last: armed, unresolvable, invisible on every surface, and liable to be
         marked settled by the other one's exit."""
         self.load(self.flat(6), symbol=PERP)
-        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=104,
                              sl=98, created_at=0, risk_usd=200)
         before = self._rows()
         with self.assertRaises(manual.IntentRejected) as cm:
-            manual.create_intent(self.con, PERP, "1H", "SHORT", entry=100,
+            manual._create_intent_legacy(self.con, PERP, "1H", "SHORT", entry=100,
                                  tp=96, sl=102, created_at=0, risk_usd=200)
         self.assertIn("nothing was armed", str(cm.exception))
         self.assertEqual(self._rows(), before)
@@ -403,19 +405,19 @@ class ManualCase(unittest.TestCase):
         side must be armable again or the chart is permanently spent."""
         bars = self.flat(2) + [(100, 105, 99, 104)] + self.flat(3)
         self.load(bars, symbol=PERP)
-        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=104,
                              sl=98, created_at=0, risk_usd=200)
         self.run_engine(symbol=PERP)
         self.assertTrue(self.execs(symbol=PERP), "fixture did not settle")
-        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=104,
                              sl=98, created_at=TF * 5, risk_usd=200)
 
     def test_another_timeframe_on_the_same_symbol_is_its_own_chart(self):
         self.load(self.flat(6), symbol=PERP)
         self.load(self.flat(6), symbol=PERP, tf="4H")
-        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=104,
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=104,
                              sl=98, created_at=0, risk_usd=200)
-        manual.create_intent(self.con, PERP, "4H", "LONG", entry=100, tp=104,
+        manual._create_intent_legacy(self.con, PERP, "4H", "LONG", entry=100, tp=104,
                              sl=98, created_at=0, risk_usd=200)
 
     def test_a_stop_beyond_liquidation_is_refused_by_the_api_not_just_the_ui(self):
@@ -423,21 +425,21 @@ class ManualCase(unittest.TestCase):
         trusts its own UI to have validated the request has no validation."""
         self.load(self.flat(10), symbol=PERP)
         with self.assertRaises(manual.IntentRejected) as ctx:
-            manual.create_intent(self.con, PERP, "1H", "LONG", entry=100,
+            manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100,
                                  tp=130, sl=85, created_at=0, leverage=10)
         self.assertIn("liquidat", str(ctx.exception).lower())
         self.assertEqual(
             store.get_facts(self.con, PERP, "1H", manual.INTENT_KIND,
                             manual.MANUAL_VERSION), [])
         # the identical stop is fine with less leverage — liquidation moves away
-        ok = manual.create_intent(self.con, PERP, "1H", "LONG", entry=100,
+        ok = manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100,
                                   tp=130, sl=85, created_at=0, leverage=2)
         self.assertEqual(Decimal(ok["liquidation"]), Decimal("50.500"))
 
     def test_leverage_cannot_exceed_the_venue_maximum(self):
         self.load(self.flat(10), symbol=PERP)
         with self.assertRaises(manual.IntentRejected):
-            manual.create_intent(self.con, PERP, "1H", "LONG", entry=100,
+            manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100,
                                  tp=104, sl=98, created_at=0, leverage=50)
 
     def test_spot_is_pinned_to_1x(self):
@@ -445,9 +447,9 @@ class ManualCase(unittest.TestCase):
         no leverage to set and no liquidation to price."""
         self.load(self.flat(10))
         with self.assertRaises(manual.IntentRejected):
-            manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100,
+            manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100,
                                  tp=104, sl=98, created_at=0, leverage=5)
-        ok = manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100,
+        ok = manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100,
                                   tp=104, sl=98, created_at=0, leverage=1)
         self.assertIsNone(ok["liquidation"])
 
@@ -459,7 +461,7 @@ class ManualCase(unittest.TestCase):
         on an unscanned symbol was checked once at arm time and then sat ARMED
         forever — a trade the operator placed and could never see settle."""
         self.load(self.flat(3))                       # not enough bars to resolve
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0)
         self.assertIn((SPOT, "1H"), manual.unresolved(self.con))
         # settle it, and the work list must empty
@@ -478,7 +480,7 @@ class ManualCase(unittest.TestCase):
         # tp sits ABOVE every fixture high: the old status() never tested
         # exits, and its fixture had already struck TP intra-window while
         # being reported OPEN. The shared walk exposed that.
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=130, sl=95, created_at=0)
         st = manual.status(self.con, SPOT, "1H", TF)
         self.assertEqual(st[0]["state"], "PENDING")
@@ -498,7 +500,7 @@ class ManualCase(unittest.TestCase):
         """The unrealized figure must come from the same price authority as
         every other number on screen — the last CLOSED candle."""
         self.load([(120, 121, 99, 101), (101, 108, 100, 106)])
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=125, sl=96, created_at=0)
         st = manual.status(self.con, SPOT, "1H", TF)
         # (106 - 100) / 4 = 1.5R — the close, not the 108 high
@@ -510,7 +512,7 @@ class ManualCase(unittest.TestCase):
         args = dict(entry=100, tp=120, sl=98, created_at=0, risk_usd=200,
                     trail_r=1.0)
         args.update(kw)
-        return manual.create_intent(self.con, symbol, "1H", "LONG", **args)
+        return manual._create_intent_legacy(self.con, symbol, "1H", "LONG", **args)
 
     def test_trailing_stop_locks_in_profit(self):
         """Risk is 2, trail is 1R: at a best of 110 the stop sits at 108, and
@@ -628,7 +630,7 @@ class ManualCase(unittest.TestCase):
           blended gross  0.5*2      + 0.5*5      = 3.50
         """
         self.load(self.scale_bars())
-        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
                              sl=98, created_at=0, risk_usd=200,
                              partials=[{"fraction": "0.5", "price": "104"}])
         self.run_engine()
@@ -657,7 +659,7 @@ class ManualCase(unittest.TestCase):
         exact drift test_one_walk.py was written after paying for twice.
         """
         self.load(self.scale_bars())
-        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
                              sl=98, created_at=0, risk_usd=200,
                              partials=[{"fraction": "0.25", "price": "102"},
                                        {"fraction": "0.25", "price": "104"}])
@@ -694,7 +696,7 @@ class ManualCase(unittest.TestCase):
         ]
         for symbol, bars, kw in cases:
             self.load(bars, symbol=symbol)
-            manual.create_intent(self.con, symbol, "1H", "LONG", entry=100,
+            manual._create_intent_legacy(self.con, symbol, "1H", "LONG", entry=100,
                                  sl=98, created_at=0, **kw)
             self.run_engine(symbol=symbol)
         settled = manual.book(self.con)["trades"]
@@ -730,10 +732,10 @@ class ManualCase(unittest.TestCase):
         bars = self.scale_bars()
         self.load(bars, symbol=PERP)
         self.load(bars, symbol=PERP2)
-        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=110,
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=110,
                              sl=98, created_at=0,
                              partials=[{"fraction": "0.5", "price": "104"}])
-        manual.create_intent(self.con, PERP2, "1H", "LONG", entry=100, tp=110,
+        manual._create_intent_legacy(self.con, PERP2, "1H", "LONG", entry=100, tp=110,
                              sl=98, created_at=0)
         self.run_engine(symbol=PERP)
         self.run_engine(symbol=PERP2)
@@ -755,7 +757,7 @@ class ManualCase(unittest.TestCase):
         """
         self.load([(100, 100.5, 99.5, 100),
                    (100, 105, 97, 98)])        # covers the rung AND the stop
-        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
                              sl=98, created_at=0,
                              partials=[{"fraction": "0.5", "price": "104"}])
         self.run_engine()
@@ -776,7 +778,7 @@ class ManualCase(unittest.TestCase):
         it was never intended."""
         self.load([(100, 100.5, 99.5, 100),
                    (100, 101, 97, 98)])        # nowhere near the rung at 104
-        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
                              sl=98, created_at=0,
                              partials=[{"fraction": "0.5", "price": "104"}])
         self.run_engine()
@@ -795,7 +797,7 @@ class ManualCase(unittest.TestCase):
         flattering, and not what the plan said would happen."""
         self.load([(100, 100.5, 99.5, 100),
                    (100, 110.5, 99.8, 110)])   # one bar covering rung and target
-        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
                              sl=98, created_at=0,
                              partials=[{"fraction": "0.5", "price": "104"}])
         self.run_engine()
@@ -814,7 +816,7 @@ class ManualCase(unittest.TestCase):
             net   (4 - 0.816) / 2         = 1.592 -> 1.59
         """
         self.load(self.flat(2) + [(100, 104.5, 99, 104)])
-        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=104,
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100, tp=104,
                              sl=98, created_at=0)
         self.run_engine()
         row = self.execs()[0]
@@ -835,7 +837,7 @@ class ManualCase(unittest.TestCase):
         defect where funding was defined and never charged at all.
         """
         self.load(self.scale_bars(), symbol=PERP)     # phemex-perp: funding is real
-        manual.create_intent(self.con, PERP, "1H", "LONG", entry=100, tp=110,
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG", entry=100, tp=110,
                              sl=98, created_at=0,
                              partials=[{"fraction": "0.5", "price": "104"}])
         self.run_engine(symbol=PERP)
@@ -852,7 +854,7 @@ class ManualCase(unittest.TestCase):
         self.load([(100, 100.5, 99.5, 100),
                    (100, 102.5, 99.8, 102),    # covers 102 only
                    (102, 106, 101, 105)])      # covers 104
-        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100, tp=110,
                              sl=98, created_at=0,
                              partials=[{"fraction": "0.2", "price": "104"},
                                        {"fraction": "0.3", "price": "102"}])
@@ -868,7 +870,7 @@ class ManualCase(unittest.TestCase):
         for price in (112, 97, 110, 98):     # beyond tp, beyond sl, AT each
             with self.subTest(price=price):
                 with self.assertRaises(manual.IntentRejected):
-                    manual.create_intent(
+                    manual._create_intent_legacy(
                         self.con, SPOT, "1H", "LONG", entry=100, tp=110, sl=98,
                         created_at=0,
                         partials=[{"fraction": "0.5", "price": str(price)}])
@@ -882,7 +884,7 @@ class ManualCase(unittest.TestCase):
         it was never asked for — the same mistake `validate_position` exists to
         undo for profit-side stops."""
         self.load(self.flat(4))
-        out = manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100,
+        out = manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100,
                                    tp=110, sl=98, created_at=0,
                                    partials=[{"fraction": "0.5", "price": "99"}])
         self.assertEqual(out["partials"], [{"fraction": "0.5", "price": "99"}])
@@ -894,7 +896,7 @@ class ManualCase(unittest.TestCase):
         do instead."""
         self.load(self.flat(4))
         with self.assertRaises(manual.IntentRejected) as cm:
-            manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100,
+            manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100,
                                  tp=110, sl=98, created_at=0,
                                  partials=[{"fraction": "0.5", "price": "102"},
                                            {"fraction": "0.5", "price": "104"}])
@@ -903,14 +905,14 @@ class ManualCase(unittest.TestCase):
     def test_a_dust_sized_rung_is_refused(self):
         self.load(self.flat(4))
         with self.assertRaises(manual.IntentRejected):
-            manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100,
+            manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100,
                                  tp=110, sl=98, created_at=0,
                                  partials=[{"fraction": "0.0001", "price": "104"}])
 
     def test_more_rungs_than_the_cap_is_refused(self):
         self.load(self.flat(4))
         with self.assertRaises(manual.IntentRejected):
-            manual.create_intent(
+            manual._create_intent_legacy(
                 self.con, SPOT, "1H", "LONG", entry=100, tp=110, sl=98,
                 created_at=0,
                 partials=[{"fraction": "0.1", "price": str(101 + i)}
@@ -928,7 +930,7 @@ class ManualCase(unittest.TestCase):
         self.load([(100, 100.5, 99.5, 100),
                    (100, 104.5, 99.8, 104),
                    (104, 107, 103, 106)])
-        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=120,
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100, tp=120,
                              sl=98, created_at=0, risk_usd=200,
                              partials=[{"fraction": "0.5", "price": "104"}])
         st = manual.status(self.con, SPOT, "1H", TF)[0]
@@ -947,7 +949,7 @@ class ManualCase(unittest.TestCase):
         """The new fields must not move the old ones. With nothing scaled out,
         `blended_r` IS `unrealized_r` and the dollars are unchanged."""
         self.load([(120, 121, 99, 101), (101, 108, 100, 106)])
-        manual.create_intent(self.con, SPOT, "1H", "LONG", entry=100, tp=125,
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG", entry=100, tp=125,
                              sl=96, created_at=0, risk_usd=100)
         st = manual.status(self.con, SPOT, "1H", TF)[0]
         self.assertEqual(st["unrealized_r"], "1.50")
@@ -1324,7 +1326,7 @@ class ManualCase(unittest.TestCase):
     def test_book_reports_only_manual_trades(self):
         bars = self.flat(6) + [(100, 104, 99, 103)] + self.flat(5)
         self.load(bars)
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0)
         self.run_engine()
         b = manual.book(self.con)
@@ -1352,7 +1354,7 @@ class ManualCase(unittest.TestCase):
         same trade and neither would be believable.
         """
         self.load(self.flat(6) + [(100, 104, 99, 103)] + self.flat(5))
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0,
                              risk_usd=100)
         self.run_engine()
@@ -1375,7 +1377,7 @@ class ManualCase(unittest.TestCase):
         it. The count is what lets the surface say "across 4 of 5 trades".
         """
         self.load(self.flat(6) + [(100, 104, 99, 103)] + self.flat(5))
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0)
         self.run_engine()
         b = manual.book(self.con)
@@ -1389,7 +1391,7 @@ class ManualCase(unittest.TestCase):
     def test_pnl_usd_is_a_key_on_every_row_even_when_it_is_absent(self):
         """Absent, not missing. A reader's `?? 0` turns a missing key into 0."""
         self.load(self.flat(6) + [(100, 104, 99, 103)] + self.flat(5))
-        manual.create_intent(self.con, SPOT, "1H", "LONG",
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",
                              entry=100, tp=104, sl=98, created_at=0)
         self.run_engine()
         for row in manual.book(self.con)["trades"]:
@@ -1403,7 +1405,7 @@ class ManualCase(unittest.TestCase):
         their record by cancelling the ones that looked like losers.
         """
         self.load(self.flat(4), symbol=PERP, tf="1H")
-        intent = manual.create_intent(self.con, PERP, "1H", "LONG",
+        intent = manual._create_intent_legacy(self.con, PERP, "1H", "LONG",
                                       entry=90, tp=94, sl=88, created_at=2 * TF,
                                       risk_usd=100)
         manual.cancel_intent(self.con, intent["intent_id"], at=4 * TF)
@@ -1425,12 +1427,12 @@ class ManualCase(unittest.TestCase):
         self.load(self.flat(6) + [(100, 104, 99, 103)] + self.flat(5),
                   symbol=PERP, tf="1H")
         self.load(self.flat(4), symbol=PERP2, tf="1H")
-        manual.create_intent(self.con, SPOT, "1H", "LONG",       # priced
+        manual._create_intent_legacy(self.con, SPOT, "1H", "LONG",       # priced
                              entry=100, tp=104, sl=98, created_at=0,
                              risk_usd=100)
-        manual.create_intent(self.con, PERP, "1H", "LONG",       # no dollars
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG",       # no dollars
                              entry=100, tp=104, sl=98, created_at=0)
-        cancelled = manual.create_intent(self.con, PERP2, "1H", "LONG",
+        cancelled = manual._create_intent_legacy(self.con, PERP2, "1H", "LONG",
                                          entry=90, tp=94, sl=88,
                                          created_at=2 * TF, risk_usd=100)
         self.run_engine()
@@ -1462,9 +1464,9 @@ class ManualCase(unittest.TestCase):
         # resting orders, which is the state that was invisible.
         self.load(self.flat(10), symbol=PERP, tf="1H")
         self.load(self.flat(10), symbol=PERP2, tf="1H")
-        manual.create_intent(self.con, PERP, "1H", "LONG",
+        manual._create_intent_legacy(self.con, PERP, "1H", "LONG",
                              entry=90, tp=94, sl=88, created_at=8 * TF, risk_usd=100)
-        manual.create_intent(self.con, PERP2, "1H", "SHORT",
+        manual._create_intent_legacy(self.con, PERP2, "1H", "SHORT",
                              entry=110, tp=106, sl=112, created_at=8 * TF, risk_usd=50)
         rows = manual.live(self.con)
         self.assertEqual({r["symbol"] for r in rows}, {PERP, PERP2},
@@ -1490,7 +1492,7 @@ class ManualCase(unittest.TestCase):
         like losers.
         """
         self.load(self.flat(4), symbol=PERP, tf="1H")
-        intent = manual.create_intent(self.con, PERP, "1H", "LONG",
+        intent = manual._create_intent_legacy(self.con, PERP, "1H", "LONG",
                                       entry=90, tp=94, sl=88, created_at=2 * TF,
                                       risk_usd=100)
         self.assertEqual([r["state"] for r in manual.live(self.con)], ["PENDING"],
@@ -1516,7 +1518,7 @@ class ManualCase(unittest.TestCase):
         # bar 1 trades through the entry, so the intent is OPEN, not resting
         self.load([(100, 101, 99, 100), (100, 101, 89, 95)] + self.flat(2),
                   symbol=PERP, tf="1H")
-        intent = manual.create_intent(self.con, PERP, "1H", "LONG",
+        intent = manual._create_intent_legacy(self.con, PERP, "1H", "LONG",
                                       entry=90, tp=120, sl=88, created_at=0,
                                       risk_usd=100)
         live = manual.live(self.con)
@@ -1531,7 +1533,7 @@ class ManualCase(unittest.TestCase):
     def test_a_cancelled_intent_stays_invisible_to_every_strategy_query(self):
         """The isolation rule holds for the new fact kind too."""
         self.load(self.flat(4), symbol=PERP, tf="1H")
-        intent = manual.create_intent(self.con, PERP, "1H", "LONG",
+        intent = manual._create_intent_legacy(self.con, PERP, "1H", "LONG",
                                       entry=90, tp=94, sl=88, created_at=2 * TF)
         manual.cancel_intent(self.con, intent["intent_id"], at=4 * TF)
         for version in (setups.SETUP_VERSION, execsim.EXEC_VERSION):
@@ -1611,7 +1613,7 @@ class FinestTimeframeCase(unittest.TestCase):
         self.con.commit()
 
     def arm(self, symbol=SPOT, armed_at=15000, **kw):
-        return manual.create_intent(self.con, symbol, "4H", "LONG",
+        return manual._create_intent_legacy(self.con, symbol, "4H", "LONG",
                                     entry=100, tp=104, sl=98,
                                     created_at=armed_at, risk_usd=100, **kw)
 

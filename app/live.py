@@ -29,7 +29,7 @@ from engine import (automation, autotrader, broker_factory, execution, positions
                     quality, listings, marketdata, pipeline, venues, cooldowns, funding)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.5-draft"
+LIVE_VERSION = "live-v0.6-draft"
 # v0.5: the cycle runs the PAPER book's own risk authority, after the paper
 # book settles and before the dispatcher reads it. Until now the only risk
 # pass was the research replay, whose account has never held an order, and the
