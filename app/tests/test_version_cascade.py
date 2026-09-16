@@ -65,9 +65,8 @@ OPERATIONAL_EXPECTED = {
     # order on a market that left the universe lost its candles and a 100-BAR
     # timeout had no bars to count. `execution.paper_open_symbols` is now the
     # one authority both this roster and `quality.unsafe_to_retire` read.
-    "live": "live-v0.10-draft",
+    "live": "live-v0.9-draft",
     "stopstudy": "stop-study-v0.1-draft",
-    "zonestudy": "zone-study-v0.1-draft",
     "forwardtrial": "forward-trial-v0.1-draft",
     # Not a fact producer: it reads `paper_positions` and the PAPER outbox and
     # returns an account. Locked anyway, for the reason `agg` is — it sits
@@ -236,12 +235,11 @@ OPERATIONAL_EXPECTED = {
 
 
 def operational_versions():
-    from engine import opportunities, paperbook, shared_account, forwardtrial, stopstudy, zonestudy
+    from engine import opportunities, paperbook, shared_account, forwardtrial, stopstudy
     return {
         "live": live.LIVE_VERSION,
         "forwardtrial": forwardtrial.TRIAL_VERSION,
         "stopstudy": stopstudy.STOP_STUDY_VERSION,
-        "zonestudy": zonestudy.ZONE_STUDY_VERSION,
         "paperbook": paperbook.PAPERBOOK_VERSION,
         "contracts": contracts.CONTRACT_VERSION,
         "automation": automation.AUTOMATION_VERSION,
@@ -395,7 +393,7 @@ RETIRED_MANUAL = tuple(v for v in manual.MANUAL_VERSIONS
 ATR_CONSUMERS = (
     "abtest", "breakout", "chartread", "execsim", "fvg", "liquidity", "ma",
     "manual", "momentum", "ranges", "regimeread", "scalein", "setups",
-    "structure", "trend", "volatility", "volume", "zones", "shared_account", "forwardtrial", "stopstudy", "zonestudy",
+    "structure", "trend", "volatility", "volume", "zones", "shared_account", "forwardtrial", "stopstudy",
 )
 
 
