@@ -28,7 +28,16 @@ from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.21-draft"
+SCALE_VERSION = "scale-v0.22-draft"
+# v0.22: the add's economics gate prices FUNDING. `estimated_round_trip_cost`
+# charges it only when symbol and tf_seconds are both supplied, and this was
+# the ONE caller passing neither — every other playbook's gate passed both.
+# setups moved to v0.11 for this exact change and this module imports
+# MIN_RISK_COST_MULT from it, which is the coupling that should have caught
+# it. The omission flattered — cost understated means the gate rejects less
+# — so adds were admitted on economics they do not have. Inert while
+# SCALE_ADD_R is 0, but the facts are written and graded, so the research
+# record carried it.
 # v0.21: the swing-v0.11 ATR cascade — compute_atr plus setup, exec and structure facts.
 # v0.20: cascade from exec-v0.26/risk-v0.27 (the corrected gapped-stop fill).
 # No rule change: an add only ever attaches to a position the simulator says
@@ -145,8 +154,23 @@ def run(con, symbol: str, tf: str = TRIGGER_TF, tf_seconds: int = 3600) -> dict:
                         continue
                     # the ADD trades on the same venue as its parent, so it is
                     # priced there — not on the process-wide spot default
+                    #
+                    # AND IT PAYS FUNDING, like every other playbook's gate.
+                    # `estimated_round_trip_cost` prices funding only when both
+                    # `symbol` and `tf_seconds` are supplied, and this call was
+                    # the only one passing neither — so the one gate deciding
+                    # whether an add is economic judged it on a cost with the
+                    # holding charge left out. setups moved to v0.11 for exactly
+                    # this change and this module imports MIN_RISK_COST_MULT
+                    # from it, which is the coupling that should have caught it.
+                    #
+                    # The omission flattered: cost understated means
+                    # `risk_dist < K * est_cost` fires less often, so adds were
+                    # admitted on economics they do not have. ~18% of the fee
+                    # term on Phemex at a 1H trigger, ~140% on Kraken.
                     est_cost = costs.estimated_round_trip_cost(
-                        px, atr_1h[i], costs.profile_for(symbol))
+                        px, atr_1h[i], costs.profile_for(symbol),
+                        symbol=symbol, tf_seconds=tf_seconds)
                     if risk_dist < MIN_RISK_COST_MULT * est_cost:
                         continue
                     reward = (tp - px) if long else (px - tp)

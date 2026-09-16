@@ -45,7 +45,10 @@ from .setups import (CONFIRM_MAX_BARS, ENTRY_MAX_BARS, ENTRY_MODEL, GOOD_RR,
 from .structure import STRUCTURE_VERSION
 from .swings import SWING_VERSION, compute_atr, quote_ticks
 
-BREAKOUT_VERSION = "breakout-v0.7-draft"
+BREAKOUT_VERSION = "breakout-v0.8-draft"
+# v0.8: stamps LIQ_VERSION into its own manifest and reads swing/structure
+# under the new setup generation. The cascade map did NOT list breakout
+# under liquidity — corrected in test_version_cascade.py with this bump.
 # v0.7: the swing-v0.11 ATR cascade — compute_atr, swing and structure facts, bias.
 # v0.6: input cascade from agg-v0.2 (own 4H/1W candle reads, swing-v0.10 and
 # structure-v0.13 facts) — acknowledged-partial buckets; no rule change here.

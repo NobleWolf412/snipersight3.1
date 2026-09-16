@@ -472,7 +472,17 @@ EXPECTED = {
     # CONSUMERS["zone"] is ("setup",), and setup's own consumers are
     # ("exec", "risk", "scale"), so the whole trading path cascades.
     "zone": "zone-v0.15-draft",
-    "liquidity": "liq-v0.13-draft",
+    # S54, one cascade, two root causes — liquidity confirmation and the
+    # scale-in cost gate. They ship together because splitting them moves
+    # exec/risk/riskpaper/scale/cooldown twice and re-derives the book twice.
+    # liq-v0.14: a pool confirms with its LAST MEMBER. The anchor is the
+    # newest member by market_time, but swings sets confirmed_at to
+    # max(confirmed_at, held_close_bar), so an earlier member can confirm
+    # later — and the pool was knowable before one of its inputs existed.
+    # setups gates on confirmed_at <= as_of, so 4 of 319 POOL facts were
+    # usable early (VTHO-USD 1D by 19 days). quality's CAUSALITY_VIOLATION
+    # compares the two stamps within ONE fact and is blind to this.
+    "liquidity": "liq-v0.14-draft",
     "regime": "regime-v0.14-draft",
     "ranges": "ranges-v0.4-draft",
     "ma": "ma-v0.3-draft",
@@ -517,7 +527,11 @@ EXPECTED = {
     # setup-v0.21, 2026-09-05: VALIDATED facts record the chart-eye read
     # (chartread) and carry WINDOW_POLICY, ALLOW everywhere. Same five-tag
     # cascade as v0.20, for the same reason.
-    "setup": "setup-v0.22-draft",
+    # setup-v0.23: liq-v0.14 changes which pools are visible when, so
+    # targets and the pool-gated playbooks move. THIS RESTARTS THE FORWARD
+    # RECORD — livegate compares the baseline's strategy_version — and it
+    # was taken deliberately while that record stood at 2 of 100.
+    "setup": "setup-v0.23-draft",
     # S50 cascade. exec-v0.13 -> v0.14 corrected the MAKER_THEN_MARKET crossing
     # leg, which booked a market fill at the PLAN's price — two bars stale, and
     # outside the fill bar's own [low, high] on 78 of 95 crossed orders, never
@@ -544,7 +558,11 @@ EXPECTED = {
     # gross. CONSUMERS["exec"] is ("risk", "scale", "cooldown") and the same
     # three reasons as the two notes above apply unchanged. `setup` does NOT
     # move: exec is downstream of setups, and no plan changed.
-    "exec": "exec-v0.27-draft",
+    # exec-v0.28: simulates setup-v0.23, and moves WITH scale-v0.22. An
+    # add's setup_id is f"{parent}|ADD{n}" and carries no scale tag, so a
+    # scale bump alone leaves two generations of ADD exec facts under one
+    # setup_id. That is S37 exactly, which is why these two never split.
+    "exec": "exec-v0.28-draft",
     # risk-v0.22: the envelope restated in R, sized by mode (paper/shadow 2%,
     # testnet/live 0.25%), gates identical everywhere; DECISIONs record their
     # pct. The v0.21 note above this line claimed "no cascade follows risk" —
@@ -561,7 +579,9 @@ EXPECTED = {
     # risk/scale/cooldown v+1, 2026-09-07: cascade from exec-v0.26 only. No
     # logic moved in any of the three — they read exec facts, and those facts
     # now carry a corrected stop fill.
-    "risk": "risk-v0.28-draft",
+    # risk-v0.29: sizes setup-v0.23 against exec-v0.28 and replays the
+    # account from those facts. No sizing rule changed.
+    "risk": "risk-v0.29-draft",
     # riskpaper-v0.1: the PAPER BOOK's own risk authority, born with this
     # separation. It rules only on setups that are still live, against
     # `paperbook`'s ledger — balance, exposure, reservations, cooldowns and
@@ -572,9 +592,18 @@ EXPECTED = {
     # candidate in a scan sees what the ones before it claimed; and the
     # loss controls are read at the moment of decision, not at the setup's
     # confirmation. All three let the book approve more than it could fund.
-    "riskpaper": "riskpaper-v0.4-draft",
-    "scale": "scale-v0.21-draft",
-    "cooldown": "cooldown-v0.15-draft",
+    # riskpaper-v0.5: the paper book's half of the risk-v0.29 move.
+    "riskpaper": "riskpaper-v0.5-draft",
+    # scale-v0.22: the add's economics gate prices FUNDING. It was the one
+    # estimated_round_trip_cost caller passing neither symbol nor
+    # tf_seconds, which is what that function requires before it charges
+    # funding at all — while setups/breakout/trend/ignition/episodes all
+    # passed both. setups moved to v0.11 for this exact change and scalein
+    # imports MIN_RISK_COST_MULT from it. Understated cost means the gate
+    # rejects less, so adds were admitted on economics they do not have.
+    "scale": "scale-v0.22-draft",
+    # cooldown-v0.16: reads exec-v0.28 to decide the re-entry lockout.
+    "cooldown": "cooldown-v0.16-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
     # every setup they emit. No rule changed in either and no trade differs —
     # both policies are ALLOW everywhere — but the payload does, and a payload
@@ -589,7 +618,10 @@ EXPECTED = {
     # was. The day `setups.py` starts recording a bias block — step 3 of the
     # plan — that stops being true and setup/exec/risk/scale/cooldown all move
     # together.
-    "breakout": "breakout-v0.7-draft",
+    # breakout-v0.8: stamps LIQ_VERSION into its own manifest and reads the
+    # new setup generation. CONSUMERS["liquidity"] did not list breakout;
+    # corrected below in the same commit.
+    "breakout": "breakout-v0.8-draft",
     # trend-v0.1: NEW ENGINE, measured and not enabled. It arrives because
     # grading the MA against the book found LONG x ABOVE = 0 and
     # SHORT x BELOW = 0 across all 477 closed trades — both shipped playbooks
@@ -614,7 +646,9 @@ EXPECTED = {
     # -0.09R) and its target_alt no better, so neither of those earns a
     # recording bump yet.
     "regimeread": "regimeread-v0.2-draft",
-    "htfread": "htfread-v0.2-draft",
+    # htfread-v0.3: reads liquidity facts directly; re-derives under the
+    # new generation with no rule change of its own.
+    "htfread": "htfread-v0.3-draft",
     # 2026-09-04: the window read the operator described (§26/§27). Locked
     # from birth; graded at analysis time and against the golden labels
     # before any playbook reads it.
@@ -782,7 +816,11 @@ CONSUMERS = {
               "setup", "breakout", "trend"),
     "structure": ("regime", "scale", "setup", "breakout", "bias", "regimeread"),
     "zone": ("setup", "htfread"),
-    "liquidity": ("setup", "htfread"),
+    # breakout was MISSING here. breakout.py stamps LIQ_VERSION into its
+    # own manifest, so a liquidity bump changes its payload — the same
+    # class of omission as the S53 note above, found the same way: by
+    # grepping for the constant rather than trusting the map.
+    "liquidity": ("setup", "htfread", "breakout"),
     "ranges": ("htfread",),
     # THE WIDENING. volatility had no consumers by design; regimeread reads its
     # ATR_REGIME and SQUEEZE facts into the phase. Today that costs nothing —
@@ -805,6 +843,12 @@ CONSUMERS = {
     "bias": ("trend", "breakout", "setup"),
     "setup": ("exec", "risk", "riskpaper", "scale"),
     "exec": ("risk", "riskpaper", "scale", "cooldown"),
+    # scale had NO entry at all, while execsim.expected_versions returns
+    # (SETUP_VERSION, SCALE_VERSION) — it reads scale facts. An ADD's
+    # setup_id embeds no scale tag, so a scale bump without exec leaves
+    # two generations sharing one setup_id: S37, which this file exists
+    # for. Stated here so the next scale bump cannot forget it.
+    "scale": ("exec",),
     "cooldown": ("risk", "riskpaper"),
     # CODE-level coupling, same class as "ma": setups.py calls
     # risk.size_order() at arming time and bakes units/risk_usd/notional into

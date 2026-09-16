@@ -47,7 +47,9 @@ from .liquidity import LIQ_VERSION
 from .ranges import RANGES_VERSION
 from .zones import ZONE_VERSION
 
-HTFREAD_VERSION = "htfread-v0.2-draft"
+HTFREAD_VERSION = "htfread-v0.3-draft"
+# v0.3: reads liquidity facts directly; reads liquidity pools (via setups) and re-derives under the new
+# generation; nothing about its own rules changed.
 # v0.2: the swing-v0.11 ATR cascade — reads zone, liquidity and ranges facts.
 #: How many rungs above the trade's timeframe are consulted for a zone.
 #: Two: the next timeframe up and the one above it (15m -> 1H, 4H). The

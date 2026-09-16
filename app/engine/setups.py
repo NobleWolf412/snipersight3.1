@@ -32,7 +32,12 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.22-draft"
+SETUP_VERSION = "setup-v0.23-draft"
+# v0.23: liq-v0.14 — pools now confirm with their last member, so targets
+# and the pool-gated playbooks change. THIS RESTARTS THE FORWARD RECORD:
+# `livegate` compares the baseline's strategy_version, and the count falls
+# to zero for the right reason — the rules that made the old record no
+# longer exist. Taken deliberately while that record stood at 2 of 100.
 # v0.22: the swing-v0.11 ATR cascade and chartread-v0.6. Every producer above this
 # engine moved, and the chart-eye read recorded on each setup is now a real
 # reading on the 23 markets where its levels used to be zero. No rule here

@@ -10,7 +10,11 @@ from decimal import Decimal
 from . import breakout, costs, execsim, importer, store, swings, venues
 
 TRIAL_VERSION = "forward-trial-v0.1-draft"
-DEPENDENCIES = {"breakout": "breakout-v0.7-draft", "exec": "exec-v0.27-draft",
+# Frozen on purpose, and re-pointed by hand when an input moves. A trial
+# whose stored config names other versions goes PAUSED rather than
+# repricing across the change (`active`), because its record is evidence
+# about the rules that made it. S54 moved breakout and exec.
+DEPENDENCIES = {"breakout": "breakout-v0.8-draft", "exec": "exec-v0.28-draft",
                 "swing": "swing-v0.11-draft"}
 STARTING_BALANCE = Decimal("10000")
 RISK_USD = Decimal("100")

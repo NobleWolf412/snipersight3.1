@@ -16,7 +16,16 @@ from . import store
 from .swings import compute_atr, SWING_VERSION, quote_ticks
 from .runlog import RunRecorder
 
-LIQ_VERSION = "liq-v0.13-draft"
+LIQ_VERSION = "liq-v0.14-draft"
+# v0.14: a liquidity pool is knowable only when its LAST MEMBER was, not when its
+# newest-by-market_time member was. `swings` sets confirmed_at to
+# max(confirmed_at, held_close_bar), which can run past a swing's own
+# market_time, so an earlier member could confirm later than the anchor and
+# the pool was stamped knowable before one of its inputs existed. `setups`
+# gates pools on confirmed_at <= as_of, so those were usable early: a target
+# available before the market made the swings defining it. 4 of 319 POOL
+# facts on the live store (VTHO-USD 1D by 19 days, PF_ARBUSD 1D by 3,
+# PF_XLMUSD 1D by 1, PF_XRPUSD 1H by 3 bars). market_time is unchanged.
 # v0.13: the swing-v0.11 ATR cascade — reads compute_atr and swing facts.
 # v0.12: input cascade from agg-v0.2 via swing-v0.10 — acknowledged-partial
 # 4H/1W buckets change the pivots pools cluster, with no rule change here.
@@ -98,9 +107,33 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 base = {"pool_id": pool_id, "side": side, "level": str(level),
                         "n_members": len(cluster),
                         "member_ts": sorted(member_ts), "state": "ACTIVE"}
+                # KNOWABLE ONLY WHEN ITS LAST MEMBER WAS. The cluster is
+                # ordered by `market_time`, so `s` is its newest member by when
+                # the MARKET made the swing — but `confirmed_at` is when the
+                # engine could first have known, and `swings` sets that to
+                # `max(confirmed_at, held_close_bar)`, which can run far past
+                # the swing's own market_time. An earlier member can therefore
+                # confirm LATER than the anchor, and stamping the anchor's
+                # confirmation made the pool knowable before one of its own
+                # inputs existed. `setups` gates pools on `confirmed_at <=
+                # as_of`, so those pools were usable early — a take-profit
+                # level available before the market had produced the swings
+                # that define it, which is §6 rule 3 and the thing that stops a
+                # backtest cheating.
+                #
+                # 4 of 319 POOL facts on the live store confirmed early under
+                # liq-v0.13 (VTHO-USD 1D by 19 days, PF_ARBUSD 1D by 3,
+                # PF_XLMUSD 1D by 1, PF_XRPUSD 1H by 3 bars). `market_time`
+                # stays the anchor's: the market made the pool when it made the
+                # last swing. Only knowability moves.
+                #
+                # quality's CAUSALITY_VIOLATION compares confirmed_at against
+                # market_time WITHIN one fact, so it is structurally blind to
+                # this and always was.
                 if store.insert_fact(con, symbol=symbol, tf=tf, kind="liquidity",
                                      market_time=s["market_time"],
-                                     confirmed_at=s["confirmed_at"],
+                                     confirmed_at=max(t["confirmed_at"]
+                                                      for t in cluster),
                                      algo_version=LIQ_VERSION,
                                      payload={**base, "event": "POOL"}):
                     n_pools += 1

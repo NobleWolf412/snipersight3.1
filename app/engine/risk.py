@@ -24,7 +24,9 @@ from .execsim import EXEC_VERSION, plan_versions as execsim_plan_versions
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.28-draft"
+RISK_VERSION = "risk-v0.29-draft"
+# v0.29: sizes setup-v0.23 against exec-v0.28 and replays the account from
+# those facts. No sizing rule changed.
 # v0.28: the swing-v0.11 ATR cascade — the account is replayed from setup, exec and
 # cooldown facts, all of which moved. NO sizing rule changed and
 # MAX_CONCURRENT is deliberately untouched; size_order does not read the
