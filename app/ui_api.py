@@ -110,6 +110,35 @@ def trade_rows(con, archive=False):
     return out
 
 
+def actionable(row, now=None):
+    """Can the operator act on this row RIGHT NOW.
+
+    One definition, because this file had three and they disagreed. The
+    `/opportunities` count and the Ready filter asked for state plus
+    eligibility plus finite positive prices plus an unexpired entry window;
+    `progress_label` and the sort order asked for `state == "READY"` alone; and
+    `/home` asked for state plus eligibility. So a setup whose entry window had
+    closed — the ordinary case, since `state` is computed when the scanner runs
+    and the window is checked when the request arrives — was badged "Ready to
+    trade", sorted to the top of the list, and given a "Review trade" button,
+    while the Ready tab beside it said there was nothing ready and the count
+    read zero.
+
+    Expiry is why this cannot be answered at scan time: it is a question about
+    the moment someone looks.
+    """
+    now = int(time.time()) if now is None else now
+    setup = row.get("setup") or {}
+    try:
+        prices = [Decimal(str(v)) for v in (setup.get("entry"), setup.get("stop"),
+                                            (setup.get("targets") or [None])[0])]
+        return (row.get("state") == "READY" and bool(row.get("eligible"))
+                and all(v.is_finite() and v > 0 for v in prices)
+                and int(setup.get("expires_at") or 0) > now)
+    except (ArithmeticError, TypeError, ValueError):
+        return False
+
+
 def opportunity_rows(con, search="", state="", domain="PAPER"):
     rows = opportunities.list_candidates(con, domain=domain, include_history=(domain == "RESEARCH"), show_real_exposure=False)
     if search:
@@ -140,9 +169,14 @@ def opportunity_rows(con, search="", state="", domain="PAPER"):
             row.setdefault("economics", {})["distance_atr"] = recorded_distance
         row["progress_stage"] = ("confirmation" if evidence.get("state") == "CONFIRMING" else
                                  "price" if evidence.get("state") == "FORMING" else "watching")
-        row["progress_label"] = ("Ready to trade" if row["state"] == "READY" else
-                                 "Waiting for confirmation" if row["progress_stage"] == "confirmation" else
-                                 "Waiting for price" if row["progress_stage"] == "price" else "Developing setup")
+        # The badge the cockpit renders, and the button beside it. It must
+        # agree with the Ready filter and the count — see `actionable`.
+        row["actionable"] = actionable(row)
+        row["progress_label"] = (
+            "Ready to trade" if row["actionable"] else
+            "Entry window closed" if row["state"] == "READY" else
+            "Waiting for confirmation" if row["progress_stage"] == "confirmation" else
+            "Waiting for price" if row["progress_stage"] == "price" else "Developing setup")
         row["confirmation_deadline"] = evidence.get("confirm_deadline_ts")
         row["cancel_reason"] = evidence.get("cancel_reason")
         if domain == "RESEARCH":
@@ -198,7 +232,7 @@ def home(workspace: str = "CRYPTO", epoch_id: str | None = None):
         rows = trade_rows(con)
         return {"context": context_model(con), "positions": [r for r in rows if r["active"]],
                 "recent": [r for r in rows if r["closed_at"] is not None][:5],
-                "opportunities": [row for row in opportunity_rows(con) if row["state"] == "READY" and row.get("eligible")][:5]}
+                "opportunities": [row for row in opportunity_rows(con) if actionable(row)][:5]}
 
 
 @router.get("/opportunities")
@@ -212,12 +246,7 @@ def opportunity_list(workspace: str = "CRYPTO", search: str = "", state: str = "
         if sort not in ("progress", "newest", "distance"):
             raise HTTPException(400, "Unknown opportunity sort")
         now = int(time.time())
-        def ready(row):
-            try:
-                values = [Decimal(str(v)) for v in (row["setup"].get("entry"), row["setup"].get("stop"), (row["setup"].get("targets") or [None])[0])]
-                return row["state"] == "READY" and bool(row.get("eligible")) and all(v.is_finite() and v > 0 for v in values) and int(row["setup"].get("expires_at") or 0) > now
-            except (ArithmeticError, TypeError, ValueError):
-                return False
+        ready = lambda row: actionable(row, now)
         counts = {"ready": sum(ready(r) for r in rows), "watching": sum(r["state"] in ("FORMING", "WATCHING") for r in rows)}
         if group == "ready":
             rows = [r for r in rows if ready(r)]
@@ -233,7 +262,9 @@ def opportunity_list(workspace: str = "CRYPTO", search: str = "", state: str = "
                     distance = Decimal("Infinity")
             except (ArithmeticError, TypeError, ValueError):
                 distance = Decimal("Infinity")
-            stage = 0 if row["state"] == "READY" else {"confirmation": 1, "price": 2}.get(row.get("progress_stage"), 3)
+            # `ready`, not `state`: a row the Ready tab excludes must not be
+            # sorted above the setups that are genuinely actionable.
+            stage = 0 if ready(row) else {"confirmation": 1, "price": 2}.get(row.get("progress_stage"), 3)
             newest = -int(setup.get("confirmed_at") or 0)
             identity = (setup["symbol"], setup["timeframe"], setup["setup_id"])
             return ((newest, stage, distance) if sort == "newest" else (distance, stage, newest) if sort == "distance" else (stage, distance, newest)) + identity

@@ -65,8 +65,20 @@ OPERATIONAL_EXPECTED = {
     # order on a market that left the universe lost its candles and a 100-BAR
     # timeout had no bars to count. `execution.paper_open_symbols` is now the
     # one authority both this roster and `quality.unsafe_to_retire` read.
-    "live": "live-v0.9-draft",
+    # live-v0.10: the cycle runs the defended-zone stop study (552e68a) —
+    # activation before setups are generated, settlement after the paper
+    # book, and its unresolved trades join the import pins so a study arm
+    # keeps the candles it needs. The constant moved in that commit with
+    # no `# v0.10:` note beside it in live.py; this is the reason, read
+    # off the diff.
+    "live": "live-v0.10-draft",
     "stopstudy": "stop-study-v0.1-draft",
+    # Writes its own `zone_study*` ledger and nothing else — no account
+    # order, no fact under another engine's tag. Locked for the reason
+    # the other studies are: it freezes DEPENDENCIES and pauses rather
+    # than repricing across a rule change, so the tag is what says which
+    # rules a stored comparison was made under.
+    "zonestudy": "zone-study-v0.1-draft",
     "forwardtrial": "forward-trial-v0.1-draft",
     # Not a fact producer: it reads `paper_positions` and the PAPER outbox and
     # returns an account. Locked anyway, for the reason `agg` is — it sits
@@ -235,11 +247,12 @@ OPERATIONAL_EXPECTED = {
 
 
 def operational_versions():
-    from engine import opportunities, paperbook, shared_account, forwardtrial, stopstudy
+    from engine import opportunities, paperbook, shared_account, forwardtrial, stopstudy, zonestudy
     return {
         "live": live.LIVE_VERSION,
         "forwardtrial": forwardtrial.TRIAL_VERSION,
         "stopstudy": stopstudy.STOP_STUDY_VERSION,
+        "zonestudy": zonestudy.ZONE_STUDY_VERSION,
         "paperbook": paperbook.PAPERBOOK_VERSION,
         "contracts": contracts.CONTRACT_VERSION,
         "automation": automation.AUTOMATION_VERSION,
@@ -394,6 +407,9 @@ ATR_CONSUMERS = (
     "abtest", "breakout", "chartread", "execsim", "fvg", "liquidity", "ma",
     "manual", "momentum", "ranges", "regimeread", "scalein", "setups",
     "structure", "trend", "volatility", "volume", "zones", "shared_account", "forwardtrial", "stopstudy",
+    # Imports `swings.compute_atr` and writes facts, so an ATR rule change
+    # moves its output without touching a version constant it imports.
+    "zonestudy",
 )
 
 

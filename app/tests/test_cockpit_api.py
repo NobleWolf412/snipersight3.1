@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import server
+import ui_api
 from engine import automation, manual, shared_account, store
 from tests.test_shared_account import bot_plan
 
@@ -191,3 +192,78 @@ def test_ready_rejects_expired_and_nonfinite_plans_and_distance_zero_is_known(co
         data=client.get('/api/ui/v1/opportunities?group=ready&sort=distance').json()
         assert data['total']==4 and data['counts']['ready']==4
         assert data['items'][0]['setup']['setup_id']=='valid'
+
+
+def _row(**over):
+    """A read-model row in the shape `actionable` reads."""
+    row = {"state": "READY", "eligible": True, "progress_stage": "watching",
+           "setup": {"entry": "100", "stop": "98", "targets": ["104"],
+                     "expires_at": 4102444800}}
+    row.update(over)
+    return row
+
+
+def test_one_definition_of_ready_reaches_every_surface():
+    """The badge, the button, the count, the filter and the sort must agree.
+
+    This file grew three definitions. The count and the Ready filter asked for
+    state + eligibility + finite positive prices + an unexpired window;
+    `progress_label` and the sort asked for `state == "READY"` alone; `/home`
+    asked for state + eligibility.
+
+    An expired setup is the ordinary case of the disagreement, because `state`
+    is computed when the scanner runs and the entry window is checked when the
+    request arrives. It was badged "Ready to trade", sorted to the top, and
+    given a "Review trade" button, while the Ready tab beside it was empty and
+    the count read zero.
+    """
+    now = 1_700_000_000
+
+    assert ui_api.actionable(_row(), now)
+
+    # Each half of the predicate, on its own, must take the row out.
+    expired = _row(setup={**_row()["setup"], "expires_at": now - 1})
+    assert not ui_api.actionable(expired, now), "an entry window that closed"
+    assert not ui_api.actionable(_row(eligible=False), now), "not eligible"
+    assert not ui_api.actionable(_row(state="FORMING"), now), "not READY"
+    assert not ui_api.actionable(
+        _row(setup={**_row()["setup"], "stop": "0"}), now), "a stop of zero"
+    assert not ui_api.actionable(
+        _row(setup={**_row()["setup"], "entry": "not a price"}), now), "junk"
+
+
+def test_an_expired_setup_is_never_badged_ready(cockpit):
+    """The label is what the operator reads, and it must not invite an action
+    the Ready tab says is unavailable."""
+    client, con = cockpit
+    rows = ui_api.opportunity_rows(con)
+    for row in rows:
+        if not row["actionable"]:
+            assert row["progress_label"] != "Ready to trade", (
+                f"{row['setup']['symbol']} is labelled ready but the Ready "
+                f"filter and the count both exclude it")
+        else:
+            assert row["state"] == "READY"
+
+
+def test_the_label_and_the_count_cannot_drift_apart():
+    """Derived from the source: every reader must go through `actionable`.
+
+    A list of the four call sites would not survive the fifth, so this asserts
+    the shape instead — no surface may re-test `state == "READY"` to decide
+    whether the operator can act.
+    """
+    import inspect
+    import re
+
+    src = inspect.getsource(ui_api)
+    # The only legitimate `state == "READY"` left is inside `actionable` itself
+    # and the label's "Entry window closed" branch, which distinguishes an
+    # expired READY row from one that never got there.
+    hits = [src.count("\n", 0, m.start()) + 1
+            for m in re.finditer(r'\["state"\]\s*==\s*"READY"|'
+                                 r'\.get\("state"\)\s*==\s*"READY"', src)]
+    assert len(hits) <= 2, (
+        f"{len(hits)} places test state == READY directly (lines {hits}); "
+        f"the question 'can the operator act on this' has one answer and it "
+        f"is `actionable`")
