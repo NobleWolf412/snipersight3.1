@@ -1468,8 +1468,12 @@
     /* The verdict is a claim; the trace is its evidence. SSTracer has existed
        since Wave 3.5 and NOTHING opened it — a drawer that answers "why did
        this trade / why was this refused" gate by gate, wired to no click. */
-    box.querySelectorAll('[data-trace],button[data-why]').forEach(d => {
-      const id = d.dataset.trace || d.dataset.why;
+    /* `button[data-why]` was half of this selector and nothing in static/
+       has ever emitted that attribute, so that half matched nothing. Attribute
+       selectors are exact; a dead one costs nothing until someone reads it as
+       evidence the feature exists. `[data-trace]` is the live half. */
+    box.querySelectorAll('[data-trace]').forEach(d => {
+      const id = d.dataset.trace;
       if(d.dataset.wired || !id) return;
       d.dataset.wired = '1';
       if(!d.matches('button')) activatable(d);
@@ -3382,7 +3386,15 @@ weighed in. Name the facts you used.`;
        Said here, in the chip's title and on Results, and nowhere re-derived. */
     const rb = p.rebuild || {};
     const rebuilding = !!rb.active;
-    $('equityChip').title = `account equity (paper) — start ${money(p.start_equity)}, ` +
+    /* NAMES THE BOOK. This read "account equity (paper)", which is the paper
+       ACCOUNT's phrase — and the number is the research replay's, as the
+       comment above already says. The Balance tile a few hundred lines down
+       shows the real one from `account.paper`, so the two sat on the same
+       screen with the replay wearing the account's label. Rule 9 is about one
+       authority per number; this is the other half of it — a number must say
+       which book it is from. */
+    $('equityChip').title = `strategy replay equity (simulated, not the paper ` +
+      `account) — start ${money(p.start_equity)}, ` +
       `open risk ${money(p.open_risk_usd || 0)}` +
       (rebuilding ? ` — PROVISIONAL: the book is being rebuilt under ${rb.version} ` +
                     `(${rb.done} of ${rb.total} market/timeframes done)` : '');
@@ -4949,23 +4961,25 @@ weighed in. Name the facts you used.`;
   });
 
   document.addEventListener('click', async e => {
-    const save = e.target.closest('[data-credsave]');
+    /* `[data-credsave]` was here too and nothing emits it — the per-field Save
+       was replaced by the bulk `[data-credsaveall]` button, which has its own
+       handler above, and this half of the listener has matched nothing since.
+       `[data-credclear]` IS emitted, so only the dead half goes. */
     const clr = e.target.closest('[data-credclear]');
-    if(!save && !clr) return;
-    const key = (save || clr).dataset.credsave || (save || clr).dataset.credclear;
+    if(!clr) return;
+    const key = clr.dataset.credclear;
     const [venue, field] = key.split('|');
     const input = document.querySelector(`[data-cred="${key}"]`);
     try{
-      const body = clr ? {venue, field, clear: true}
-                       : {venue, field, value: input ? input.value : ''};
       const r = await fetch('/api/credentials', {method:'POST',
-        headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({venue, field, clear: true})});
       const d = await r.json().catch(() => ({}));
       if(!r.ok) throw new Error(d.detail || ('credentials → ' + r.status));
       if(input) input.value = '';        // never leave a secret in the DOM
       window.SSData.invalidate('/api/credentials');
       await loadCredentials();
-    }catch(err){ toast('Could not save credential: ' + err.message, 'bad'); }
+    }catch(err){ toast('Could not clear credential: ' + err.message, 'bad'); }
   });
 
   /* where candidates die, stage by stage — the operator's debugging view */

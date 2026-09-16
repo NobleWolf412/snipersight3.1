@@ -20,7 +20,19 @@ from .contracts import (DecisionReason, EntryRecommendation, ExecutionDomain,
                         to_wire)
 
 
-OPPORTUNITY_VERSION = "opportunity-v0.8-draft"
+OPPORTUNITY_VERSION = "opportunity-v0.9-draft"
+# v0.9: the private ENTRY_* outbox states are mapped. `monitor_private` writes
+# ENTRY_FILLED / ENTRY_CANCELLED / ENTRY_CANCELED / ENTRY_REJECTED /
+# ENTRY_EXPIRED, and `sync_manual` writes "CANCELLED"; none were in
+# `_OUTBOX_LIFECYCLE`, so they fell through the unmapped branch, which logs and
+# `continue`s. That returns NO RECORD — and under v0.8's own rule the absence
+# of a record means the domain has not acted, so the setup read READY again
+# after the venue had already filled or refused its entry. The state a setup
+# reports changes, which is what earns the tag.
+#
+# TESTNET-shaped today (mainnet routing is build-locked and PAPER never writes
+# these), which is why it cost warnings rather than orders. It becomes a
+# re-dispatch the day the lock comes off, so it is fixed while it is cheap.
 # v0.8: lifecycle belongs to ONE execution domain, and the research simulator
 # is no longer any domain's authority but its own.
 #
@@ -566,6 +578,24 @@ _OUTBOX_LIFECYCLE = {
     "RISK_REJECTED": OpportunityState.BLOCKED,
     "HELD_OFF": OpportunityState.BLOCKED,
     "SUBMIT_FAILED": OpportunityState.BLOCKED,
+    # THE PRIVATE ENTRY STATES, which were absent. `monitor_private` writes
+    # every one of these (execution.py), and an unmapped state falls through
+    # the `continue` below — the record is treated as ABSENT, and absence means
+    # "this domain has not acted", so the setup reads READY again after the
+    # venue has already filled or refused its entry. A filled entry reading as
+    # ready-to-trade is the worst of them.
+    "ENTRY_FILLED": OpportunityState.POSITION_OPEN,
+    "ENTRY_CANCELLED": OpportunityState.CANCELLED,
+    "ENTRY_CANCELED": OpportunityState.CANCELLED,
+    "ENTRY_EXPIRED": OpportunityState.EXPIRED,
+    # A venue refusal is the domain acting and being declined, same rung as
+    # RISK_REJECTED above — not a cancellation the operator chose.
+    "ENTRY_REJECTED": OpportunityState.BLOCKED,
+    # `shared_account.sync_manual` writes this spelling into the same column.
+    # Harmless today only because `manual:` setup ids never match a setup fact,
+    # so it cost a warning per read-model call rather than a wrong state.
+    "CANCELLED": OpportunityState.CANCELLED,
+    "CANCELED": OpportunityState.CANCELLED,
 }
 
 #: managed_positions speaks for a REAL position, outranking the outbox's

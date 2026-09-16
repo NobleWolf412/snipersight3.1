@@ -275,8 +275,18 @@ async function home(background=false){const data=await read('home','home');if(!d
 
 function botActivity(data,detail=false){
   const scan=data.scanner||{},fresh=scan.state==='SCANNING'&&Number.isFinite(scan.age_s)&&scan.age_s<90;
-  const stage=String(scan.stage||''),progress=stage.match(/\((\d+)\/(\d+)\)/),market=stage.match(/^(?:import|engines|aggregate|manual|resolve pinned) ([^ (]+)/)?.[1];
-  const phases=[['import','Updating prices'],['aggregate','Building candles'],['engines','Checking strategies'],['autonomous','Checking new orders'],['paper risk','Checking paper trades'],['risk','Checking account risk'],['manual','Checking your orders'],['resolve pinned','Checking tracked trades'],['audit','Checking price data'],['retention','Maintaining price history'],['regrade','Reviewing strategy results'],['idle','Waiting for the next scan'],['sleep','Waiting for the next scan']];
+  /* The stage string is free text from live.py's heartbeat and this panel
+     scrapes it, so EVERY new `_beat` phrase silently falls through to the
+     generic line until it is listed here. 5edf9cb added two and neither was:
+     the operator saw "Working through the scan" twice a scan. `import
+     reference X` is worse than missing — the market regex captured the word
+     `reference` and the panel read "Current market: reference".
+
+     So: `import reference` is matched BEFORE `import` (first match wins), and
+     the market regex refuses to treat it as a market name. `sleep` is gone —
+     live.py only ever writes `idle`. */
+  const stage=String(scan.stage||''),progress=stage.match(/\((\d+)\/(\d+)\)/),market=stage.match(/^(?:import|engines|aggregate|manual|resolve pinned|repair) (?!reference\b)([^ (]+)/)?.[1];
+  const phases=[['import reference','Updating reference prices'],['import','Updating prices'],['aggregate','Building candles'],['engines','Checking strategies'],['autonomous','Checking new orders'],['paper risk','Checking paper trades'],['risk','Checking account risk'],['manual','Checking your orders'],['resolve pinned','Checking tracked trades'],['forward strategy trial','Running the strategy trial'],['stop comparison','Comparing stop styles'],['universe','Refreshing the market list'],['repair','Repairing price history'],['drift','Checking for price drift'],['audit','Checking price data'],['retention','Maintaining price history'],['regrade','Reviewing strategy results'],['idle','Waiting for the next scan']];
   const task=phases.find(([prefix])=>stage.startsWith(prefix))?.[1]||'Working through the scan';
   const title=fresh?task:scan.state==='OFFLINE'?'Scanner not reporting':'Scanner update overdue';
   const mode=data.automation||{},paused=mode.halted||context.state==='DRAINING',off=mode.mode==='OFF';

@@ -141,7 +141,12 @@ OPERATIONAL_EXPECTED = {
     # a later edit must not undo: a domain's routing state comes from that
     # domain's own records, and the absence of a record means that domain has
     # not acted — never a reason to consult another one.
-    "opportunities": "opportunity-v0.8-draft",
+    # opportunity-v0.9: the private ENTRY_* states and sync_manual's
+    # "CANCELLED" were absent from _OUTBOX_LIFECYCLE, so they hit the unmapped
+    # branch and returned NO RECORD — which under the v0.8 rule above means
+    # "this domain has not acted", and the setup read READY again after the
+    # venue had filled or refused its entry.
+    "opportunities": "opportunity-v0.9-draft",
     # quality-v0.5: staleness floored at 30 minutes. 2 x tf on a 5m series is
     # ten minutes, and a scan cycle is eleven to twelve, so every 5m feed was
     # DEGRADED near the end of every cycle and healed on the next import — the

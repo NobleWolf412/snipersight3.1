@@ -201,3 +201,58 @@ def test_summary_separates_ready_entries_from_forming_progress():
     result = opportunities.summary([{"state": "FORMING"}])
     assert result["actionable"] == 0
     assert result["narrative"] == "1 setup is forming; no entry is ready."
+
+
+def test_every_outbox_state_a_writer_can_produce_is_mapped():
+    """Derived from the WRITERS, not listed by hand.
+
+    `_OUTBOX_LIFECYCLE` is the lifecycle authority for a dispatched intent, and
+    an unmapped state hits the `continue` in `_outbox_records` — which returns
+    NO RECORD. Under opportunity-v0.8's rule the absence of a record means the
+    domain has not acted, so a setup whose venue entry had already FILLED read
+    READY again and was eligible to be dispatched a second time.
+
+    Six states were missing: the five `ENTRY_*` that `monitor_private` writes
+    and the `"CANCELLED"` that `shared_account.sync_manual` writes. A hand-kept
+    list is what let them drift apart in the first place, so this reads the
+    string literals out of the writers' own source.
+    """
+    import inspect
+    import re
+
+    from engine import execution, shared_account
+
+    written = set()
+    for module in (execution, shared_account):
+        src = inspect.getsource(module)
+        # A literal handed to the outbox event writer. The lookbehind keeps
+        # `_audit_event` out — that writes the audit trail, a different table
+        # with its own vocabulary (EXPIRY_CANCELLED and friends).
+        written |= set(re.findall(
+            r'(?<![\w])_?event\s*\(\s*\w+\s*,\s*\w+\s*,\s*"([A-Z][A-Z_]{3,})"',
+            src))
+        written |= set(re.findall(r'next_state\s*=\s*"([A-Z][A-Z_]{3,})"', src))
+        # Direct UPDATEs, scoped to the outbox — `account_epochs` has its own
+        # `state` column whose values (OPEN/DRAINING/SEALED) are not lifecycle.
+        for stmt in re.findall(r'UPDATE execution_outbox[^"\']*', src):
+            written |= set(re.findall(r"state\s*=\s*'([A-Z][A-Z_]{3,})'", stmt))
+
+    # `next_state = "ENTRY_" + status` builds its name at runtime; the five it
+    # can produce are asserted by name below.
+    written = {s for s in written if not s.endswith("_")}
+
+    unmapped = {s for s in written if s not in opportunities._OUTBOX_LIFECYCLE}
+    assert not unmapped, (
+        f"these outbox states have no lifecycle mapping, so a setup carrying "
+        f"one reads as 'this domain never acted' and returns to READY: "
+        f"{sorted(unmapped)}")
+
+    # The six that were actually missing, pinned by name so a future edit that
+    # drops one fails here rather than in the dispatcher.
+    for state in ("ENTRY_FILLED", "ENTRY_CANCELLED", "ENTRY_CANCELED",
+                  "ENTRY_REJECTED", "ENTRY_EXPIRED", "CANCELLED"):
+        assert state in opportunities._OUTBOX_LIFECYCLE, state
+    assert (opportunities._OUTBOX_LIFECYCLE["ENTRY_FILLED"]
+            is OpportunityState.POSITION_OPEN), (
+        "a filled venue entry is an OPEN POSITION — reading it as anything "
+        "dispatchable is how the same zone gets entered twice")

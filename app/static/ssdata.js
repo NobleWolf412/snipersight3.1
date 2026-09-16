@@ -177,7 +177,13 @@
     }
     return () => {
       e.subs.delete(fn);
-      if (!e.subs.size) { e.everyMs = 0; e.nextAt = 0; }   // stop polling for nobody
+      /* `when` is cleared with the cadence, and for the same reason. It is
+         stored per PATH, not per subscriber, so the last unsubscribe leaving
+         it behind hands a dead predicate to whoever subscribes next — and a
+         predicate that answers for a surface nobody is showing any more means
+         the new subscriber's panel silently never polls. Whichever module
+         subscribes next sets its own, or has none. */
+      if (!e.subs.size) { e.everyMs = 0; e.nextAt = 0; e.when = null; }
     };
   }
 
