@@ -188,5 +188,52 @@ class LiveGateCase(unittest.TestCase):
                          self.con.execute("SELECT COUNT(*) FROM facts").fetchone()[0])
 
 
+class TheGateGradesThePaperBook(unittest.TestCase):
+    """Criterion 5, learned the hard way: the bar must count the RIGHT BOOK.
+
+    `_live_gate_from` passed `/api/portfolio`'s journal, which is built from
+    `execsim.EXEC_VERSION` facts — the research replay. So "Forward trades
+    closed: N/100" counted trades a simulator took. Measured on the live store
+    2026-09-15: 1030 replay exec facts at the current version against 3 paper
+    orders ever placed. The bar could have reached 100 with the operator's book
+    completely untouched.
+
+    Nothing above catches it. Every test here hands `evaluate` a journal and
+    checks the arithmetic, which is right either way — the question is where
+    the journal came from, and that lives in the caller.
+    """
+
+    def test_the_payload_names_the_book_it_graded(self):
+        out = livegate.evaluate(None, journal=[], max_drawdown_pct=0.0,
+                                quality_status="PASS")
+        self.assertEqual(out["population"], "PAPER_ACCOUNT",
+                         "a stored verdict that does not say which book it is "
+                         "about is a verdict nobody can check")
+
+    def test_the_server_grades_the_paper_account_not_the_replay(self):
+        """Read the caller's source. The defect was never in this module.
+
+        A behavioural test would need the whole server and a store with both
+        books populated; the claim worth pinning is narrower and exact — the
+        gate's journal must come from the paper account's authority, and the
+        replay's version constant must not appear in that function at all.
+        """
+        import inspect
+        import server
+
+        # The BODY, not the docstring — which explains the defect and so names
+        # the very constant this asserts is absent.
+        whole = inspect.getsource(server._live_gate_from)
+        src = whole.split('"""')[2]
+        self.assertIn("shared_account.journal", src,
+                      "the gate must read the paper book's own authority")
+        self.assertNotIn("EXEC_VERSION", src,
+                         "execsim.EXEC_VERSION is the research replay — the "
+                         "book this gate must never grade")
+        self.assertNotIn('pf.get("journal")', src,
+                         "the portfolio journal IS the replay's; taking it "
+                         "back is how this defect returns")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -45,7 +45,14 @@ from __future__ import annotations
 
 from . import edgestats
 
-LIVEGATE_VERSION = "livegate-v0.2-draft"
+LIVEGATE_VERSION = "livegate-v0.3-draft"
+# v0.3: the gate grades the PAPER ACCOUNT, not the research replay. The caller
+# passed `/api/portfolio`'s journal, built from `execsim.EXEC_VERSION` facts, so
+# "Forward trades closed: N/100" counted simulated trades — 1030 replay execs
+# against 3 paper orders ever, on the live store 2026-09-15. A v0.2 reader of a
+# v0.3 payload is wrong about WHICH BOOK the number describes, which is the
+# manual-v0.3 argument verbatim, so the payload now names its `population`.
+# The count drops to the true one; that is the fix, not a regression.
 # v0.2: build_note copy changed — it now names the build lock rather than
 # claiming no order code exists (the outbox and signed testnet adapter shipped
 # 2026-08-27). No criterion moved, but the note is API-visible on two operator
@@ -99,13 +106,32 @@ def _drawdown_limit(con) -> float:
 
 def evaluate(con, *, journal: list[dict], max_drawdown_pct: float,
              quality_status: str | None, baseline: dict | None = None,
-             strategy_version: str | None = None) -> dict:
+             strategy_version: str | None = None,
+             population: str = "PAPER_ACCOUNT") -> dict:
     """Grade the forward record against the four criteria. Read-only.
 
-    `journal` is the CURRENT BASELINE's closed trades — the caller passes it
-    in rather than re-deriving it, because `/api/portfolio` already owns that
-    query and this must never be able to disagree with the equity curve shown
-    beside it (§8: never re-derive equity).
+    `journal` is the PAPER ACCOUNT's closed trades. The caller passes it in
+    rather than re-deriving it — §8, never re-derive equity — but WHICH BOOK it
+    comes from is this module's business, because the whole claim of the
+    docstring above is that "the operator moves the evidence bar by trading the
+    paper book".
+
+    It did not. The caller passed `/api/portfolio`'s journal, which is built
+    from `execsim.EXEC_VERSION` facts — the research replay. The bar counted
+    simulated trades. Measured on the live store 2026-09-15: 1030 replay exec
+    facts at the current version against 3 paper orders ever placed, so the
+    population this gate graded could climb toward 100 without the operator's
+    book doing anything at all. It read 1/100 at the time only because a risk
+    version bump had reset the join, which is luck, not a guard.
+
+    That matters beyond display: `automation.promotion_summary` turns `ready`
+    into `live_ready` -> `live_enabled` -> `dispatch_allowed`. It is inert
+    solely because `LIVE_ROUTER_BUILD_ENABLED` is False. This is the number
+    that decides when real money is at risk, so it grades the book that would
+    be risking it.
+
+    `population` is stamped on the payload for the same reason the criteria
+    are: a stored verdict must say which book it is about.
     """
     rs = [float(t["r_multiple"]) for t in journal
           if t.get("r_multiple") is not None]
@@ -212,6 +238,10 @@ def evaluate(con, *, journal: list[dict], max_drawdown_pct: float,
 
     return {
         "version": LIVEGATE_VERSION,
+        # WHOSE BOOK this verdict is about. A stored payload that does not say
+        # is a payload nobody can check, and the reason v0.3 exists is that the
+        # answer used to be the wrong one silently.
+        "population": population,
         "criteria": criteria,
         "met": met,
         "total": len(criteria),

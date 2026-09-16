@@ -182,7 +182,16 @@ OPERATIONAL_EXPECTED = {
     # operator surfaces, and it was never locked here before — a behaviour
     # change under an old livegate label failed no gate (cold audit,
     # 2026-08-31).
-    "livegate": "livegate-v0.2-draft",
+    # livegate-v0.3: the gate grades the PAPER ACCOUNT. It graded
+    # `/api/portfolio`'s journal, which is built from execsim.EXEC_VERSION
+    # facts — the research replay — so the bar that decides when this system
+    # may risk real money counted simulated trades: 1030 replay execs against
+    # 3 paper orders ever (live store, 2026-09-15). A v0.2 reader of a v0.3
+    # payload is wrong about WHICH BOOK the count describes, so the payload now
+    # carries `population`. The sample drops to the true number; that is the
+    # fix. `promotion_summary` reads `ready`, so this is a promotion consumer,
+    # not display.
+    "livegate": "livegate-v0.3-draft",
     # regrade-v0.1: writes durable strategy_regrades rows under this tag —
     # a reading that outlives retention deserves the same lock as any other
     # version-stamped durable state.

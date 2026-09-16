@@ -2776,15 +2776,39 @@ def _requested_domain(con, domain: str | None) -> str:
 
 
 def _live_gate_from(con, pf: dict) -> dict:
-    """Evaluate the gate from an already-authoritative portfolio payload."""
-    from engine import livegate
+    """Evaluate the gate against THE PAPER ACCOUNT.
+
+    `pf` is still the portfolio payload, and the quality status and baseline
+    come from it — but the journal and the drawdown do not. Those used to, and
+    `pf["journal"]` is built from `execsim.EXEC_VERSION` facts, so the bar that
+    decides when this system may risk real money was counting the research
+    replay's simulated trades. 1030 of them against 3 paper orders ever, on the
+    live store. `livegate`'s own docstring says the operator moves this bar by
+    trading the paper book; now they do.
+
+    `shared_account.journal` is that book's authority and is already epoch
+    scoped, and `paperbook.snapshot` owns its drawdown — so this reads two
+    authorities rather than re-deriving anything (§6 rule 9 is satisfied by
+    WHICH authority, not by how few of them there are).
+    """
+    from engine import livegate, paperbook
     q = con.execute("SELECT status FROM quality_runs "
                     "ORDER BY observed_at DESC LIMIT 1").fetchone()
+    gates = shared_account.gates_for_account(con)
+    max_dd = livegate._drawdown_limit(con)
+    book = paperbook.snapshot(con, gates=gates, max_drawdown_pct=max_dd)
+    # Closed trades only, and only ones that produced an R. A cancelled or
+    # risk-rejected order is terminal but is not a trade, and counting it would
+    # inflate the sample with rows that never took a position.
+    closed = [row for row in shared_account.journal(con)
+              if row["state"] in shared_account.TERMINAL
+              and row.get("r_multiple") is not None]
     return livegate.evaluate(
-        con, journal=pf.get("journal") or [],
-        max_drawdown_pct=pf.get("max_drawdown_pct") or 0.0,
+        con, journal=closed,
+        max_drawdown_pct=float(book.get("drawdown") or 0.0),
         quality_status=q[0] if q else None,
-        baseline=pf.get("baseline"), strategy_version=setups.SETUP_VERSION)
+        baseline=pf.get("baseline"), strategy_version=setups.SETUP_VERSION,
+        population="PAPER_ACCOUNT")
 
 
 def _automation_read(con, gate: dict | None = None) -> tuple[dict, dict]:
