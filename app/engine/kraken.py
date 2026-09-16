@@ -106,7 +106,17 @@ def _get(path: str, retries: int = RANK_RETRIES):
         try:
             req = urllib.request.Request(API + path, headers=_UA)
             with urllib.request.urlopen(req, timeout=25) as r:
-                return json.loads(r.read().decode())
+                # parse_float=Decimal keeps venue prices exact end to end.
+                # Without it the venue's own string goes through a float
+                # and comes back changed: measured on the live store,
+                # kraken-perp holds 324 prices written in scientific
+                # notation and values like 0.000004336000000000001, which
+                # is float noise the venue never sent. House rule 5 says
+                # no float touches a price; the schema storing TEXT is the
+                # enforcement, and a float that round-trips through str()
+                # walks straight past it.
+                return json.loads(r.read().decode(),
+                                  parse_float=Decimal)
         except urllib.error.HTTPError as exc:
             last = exc
             if exc.code not in RETRY_CODES:

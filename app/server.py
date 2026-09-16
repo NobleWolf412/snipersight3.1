@@ -2637,8 +2637,27 @@ def status():
         con.close()
 
 
+def _funding_hold_rate(symbol, tf, venue):
+    """Funding on notional over EXPECTED_HOLD_BARS of `tf`, or None.
+
+    Zero on spot by venue declaration (`funding_settlements_per_day` is 0), not
+    by a branch — the same way `costs.estimated_round_trip_cost` gets it.
+    """
+    if not symbol or not tf or tf not in importer.TF_SECONDS:
+        return None
+    try:
+        hours = (Decimal(costs.EXPECTED_HOLD_BARS * importer.TF_SECONDS[tf])
+                 / Decimal(3600))
+        return float(venues.funding_cost_rate(
+            symbol, costs.DEFAULT_FUNDING_RATE, hours))
+    except ValueError:
+        # Unknown symbol: the caller has already fallen back to spot constants
+        # and said so via `venue_fallback`. Spot pays no funding.
+        return 0.0
+
+
 @app.get("/api/trade-config")
-def trade_config(symbol: str | None = None):
+def trade_config(symbol: str | None = None, tf: str | None = None):
     """Sizing and cost constants for the order ticket, for THIS symbol's venue.
 
     The ticket must NOT hard-code these. When the cockpit re-derived a number
@@ -2676,6 +2695,15 @@ def trade_config(symbol: str | None = None):
     finally:
         con.close()
     return {
+        # WHICH SYMBOL THESE CONSTANTS DESCRIBE. Without it the client cannot
+        # tell a config for the market it asked about from one left over from
+        # the market before — and `chart.js` keeps module-level `cfg` across
+        # symbol changes, so a failed fetch left the ticket pricing the new
+        # market on the old one's venue. Spot against perp is 1x vs 10x and a
+        # 1.00% vs 0.07% round trip, which flips the sign of the net-R
+        # decision this endpoint's own docstring warns about. Same guard as
+        # `posKey` on the other side of the wire.
+        "symbol": symbol,
         "risk_pct": float(g["risk_pct"]),
         "max_total_risk_pct": float(g["max_total_open_risk_pct"]),
         # What the envelope actually lets you carry. With one slot and no
@@ -2712,7 +2740,21 @@ def trade_config(symbol: str | None = None):
                  # constant `costs.round_trip_cost` charges, and the ticket
                  # says so rather than implying a live venue quote.
                  "funding_rate": float(costs.DEFAULT_FUNDING_RATE),
-                 "funding_per_day": v.funding_settlements_per_day},
+                 "funding_per_day": v.funding_settlements_per_day,
+                 # WHAT HOLDING ACTUALLY COSTS, over the horizon the economics
+                 # gate assumes, computed HERE by the same function that gate
+                 # uses. The ticket's net-R omitted funding entirely and the
+                 # gap grows with hold time — unbounded, and always flattering.
+                 # Served as a finished rate rather than the pieces, so the
+                 # browser multiplies notional by it instead of counting
+                 # settlements: counting them there would be a second
+                 # implementation of `venues.funding_cost_rate`, and this file
+                 # already carries the one sanctioned duplicate (the
+                 # liquidation formula). Null without a timeframe, because the
+                 # horizon is EXPECTED_HOLD_BARS of a specific bar and
+                 # inventing one would be worse than charging nothing.
+                 "expected_hold_bars": costs.EXPECTED_HOLD_BARS,
+                 "funding_hold_rate": _funding_hold_rate(symbol, tf, v)},
         # Live order submission is locked until the forward record earns it.
         # The UI reads this rather than deciding for itself.
         "live_enabled": False,

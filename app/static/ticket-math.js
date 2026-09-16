@@ -159,12 +159,34 @@
     // That asymmetry is what sank the intraday book in backtest; it is shown,
     // not buried.
     if(cfg.cost){
-      const fees = notional * (cfg.cost.maker_rate + cfg.cost.taker_rate);
+      /* CHARGE WHAT THE ENGINE CHARGES. `rrNet` gates the note below, and it
+         had two errors pointing opposite ways.
+
+         The exit was billed at the TAKER rate. `rrNet` measures the reward at
+         TARGET, and a target is a resting limit: `execsim.settle` charges
+         `maker_rate if outcome == "TP" else taker_rate`. Over-charging is the
+         safe direction, but it is still not what the book will record.
+
+         Funding was not charged at all, and that one flatters without bound —
+         a perp holder pays every settlement, so the gap grows with hold time.
+         `funding_hold_rate` is served finished, computed by
+         `venues.funding_cost_rate` over the same EXPECTED_HOLD_BARS horizon
+         the economics gate assumes. Multiplying notional by a served rate is
+         reading an authority; counting settlements here would be a second
+         implementation of it, and this file already carries the one
+         sanctioned duplicate (the liquidation formula). Null when the server
+         had no timeframe to price against, and zero on spot by venue
+         declaration rather than by a branch here. */
+      const entryFee = notional * cfg.cost.maker_rate;
+      const exitFee = notional * cfg.cost.maker_rate;
+      const fees = entryFee + exitFee;
+      const funding = notional * (cfg.cost.funding_hold_rate || 0);
       out.fees = fees;
-      out.netUsd = rewU * size - fees;
+      out.funding = funding;
+      out.netUsd = rewU * size - fees - funding;
       out.rrNet = out.netUsd / riskUsd;
       if(out.rrNet < 1)
-        out.notes.push('After fees this risks more than it stands to make. ' +
+        out.notes.push('After costs this risks more than it stands to make. ' +
                        'The engine gate rejects trades like this for a reason.');
     }
 

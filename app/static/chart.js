@@ -1186,7 +1186,10 @@ window.SSChart = (() => {
        rejection in the console. */
     const draftReq = api(`/api/draft?symbol=${encodeURIComponent(sym)}&tf=${tf}`);
     const openReq = api(`/api/manual/open?symbol=${encodeURIComponent(sym)}&tf=${tf}`);
-    const cfgReq = api('/api/trade-config?symbol=' + encodeURIComponent(sym));
+    // `tf` too: funding is priced over EXPECTED_HOLD_BARS of THIS bar, so
+    // the server cannot compute the holding cost without it.
+    const cfgReq = api('/api/trade-config?symbol=' + encodeURIComponent(sym)
+                       + '&tf=' + encodeURIComponent(tf));
     draftReq.catch(() => {}); openReq.catch(() => {}); cfgReq.catch(() => {});
 
     let res;
@@ -1256,10 +1259,32 @@ window.SSChart = (() => {
     if(seq !== loadSeq){ noteStalledLoad(); return; }
     // Costs are per VENUE, so the config must be re-read per symbol. Spot fees
     // on a perp chart would flip the sign of the net-R decision.
+    /* A FAILED FETCH MUST NOT LEAVE THE PREVIOUS MARKET'S VENUE IN PLACE.
+       `cfg` is module state and was never nulled on a symbol change, so this
+       catch — whose comment used to claim "the ticket labels its source",
+       which nothing did — left the new market priced on the old one's venue.
+       Spot against perp is 1x vs 10x and a 1.00% vs 0.07% round trip, so the
+       ticket's own net-R note flips sign. That is the same class of failure
+       the block above calls the worst this file can produce, and `posKey`
+       twelve lines up exists for exactly it.
+
+       The server now echoes the symbol it priced, so a mismatch is
+       detectable rather than merely suspected. Either way the ticket loses
+       its constants and says so — a blank ticket is recoverable, a
+       confidently wrong one is not. */
     try{
-      cfg = await cfgReq;
+      const served = await cfgReq;
+      if(served && served.symbol && served.symbol !== sym)
+        throw new Error('served ' + served.symbol + ', asked for ' + sym);
+      cfg = served;
       setLock();
-    }catch(err){ /* keep whatever we had; the ticket labels its source */ }
+    }catch(err){
+      cfg = null;
+      setLock();
+      if(typeof window.SSToast === 'function')
+        window.SSToast('Could not price ' + sym + " \u2014 the order ticket is "
+          + 'unavailable until its venue constants load', 'warn');
+    }
     /* Loud fallback: the server says when it could not place this symbol on
        a venue and served spot constants (1x, no shorts, 1.00% round trip).
        Pricing an unknown market on those without saying so was the quiet
@@ -2638,8 +2663,16 @@ window.SSChart = (() => {
        resolution the operator chose to trade at — anything older and the bar
        they are planning against may already have closed somewhere else. */
     const stale = staleForThisTimeframe();
+    /* NO VENUE CONSTANTS, NO ARM. `cfg` carries the fee profile, the leverage
+       cap and the maintenance margin this ticket sizes and prices against; it
+       is null when the per-symbol fetch failed or answered for a different
+       market. It used to keep the PREVIOUS market's values in that case,
+       which priced a perp on spot fees and flipped the net-R sign. Nulling it
+       is only safe if nothing arms against the hole. */
+    const noVenue = !cfg;
     btn.disabled = badScale ? true
       : preferredSetupMissing ? true
+      : noVenue ? true
       : stale ? true
       : holding ? (!modified || !armable) : (!armable || !sym || !!dupe);
 
@@ -2654,6 +2687,14 @@ window.SSChart = (() => {
       let why = '', fixLabel = '', fixLev = null;
       if(preferredSetupMissing){
         why = 'The selected setup is no longer available. No substitute was loaded.';
+      }else if(noVenue){
+        /* Ahead of the plan verdicts for the same reason `stale` is: every one
+           of them is computed from constants this branch has established are
+           missing, so reporting a margin breach would send the operator to fix
+           the wrong thing. */
+        why = 'This market\u2019s fees and leverage limits could not be loaded, '
+            + 'so the ticket cannot size or price a trade on it. Reload, or '
+            + 'pick the market again.';
       }else if(stale){
         /* FIRST, ahead of every other reason. The others are verdicts about
            the plan — margin, geometry, a resting duplicate — and every one of

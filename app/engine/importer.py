@@ -30,7 +30,18 @@ def price_text(value) -> str:
     return s or "0"
 
 
-IMPORTER_VERSION = "importer-v0.8-draft"
+IMPORTER_VERSION = "importer-v0.9-draft"
+# v0.9: the Kraken and Phemex adapters parse JSON with parse_float=Decimal, as
+# `_get` here and the Binance and funding readers already did. Without it the
+# venue's own price string went through a float and came back CHANGED, and the
+# live store carries the evidence: kraken-perp holds 324 prices written in
+# scientific notation (`1e-05` where the venue sent `0.00001`) and values like
+# `0.000004336000000000001`, which is float noise no venue ever sent. Stored
+# price TEXT changes from here on, which is what earned v0.8 below — and it is
+# the same downstream reader at stake, since `swings.quote_ticks` takes the
+# tick off the exponent of the stored string and an `e`-notation bar is not
+# the number the venue quoted. Rows already stored keep what they have; an
+# append-only store can only promise the next bar.
 # v0.8: price text is stored without trailing fractional zeros. Kraken
 # occasionally serves `0.20036000000000000000` (PF_ADAUSD 5m, 2 of 13,556
 # bars; PF_PUMPUSD to 20 dp, PF_AAVEUSD to 15) and `swings.quote_ticks` reads

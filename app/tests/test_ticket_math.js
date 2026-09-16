@@ -91,7 +91,7 @@ t('fees are charged on notional, so a tight stop is fee-dominated', () => {
 
 t('fee maths matches the engine cost profile exactly', () => {
   const m = ticketMath({dir: 'LONG', entry: 100, tp: 130, sl: 90, equity: EQ, cfg: CFG});
-  assert.ok(near(m.fees, m.notional * (CFG.cost.maker_rate + CFG.cost.taker_rate)));
+  assert.ok(near(m.fees, m.notional * CFG.cost.maker_rate * 2));
   assert.ok(near(m.netUsd, m.rewardPerUnit * m.size - m.fees));
   assert.ok(near(m.rrNet, m.netUsd / m.riskUsd));
 });
@@ -414,6 +414,56 @@ t('a bad rung does not block the trade itself', () => {
   assert.strictEqual(m.blocks.length, 0,
     'blocks is the liquidation gate — a mistyped rung is not a plan that ' +
     'cannot be placed at all');
+});
+
+/* ---------- what the ticket charges -------------------------------------
+   `rrNet` gates the "after costs this risks more than it stands to make"
+   note, and it had two errors pointing opposite ways: the exit was billed at
+   the TAKER rate where the engine charges MAKER on a resting target
+   (execsim.settle: `maker_rate if outcome == "TP" else taker_rate`), and
+   funding was not charged at all. The second flatters without bound, because
+   a perp holder pays every settlement and the gap grows with hold time. */
+
+t('the exit is billed at the maker rate, as a resting target is', () => {
+  const m = ticketMath({dir: 'LONG', entry: 100, tp: 110, sl: 98,
+                        equity: EQ, cfg: CFG});
+  const notional = m.size * 100;
+  assert.ok(near(m.fees, notional * CFG.cost.maker_rate * 2),
+    'entry and exit both maker: the engine charges taker on the exit only ' +
+    'when the trade ends on a STOP, and rrNet measures reward at TARGET');
+});
+
+t('funding is charged on the served rate, not counted here', () => {
+  const perp = {...CFG, cost: {...CFG.cost, funding_hold_rate: 0.003,
+                               funding_per_day: 3}};
+  const withF = ticketMath({dir: 'LONG', entry: 100, tp: 110, sl: 98,
+                            equity: EQ, cfg: perp});
+  const without = ticketMath({dir: 'LONG', entry: 100, tp: 110, sl: 98,
+                              equity: EQ, cfg: CFG});
+  const notional = withF.size * 100;
+  assert.ok(near(withF.funding, notional * 0.003),
+    'notional times the rate the server computed — the browser must not ' +
+    'count settlements itself, that is venues.funding_cost_rate\'s job');
+  assert.ok(withF.netUsd < without.netUsd,
+    'charging funding must LOWER net; omitting it flattered every perp');
+  assert.ok(withF.rrNet < without.rrNet, 'and it must move rrNet with it');
+});
+
+t('a venue that pays no funding is unaffected', () => {
+  const spot = {...CFG, cost: {...CFG.cost, funding_hold_rate: 0}};
+  const m = ticketMath({dir: 'LONG', entry: 100, tp: 110, sl: 98,
+                        equity: EQ, cfg: spot});
+  assert.strictEqual(m.funding, 0,
+    'spot declares zero settlements a day, so the term vanishes by venue ' +
+    'declaration rather than by a branch');
+});
+
+t('a missing funding rate charges nothing rather than guessing', () => {
+  const m = ticketMath({dir: 'LONG', entry: 100, tp: 110, sl: 98,
+                        equity: EQ, cfg: CFG});
+  assert.strictEqual(m.funding, 0,
+    'the server sends no rate without a timeframe to price against, and an ' +
+    'invented horizon would be worse than charging nothing');
 });
 
 console.log(`\n${pass} passed`);
