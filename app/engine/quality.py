@@ -214,7 +214,8 @@ def _known_gap_buckets(con, sym: str, tf: str,
     what disarmed SEQUENCE_GAPS entirely.
 
     THE COUNT COULD NOT BE ATTRIBUTED, SO IT WAS SPENT ANYWHERE. Each row's
-    `n_gaps` is exact while its `gaps` list is truncated at import (gaps[:200]),
+    `n_gaps` is exact while its `gaps` list is truncated at import
+    (`importer` writes `gaps[:5000]`; older rows cap at 200),
     so a thin listing like EUL-USD 15m with 830 real voids has to be judged on
     the count — that part is right and stays. What was wrong is that the count
     was summed into one pool and then applied to the first N unexplained
