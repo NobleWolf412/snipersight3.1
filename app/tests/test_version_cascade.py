@@ -78,7 +78,13 @@ OPERATIONAL_EXPECTED = {
     # not the replay's. The rules and the evaluator stay shared.
     # paperbook-v0.4: the reservation count is `reserved_slots`, the name
     # `risk.decide` reads. One name for one thing.
-    "paperbook": "paperbook-v0.5-draft",
+    # paperbook-v0.6: the snapshot reports `max_drawdown_pct`, the worst
+    # peak-to-trough fall, measured whether or not the guardrail tripped.
+    # `drawdown` is a breach marker (None, then a dict) and cannot answer
+    # that; livegate read it as a number and therefore scored its drawdown
+    # criterion 0.00% on every healthy book, which made one of the four
+    # conditions on real-money routing unfailable. Durable output grew.
+    "paperbook": "paperbook-v0.6-draft",
     # contracts-v0.4: a RiskDecision states the equity basis its size is a
     # percentage of, and where that figure was read. Nothing converted the
     # ACCOUNT between the paper replay and a dispatched order.

@@ -404,5 +404,62 @@ class TheForwardBook(unittest.TestCase):
                         "it must be sized before the dispatcher reads it")
 
 
+class TheBookReportsHowFarItFell(unittest.TestCase):
+    """`drawdown` is a BREACH MARKER. `max_drawdown_pct` is the MEASUREMENT.
+
+    They are different questions and the gate needs the second one. `drawdown`
+    is None until the guardrail trips and a dict afterwards, so a caller
+    reading it as a number scores 0.00 on every healthy book and raises
+    TypeError the day it is not — and the caller was `livegate`'s third
+    criterion, one of the four conditions on real-money routing. A criterion
+    that cannot fail is not a criterion.
+    """
+
+    def test_it_measures_the_worst_fall_even_when_nothing_tripped(self):
+        con = _con(self)
+        # +200, then -500: peak 10,200, trough 9,700, so 500/10,200 = 4.90%.
+        for i, r in enumerate(("2", "-5")):
+            _intent(con, f"i{i}", f"s{i}", "100", state="PAPER_CLOSED")
+            _position(con, f"i{i}", state="CLOSED", closed_at=T0 + i * 3600, r=r)
+        book = paperbook.snapshot(con, max_drawdown_pct=50)
+
+        self.assertIsNone(book["drawdown"],
+                          "a 50% guardrail must not have tripped on a 4.9% fall")
+        self.assertEqual(Decimal(book["max_drawdown_pct"]), Decimal("4.90"),
+                         "the fall happened whether or not the limit noticed")
+
+    def test_a_book_that_only_rose_reports_no_drawdown(self):
+        con = _con(self)
+        _intent(con, "w", "sw", "100", state="PAPER_CLOSED")
+        _position(con, "w", state="CLOSED", closed_at=T0, r="3")
+        book = paperbook.snapshot(con, max_drawdown_pct=20)
+        self.assertEqual(Decimal(book["max_drawdown_pct"]), Decimal("0.00"))
+
+    def test_the_measurement_is_text_like_every_other_money_figure(self):
+        con = _con(self)
+        book = paperbook.snapshot(con, max_drawdown_pct=20)
+        self.assertIsInstance(book["max_drawdown_pct"], str,
+                              "prices and percentages live in this store as "
+                              "text so a float cannot survive a round trip")
+
+    def test_the_live_gate_criterion_actually_moves(self):
+        """The regression in one assertion: the criterion must respond to the
+        book. It read a constant 0.00 while `drawdown` was None, which is
+        every healthy book."""
+        from engine import livegate
+
+        shallow = livegate.evaluate(None, journal=[], max_drawdown_pct=1.0,
+                                    quality_status="PASS")
+        deep = livegate.evaluate(None, journal=[], max_drawdown_pct=99.0,
+                                 quality_status="PASS")
+        pick = lambda out: next(c for c in out["criteria"]
+                                if c["key"] == "drawdown")
+        self.assertTrue(pick(shallow)["pass"])
+        self.assertFalse(pick(deep)["pass"],
+                         "a 99% drawdown must fail the criterion, or it is "
+                         "not gating anything")
+        self.assertNotEqual(pick(shallow)["have"], pick(deep)["have"])
+
+
 if __name__ == "__main__":
     unittest.main()

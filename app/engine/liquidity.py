@@ -130,10 +130,10 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 # quality's CAUSALITY_VIOLATION compares confirmed_at against
                 # market_time WITHIN one fact, so it is structurally blind to
                 # this and always was.
+                pool_confirmed = max(t["confirmed_at"] for t in cluster)
                 if store.insert_fact(con, symbol=symbol, tf=tf, kind="liquidity",
                                      market_time=s["market_time"],
-                                     confirmed_at=max(t["confirmed_at"]
-                                                      for t in cluster),
+                                     confirmed_at=pool_confirmed,
                                      algo_version=LIQ_VERSION,
                                      payload={**base, "event": "POOL"}):
                     n_pools += 1
@@ -142,7 +142,16 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 for j in range(i + 1, len(candles)):
                     c = candles[j]
                     bar_close_ts = c["open_ts"] + tf_seconds
-                    if bar_close_ts <= s["confirmed_at"]:
+                    # THE SAME FLOOR THE POOL ITSELF USES. This read the
+                    # ANCHOR's `confirmed_at`, which was the pool's too until
+                    # the pool started confirming with its last member — and
+                    # then the two diverged, so a SWEEP or BROKEN event could
+                    # confirm BEFORE the pool it is an event about. `setups`
+                    # reads pools and their events on `confirmed_at`
+                    # independently, so the engine would have known a pool was
+                    # swept before it knew the pool existed. On the VTHO-USD 1D
+                    # case that opened a 19-day window.
+                    if bar_close_ts <= pool_confirmed:
                         continue
                     hi, lo, close = Decimal(c["high"]), Decimal(c["low"]), Decimal(c["close"])
                     tol = max(ticks[j], TOL_ATR * atr[j]) if atr[j] is not None else ticks[j]

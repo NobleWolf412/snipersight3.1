@@ -133,5 +133,54 @@ class LiquidityPoolCausality(unittest.TestCase):
                 f"{latest}")
 
 
+    def events(self):
+        out = []
+        for r in store.get_facts(self.con, "BTC-USD", TF, "liquidity",
+                                 liquidity.LIQ_VERSION):
+            p = json.loads(r["payload"])
+            if p.get("event") in ("SWEEP", "BROKEN"):
+                out.append({"event": p["event"], "confirmed_at": r["confirmed_at"]})
+        return out
+
+    def test_no_event_confirms_before_the_pool_it_describes(self):
+        """The half a pool-only check cannot see.
+
+        Moving the POOL's confirmation to its last member without moving the
+        event scan's floor leaves them disagreeing: the scan skipped bars
+        closing at or before the ANCHOR's confirmation, which is now earlier
+        than the pool's. `setups` reads pools and their SWEEP/BROKEN events on
+        `confirmed_at` independently, so the engine could know a pool was
+        swept before it knew the pool existed.
+        """
+        base = self.candles(80)
+        early_mt = base + 10 * TF_S
+        late_mt = base + 20 * TF_S
+        early_conf = base + 40 * TF_S      # the pool is not knowable until here
+        late_conf = base + 22 * TF_S       # the anchor, knowable much earlier
+
+        self.swing(early_mt, early_conf, Decimal("100.00"))
+        self.swing(late_mt, late_conf, Decimal("100.01"))
+
+        # A bar that sweeps the level in the window BETWEEN the anchor's
+        # confirmation and the pool's. Under the anchor floor this emitted a
+        # SWEEP; under the pool floor it cannot.
+        sweep_ts = base + 26 * TF_S
+        self.con.execute(
+            "UPDATE candles SET high=?, close=? WHERE symbol=? AND tf=? AND open_ts=?",
+            ("120", "100", "BTC-USD", TF, sweep_ts))
+        self.con.commit()
+
+        liquidity.run(self.con, "BTC-USD", TF, TF_S)
+
+        pools = self.pools()
+        self.assertEqual(len(pools), 1)
+        pool_confirmed = pools[0]["confirmed_at"]
+        for ev in self.events():
+            self.assertGreaterEqual(
+                ev["confirmed_at"], pool_confirmed,
+                f"a {ev['event']} confirmed at {ev['confirmed_at']}, before "
+                f"its own pool was knowable at {pool_confirmed}")
+
+
 if __name__ == "__main__":
     unittest.main()

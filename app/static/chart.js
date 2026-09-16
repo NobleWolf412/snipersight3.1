@@ -733,8 +733,19 @@ window.SSChart = (() => {
       (m.margin == null ? '' : row('margin posted', usd(m.margin) +
           (m.leverage > 1 ? ` at ${m.leverage}x` : ''))) +
       row('risk', m.riskUsd == null ? '—' : usd(m.riskUsd)) +
-      row('round-trip fees', m.fees == null ? '—' : usd(m.fees),
-          m.fees && m.riskUsd && m.fees > m.riskUsd * 0.3 ? 'warn' : '') +
+      row('round-trip fees', m.fees == null ? '—' : usd(m.fees)) +
+      /* FUNDING IS A COST AND IT IS SHOWN. `rrNet` subtracts it, and on a
+         Kraken 1D perp it is 2.40% of notional against 0.04% of fees — so a
+         ticket that displayed fees alone reported $4 of cost while the net
+         line below it took $244. The warning below moved to the TOTAL for the
+         same reason: on a long perp hold the fee half is the quiet half, and
+         a "costs are large" cue that tests it is silent exactly when it
+         matters most. Hidden on spot, where the venue declares no
+         settlements and the row would always read zero. */
+      (!m.funding ? '' : row('funding while held', usd(m.funding))) +
+      (m.fees == null ? '' : row('total cost', usd(m.fees + (m.funding || 0)),
+          m.riskUsd && (m.fees + (m.funding || 0)) > m.riskUsd * 0.3
+            ? 'warn' : '')) +
       row('net if target hits', m.netUsd == null ? '—' : usd(m.netUsd),
           m.netUsd > 0 ? 'good' : 'bad') +
       // A stop past the entry cannot lose. Say what it guarantees, because

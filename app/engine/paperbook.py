@@ -39,7 +39,14 @@ from decimal import Decimal
 from .contracts import AutomationMode
 
 
-PAPERBOOK_VERSION = "paperbook-v0.5-draft"
+PAPERBOOK_VERSION = "paperbook-v0.6-draft"
+# v0.6: the snapshot reports `max_drawdown_pct` — the worst peak-to-trough
+# fall, measured whether or not the guardrail tripped. `drawdown` is a
+# breach marker (None, then a dict) and cannot answer that question; the
+# live-readiness gate was reading it as a number and therefore scoring its
+# drawdown criterion 0.00% on every call, which made one of the four
+# conditions on real-money routing unfailable. Durable output grew, which
+# is what earns the bump.
 # v0.4: the reservation count is named `reserved_slots`, matching
 # `risk.decide`'s account contract exactly. A key that has to be translated
 # on the way into the rules is a rename waiting to be got wrong.
@@ -261,6 +268,14 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
     side_losses: dict[tuple, int] = {}
     halted_days: set[str] = set()
     drawdown: dict | None = None
+    # The WORST peak-to-trough fall the book has taken, whether or not the
+    # guardrail below ever tripped. `drawdown` is a breach marker — None until
+    # the limit is crossed, a dict after — so it cannot answer "how deep did
+    # this book go", and a caller that read it as a number got 0.00 every time
+    # until the day it got a dict. `livegate`'s drawdown criterion is that
+    # caller. Measured here because this is where the equity curve is walked;
+    # re-deriving it anywhere else would be a second authority for it.
+    max_dd = Decimal(0)
     dd_limit = Decimal(str(max_drawdown_pct or 0)) / Decimal(100)
     daily_loss_pct = (gates or {}).get("daily_loss_limit_pct")
     for trade in closed:
@@ -283,6 +298,8 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
         # catches a bad month that never trips it — a slow bleed of small
         # losses can drain the account without any single day breaching the
         # daily limit. Trips once and stays tripped, as the replay's does.
+        if peak > 0:
+            max_dd = max(max_dd, (peak - equity) / peak)
         if dd_limit > 0 and peak > 0 and drawdown is None:
             dd = (peak - equity) / peak
             if dd >= dd_limit:
@@ -333,6 +350,10 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
         "mode": mode.value,
         "halted_days": halted_days,
         "drawdown": drawdown,
+        #: Percent, as TEXT like every other money figure here. The
+        #: breach marker above says whether the guardrail tripped; this
+        #: says how far the book actually fell.
+        "max_drawdown_pct": str((max_dd * 100).quantize(Decimal("0.01"))),
         #: Re-entry locks this book earned itself, in the shape
         #: `cooldowns.blocked_at` evaluates.
         "cooldowns": _cooldowns(closed),

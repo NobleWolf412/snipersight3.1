@@ -2637,7 +2637,7 @@ def status():
         con.close()
 
 
-def _funding_hold_rate(symbol, tf, venue):
+def _funding_hold_rate(symbol, tf):
     """Funding on notional over EXPECTED_HOLD_BARS of `tf`, or None.
 
     Zero on spot by venue declaration (`funding_settlements_per_day` is 0), not
@@ -2754,7 +2754,7 @@ def trade_config(symbol: str | None = None, tf: str | None = None):
                  # horizon is EXPECTED_HOLD_BARS of a specific bar and
                  # inventing one would be worse than charging nothing.
                  "expected_hold_bars": costs.EXPECTED_HOLD_BARS,
-                 "funding_hold_rate": _funding_hold_rate(symbol, tf, v)},
+                 "funding_hold_rate": _funding_hold_rate(symbol, tf)},
         # Live order submission is locked until the forward record earns it.
         # The UI reads this rather than deciding for itself.
         "live_enabled": False,
@@ -2847,7 +2847,11 @@ def _live_gate_from(con, pf: dict) -> dict:
               and row.get("r_multiple") is not None]
     return livegate.evaluate(
         con, journal=closed,
-        max_drawdown_pct=float(book.get("drawdown") or 0.0),
+        # `drawdown` is a BREACH MARKER — None until the guardrail trips,
+        # a dict after — so reading it as a number scored this criterion
+        # 0.00% on every call and would have raised the day it tripped.
+        # `max_drawdown_pct` is the measurement.
+        max_drawdown_pct=float(book.get("max_drawdown_pct") or 0.0),
         quality_status=q[0] if q else None,
         baseline=pf.get("baseline"), strategy_version=setups.SETUP_VERSION,
         population="PAPER_ACCOUNT")
