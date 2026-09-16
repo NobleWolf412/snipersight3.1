@@ -74,6 +74,75 @@ class TestMarketQuality(QualityStoreCase):
             self.con, "BTC-USD", now=base + 6 * 3600)
         self.assertIn("SEQUENCE_GAPS", {c["code"] for c in checks})
 
+    def test_an_advancing_watermark_cannot_disarm_the_gap_blocker(self):
+        """THE BUDGET WAS A POOL, AND THE POOL HAD NO CEILING.
+
+        Acknowledged gaps were summed into one count and spent on the first N
+        unexplained buckets anywhere in the series. The only thing bounding it
+        was collapsing retries on `range_start`, which assumed a quiet tail is
+        retried from the same last stored candle. It is not: `live.py` imports
+        from MAX(open_ts)+gran, which advances every cycle, and
+        `ingest.backfill_history` re-imports from `history_floor(tf, now)`,
+        which slides with the wall clock and is re-run hourly for every warming
+        symbol. Starts proliferate instead of repeating — 4,054 distinct on
+        SOLUSDT 15m alone (live store, 2026-09-15) — so the budget grew without
+        bound and SEQUENCE_GAPS became unreachable by arithmetic on EVERY
+        series. That is the one blocker saying a hole is real and unhealable.
+
+        The fixture is that shape in miniature: many rows, each at its own
+        advancing start, each honestly acknowledging one quiet bucket it
+        actually spanned — and one genuine hole none of them covers. Under the
+        pooled budget the accumulated count swallowed the real hole. Attributed
+        per bucket, a row can only vouch for what lies inside its own
+        [range_start, range_end).
+        """
+        base = importer.PRE_2000
+        # A long quiet run, then a candle, then a REAL hole, then a candle.
+        quiet = 40
+        self.candle("1H", base)
+        self.candle("1H", base + (quiet + 1) * 3600)
+        self.candle("1H", base + (quiet + 4) * 3600)     # 2 unexplained buckets
+
+        for i in range(quiet):
+            start = base + i * 3600
+            self.con.execute(
+                "INSERT INTO import_log (symbol,tf,range_start,range_end,"
+                "n_candles,n_gaps,gaps,source,run_at,n_bad) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                ("BTC-USD", "1H", start, start + 3600, 0, 1, "[]",
+                 "coinbase", start, 0))
+        self.con.commit()
+
+        checks = quality.audit_market_inputs(
+            self.con, "BTC-USD", now=base + (quiet + 6) * 3600)
+        codes = {c["code"] for c in checks}
+        self.assertIn("SEQUENCE_GAPS", codes,
+                      f"{quiet} honest single-bucket acknowledgements, each on "
+                      f"its own advancing range_start, must not add up to "
+                      f"cover a hole none of them spanned")
+
+    def test_a_row_still_covers_the_buckets_it_actually_spanned(self):
+        """The other half: attribution must not turn honest acknowledgements
+        into false blockers. Truncation is real — `n_gaps` is exact while
+        `gaps` is cut at 200 — so a row that spans the holes and counts them
+        still vouches for them without naming them."""
+        base = importer.PRE_2000
+        self.candle("1H", base)
+        self.candle("1H", base + 4 * 3600)
+        self.con.execute(
+            "INSERT INTO import_log (symbol,tf,range_start,range_end,"
+            "n_candles,n_gaps,gaps,source,run_at,n_bad) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ("BTC-USD", "1H", base, base + 4 * 3600, 0, 3, "[]",
+             "coinbase", base + 4 * 3600, 0))
+        self.con.commit()
+        checks = quality.audit_market_inputs(
+            self.con, "BTC-USD", now=base + 6 * 3600)
+        codes = {c["code"] for c in checks}
+        self.assertNotIn("SEQUENCE_GAPS", codes,
+                         "a row spanning the holes and counting them covers "
+                         "them even though truncation left them unnamed")
+
     def test_final_candle_does_not_erase_prior_gap_acknowledgements(self):
         base = importer.PRE_2000
         self.candle("1H", base)

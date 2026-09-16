@@ -168,7 +168,15 @@ OPERATIONAL_EXPECTED = {
     # to the same generation as the `risk` rows it is checked against. One
     # half of that pair was already pinned; a loose other half compares two
     # generations on the first version bump.
-    "quality": "quality-v0.6-draft",
+    # quality-v0.7: acknowledged gaps are attributed to the import span that
+    # acknowledged them rather than pooled into a count. The old pool was
+    # bounded by collapsing retries on range_start, which assumed a quiet tail
+    # retries from the same stored candle; the watermark advances every cycle
+    # and the backfill floor slides hourly, so starts proliferated and the
+    # budget grew without bound. SEQUENCE_GAPS — one of two UNHEALABLE_HALT
+    # codes — was unreachable on every series. 0 series blocked before, 4 after
+    # (29 buckets), measured read-only on the live store before shipping.
+    "quality": "quality-v0.7-draft",
     # listings-v0.1: the venue product sweep, appended one fact per venue per
     # run. Locked from birth — quality's verdict now depends on it, and a
     # version nobody tracks until something reads it leaves its early facts

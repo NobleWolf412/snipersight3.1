@@ -17,7 +17,21 @@ from . import aggregator, importer, listings, venues
 # stale near the end of every cycle (measured: 640 s cycles vs a 600 s bar).
 STALE_FLOOR_S = 1800
 
-QUALITY_VERSION = "quality-v0.6-draft"
+QUALITY_VERSION = "quality-v0.7-draft"
+# v0.7: an acknowledged gap is attributed to the import span that acknowledged
+# it, instead of pooled into a count spent anywhere in the series. The pool was
+# bounded by collapsing retries on `range_start`, on the premise that a quiet
+# tail is retried from the same last stored candle — but `live.py` imports from
+# MAX(open_ts)+gran, which advances every cycle, and `ingest.backfill_history`
+# re-imports from `history_floor(tf, now)`, which slides with the wall clock
+# hourly for every warming symbol. So starts proliferated rather than repeating
+# (4,054 distinct on SOLUSDT 15m alone, live store 2026-09-15) and the budget
+# grew without bound: SEQUENCE_GAPS was unreachable by arithmetic on EVERY
+# series. Same store, different verdict, which is what earns the tag.
+#
+# Measured read-only before shipping: 0 series report SEQUENCE_GAPS today, 4 do
+# under this rule (CAP-USD 15m, LSETH-USD 15m, PENGU-USD 5m, PEPE-USD 5m), 29
+# buckets in total. Remediation is `ingest.reacknowledge_bucket` per hole.
 # v0.6: the ACCOUNTING reconciliation reads the account summary of the same
 # generation as the risk decisions it is checked against. Both halves of that
 # pair now pin to the active chain; the summary side was loose, which changed
@@ -171,47 +185,82 @@ def _current_versions():
             "order": (execsim.EXEC_VERSION,)}
 
 
-def _known_gap_buckets(con, sym: str, tf: str) -> tuple[set[int], int]:
+def _known_gap_buckets(con, sym: str, tf: str,
+                       missing: set[int] | None = None) -> tuple[set[int], set[int]]:
     """Gaps the importer acknowledged at import time (gap-honesty rule: gaps are
     logged, never fabricated). Coinbase legitimately omits a bucket when zero
     trades occurred in it — an acknowledged void is data, not corruption.
 
-    Returns (explicitly listed timestamps, acknowledged count after duplicate
-    retry chains are collapsed). The list is truncated at import (gaps[:200])
-    while n_gaps is exact, so a thin listing like EUL-USD 15m with 830 real
-    voids must be judged on the COUNT — otherwise truncation alone re-wedges
-    the fail-closed gate (regression seen 2026-07-26).
+    Returns (explicitly listed timestamps, buckets covered anonymously). BOTH
+    ARE SETS OF BUCKETS. The second used to be a scalar budget, and a scalar is
+    what disarmed SEQUENCE_GAPS entirely.
+
+    THE COUNT COULD NOT BE ATTRIBUTED, SO IT WAS SPENT ANYWHERE. Each row's
+    `n_gaps` is exact while its `gaps` list is truncated at import (gaps[:200]),
+    so a thin listing like EUL-USD 15m with 830 real voids has to be judged on
+    the count — that part is right and stays. What was wrong is that the count
+    was summed into one pool and then applied to the first N unexplained
+    buckets ANYWHERE in the series, regardless of which import span had
+    acknowledged them.
+
+    The collapse that was supposed to bound that pool keyed on `range_start`,
+    on the premise that "a quiet tail is retried every cycle from the same last
+    stored candle". That premise does not hold: `live.py` imports from
+    `MAX(open_ts) + gran`, which advances every cycle, and
+    `ingest.backfill_history` re-imports from `history_floor(tf, now)`, which
+    slides with the wall clock and is re-run hourly for every warming symbol.
+    So range_start proliferates instead of repeating — measured on the live
+    store 2026-09-15: 4,054 distinct starts on SOLUSDT 15m alone — and the
+    budget grew without bound. `SEQUENCE_GAPS` became unreachable by
+    arithmetic, on every series, which is the one blocker that says a hole is
+    real and the scanner cannot heal it.
+
+    So the coverage is ATTRIBUTED instead of counted. A row may only vouch for
+    buckets inside its own `[range_start, range_end)` — the column has always
+    been there — and each bucket is acknowledged once. The LSETH-USD lesson is
+    preserved exactly: every explicitly listed timestamp from every retry is
+    kept, because a later poll that finally receives a candle reports zero gaps
+    for its shortened tail while the empty buckets earlier polls proved remain
+    real (selecting only the final row erased 202 legitimate acknowledgements).
+
+    Measured before shipping, read-only against the live store: 0 series report
+    SEQUENCE_GAPS today, 4 do under this rule — CAP-USD 15m, LSETH-USD 15m,
+    PENGU-USD 5m, PEPE-USD 5m — for 29 buckets in total. Remediation is
+    `ingest.reacknowledge_bucket` per hole.
     """
     listed: set[int] = set()
-    # A quiet tail is retried every cycle from the same last stored candle.
-    # Summing every import_log row counted the same missing buckets again and
-    # again: LSETH-USD accumulated 17, then 18, then 19... for one expanding
-    # empty window.  That inflated anonymous budget could excuse a genuinely
-    # unexplained hole later. One range_start is one retry chain: retain its
-    # largest count, while preserving every explicitly listed timestamp.
-    # A new stored candle advances range_start, so genuinely disjoint import
-    # spans still add normally.
-    retry_chains: dict[int, int] = {}
+    rows: list[tuple[int, int | None, int, set[int]]] = []
     # range_start >= PRE_2000: the quarantined cold-start rows (importer.py)
     # hold ~2M fabricated gap entries each. This reader ingested their counts
     # into its budget until 2026-08-09 — harmless only because those symbols'
     # real voids dwarfed nothing, but a budget built on fabricated numbers is
     # the exact defect the quarantine exists to contain.
-    for start, g, n in con.execute(
-            "SELECT range_start, gaps, n_gaps FROM import_log "
+    for start, g, n, end in con.execute(
+            "SELECT range_start, gaps, n_gaps, range_end FROM import_log "
             "WHERE symbol=? AND tf=? "
             "AND range_start>=?", (sym, tf, importer.PRE_2000)):
-        # A later response can finally contain a candle and report zero gaps
-        # for its shortened tail, but earlier recorded empty buckets remain
-        # real. Selecting only the final row erased 202 legitimate LSETH-USD
-        # acknowledgements on the first live verification of this fix.
         try:
-            listed.update(int(t) for t in json.loads(g))
+            explicit = {int(t) for t in json.loads(g)}
         except Exception:
-            pass
-        key = int(start)
-        retry_chains[key] = max(retry_chains.get(key, 0), int(n or 0))
-    return listed, sum(retry_chains.values())
+            explicit = set()
+        listed |= explicit
+        rows.append((int(start), None if end is None else int(end),
+                     int(n or 0), explicit))
+
+    covered: set[int] = set()
+    if missing:
+        # Deterministic order: a row may only vouch for buckets it actually
+        # spanned, and the oldest span goes first so the attribution does not
+        # depend on SQLite's row order.
+        for start, end, n, explicit in sorted(rows):
+            spare = n - len(explicit)
+            if spare <= 0:
+                continue
+            inside = sorted(t for t in missing
+                            if t not in listed and t not in covered
+                            and start <= t and (end is None or t < end))
+            covered.update(inside[:spare])
+    return listed, covered
 
 
 # These are operator/system events, not deterministic engine outputs.  They
@@ -557,11 +606,13 @@ def audit_market_inputs(con, symbol: str | None = None, now: int | None = None):
                 t += sec
         if missing:
             if tf in importer.NATIVE_TFS:
-                listed, acknowledged = _known_gap_buckets(con, sym, tf)
-                remaining = [t for t in missing if t not in listed]
-                # voids the importer counted but could not list (truncation)
-                budget = max(0, acknowledged - len([t for t in missing if t in listed]))
-                unexplained = remaining[budget:]
+                # Acknowledged PER BUCKET, not as a pool. `covered` is the set
+                # the truncated listings could not name but their own import
+                # span vouched for; see `_known_gap_buckets` for why a scalar
+                # budget disarmed this check on every series.
+                listed, covered = _known_gap_buckets(con, sym, tf, set(missing))
+                unexplained = [t for t in missing
+                               if t not in listed and t not in covered]
             else:
                 # Aggregate TFs: a missing bucket is BY DESIGN when its source
                 # bucket was incomplete (never fabricate). Genuine aggregation
