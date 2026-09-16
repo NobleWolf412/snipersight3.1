@@ -158,8 +158,11 @@ class LiquidityPoolCausality(unittest.TestCase):
         early_conf = base + 40 * TF_S      # the pool is not knowable until here
         late_conf = base + 22 * TF_S       # the anchor, knowable much earlier
 
-        self.swing(early_mt, early_conf, Decimal("100.00"))
-        self.swing(late_mt, late_conf, Decimal("100.01"))
+        # ABOVE the flat fixture's highs (101), so the doctored bar below is the
+        # ONLY bar that can sweep this level. Left at 100.x, every bar swept it
+        # and the assertions read whichever fired first.
+        self.swing(early_mt, early_conf, Decimal("105.00"))
+        self.swing(late_mt, late_conf, Decimal("105.01"))
 
         # A bar that sweeps the level in the window BETWEEN the anchor's
         # confirmation and the pool's. Under the anchor floor this emitted a
@@ -175,11 +178,48 @@ class LiquidityPoolCausality(unittest.TestCase):
         pools = self.pools()
         self.assertEqual(len(pools), 1)
         pool_confirmed = pools[0]["confirmed_at"]
-        for ev in self.events():
+        events = self.events()
+
+        # DELAYED, NOT DELETED — and an ordering-only assertion cannot tell the
+        # two apart, which is how the first version of this fix shipped
+        # dropping events while this test passed. Skipping the bar satisfies
+        # "no event precedes its pool" perfectly, by having no events at all.
+        self.assertTrue(events, (
+            "the sweep happened; the engine merely could not know about it "
+            "until the pool confirmed. A SWEEP is a one-bar pattern, so one "
+            "skipped here is gone for good"))
+        self.assertEqual({e["event"] for e in events}, {"SWEEP"})
+
+        for ev in events:
             self.assertGreaterEqual(
                 ev["confirmed_at"], pool_confirmed,
                 f"a {ev['event']} confirmed at {ev['confirmed_at']}, before "
                 f"its own pool was knowable at {pool_confirmed}")
+        self.assertEqual(
+            events[0]["confirmed_at"], pool_confirmed,
+            "an event the market made BEFORE its pool was knowable becomes "
+            "knowable exactly when the pool does — max(bar close, pool), the "
+            "same construction `swings` uses for the confirmation this whole "
+            "change is about")
+
+    def test_an_event_after_the_pool_keeps_its_own_bar_close(self):
+        """The other side of the max(): a normal event is not delayed."""
+        base = self.candles(80)
+        self.swing(base + 10 * TF_S, base + 12 * TF_S, Decimal("105.00"))
+        self.swing(base + 20 * TF_S, base + 22 * TF_S, Decimal("105.01"))
+        sweep_ts = base + 40 * TF_S
+        self.con.execute(
+            "UPDATE candles SET high=?, close=? WHERE symbol=? AND tf=? AND open_ts=?",
+            ("120", "100", "BTC-USD", TF, sweep_ts))
+        self.con.commit()
+
+        liquidity.run(self.con, "BTC-USD", TF, TF_S)
+        events = self.events()
+        self.assertTrue(events, "fixture produced no event")
+        self.assertEqual(
+            events[0]["confirmed_at"], sweep_ts + TF_S,
+            "a sweep the engine could already see confirms at its own bar "
+            "close; the pool's time must not drag it later")
 
 
 if __name__ == "__main__":

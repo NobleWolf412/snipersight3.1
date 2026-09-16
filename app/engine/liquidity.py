@@ -142,17 +142,30 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 for j in range(i + 1, len(candles)):
                     c = candles[j]
                     bar_close_ts = c["open_ts"] + tf_seconds
-                    # THE SAME FLOOR THE POOL ITSELF USES. This read the
-                    # ANCHOR's `confirmed_at`, which was the pool's too until
-                    # the pool started confirming with its last member — and
-                    # then the two diverged, so a SWEEP or BROKEN event could
-                    # confirm BEFORE the pool it is an event about. `setups`
-                    # reads pools and their events on `confirmed_at`
-                    # independently, so the engine would have known a pool was
-                    # swept before it knew the pool existed. On the VTHO-USD 1D
-                    # case that opened a 19-day window.
-                    if bar_close_ts <= pool_confirmed:
+                    if bar_close_ts <= s["confirmed_at"]:
                         continue
+                    # KNOWABLE WITH THE POOL, NEVER BEFORE IT — and never
+                    # DELETED for having happened first.
+                    #
+                    # The pool confirms with its last member, which can be
+                    # later than the anchor this scan is floored on, so an
+                    # event could otherwise confirm BEFORE the pool it is an
+                    # event about; `setups` reads pools and their events on
+                    # `confirmed_at` independently, and would have known a pool
+                    # was swept before it knew the pool existed.
+                    #
+                    # The first fix for that raised the FLOOR to
+                    # `pool_confirmed`, which skipped those bars outright. That
+                    # is a different and worse thing: a SWEEP is a one-bar
+                    # pattern, so a skipped one never recurs, and on the live
+                    # store one PF_XLMUSD sweep vanished permanently while a
+                    # VTHO-USD break was lost for 57 days — during which
+                    # `setups.target` offered a level price had already traded
+                    # through as an unbroken target. The market did the thing;
+                    # only the engine's knowledge of it is late. So stamp the
+                    # later of the two, which is the same `max()` the swing
+                    # confirmation this whole cascade is about already uses.
+                    event_confirmed = max(bar_close_ts, pool_confirmed)
                     hi, lo, close = Decimal(c["high"]), Decimal(c["low"]), Decimal(c["close"])
                     tol = max(ticks[j], TOL_ATR * atr[j]) if atr[j] is not None else ticks[j]
                     if side == "HIGH":
@@ -167,7 +180,8 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                             payload["outcome"] = "REJECTED"
                             swept_once = True
                         if store.insert_fact(con, symbol=symbol, tf=tf, kind="liquidity",
-                                             market_time=c["open_ts"], confirmed_at=bar_close_ts,
+                                             market_time=c["open_ts"],
+                                             confirmed_at=event_confirmed,
                                              algo_version=LIQ_VERSION, payload=payload):
                             n_events += 1
                         if broke:
