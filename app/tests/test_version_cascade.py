@@ -59,7 +59,13 @@ OPERATIONAL_EXPECTED = {
     # paper book settles and BEFORE the dispatcher reads it. Order is part of
     # the behaviour: settle, then size, then dispatch — sizing first means
     # every decision is made against the previous cycle's account.
-    "live": "live-v0.8-draft",
+    # live-v0.9: the BOT's paper book pins its own markets for import. v0.1
+    # gave that pin to the research replay and the manual book takes its own;
+    # the domain split left the bot's paper book without one, so a filled paper
+    # order on a market that left the universe lost its candles and a 100-BAR
+    # timeout had no bars to count. `execution.paper_open_symbols` is now the
+    # one authority both this roster and `quality.unsafe_to_retire` read.
+    "live": "live-v0.9-draft",
     "stopstudy": "stop-study-v0.1-draft",
     "forwardtrial": "forward-trial-v0.1-draft",
     # Not a fact producer: it reads `paper_positions` and the PAPER outbox and

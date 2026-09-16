@@ -142,10 +142,30 @@ def _record(con, request_id, digest, receipt):
 
 
 def _legacy_untracked(con):
+    """Manual exposure this account carries but does not track.
+
+    ADOPTED intents are NOT that, and counting them froze the whole account.
+    `manual.adopt_position` lays the operator's exit levels over an engine
+    position the RESEARCH replay is simulating — `/api/positions/adopt` takes
+    its position from `portfolio()["active_positions"]` and requires an `order`
+    fact under `execsim.EXEC_VERSION`, so by construction there is no
+    `execution_outbox` row and no paper-book capital behind it. The replay
+    keeps running its own plan alongside, which is the entire point: both exits
+    get recorded and the comparison is real.
+
+    Read as untracked exposure, one adoption raised LEGACY_EXPOSURE on every
+    subsequent admission — bot and manual alike — until it settled, which on a
+    1D chart is days. It also became a permanent `cutover_blockers` entry.
+
+    That is §6 rule 10 read backwards: the absence of a paper record here means
+    the paper book has not acted, and an adopted overlay on another domain's
+    position is not a reason to say it has. A genuine pre-account manual arm
+    still counts — it really did occupy the account.
+    """
     from . import manual
     known = {r[0] for r in con.execute("SELECT intent_id FROM execution_outbox")}
     return [p for plans in manual.unresolved(con).values() for p in plans
-            if p["intent_id"] not in known]
+            if p["intent_id"] not in known and p.get("state") != "ADOPTED"]
 
 
 def _decision(con, *, symbol, direction, entry, stop, now, requested=None):

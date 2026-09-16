@@ -342,3 +342,50 @@ def test_the_account_gates_are_the_ones_the_surfaces_read(tmp_path):
     # percentage. It moves with risk_pct the day that contract changes, which
     # is why it is derived rather than pinned.
     assert gates["scale_risk_pct"] == 0 == default["scale_risk_pct"]
+
+
+def test_an_adopted_engine_position_does_not_freeze_the_account(tmp_path):
+    """One Adopt used to stop the whole book admitting anything.
+
+    `manual.adopt_position` lays the operator's exit levels over a position the
+    RESEARCH replay is simulating — no outbox row and no paper capital behind
+    it, by construction. `_legacy_untracked` read that as untracked manual
+    exposure, so `_decision` raised LEGACY_EXPOSURE on every later admission,
+    bot and manual alike, until the adoption settled. On a 1D chart that is
+    days of a book that silently refuses every order while the autotrader
+    reports "0 routed, N refused".
+
+    A genuine pre-account manual arm must still block — it really did occupy
+    the account — so this pins both halves.
+    """
+    con = account(tmp_path)
+    manual.adopt_position(
+        con, "BTCUSDT|1H|REV|900", "BTCUSDT", "1H", "LONG",
+        entry=Decimal("100"), sl=Decimal("98"), tp=Decimal("104"),
+        original_sl=Decimal("98"), fill_ts=900, adopted_at=1000,
+        risk_usd=Decimal("25"))
+    con.commit()
+
+    adopted = [p for plans in manual.unresolved(con).values() for p in plans
+               if p.get("state") == "ADOPTED"]
+    assert adopted, "fixture did not actually create an adopted intent"
+    assert not shared_account._legacy_untracked(con), (
+        "an adopted overlay on a replay position is not this account's "
+        "untracked exposure")
+    assert not shared_account.cutover_blockers(con, "legacy"), (
+        "an adoption must not become a permanent cutover blocker either")
+
+    after, _ = shared_account.admit_plan(con, bot_plan(key="after"))
+    assert after.risk.approved, "the account froze after an adoption"
+
+    # ...and the guard still does its job for real manual exposure: a manual
+    # intent fact with no outbox row behind it, which is what the pre-account
+    # book left lying around.
+    con.execute("UPDATE execution_outbox SET state='PAPER_CLOSED'")
+    con.commit()
+    arm(con, at=4242)
+    con.execute("DELETE FROM execution_outbox WHERE intent_id LIKE '%MANUAL%'")
+    con.commit()
+    assert shared_account._legacy_untracked(con), (
+        "a manual arm with no outbox row IS untracked exposure and must "
+        "still close the gate")

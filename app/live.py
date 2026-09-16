@@ -29,7 +29,16 @@ from engine import (automation, autotrader, broker_factory, execution, positions
                     quality, listings, marketdata, pipeline, venues, cooldowns, funding, forwardtrial, stopstudy)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.8-draft"
+LIVE_VERSION = "live-v0.9-draft"
+# v0.9: the BOT's paper book pins its own markets for import. v0.1 (below) gave
+# that pin to the research replay's unresolved orders and the manual book got
+# its own; the domain split then left the bot's paper book — the one that
+# actually routes today — with none. A filled paper order on a market that fell
+# out of the universe stopped receiving candles, so `monitor_paper`'s 100-BAR
+# timeout had no bars to count, which is XLMUSDT again in a different book.
+# Latent when written (the paper outbox held 3 rows, all terminal), which is
+# the cheapest moment to close it. `execution.paper_open_symbols` is the shared
+# authority; `quality.unsafe_to_retire` asks it the same question.
 # v0.8: paired prospective stop comparison; all arms retain their data feed.
 # v0.7: isolated prospective breakout trial; unresolved trials retain data feeds.
 # v0.5: the cycle runs the PAPER book's own risk authority, after the paper
@@ -486,12 +495,28 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     pinned_exec = {key: value for key, value in unresolved_exec.items()
                    if key[0] not in scan_set}
     trial_pins = forwardtrial.unresolved(con) | stopstudy.unresolved(con)
+    # THE BOT'S PAPER BOOK PINS ITS OWN MARKETS. Everything else in this
+    # expression is another domain: `unresolved_exec` is the RESEARCH replay,
+    # `trial_pins` are the forward studies, and the manual book takes its own
+    # pin below. The one book nobody gave a pin to was the bot's paper book —
+    # so a filled paper order on a market that left the universe stopped
+    # receiving candles, and `monitor_paper`'s bar-count timeout has no bars to
+    # count. That is XLMUSDT (open four days, 2026-08-12) reintroduced by the
+    # domain split. `execution.paper_open_symbols` is the shared authority;
+    # `quality.unsafe_to_retire` asks it the same question.
+    paper_pins = execution.paper_open_symbols(con)
     import_symbols = sorted(scan_set | {symbol for symbol, _tf in pinned_exec}
-                            | {symbol for symbol, _tf in trial_pins})
+                            | {symbol for symbol, _tf in trial_pins}
+                            | paper_pins)
     if pinned_exec:
         log.debug(
             f"execution pin: {len(pinned_exec)} unresolved market/timeframe "
             f"pair(s) outside the universe remain on data and exit resolution")
+    if paper_pins - scan_set:
+        log.info(
+            f"PAPER BOOK PIN {len(paper_pins - scan_set)} market(s) with an "
+            f"open paper order outside the universe stay on data and exit "
+            f"resolution: {', '.join(sorted(paper_pins - scan_set)[:6])}")
     for i, sym in enumerate(import_symbols, 1):
         _beat(f"import {sym} ({i}/{len(import_symbols)})")
         # One symbol's transient venue error must not abort the scan. A single

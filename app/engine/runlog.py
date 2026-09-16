@@ -52,6 +52,13 @@ AUDIT_PREFIXES = (
     # permitted at a moment, and "why did nothing fire at 14:05" is only
     # answerable if it survives rotation.
     "PAPER RISK",
+    # Which markets an open paper order is holding a data feed for after the
+    # universe dropped them. Evidence, not heartbeat: it is the only record
+    # that a market outside the universe was deliberately kept importable, and
+    # "why did this order never time out" is answerable only if it survives
+    # rotation. Rare by construction — it prints nothing while every open
+    # paper order is in the scan set.
+    "PAPER BOOK PIN",
 )
 
 

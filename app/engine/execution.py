@@ -492,6 +492,39 @@ def monitor_private(con, broker) -> dict:
             "version": EXECUTION_CORE_VERSION}
 
 
+def paper_open_symbols(con) -> set[str]:
+    """Markets an unresolved PAPER order still needs candles for.
+
+    ONE AUTHORITY for "which markets a paper position pins", because there are
+    two callers who must never disagree: `quality.unsafe_to_retire` (do not
+    demote this series) and `live.cycle`'s import roster (keep importing it).
+    Only the first had it. `import_symbols` was built from the scan set plus
+    `execsim.unresolved` — the RESEARCH replay — plus the forward-trial pins,
+    and nothing read the outbox, so a filled paper position on a market that
+    dropped out of the universe stopped receiving candles. `monitor_paper`
+    walks candles forward from `intent.created_at`, so with no new bars it can
+    never fill, stop, target, or reach PAPER_MAX_HOLDING_BARS — which counts
+    BARS, not clock — and the order sits open indefinitely.
+
+    That is the XLMUSDT incident (filled 16:00Z 2026-08-12, below the liquidity
+    floor fifteen minutes later, open four days) reintroduced by the domain
+    split: the manual book kept its own pin in `live.cycle` and the bot's paper
+    book was the one nobody gave one to.
+
+    The states ARE the roster: `_monitor_paper_locked` reads exactly these two.
+    The table is created by `_ensure` on the first enqueue, so a store where
+    nothing has ever been armed does not have it — that is an EMPTY population,
+    not an unreadable one, and raising here would pin every symbol on exactly
+    the cold stores a demotion pass is meant to work on.
+    """
+    if not con.execute("SELECT count(*) FROM sqlite_master WHERE type='table' "
+                       "AND name='execution_outbox'").fetchone()[0]:
+        return set()
+    return {r[0] for r in con.execute(
+        "SELECT DISTINCT symbol FROM execution_outbox WHERE mode='PAPER' "
+        "AND state IN ('PAPER_ROUTED','PAPER_FILLED')").fetchall()}
+
+
 def monitor_paper(con) -> dict:
     """Resolve durable PAPER intents from closed candles, deterministically.
 

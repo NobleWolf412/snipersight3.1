@@ -294,22 +294,11 @@ def _symbols_that_must_keep_blocking(con) -> set:
         out |= {symbol for symbol, _tf in execsim.unresolved(con)}
         out |= {str(key[0]) if isinstance(key, tuple) else str(key)
                 for key in manual.unresolved(con)}
-        # Durable PAPER intents, straight off the outbox. monitor_paper reads
-        # exactly these two states and walks candles from intent.created_at, so
-        # the states are the roster — reading it here rather than through
-        # execution keeps this a single indexed query with no plan decoding.
-        #
-        # The table is created by execution._ensure on the first enqueue, so a
-        # store where nothing has ever been armed does not have it. That is an
-        # EMPTY population, not an unreadable one, and the difference matters:
-        # letting the missing table raise would reach the fail-closed handler
-        # below and pin every symbol on exactly the cold stores the demotion is
-        # supposed to work on. Absent table -> no paper intents exist.
-        if con.execute("SELECT count(*) FROM sqlite_master WHERE type='table' "
-                       "AND name='execution_outbox'").fetchone()[0]:
-            out |= {r[0] for r in con.execute(
-                "SELECT DISTINCT symbol FROM execution_outbox WHERE mode='PAPER' "
-                "AND state IN ('PAPER_ROUTED','PAPER_FILLED')").fetchall()}
+        # Durable PAPER intents. `execution.paper_open_symbols` owns this
+        # question — `live.cycle`'s import roster asks it too, and the two must
+        # never disagree about which markets an open paper order pins.
+        from . import execution
+        out |= execution.paper_open_symbols(con)
         out |= set(universe.scan_symbols(con))
     except Exception as exc:
         # Loud-fallback rule: the safe direction is still a degraded one, and

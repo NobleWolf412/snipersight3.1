@@ -287,3 +287,46 @@ class LifecycleOwnership(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_an_open_paper_order_pins_its_market_for_import():
+    """The bot's paper book must keep its candles when the universe moves on.
+
+    `live.cycle` built `import_symbols` from the scan set plus
+    `execsim.unresolved` (the RESEARCH replay) plus the forward-trial pins.
+    Every one of those is another domain. The manual book takes its own pin a
+    hundred lines further down; the bot's paper book — the one that actually
+    routes today — had none, so a filled paper order on a market that dropped
+    below the liquidity floor stopped receiving candles. `monitor_paper` walks
+    forward from `intent.created_at` and PAPER_MAX_HOLDING_BARS counts BARS,
+    so with no new bars the order can never fill, stop, target or time out.
+
+    That is XLMUSDT (2026-08-12, open four days) in a different book, and the
+    query that prevents it already existed one file away in
+    `quality.unsafe_to_retire`. Both now read one authority.
+    """
+    import sqlite3
+    from engine import execution
+
+    con = sqlite3.connect(":memory:")
+    # No outbox table at all: a store where nothing was ever armed is an EMPTY
+    # population, not an unreadable one. Raising here would pin every symbol on
+    # exactly the cold stores a demotion pass is meant to work on.
+    assert execution.paper_open_symbols(con) == set()
+
+    con.execute("CREATE TABLE execution_outbox (intent_id TEXT, mode TEXT, "
+                "symbol TEXT, state TEXT)")
+    con.executemany(
+        "INSERT INTO execution_outbox VALUES(?,?,?,?)", [
+            ("a", "PAPER", "XLMUSDT", "PAPER_FILLED"),
+            ("b", "PAPER", "ROUTEDUSDT", "PAPER_ROUTED"),
+            ("c", "PAPER", "DONEUSDT", "PAPER_CLOSED"),
+            ("d", "PAPER", "GONEUSDT", "ORDER_LIFECYCLE_COMPLETE"),
+            ("e", "TESTNET", "OTHERUSDT", "PAPER_FILLED"),
+        ])
+
+    pinned = execution.paper_open_symbols(con)
+    assert pinned == {"XLMUSDT", "ROUTEDUSDT"}, (
+        "exactly the two states monitor_paper resolves — a terminal order "
+        "must release its feed, and another domain's order is not this "
+        "book's to pin")
