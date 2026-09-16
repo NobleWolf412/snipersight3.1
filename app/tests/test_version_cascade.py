@@ -65,8 +65,9 @@ OPERATIONAL_EXPECTED = {
     # order on a market that left the universe lost its candles and a 100-BAR
     # timeout had no bars to count. `execution.paper_open_symbols` is now the
     # one authority both this roster and `quality.unsafe_to_retire` read.
-    "live": "live-v0.9-draft",
+    "live": "live-v0.10-draft",
     "stopstudy": "stop-study-v0.1-draft",
+    "zonestudy": "zone-study-v0.1-draft",
     "forwardtrial": "forward-trial-v0.1-draft",
     # Not a fact producer: it reads `paper_positions` and the PAPER outbox and
     # returns an account. Locked anyway, for the reason `agg` is — it sits
@@ -182,7 +183,13 @@ OPERATIONAL_EXPECTED = {
     # budget grew without bound. SEQUENCE_GAPS — one of two UNHEALABLE_HALT
     # codes — was unreachable on every series. 0 series blocked before, 4 after
     # (29 buckets), measured read-only on the live store before shipping.
-    "quality": "quality-v0.7-draft",
+    # quality-v0.8: `evaluation_allowed` counts only blocking findings on
+    # markets the book can trade, plus store-wide ones. It was
+    # `status != "BLOCKED"`, so v0.7's newly-reachable SEQUENCE_GAPS on four
+    # UNTRADED series halted sizing everywhere — DATA_HEALTH_BLOCKED went from
+    # 2.3% of risk facts to 49.3% on the live store. `status` still reports
+    # BLOCKED and the per-market gate still refuses those markets.
+    "quality": "quality-v0.8-draft",
     # listings-v0.1: the venue product sweep, appended one fact per venue per
     # run. Locked from birth — quality's verdict now depends on it, and a
     # version nobody tracks until something reads it leaves its early facts
@@ -229,11 +236,12 @@ OPERATIONAL_EXPECTED = {
 
 
 def operational_versions():
-    from engine import opportunities, paperbook, shared_account, forwardtrial, stopstudy
+    from engine import opportunities, paperbook, shared_account, forwardtrial, stopstudy, zonestudy
     return {
         "live": live.LIVE_VERSION,
         "forwardtrial": forwardtrial.TRIAL_VERSION,
         "stopstudy": stopstudy.STOP_STUDY_VERSION,
+        "zonestudy": zonestudy.ZONE_STUDY_VERSION,
         "paperbook": paperbook.PAPERBOOK_VERSION,
         "contracts": contracts.CONTRACT_VERSION,
         "automation": automation.AUTOMATION_VERSION,
@@ -387,7 +395,7 @@ RETIRED_MANUAL = tuple(v for v in manual.MANUAL_VERSIONS
 ATR_CONSUMERS = (
     "abtest", "breakout", "chartread", "execsim", "fvg", "liquidity", "ma",
     "manual", "momentum", "ranges", "regimeread", "scalein", "setups",
-    "structure", "trend", "volatility", "volume", "zones", "shared_account", "forwardtrial", "stopstudy",
+    "structure", "trend", "volatility", "volume", "zones", "shared_account", "forwardtrial", "stopstudy", "zonestudy",
 )
 
 

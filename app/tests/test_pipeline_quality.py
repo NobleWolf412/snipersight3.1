@@ -74,6 +74,77 @@ class TestMarketQuality(QualityStoreCase):
             self.con, "BTC-USD", now=base + 6 * 3600)
         self.assertIn("SEQUENCE_GAPS", {c["code"] for c in checks})
 
+    def test_a_hole_on_an_untraded_market_does_not_halt_the_book(self):
+        """THE HALT. A blocking finding is a verdict about ONE SERIES;
+        `evaluation_allowed` is a switch over the WHOLE BOOK, and they were the
+        same expression.
+
+        `risk.decide` rejects every decision on every market with
+        DATA_HEALTH_BLOCKED while that switch is false. So when quality-v0.7
+        re-armed SEQUENCE_GAPS and found 29 genuinely unexplained buckets on
+        four series — CAP-USD 15m, LSETH-USD 15m, PENGU-USD 5m, PEPE-USD 5m,
+        none of them in the 38-symbol scan universe — the live store went
+        BLOCKED and rejections climbed from 2.3% of risk facts to 49.3%. Four
+        markets nobody was trading stopped the book.
+
+        Both halves matter: the verdict must still SAY blocked, because the
+        hole is real and `assert_market_ready` must still refuse that market.
+        """
+        # NOT a seed anchor: universe.SEED is BTC-USD/ETH-USD and those are
+        # always in the scan universe, so they are always on the roster — the
+        # four markets that actually caused the halt were none of them.
+        base = importer.PRE_2000
+        for ts in (base, base + 3 * 3600):      # two unexplained buckets between
+            self.con.execute(
+                "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+                ("CAP-USD", "1H", ts, "100", "102", "98", "101", "1",
+                 "coinbase", ts + 1))
+        self.con.commit()
+
+        report = quality.audit(self.con, now=base + 5 * 3600)
+        codes = {b["code"] for b in report["blockers"]}
+        assert "SEQUENCE_GAPS" in codes, "fixture produced no blocker"
+
+        self.assertEqual(report["status"], "BLOCKED",
+                         "the store has a real hole and must say so")
+        self.assertTrue(report["evaluation_allowed"],
+                        "CAP-USD is in no scan universe and holds no order, so "
+                        "its hole cannot invent a fill anywhere — halting every "
+                        "other market over it is the defect")
+        self.assertEqual(report["gating_blockers"], [],
+                         "nothing is stopping the book")
+
+    def test_a_hole_on_a_market_with_an_open_order_still_halts_the_book(self):
+        """The other half, and the reason the switch exists at all.
+
+        `_symbols_that_must_keep_blocking` is the roster — "symbols where an
+        unexplained gap can still invent a fill". A market carrying an
+        unresolved order is on it, because resolving an exit across a hole
+        invents which level hit first, and that invented fill enters the graded
+        book that decides whether live routing unlocks.
+        """
+        base = importer.PRE_2000
+        for ts in (base, base + 3 * 3600):
+            self.con.execute(
+                "INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?)",
+                ("CAP-USD", "1H", ts, "100", "102", "98", "101", "1",
+                 "coinbase", ts + 1))
+        # An unresolved PAPER order on that market puts it on the roster.
+        self.con.execute(
+            "CREATE TABLE IF NOT EXISTS execution_outbox (intent_id TEXT, "
+            "mode TEXT, symbol TEXT, state TEXT)")
+        self.con.execute(
+            "INSERT INTO execution_outbox VALUES(?,?,?,?)",
+            ("open", "PAPER", "CAP-USD", "PAPER_FILLED"))
+        self.con.commit()
+
+        report = quality.audit(self.con, now=base + 5 * 3600)
+        self.assertFalse(report["evaluation_allowed"],
+                         "a hole on a market holding an open order can invent "
+                         "that order's exit; the book must stop")
+        self.assertTrue(report["gating_blockers"],
+                        "and the report must name what stopped it")
+
     def test_an_advancing_watermark_cannot_disarm_the_gap_blocker(self):
         """THE BUDGET WAS A POOL, AND THE POOL HAD NO CEILING.
 

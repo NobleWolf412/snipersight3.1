@@ -17,7 +17,25 @@ from . import aggregator, importer, listings, venues
 # stale near the end of every cycle (measured: 640 s cycles vs a 600 s bar).
 STALE_FLOOR_S = 1800
 
-QUALITY_VERSION = "quality-v0.7-draft"
+QUALITY_VERSION = "quality-v0.8-draft"
+# v0.8: `evaluation_allowed` — the switch `risk.decide` reads — counts only
+# blocking findings on markets the book can actually trade, plus every
+# store-wide one. It was `status != "BLOCKED"`, so a hole on any of 600+ stored
+# series stopped sizing on all of them.
+#
+# v0.7 re-armed SEQUENCE_GAPS and immediately proved it: 29 unexplained buckets
+# on CAP-USD 15m, LSETH-USD 15m, PENGU-USD 5m and PEPE-USD 5m — none of them in
+# the 38-symbol scan universe — took the live store to BLOCKED, and
+# DATA_HEALTH_BLOCKED rejections went from 2.3% of risk facts (307/13,417 under
+# risk-v0.28) to 49.3% (246/499 under v0.29). Four untraded markets halted the
+# book.
+#
+# `status` is unchanged and still BLOCKED: the store really does have a hole,
+# and `assert_market_ready` still refuses that market to anything that asks.
+# Only the global switch narrows, and the roster it narrows to
+# (`_symbols_that_must_keep_blocking`) fails closed. Same reasoning as the
+# reference-key demotion that already lived in `audit`: nothing trades on it,
+# so a blocking verdict there could only wedge evaluation.
 # v0.7: an acknowledged gap is attributed to the import span that acknowledged
 # it, instead of pooled into a count spent anywhere in the series. The pool was
 # bounded by collapsing retries on `range_start`, on the premise that a quiet
@@ -1017,10 +1035,40 @@ def audit(con, symbol: str | None = None, now: int | None = None, persist=False)
     rung_counts = {r: 0 for r in RUNGS}
     for c in checks:
         rung_counts[c["rung"]] = rung_counts.get(c["rung"], 0) + 1
+    # THE TRADING SWITCH IS NARROWER THAN THE VERDICT, and the two were the
+    # same expression. `risk.decide` rejects every decision on any book with
+    # DATA_HEALTH_BLOCKED when `evaluation_allowed` is false, so one blocking
+    # finding on any of 600+ stored series stopped sizing on ALL of them.
+    #
+    # Measured the day quality-v0.7 re-armed SEQUENCE_GAPS: 29 unexplained
+    # buckets across four series — CAP-USD 15m, LSETH-USD 15m, PENGU-USD 5m,
+    # PEPE-USD 5m, NONE of them in the 38-symbol scan universe — took the store
+    # to BLOCKED and rejections went from 2.3% of risk facts to 49.3%. A hole
+    # on a market the book cannot trade halted the book.
+    #
+    # `_symbols_that_must_keep_blocking` is already the right roster and its
+    # docstring is the argument: "symbols where an unexplained gap can still
+    # invent a fill" — the scan set plus anything with an unresolved simulator,
+    # paper or manual order. A finding with NO symbol is store-wide (causality,
+    # aggregation, accounting) and always gates. This is the same reasoning the
+    # reference-key demotion above already applies: nothing trades on it, so a
+    # blocking verdict could only wedge evaluation.
+    #
+    # `status` is UNCHANGED and still BLOCKED — the store really does have a
+    # hole, the operator must see it, and `assert_market_ready` still refuses
+    # that market to anyone who asks for it. Only the global switch narrows.
+    # The roster fails closed (it pins everything it cannot rule out), so an
+    # error here halts the book exactly as before.
+    gating = [c for c in checks if c["status"] == "BLOCKED"
+              and (not c["symbol"] or c["symbol"] in _symbols_that_must_keep_blocking(con))]
     result = {"version": QUALITY_VERSION,
               "observed_at": now, "status": status, "worst_rung": worst_rung,
               "rung_counts": rung_counts,
-              "evaluation_allowed": status != "BLOCKED",
+              "evaluation_allowed": not gating,
+              #: Which markets actually stopped the book, so a BLOCKED status
+              #: with trading still allowed is readable rather than confusing.
+              "gating_blockers": sorted({
+                  f"{c['symbol'] or 'STORE'} {c['code']}" for c in gating}),
               "strategy_rules_changed": False, "stages": stages,
               "blockers": [c for c in checks if c["status"] == "BLOCKED"],
               "warnings": [c for c in checks if c["status"] == "DEGRADED"],
