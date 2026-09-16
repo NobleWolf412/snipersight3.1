@@ -91,19 +91,20 @@ ok('every await stayed on its own side of the guards', () => {
     'lost the race would apply the previous market\'s fees to this chart');
 });
 
-ok('the fee config still keeps its previous value on failure', () => {
-  /* Blanking it would be worse than the stale value it replaces: spot fees
-     on a perp chart flip the sign of the net-R decision, and chart.js says
-     so where cfg is read. `cfg` must be assigned only by a resolved await,
-     never reset in the catch. */
-  const at = CHART.indexOf('cfg = await cfgReq');
-  const tail = CHART.slice(at, at + 400);
+ok('a failed fee lookup clears stale venue values and locks the ticket', () => {
+  // A previous market's fees cannot price the newly selected market.
+  const at = CHART.indexOf('await cfgReq');
+  assert(at > 0, 'the fee config is no longer awaited');
+  const tail = CHART.slice(at, at + 850);
   const catchAt = tail.indexOf('}catch');
   assert(catchAt > 0, 'the fee-config await lost its catch — a venue lookup ' +
     'failure now takes down the whole chart load');
-  assert(!/cfg\s*=/.test(tail.slice(catchAt)),
-    'the catch reassigns cfg — on a failed lookup the ticket must keep the ' +
-    'value it had, not blank it');
+  assert(/cfg\s*=\s*null/.test(tail.slice(catchAt)),
+    'a failed lookup retains stale venue values');
+  assert(/setLock\(\)/.test(tail.slice(catchAt)),
+    'the ticket is not re-locked after losing venue values');
+  assert(/const noVenue\s*=\s*!cfg/.test(CHART) && /noVenue\s*\?\s*true/.test(CHART),
+    'missing venue values must disable arming');
 });
 
 console.log('\n  ' + passed + ' passed');
