@@ -26,10 +26,10 @@ from pathlib import Path
 import notify
 from engine import (automation, autotrader, broker_factory, execution, positions, store,
                     importer, aggregator, execsim, risk, riskpaper, universe, ingest,
-                    quality, listings, marketdata, pipeline, venues, cooldowns, funding, forwardtrial, stopstudy)
+                    quality, listings, marketdata, pipeline, venues, cooldowns, funding, forwardtrial, stopstudy, zonestudy)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.9-draft"
+LIVE_VERSION = "live-v0.10-draft"
 # v0.9: the BOT's paper book pins its own markets for import. v0.1 (below) gave
 # that pin to the research replay's unresolved orders and the manual book got
 # its own; the domain split then left the bot's paper book — the one that
@@ -481,6 +481,11 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
             "baseline plan(s) missing current execution records; "
             "recovering with quality-gated simulation")
     scan_set = set(scan)
+    if not zonestudy.exists(con):
+        try:
+            zonestudy.run(con)
+        except Exception:
+            log.exception("Defended zone comparison activation failed")
     if not stopstudy.exists(con):
         try:
             stopstudy.run(con)
@@ -494,7 +499,7 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
             log.exception("Forward strategy trial activation failed")
     pinned_exec = {key: value for key, value in unresolved_exec.items()
                    if key[0] not in scan_set}
-    trial_pins = forwardtrial.unresolved(con) | stopstudy.unresolved(con)
+    trial_pins = forwardtrial.unresolved(con) | stopstudy.unresolved(con) | zonestudy.unresolved(con)
     # THE BOT'S PAPER BOOK PINS ITS OWN MARKETS. Everything else in this
     # expression is another domain: `unresolved_exec` is the RESEARCH replay,
     # `trial_pins` are the forward studies, and the manual book takes its own
@@ -630,6 +635,10 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
             stopstudy.run(con)
         except Exception:
             log.exception("Stop comparison update failed")
+        try:
+            zonestudy.run(con)
+        except Exception:
+            log.exception("Zone comparison update failed")
         try:
             forwardtrial.run(con, scan_set)
         except Exception:
@@ -792,6 +801,11 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
         stopstudy.run(con)
     except Exception:
         log.exception("Stop comparison failed; account processing is unaffected")
+
+    try:
+        zonestudy.run(con)
+    except Exception:
+        log.exception("Zone comparison failed; account processing is unaffected")
 
     _beat("audit")
     quality.audit(con, now=now, persist=True)

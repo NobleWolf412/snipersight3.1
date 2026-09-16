@@ -153,10 +153,41 @@ def test_setup_guide_uses_recorded_zone_prices(cockpit):
 
 def test_research_includes_history_and_ready_filter_checks_prices(cockpit):
     client, con = cockpit
-    base={'setup':{'setup_id':'x','symbol':'ETHUSDT','timeframe':'1H','entry':'100','stop':'98','targets':['104'],'confirmed_at':1},'state':'READY','eligible':True}
+    base={'setup':{'setup_id':'x','symbol':'ETHUSDT','timeframe':'1H','entry':'100','stop':'98','targets':['104'],'confirmed_at':1,'expires_at':int(time.time())+3600},'state':'READY','eligible':True}
     with patch('engine.opportunities.list_candidates', return_value=[base]) as read:
         assert client.get('/api/ui/v1/research').status_code==200
         assert read.call_args.kwargs['include_history'] is True
     with patch('ui_api.opportunity_rows',return_value=[base,{**base,'eligible':False},{**base,'setup':{**base['setup'],'entry':'0'}}]):
         rows=client.get('/api/ui/v1/opportunities?group=ready').json()['items']
         assert len(rows)==1
+
+
+def test_opportunity_tabs_filter_before_limit_and_sort_whole_population(cockpit):
+    client, _ = cockpit
+    now=int(time.time())
+    def row(n,state="FORMING",distance=None,stage="price"):
+        return dict(state=state,eligible=state=="READY",progress_stage=stage,economics={"distance_atr":distance},setup=dict(setup_id=str(n),symbol=f"COIN{n}",timeframe="1H",entry="100",stop="98",targets=["104"],confirmed_at=now-n,expires_at=now+3600))
+    candidates=[row(n,distance=str(20-n)) for n in range(20)]
+    candidates += [row(20,"BLOCKED","0"),row(21,"EXPIRED","0"),row(22,"POSITION_OPEN","0"),row(23,"FORMING","0","confirmation")]
+    with patch('ui_api.opportunity_rows',return_value=candidates):
+        data=client.get('/api/ui/v1/opportunities?group=watching&limit=10').json()
+        assert len(data['items'])==10 and data['total']==21
+        assert data['items'][0]['setup']['setup_id']=='23'
+        assert data['items'][1]['setup']['setup_id']=='19'
+        assert not {'BLOCKED','EXPIRED','POSITION_OPEN'} & {r['state'] for r in data['items']}
+        newest=client.get('/api/ui/v1/opportunities?group=watching&sort=newest&limit=10').json()
+        assert newest['items'][0]['setup']['setup_id']=='0'
+        assert client.get('/api/ui/v1/opportunities?sort=bogus').status_code==400
+
+
+def test_ready_rejects_expired_and_nonfinite_plans_and_distance_zero_is_known(cockpit):
+    client, _ = cockpit
+    now=int(time.time())
+    base=dict(state='READY',eligible=True,economics={'distance_atr':'0'},setup=dict(setup_id='valid',symbol='ETHUSDT',timeframe='1H',entry='100',stop='98',targets=['104'],confirmed_at=now,expires_at=now+60))
+    bad=[{**base,'setup':{**base['setup'],'entry':v,'setup_id':v}} for v in ('NaN','Infinity','broken','0','-1')]
+    bad += [{**base,'setup':{**base['setup'],'expires_at':now-1}}, {**base,'eligible':False}]
+    unknown=[{**base,'setup':{**base['setup'],'setup_id':str(i)},'economics':{'distance_atr':d}} for i,d in enumerate((None,'NaN','Infinity'))]
+    with patch('ui_api.opportunity_rows',return_value=bad+unknown+[base]):
+        data=client.get('/api/ui/v1/opportunities?group=ready&sort=distance').json()
+        assert data['total']==4 and data['counts']['ready']==4
+        assert data['items'][0]['setup']['setup_id']=='valid'

@@ -10,7 +10,7 @@ from engine import automation, importer, livegate, manual, opportunities, settin
 from engine.contracts import to_wire
 
 router = APIRouter(prefix="/api/ui/v1")
-VERSION = "cockpit-readmodel-v1"
+VERSION = "cockpit-readmodel-v2"
 
 
 def workspace_scope(workspace):
@@ -133,6 +133,16 @@ def opportunity_rows(con, search="", state="", domain="PAPER"):
     recorded_setups = opportunities._latest_by_setup(con, "setup", setups.SETUP_VERSION, int(store.get_active_baseline(con)["started_at"]))
     for row in rows:
         evidence = recorded_setups.get(row["setup"]["setup_id"], {})
+        recorded_distance = evidence.get("distance_atr")
+        if recorded_distance is None:
+            recorded_distance = evidence.get("prox_atr")
+        if recorded_distance is not None:
+            row.setdefault("economics", {})["distance_atr"] = recorded_distance
+        row["progress_stage"] = ("confirmation" if evidence.get("state") == "CONFIRMING" else
+                                 "price" if evidence.get("state") == "FORMING" else "watching")
+        row["progress_label"] = ("Ready to trade" if row["state"] == "READY" else
+                                 "Waiting for confirmation" if row["progress_stage"] == "confirmation" else
+                                 "Waiting for price" if row["progress_stage"] == "price" else "Developing setup")
         row["confirmation_deadline"] = evidence.get("confirm_deadline_ts")
         row["cancel_reason"] = evidence.get("cancel_reason")
         if domain == "RESEARCH":
@@ -193,20 +203,45 @@ def home(workspace: str = "CRYPTO", epoch_id: str | None = None):
 
 @router.get("/opportunities")
 def opportunity_list(workspace: str = "CRYPTO", search: str = "", state: str = "",
-                     limit: int = Query(10, ge=1, le=200), group: str = "all", epoch_id: str | None = None):
+                     limit: int = Query(10, ge=1, le=200), group: str = "all", epoch_id: str | None = None,
+                     sort: str = "progress"):
     if workspace_scope(workspace) == "STOCKS":
         return {"items": [], "capabilities": stocks.status(), "workspace": workspace}
     with account_read(epoch_id) as con:
         rows = opportunity_rows(con, search, state)
+        if sort not in ("progress", "newest", "distance"):
+            raise HTTPException(400, "Unknown opportunity sort")
+        now = int(time.time())
+        def ready(row):
+            try:
+                values = [Decimal(str(v)) for v in (row["setup"].get("entry"), row["setup"].get("stop"), (row["setup"].get("targets") or [None])[0])]
+                return row["state"] == "READY" and bool(row.get("eligible")) and all(v.is_finite() and v > 0 for v in values) and int(row["setup"].get("expires_at") or 0) > now
+            except (ArithmeticError, TypeError, ValueError):
+                return False
+        counts = {"ready": sum(ready(r) for r in rows), "watching": sum(r["state"] in ("FORMING", "WATCHING") for r in rows)}
         if group == "ready":
-            rows = [r for r in rows if r["state"] == "READY" and r.get("eligible") and
-                    all(Decimal(str(v or 0)) > 0 for v in (r["setup"]["entry"], r["setup"]["stop"], (r["setup"].get("targets") or [0])[0]))]
+            rows = [r for r in rows if ready(r)]
         elif group == "watching":
-            rows = [r for r in rows if r["state"] in ("FORMING", "WATCHING", "BLOCKED")]
+            rows = [r for r in rows if r["state"] in ("FORMING", "WATCHING")]
         elif group != "all":
             raise HTTPException(400, "Unknown opportunity group")
-        return {"items": rows[:limit], "total": len(rows), "workspace": workspace, "domain": "PAPER",
-                "ordering": "Readiness, distance to entry (ATR) when available, then market identity. No confidence score."}
+        def order(row):
+            setup = row["setup"]
+            try:
+                distance = abs(Decimal(str(row.get("economics", {}).get("distance_atr"))))
+                if not distance.is_finite():
+                    distance = Decimal("Infinity")
+            except (ArithmeticError, TypeError, ValueError):
+                distance = Decimal("Infinity")
+            stage = 0 if row["state"] == "READY" else {"confirmation": 1, "price": 2}.get(row.get("progress_stage"), 3)
+            newest = -int(setup.get("confirmed_at") or 0)
+            identity = (setup["symbol"], setup["timeframe"], setup["setup_id"])
+            return ((newest, stage, distance) if sort == "newest" else (distance, stage, newest) if sort == "distance" else (stage, distance, newest)) + identity
+        rows.sort(key=order)
+        ordering = {"progress": "Confirmation stage first, then recorded proximity to the zone. This is not a prediction of which trade will win.",
+                    "newest": "Newest recorded setups first.", "distance": "Nearest zone when the setup was recorded. This is not live distance to entry."}[sort]
+        return {"items": rows[:limit], "total": len(rows), "counts": counts, "workspace": workspace, "domain": "PAPER",
+                "ordering": ordering}
 
 
 @router.get("/positions")
@@ -236,11 +271,12 @@ def diagnosis(intent_id: str, workspace: str = "CRYPTO"):
         row = next((r for r in rows if r["intent_id"] == intent_id), None)
         if row is None:
             raise HTTPException(404, "Account trade not found")
-        from engine import stopstudy, tradevisuals
+        from engine import stopstudy, tradevisuals, zonestudy
         row["price_format"] = tradevisuals.chart_format(row)
         row["excursion"] = tradevisuals.excursion(con, row)
         return {"trade": row, "authority": "RECORDED_EXECUTION", "advisory_only": True,
                 "stop_comparison": stopstudy.report(con, key="paper:"+intent_id),
+                "zone_comparison": zonestudy.report(con, key="paper:"+intent_id),
                 "facts": [f"Origin: {row['origin']}. Current controller: {row['controller']}.",
                     f"Recorded outcome: {row['outcome'] or row['state']}.",
                     f"Net result: {row['r_multiple']} R." if row['r_multiple'] is not None else "No settled R result yet.",
@@ -291,6 +327,21 @@ def stop_comparison(workspace: str = "CRYPTO"):
         con.execute("PRAGMA query_only=ON")
         con.execute("BEGIN")
         return stopstudy.report(con)
+    finally:
+        con.rollback()
+        con.close()
+
+
+@router.get("/zone-comparison")
+def zone_comparison(workspace: str = "CRYPTO"):
+    from engine import zonestudy
+    if workspace_scope(workspace) != "CRYPTO":
+        return {"state": "UNAVAILABLE", "items": [], "note": "This comparison uses crypto paper trades."}
+    con = store.connect()
+    try:
+        con.execute("PRAGMA query_only=ON")
+        con.execute("BEGIN")
+        return zonestudy.report(con)
     finally:
         con.rollback()
         con.close()

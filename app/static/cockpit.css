@@ -61,3 +61,19 @@
 .excursion-panel { border-top:3px solid #8de5e9; }
 .excursion-value { display:block; font-size:clamp(1.2rem,3vw,1.7rem); color:#8de5e9; }
 @media(max-width:650px) { .study-arms { grid-template-columns:1fr; } }
+
+.chart-mode{display:flex;flex-wrap:wrap;gap:.5rem;margin:.8rem 0}.chart-mode button[aria-pressed="true"]{border-color:var(--accent,#78e2b6)}.trade-zone-area{position:absolute;border:1px dashed #edc77c;pointer-events:none;z-index:2}.trade-zone-area.defended{background:rgba(237,199,124,.13);border-style:solid}.zone-study .study-arms{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+
+.chart-rule{display:flex;align-items:center;gap:.6rem;width:100%;font-size:.85rem;color:var(--muted)}
+.chart-rule[hidden]{display:none}.chart-rule select{flex:1;min-width:0;max-width:100%}.journey-key{row-gap:.6rem}.chart-legend-rule{flex-basis:100%}
+
+.segmented{display:flex;gap:4px;padding:4px;border:1px solid #394a59;border-radius:12px;background:#101821;max-width:100%}
+.segmented button{flex:1;border:1px solid transparent;background:transparent;border-radius:8px;min-height:44px;padding:10px 14px;color:#b6c3d0}
+.segmented button[aria-selected="true"],.segmented button[aria-pressed="true"]{background:#244139;color:#b5f9dd;border-color:#78e2b6;font-weight:650}
+.opportunity-tabs{margin:24px 0 16px;max-width:540px}.opportunity-tabs span:not(:empty){display:inline-block;margin-left:6px;font-size:.85em;font-variant-numeric:tabular-nums}
+.opportunity-filters{display:grid;grid-template-columns:minmax(150px,1fr) minmax(190px,1fr);max-width:700px;gap:16px;margin-bottom:20px}
+.opportunity-filters label{display:grid;gap:6px}.opportunity-filters input,.opportunity-filters select{width:100%;min-width:0}
+#opportunity-summary{margin:0 0 18px;line-height:1.6}.chart-mode button[aria-pressed="true"]{background:#244139;color:#b5f9dd}
+@media(max-width:480px){.opportunity-filters{grid-template-columns:1fr}.opportunity-tabs{width:100%}.opportunity-tabs button{padding:10px 8px}}
+
+.chart-view-tabs{width:100%}.tabs button[aria-pressed="true"]{background:#244139;color:#b5f9dd;border-color:#78e2b6}

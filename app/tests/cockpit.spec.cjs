@@ -193,7 +193,7 @@ test('opportunities preserve confirmed prices and leave missing setup prices bla
   await page.route('**/api/ui/v1/opportunities?*',route=>route.fulfill({json:{total:1,items:[{setup:{symbol:'BTCUSDT',timeframe:'1H',strategy:'PULLBACK',direction:'LONG',entry:ready?'100.125':'0',stop:ready?'98.250':'0.00',targets:[ready?'104.875':'0'],invalidation:'Stop-loss',expires_at:Math.floor(Date.now()/1000)+3600},state:ready?'READY':'FORMING',evidence:{grade:'UNGRADED'},primary_explanation:'Waiting for confirmation.',strongest_counterargument:'No entry deadline is recorded.'}]}}));
   await page.goto('/#opportunities');
   await expect(page.getByText('No confirmed trades ready right now')).toBeVisible();
-  await page.locator('select[name=group]').selectOption('watching');
+  await page.getByRole('tab',{name:/Watching/}).click();
   await page.getByRole('button',{name:'View chart',exact:true}).click();
   for(const name of ['entry','sl','tp']){
     await expect(page.locator('#'+name)).toHaveValue('');
@@ -215,7 +215,7 @@ test('watching shows recorded timing, prices and chart conditions',async({page})
   await page.route('**/api/ui/v1/opportunities?*',route=>route.fulfill({json:{total:1,items:[row]}}));
   await page.route('**/api/ui/v1/setup-guide?*',route=>route.fulfill({json:{zone_bottom:'98.125',zone_top:'99.875',confirmation_deadline:1700007200,entry_deadline:null,confirmation:'A completed candle must close above the upper edge.',skip_if:'Skip if the zone breaks before confirmation.'}}));
   await page.goto('/#opportunities');
-  await page.locator('select[name=group]').selectOption('watching');
+  await page.getByRole('tab',{name:/Watching/}).click();
   await expect(page.locator('.setup-row')).toContainText('Setup recorded');
   await expect(page.locator('.setup-row')).toContainText('Stop-loss');
   await expect(page.locator('.setup-row')).toContainText('Not set');
@@ -304,10 +304,10 @@ test('stop comparison counts only completed triplets and explains pending arms',
   const rules={HOLD:'Original stop',COST_COVER:'Cover costs after +1R',STRUCTURE:'Follow confirmed swings'};
   await page.route('**/api/ui/v1/stop-comparison*',r=>r.fulfill({json:{state:'COLLECTING',started_at:now-86400,checked_at:now,rules,paired_count:2,pending_count:3,excluded_count:1,totals:{HOLD:{pnl_usd:'-200',difference_usd:'0'},COST_COVER:{pnl_usd:'50',difference_usd:'250',better:1,worse:0},STRUCTURE:{pnl_usd:'-25',difference_usd:'175',better:1,worse:1}},items:[]}}));
   await page.goto('/#research');
-  await expect(page.locator('.study-panel')).toContainText('3 still being followed');
+  await expect(page.locator('.study-panel:not(.zone-study)')).toContainText('3 still being followed');
   await expect(page.locator('.study-cost')).toContainText('$250.00 versus the original stop');
   await page.getByText('What each rule does',{exact:true}).click();
-  await expect(page.locator('.study-panel')).toContainText('Changes take effect on the next candle');
+  await expect(page.locator('.study-panel:not(.zone-study)')).toContainText('Changes take effect on the next candle');
   const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();
   expect(audit.violations.map(v=>v.id)).toEqual([]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
@@ -375,4 +375,78 @@ test('blocked count opens searchable reasons and links to the setup chart',async
   await page.screenshot({path:info.outputPath('blocked-reasons.png'),fullPage:true});
   await page.getByRole('textbox',{name:'Market'}).fill('XYZ');await page.getByRole('button',{name:'Search',exact:true}).click();
   await expect(page.getByRole('heading',{name:'No blocked setups found'})).toBeVisible();
+});
+
+test('defended zone comparison shows timing, reasons, and chart timeframe toggle',async({page},info)=>{
+  const start=Math.floor((Date.now()/1000-86400)/900)*900;
+  const rules={HOLD:'Original stop',SWING_IDEAL:'Swing trail - candle close',SWING_OBSERVED:'Swing trail - scanner timing',ZONE_IDEAL:'Defended zone - candle close',ZONE_OBSERVED:'Defended zone - scanner timing'};
+  const item={key:'paper:zone',state:'OPEN',source:'PAPER',tf:'15m',management_tf:'5m',symbol:'ENAUSDT',note:'Following the remaining simulated stops.',results:{},moves:{ZONE_IDEAL:[{at:start+1800,price:'99.5',confirmed_at:start+1800,observed_at:start+1850}]},zones:[{kind:'FORMED',at:start+900,detected_at:start+900,observed_at:start+950,low:'99',high:'100'},{kind:'DEFENDED',at:start+1800,detected_at:start+900,observed_at:start+1850,low:'99',high:'100'}],diagnostics:[{rule:'ZONE_OBSERVED',reason:'Price had already crossed the proposed stop.'}]};
+  const comparison={state:'COLLECTING',rules,items:[item],paired_count:0,pending_count:1,excluded_count:0,started_at:start,checked_at:start+3000};
+  const trade={intent_id:'zone',symbol:'ENAUSDT',timeframe:'15m',direction:'LONG',origin:'BOT',controller:'BOT',filled_at:start,closed_at:start+2700,entry:'100',exit_price:'98',planned_stop:'98',targets:['110'],price_format:{type:'price',precision:2,minMove:'.01'}};
+  await page.route('**/api/ui/v1/zone-comparison*',r=>r.fulfill({json:comparison}));
+  await page.route('**/api/ui/v1/journal?*',r=>r.fulfill({json:{items:[trade],scope:'EXECUTED_ACCOUNT',note:''}}));
+  await page.route('**/api/ui/v1/trades/zone/diagnosis?*',r=>r.fulfill({json:{trade,zone_comparison:comparison}}));
+  await page.route('**/api/candles?*',r=>{const step=new URL(r.request().url()).searchParams.get('tf')==='5m'?300:900;return r.fulfill({json:Array.from({length:40},(_,i)=>({time:start+(i-5)*step,open:100+Math.sin(i*.6)*.8,high:101.2+Math.sin(i*.6)*.8,low:99.4+Math.sin(i*.6)*.8,close:100+Math.sin(i*.6)*.8+(i%3===0?-.35:.45),volume:1}))});});
+  await page.goto('/#research');
+  await expect(page.locator('.zone-study .study-arm')).toHaveCount(5);
+  await page.getByText('Individual trades and reasons',{exact:true}).click();
+  await expect(page.locator('.zone-study')).toContainText('Price had already crossed');
+  await page.goto('/#journal');
+  await page.getByRole('button',{name:'View ENAUSDT trade details'}).click();
+  await expect(page.locator('.trade-history-note')).toContainText('15m candles');
+  await expect(page.getByRole('button',{name:'Recorded trade chart',exact:true})).toHaveAttribute('aria-pressed','true');
+  await page.getByRole('button',{name:'Smaller-timeframe comparison',exact:true}).click();
+  await expect(page.locator('.trade-history-note')).toContainText('5m candles');
+  await page.getByLabel('Simulated stop',{exact:true}).selectOption('ZONE_IDEAL');
+  await expect(page.locator('.trade-zone-area.defended')).toHaveCount(1);
+  await expect(page.locator('.zone-study')).toContainText('observed');
+  await page.getByRole('button',{name:'Recorded trade chart',exact:true}).click();
+  await expect(page.locator('.trade-history-note')).toContainText('15m candles');
+  await expect(page.locator('.journey-key')).toHaveCount(1);
+  await page.getByRole('button',{name:'Smaller-timeframe comparison',exact:true}).click();
+  await expect(page.locator('.trade-history-note')).toContainText('5m candles');
+  expect(await page.locator('.trade-dialog').evaluate(n=>n.scrollWidth<=n.clientWidth)).toBeTruthy();
+  await page.getByLabel('Simulated stop',{exact:true}).selectOption('SWING_OBSERVED');
+  await expect(page.locator('.trade-zone-area')).toHaveCount(0);
+  await page.getByLabel('Simulated stop',{exact:true}).selectOption('ZONE_IDEAL');
+  await expect(page.locator('.trade-zone-area.defended')).toHaveCount(1);
+  await page.locator('.trade-dialog .eyebrow').first().evaluate(n=>{n.textContent='SYNTHETIC TEST EXAMPLE - NOT A REAL TRADE';});
+  await page.screenshot({path:info.outputPath('zone-comparison.png')});
+});
+
+
+test('opportunity tabs prioritize actionable plans and filter instantly',async({page},info)=>{
+  const queries=[];
+  await page.route('**/api/ui/v1/opportunities?*',route=>{
+    const q=new URL(route.request().url()).searchParams;queries.push(Object.fromEntries(q));
+    const watching=q.get('group')==='watching';
+    const count=Number(q.get('limit')||10);
+    const rows=Array.from({length:Math.min(count,12)},(_,i)=>({state:watching?'FORMING':'READY',eligible:!watching,evidence:{grade:'UNGRADED'},primary_explanation:'Recorded fixture',strongest_counterargument:'Account risk is checked again.',progress_label:watching?'Waiting for confirmation':'Ready to trade',setup:{setup_id:'tabs-'+i,symbol:(q.get('search')||'BTC')+i+'USDT',timeframe:'1H',strategy:'PULLBACK',direction:'LONG',entry:'100',stop:'98',targets:['104'],expires_at:Math.floor(Date.now()/1000)+3600,confirmed_at:Math.floor(Date.now()/1000)}}));
+    return route.fulfill({json:{items:rows,total:12,counts:{ready:12,watching:8},ordering:'Confirmation stage first, then recorded proximity to the zone.'}});
+  });
+  await page.goto('/#opportunities');
+  await expect(page.getByRole('tab',{name:/Ready to trade/})).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('.setup-row')).toHaveCount(10);
+  await expect(page.getByText('Readiness',{exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Apply',exact:true})).toHaveCount(0);
+  await page.getByRole('tab',{name:/Watching/}).click();
+  await expect(page.locator('.setup-row').first()).toContainText('Waiting for confirmation');
+  await page.getByLabel('Sort by',{exact:true}).selectOption('newest');
+  await expect.poll(()=>queries.at(-1)?.sort).toBe('newest');
+  await page.getByRole('button',{name:'Show 10 more',exact:true}).click();
+  await expect(page.locator('.setup-row')).toHaveCount(12);
+  await page.getByRole('searchbox',{name:'Market',exact:true}).fill('ETH');
+  await expect(page.locator('.setup-row').first()).toContainText('ETH0USDT');
+  await expect(page.locator('.setup-row')).toHaveCount(10);
+  await page.getByRole('tab',{name:/Watching/}).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.getByRole('tab',{name:/Ready to trade/})).toHaveAttribute('aria-selected','true');
+  const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();
+  expect(audit.violations.map(v=>v.id)).toEqual([]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+  await page.screenshot({path:info.outputPath('opportunity-tabs.png')});
+  await page.getByRole('button',{name:'Review trade',exact:true}).first().click();
+  await page.getByRole('button',{name:'Short',exact:true}).click();
+  await expect(page.locator('#direction')).toHaveValue('SHORT');
+  await expect(page.getByRole('button',{name:'Short',exact:true})).toHaveAttribute('aria-pressed','true');
 });

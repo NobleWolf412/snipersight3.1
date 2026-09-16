@@ -31,6 +31,9 @@ class LiveClockContract(unittest.TestCase):
              patch.object(live.universe, "scan_symbols", return_value=[]), \
              patch.object(live.execsim, "unresolved", return_value={}), \
              patch.object(live, "execution_rebuild_work", return_value={}), \
+             patch.object(live.zonestudy, "exists", return_value=True), \
+             patch.object(live.zonestudy, "unresolved", return_value=set()), \
+             patch.object(live.zonestudy, "run"), \
              patch.object(live.stopstudy, "exists", return_value=True), \
              patch.object(live.stopstudy, "unresolved", return_value=set()), \
              patch.object(live.stopstudy, "run"), \
@@ -63,6 +66,9 @@ class LiveClockContract(unittest.TestCase):
              patch.object(live.venues, "REFERENCE", {}), \
              patch.object(live.execsim, "unresolved", return_value={}), \
              patch.object(live, "execution_rebuild_work", return_value={}), \
+             patch.object(live.zonestudy, "exists", return_value=True), \
+             patch.object(live.zonestudy, "unresolved", return_value=set()), \
+             patch.object(live.zonestudy, "run"), \
              patch.object(live.stopstudy, "exists", return_value=True), \
              patch.object(live.stopstudy, "unresolved", return_value=set()), \
              patch.object(live.stopstudy, "run"), \
@@ -88,6 +94,9 @@ class LiveClockContract(unittest.TestCase):
                           return_value=["BTCUSDT"]), \
              patch.object(live.execsim, "unresolved", return_value=pinned), \
              patch.object(live, "execution_rebuild_work", return_value={}), \
+             patch.object(live.zonestudy, "exists", return_value=True), \
+             patch.object(live.zonestudy, "unresolved", return_value=set()), \
+             patch.object(live.zonestudy, "run"), \
              patch.object(live.stopstudy, "exists", return_value=True), \
              patch.object(live.stopstudy, "unresolved", return_value=set()), \
              patch.object(live.stopstudy, "run"), \

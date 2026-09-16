@@ -140,7 +140,9 @@ class SimulatorConventions(unittest.TestCase):
         # pairing rather than demanding the two always move in step. v0.7 and
         # exec-v0.27 moved together again, for the swing-v0.11 ATR cascade:
         # this harness computes its own ATR, so its replay follows the engine.
-        self.assertEqual(execsim.EXEC_VERSION, "exec-v0.27-draft")
+        # v0.28 changes setup/scale input generations; settlement arithmetic
+        # used by this harness is unchanged (2bc49cf).
+        self.assertEqual(execsim.EXEC_VERSION, "exec-v0.28-draft")
 
     def test_same_bar_stop_and_target_counts_as_the_stop(self):
         """The metric this whole version moves is the same-bar stop-out rate.
