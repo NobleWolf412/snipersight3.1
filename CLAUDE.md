@@ -270,11 +270,26 @@ misses most of them — `0x0b` and `0x0c` in particular fall in the range most
 filters skip. From the repo root:
 
 ```
-python -c "import pathlib;bad=lambda r:[i for i,b in enumerate(r) if b<32 and b not in (9,10,13)];[print(p,bad(p.read_bytes())[:8]) for p in pathlib.Path('app').rglob('*') if p.suffix in {'.js','.py','.css','.html'} and bad(p.read_bytes())]"
+python -c "import pathlib;bad=lambda r:[i for i,b in enumerate(r) if b<32 and b not in (9,10,13)];[print(p,bad(p.read_bytes())[:8]) for p in pathlib.Path('app').rglob('*') if p.suffix in {'.js','.py','.css','.html'} and 'node_modules' not in p.parts and bad(p.read_bytes())]"
 ```
 
 Silence is a pass. At `c30f031` it printed two files and nine bytes, fixed in
 `216c819` and `84aa15c`.
+
+**The `node_modules` exclusion is load-bearing**, and it is why `scripts/check.ps1`
+asks `git ls-files` rather than walking the tree. Without it the command prints
+eight vendored files — Playwright and axe-core legitimately carry control bytes
+in minified code — and a check whose clean state is eight lines of noise is a
+check nobody reads. It went quiet the moment Playwright landed and stayed that
+way until someone actually needed it.
+
+It earns its place: this session wrote a `\b` into `cockpit/app.js` through a
+Git Bash heredoc and got the byte `0x08` instead, inside a regex, where it
+matched nothing and announced nothing. `node --check` passed and the served
+file diffed clean. ESLint's `no-control-regex` caught it, which is the second
+time the linter has been the only thing standing between a scripted edit and a
+silent defect. **Prefer writing a scratch `.py` file over a heredoc** when the
+edit contains a backslash escape — the heredoc is what produces these.
 
 **Verifying in the browser.** The hidden preview pane does not composite, and
 three separate things follow from that, each of which looks exactly like a bug
