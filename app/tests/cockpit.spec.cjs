@@ -224,10 +224,24 @@ test('watching shows recorded timing, prices and chart conditions',async({page})
   await expect(page.locator('#setup-evidence')).toContainText('99.875');
   await expect(page.locator('#setup-evidence')).toContainText('Skip if the zone breaks');
   await expect(page.locator('#chart canvas').first()).toBeVisible();
+  await expect(page.locator('#opportunity-level-key')).toContainText('Area lower edge: 98.125');
+  await expect(page.locator('#opportunity-level-key')).toContainText('Area upper edge: 99.875');
   await page.locator('#symbol').fill('ETHUSDT');
   await page.locator('#symbol').press('Tab');
   await expect(page.locator('#setup-evidence')).toHaveCount(0);
   await expect(page.locator('#entry')).toHaveValue('');
+});
+
+test('entry remains distinct when it shares the watched zone edge',async({page})=>{
+  const row={setup:{setup_id:'overlap-test',symbol:'BTCUSDT',timeframe:'1H',strategy:'PULLBACK',direction:'LONG',entry:'99.8750',stop:'98',targets:['104']},state:'FORMING',evidence:{grade:'UNGRADED'}};
+  await page.route('**/api/ui/v1/opportunities?*',route=>route.fulfill({json:{total:1,items:[row]}}));
+  await page.route('**/api/ui/v1/setup-guide?*',route=>route.fulfill({json:{zone_bottom:'99',zone_top:'99.875',confirmation:'Waiting for confirmation.',skip_if:'Skip if the zone breaks.'}}));
+  await page.goto('/#opportunities');
+  await page.getByRole('tab',{name:/Watching/}).click();
+  await page.getByRole('button',{name:'View chart',exact:true}).click();
+  await expect(page.locator('#opportunity-level-key .entry-level')).toHaveText('Entry: 99.8750 · area upper edge at the same price');
+  await expect(page.locator('#opportunity-level-key span')).toHaveCount(4);
+  await expect(page.locator('#chart canvas').first()).toBeVisible();
 });
 
 test('profit colours, recorded result bars and accessible trade pop-out',async({page},info)=>{
@@ -421,7 +435,7 @@ test('opportunity tabs prioritize actionable plans and filter instantly',async({
     const q=new URL(route.request().url()).searchParams;queries.push(Object.fromEntries(q));
     const watching=q.get('group')==='watching';
     const count=Number(q.get('limit')||10);
-    const rows=Array.from({length:Math.min(count,12)},(_,i)=>({state:watching?'FORMING':'READY',eligible:!watching,evidence:{grade:'UNGRADED'},primary_explanation:'Recorded fixture',strongest_counterargument:'Account risk is checked again.',progress_label:watching?'Waiting for confirmation':'Ready to trade',setup:{setup_id:'tabs-'+i,symbol:(q.get('search')||'BTC')+i+'USDT',timeframe:'1H',strategy:'PULLBACK',direction:'LONG',entry:'100',stop:'98',targets:['104'],expires_at:Math.floor(Date.now()/1000)+3600,confirmed_at:Math.floor(Date.now()/1000)}}));
+    const rows=Array.from({length:Math.min(count,12)},(_,i)=>({state:watching?'FORMING':'READY',eligible:!watching,actionable:!watching,evidence:{grade:'UNGRADED'},primary_explanation:'Recorded fixture',strongest_counterargument:'Account risk is checked again.',progress_label:watching?'Waiting for confirmation':'Ready to trade',setup:{setup_id:'tabs-'+i,symbol:(q.get('search')||'BTC')+i+'USDT',timeframe:'1H',strategy:'PULLBACK',direction:'LONG',entry:'100',stop:'98',targets:['104'],expires_at:Math.floor(Date.now()/1000)+3600,confirmed_at:Math.floor(Date.now()/1000)}}));
     return route.fulfill({json:{items:rows,total:12,counts:{ready:12,watching:8},ordering:'Confirmation stage first, then recorded proximity to the zone.'}});
   });
   await page.goto('/#opportunities');

@@ -41,6 +41,7 @@ from __future__ import annotations
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from decimal import Decimal
 from pathlib import Path
 
@@ -136,7 +137,8 @@ class ThePaperBookUsesIt(unittest.TestCase):
         intent_id = routed["routed"][0]["queue"]["intent_id"]
         self._candle(self.now + HOUR, 50400, 50450, 49900, 50100)   # fills
         self._candle(self.now + 2 * HOUR, 47000, 47500, 46800, 47100)  # gaps
-        execution.monitor_paper(self.con)
+        with patch('engine.execution.time.time', return_value=self.now + 3 * HOUR):
+            execution.monitor_paper(self.con)
         outcome, exit_price, r_multiple = self.con.execute(
             "SELECT outcome,exit_price,r_multiple FROM paper_positions "
             "WHERE intent_id=?", (intent_id,)).fetchone()
@@ -156,7 +158,8 @@ class ThePaperBookUsesIt(unittest.TestCase):
         intent_id = routed["routed"][0]["queue"]["intent_id"]
         self._candle(self.now + HOUR, 50400, 50450, 49900, 50100)
         self._candle(self.now + 2 * HOUR, 50000, 52500, 48500, 50000)
-        execution.monitor_paper(self.con)
+        with patch('engine.execution.time.time', return_value=self.now + 3 * HOUR):
+            execution.monitor_paper(self.con)
         row = self.con.execute(
             "SELECT payload FROM execution_events WHERE intent_id=? "
             "AND event='PAPER_CLOSED'", (intent_id,)).fetchone()

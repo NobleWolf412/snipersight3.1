@@ -133,7 +133,7 @@ OPERATIONAL_EXPECTED = {
     # losses that hurt most.
     # execution-core-v0.9: `intent_key` accepts the attempt, so a retested
     # zone stops inheriting the previous attempt's terminal state.
-    "execution_core": "execution-core-v0.10-draft",
+    "execution_core": "execution-core-v0.11-draft",
     "positions": "positions-v0.3-draft",
     # phemex-private-v0.4: the stop (sent on every order) and every target
     # are tick-validated for all order kinds; submit() sets the leverage the
@@ -164,7 +164,7 @@ OPERATIONAL_EXPECTED = {
     # branch and returned NO RECORD — which under the v0.8 rule above means
     # "this domain has not acted", and the setup read READY again after the
     # venue had filled or refused its entry.
-    "opportunities": "opportunity-v0.9-draft",
+    "opportunities": "opportunity-v0.10-draft",
     # quality-v0.5: staleness floored at 30 minutes. 2 x tf on a 5m series is
     # ten minutes, and a scan cycle is eleven to twelve, so every 5m feed was
     # DEGRADED near the end of every cycle and healed on the next import — the
@@ -414,6 +414,9 @@ ATR_CONSUMERS = (
 
 
 EXPECTED = {
+    # Confirmation lifecycle: setup24 publishes causal close-reference plans,
+    # terminal rejections, and complete-window cancellations. Its whole trading
+    # tail moves: exec29, risk30, riskpaper6, scale23, cooldown17.
     # ------------------------------------------------------------------
     # 2026-09-10 — THE ATR CASCADE. `swings.compute_atr` quantized to a FIXED
     # Q8, which is thirteen significant figures on BTC at 78,262 and ONE on
@@ -564,7 +567,7 @@ EXPECTED = {
     # targets and the pool-gated playbooks move. THIS RESTARTS THE FORWARD
     # RECORD — livegate compares the baseline's strategy_version — and it
     # was taken deliberately while that record stood at 2 of 100.
-    "setup": "setup-v0.23-draft",
+    "setup": "setup-v0.24-draft",
     # S50 cascade. exec-v0.13 -> v0.14 corrected the MAKER_THEN_MARKET crossing
     # leg, which booked a market fill at the PLAN's price — two bars stale, and
     # outside the fill bar's own [low, high] on 78 of 95 crossed orders, never
@@ -595,7 +598,7 @@ EXPECTED = {
     # add's setup_id is f"{parent}|ADD{n}" and carries no scale tag, so a
     # scale bump alone leaves two generations of ADD exec facts under one
     # setup_id. That is S37 exactly, which is why these two never split.
-    "exec": "exec-v0.28-draft",
+    "exec": "exec-v0.29-draft",
     # risk-v0.22: the envelope restated in R, sized by mode (paper/shadow 2%,
     # testnet/live 0.25%), gates identical everywhere; DECISIONs record their
     # pct. The v0.21 note above this line claimed "no cascade follows risk" —
@@ -614,7 +617,7 @@ EXPECTED = {
     # now carry a corrected stop fill.
     # risk-v0.29: sizes setup-v0.23 against exec-v0.28 and replays the
     # account from those facts. No sizing rule changed.
-    "risk": "risk-v0.29-draft",
+    "risk": "risk-v0.30-draft",
     # riskpaper-v0.1: the PAPER BOOK's own risk authority, born with this
     # separation. It rules only on setups that are still live, against
     # `paperbook`'s ledger — balance, exposure, reservations, cooldowns and
@@ -626,7 +629,7 @@ EXPECTED = {
     # loss controls are read at the moment of decision, not at the setup's
     # confirmation. All three let the book approve more than it could fund.
     # riskpaper-v0.5: the paper book's half of the risk-v0.29 move.
-    "riskpaper": "riskpaper-v0.5-draft",
+    "riskpaper": "riskpaper-v0.6-draft",
     # scale-v0.22: the add's economics gate prices FUNDING. It was the one
     # estimated_round_trip_cost caller passing neither symbol nor
     # tf_seconds, which is what that function requires before it charges
@@ -634,9 +637,9 @@ EXPECTED = {
     # passed both. setups moved to v0.11 for this exact change and scalein
     # imports MIN_RISK_COST_MULT from it. Understated cost means the gate
     # rejects less, so adds were admitted on economics they do not have.
-    "scale": "scale-v0.22-draft",
+    "scale": "scale-v0.23-draft",
     # cooldown-v0.16: reads exec-v0.28 to decide the re-entry lockout.
-    "cooldown": "cooldown-v0.16-draft",
+    "cooldown": "cooldown-v0.17-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
     # every setup they emit. No rule changed in either and no trade differs —
     # both policies are ALLOW everywhere — but the payload does, and a payload

@@ -17,6 +17,7 @@ from __future__ import annotations
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from decimal import Decimal
 from pathlib import Path
 
@@ -121,7 +122,8 @@ class OnePaperAttempt(unittest.TestCase):
             (50100, 50800, 50050, 50700),
             (50700, 52100, 50600, 52050),     # takes 52000 — the target
         ])
-        execution.monitor_paper(self.con)
+        with patch('engine.execution.time.time', return_value=self.now + 4 * HOUR):
+            execution.monitor_paper(self.con)
         position = self.con.execute(
             "SELECT state,entry,r_multiple,outcome FROM paper_positions "
             "WHERE intent_id=?", (routed["routed"][0]["queue"]["intent_id"],)
@@ -167,7 +169,8 @@ class OnePaperAttempt(unittest.TestCase):
             (50100, 50800, 50050, 50700),
             (50700, 52100, 50600, 52050),
         ])
-        execution.monitor_paper(self.con)
+        with patch('engine.execution.time.time', return_value=self.now + 4 * HOUR):
+            execution.monitor_paper(self.con)
 
         import server
         trace = server._paper_trace(self.con, self.setup_id)

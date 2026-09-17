@@ -32,7 +32,10 @@ from .regime import REGIME_VERSION
 from .runlog import RunRecorder
 from . import costs
 
-SETUP_VERSION = "setup-v0.23-draft"
+SETUP_VERSION = "setup-v0.24-draft"
+# v0.24: wait the full confirmation window, close rejected lifecycles, and
+# publish plans from the confirmation close without waiting for a future bar.
+# This is a planned reference, never a claim of an executable fill.
 # v0.23: liq-v0.14 — pools now confirm with their last member, so targets
 # and the pool-gated playbooks change. THIS RESTARTS THE FORWARD RECORD:
 # `livegate` compares the baseline's strategy_version, and the count falls
@@ -1031,6 +1034,19 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                                  algo_version=SETUP_VERSION, payload=payload):
                 n_rejected += 1
 
+        def reject_confirmed(zone_id, at, reason, details=None):
+            # Once confirmation succeeds, a later gate must finish the same
+            # setup lifecycle, not leave a permanent CONFIRMING placeholder.
+            reject(zone_id, at, reason, details)
+            store.insert_fact(con, symbol=symbol, tf=tf, kind="setup",
+                              market_time=at["market_time"], confirmed_at=at["confirmed_at"],
+                              algo_version=SETUP_VERSION,
+                              payload={**confirming, "state": "REJECTED",
+                                       "confirmed_bar_ts": at["market_time"],
+                                       "why": "The candle confirmed the setup, but the trade plan was rejected: " + reason.replace("_", " ").lower() + ".",
+                                       "rejection_reason": reason,
+                                       "rejection_details": details or {}})
+
         def gates(direction, entry, sl, tp, a):
             """Shared R:R + fee gates. Returns rr or None."""
             risk = (entry - sl) if direction == "LONG" else (sl - entry)
@@ -1241,8 +1257,11 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
 
             if ci is None:
                 cancel_at = min(i0 + CONFIRM_MAX_BARS, len(candles) - 1)
+                zone_broke = broken and broken["market_time"] <= candles[cancel_at]["open_ts"]
+                if not zone_broke and candles[cancel_at]["open_ts"] + tf_seconds < confirming["confirm_deadline_ts"]:
+                    continue
                 reason = ("ZONE_BROKE_UNCONFIRMED"
-                          if broken and broken["market_time"] <= candles[cancel_at]["open_ts"]
+                          if zone_broke
                           else "CONFIRMATION_TIMEOUT")
                 # A zone that broke before confirming is a LOSS AVOIDED, not
                 # attrition. The UI must present it that way or the filter that
@@ -1260,16 +1279,13 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             # ── VALIDATED: the level held, on the evidence of a closed bar ───
             cb = candles[ci]
             bct = cb["open_ts"] + tf_seconds          # when this became knowable
+            decision_at = {"market_time": cb["open_ts"], "confirmed_at": bct}
             if atr[ci] is None:
-                reject(zone_id, touched, "ATR_UNAVAILABLE")
+                reject_confirmed(zone_id, decision_at, "ATR_UNAVAILABLE")
                 continue
-            # Entry is the NEXT bar's open — a price that demonstrably traded,
-            # so no fill assumption is required. v0.6 rested a limit at the zone
-            # edge and MISSED 90 of 232 orders (39%); a miss is not a neutral
-            # outcome, it is a signal the book never got to express.
-            if ci + 1 >= len(candles):
-                continue                              # next bar has not closed yet
-            entry = Decimal(candles[ci + 1]["open"])
+            # A plan reference knowable NOW, not the next candle's opening
+            # price read only after that candle closes. Execution owns fills.
+            entry = Decimal(cb["close"])
             # Stop sits beyond the confirmation bar's own extreme: a level the
             # market has just visibly rejected, not an ATR offset from a zone.
             if direction == "LONG":
@@ -1278,19 +1294,19 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 sl = max(Decimal(cb["high"]), top) + SL_BUFFER_ATR * atr[ci]
             risk = (entry - sl) if direction == "LONG" else (sl - entry)
             if risk <= 0:
-                reject(zone_id, touched, "INVALID_BRACKET")
+                reject_confirmed(zone_id, decision_at, "INVALID_BRACKET")
                 continue
             # VETO before any scoring. A veto is not a low score that something
             # else can offset — it is a trade that cannot be taken as planned.
             fired = vetoes(confirm_bar=cb, atr_at_confirm=atr[ci],
                            entry=entry, sl=sl, tick=ticks[ci])
             if fired:
-                reject(zone_id, touched, "VETOED", {"vetoes": fired})
+                reject_confirmed(zone_id, decision_at, "VETOED", {"vetoes": fired})
                 continue
 
             tp_uncapped = target(direction, entry, bct)
             if tp_uncapped is None:
-                reject(zone_id, touched, "NO_CAUSAL_TARGET")
+                reject_confirmed(zone_id, decision_at, "NO_CAUSAL_TARGET")
                 continue
             # Cap the target in R. Uncapped, `target()` returns the nearest
             # opposing structure — which on a daily chart is routinely a quarter
@@ -1303,14 +1319,14 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             rr = ((tp - entry) if direction == "LONG" else (entry - tp)) / risk
             rr = rr.quantize(Q2)
             if rr < MIN_RR:
-                reject(zone_id, touched, "RR_BELOW_MINIMUM",
+                reject_confirmed(zone_id, decision_at, "RR_BELOW_MINIMUM",
                        {"rr": str(rr), "minimum": str(MIN_RR)})
                 continue
             est_cost = costs.estimated_round_trip_cost(entry, atr[ci], profile,
                                             symbol=symbol, tf_seconds=tf_seconds)
             if risk < MIN_RISK_COST_MULT * est_cost:
                 n_cost_rejected += 1
-                reject(zone_id, touched, "UNECONOMIC_AFTER_COSTS",
+                reject_confirmed(zone_id, decision_at, "UNECONOMIC_AFTER_COSTS",
                        {"risk_price_units": str(risk),
                         "estimated_cost_price_units": str(est_cost),
                         "required_multiple": str(MIN_RISK_COST_MULT)})
@@ -1368,7 +1384,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 # so `test_pipeline_gates` can see it: that guard scans this
                 # source for reject() call sites and a constant reference is
                 # invisible to it. The two are pinned equal in test_bias.
-                reject(zone_id,
+                reject_confirmed(zone_id,
                        {"market_time": cb["open_ts"], "confirmed_at": bct},
                        "BIAS_BLOCKED",
                        {"bias": bias_block, "strategy": strategy,
@@ -1384,7 +1400,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             _agrees = bias.agrees(direction, _permitted)
             _ctx = context_verdict(strategy, _permitted)
             if context_blocked(_ctx):
-                reject(zone_id,
+                reject_confirmed(zone_id,
                        {"market_time": cb["open_ts"], "confirmed_at": bct},
                        "CONTEXT_BLOCKED",
                        {"context": _ctx, "phase": _phase["phase"],
@@ -1408,7 +1424,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             _wv = window_verdict(strategy, direction, _cc["read"] if _cc["read"] != "UNKNOWN" else None)
             _chart["situation"], _chart["action"] = _wv["situation"], _wv["action"]
             if window_blocked(_wv):
-                reject(zone_id,
+                reject_confirmed(zone_id,
                        {"market_time": cb["open_ts"], "confirmed_at": bct},
                        "WINDOW_BLOCKED",
                        {"chart": _chart, "strategy": strategy, "direction": direction})
@@ -1430,6 +1446,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
             payload = {"setup_id": setup_id,
                        "strategy": strategy, "direction": direction,
                        "entry": str(entry), "sl": str(sl), "tp": str(tp),
+                       "entry_reference": "ARMED_PLAN" if _inherited else "CONFIRMATION_CLOSE",
                        "inherited_from_forming": _inherited,
                        "forming_id": (_armed.get("setup_id") if _inherited else None),
                        "armed_size_units": (_armed.get("size_units") if _inherited else None),

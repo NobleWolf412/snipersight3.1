@@ -123,7 +123,7 @@ function resultChart(rows){
 
 function facts(entries) { return `<dl class="facts">${entries.map(([label,value])=>`<div><dt>${esc(label)}</dt><dd class="${/profit|loss|realised/i.test(label)?'pnl-'+pnlTone(value):''}">${esc(value)}</dd></div>`).join('')}</dl>`; }
 
-function disposeChart(){if(resize)resize.disconnect();resize=null;if(chart)chart.remove();chart=null;}
+function disposeChart(){if(resize)resize.disconnect();resize=null;if(chart)chart.remove();chart=null;$('#opportunity-level-key')?.remove();}
 
 function goto(next){if(location.hash===`#${next}`)void render();else location.hash=next;}
 
@@ -410,7 +410,20 @@ async function drawChart(symbol,tf){disposeChart();try{const data=await read('ca
 
     series.setData(data.candles.map(c=>({time:c.time,open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)})));
 
-    if(selectedSetup&&selectedSetup.setup.symbol===symbol){const s=selectedSetup.setup;[[s.entry,'Entry','#a4baff'],[s.stop,'Stop','#ff999e'],[s.targets?.[0],'Target','#78e2b6']].forEach(([price,title,color])=>{if(setupPrice(price)&&Number.isFinite(Number(price))&&Number(price)>0)series.createPriceLine({price:Number(price),color,lineWidth:1,lineStyle:2,axisLabelVisible:true,title});});}
+    // Keep level labels outside the candle pane so stacked prices never cover it.
+    $('#opportunity-level-key')?.remove();
+    const levelKey=document.createElement('div');levelKey.id='opportunity-level-key';levelKey.className='opportunity-level-key';levelKey.setAttribute('aria-label','Chart levels');$('#chart').after(levelKey);
+    const plottedLevels=new Map();
+    const addLevel=(price,title,color)=>{
+      if(!setupPrice(price)||!Number.isFinite(Number(price))||Number(price)<=0)return;
+      // Equal canvas prices share one line. Order levels take priority over zone edges.
+      const coordinate=Number(price),existing=plottedLevels.get(coordinate);
+      if(existing){existing.textContent+=` · ${title.toLowerCase()} at the same price`;return;}
+      const isEntry=title==='Entry';
+      series.createPriceLine({price:coordinate,color,lineWidth:isEntry?2:1,lineStyle:isEntry?0:2,axisLabelVisible:false,title:''});
+      const item=document.createElement('span');item.style.setProperty('--level-color',color);if(isEntry)item.className='entry-level';item.textContent=`${title}: ${price}`;levelKey.append(item);plottedLevels.set(coordinate,item);
+    };
+    if(selectedSetup&&selectedSetup.setup.symbol===symbol){const s=selectedSetup.setup;[[s.entry,'Entry','#a4baff'],[s.stop,'Stop-loss','#ff999e'],[s.targets?.[0],'Target','#78e2b6']].forEach(([price,title,color])=>addLevel(price,title,color));}
 
     if(selectedSetup){
       const chartForGuide=chart;
@@ -419,7 +432,7 @@ async function drawChart(symbol,tf){disposeChart();try{const data=await read('ca
       if(guide){
       const node=$('#setup-evidence');
       if(node)node.insertAdjacentHTML('beforeend',`<h3>Levels being watched</h3>${facts([['Area lower edge',guide.zone_bottom||'Not recorded'],['Area upper edge',guide.zone_top||'Not recorded'],['Confirmation deadline',date(guide.confirmation_deadline)],['Entry deadline',date(guide.entry_deadline)]])}<p>${esc(guide.confirmation)}</p><h3>When the bot skips it</h3><p>${esc(guide.cancel_reason?label(guide.cancel_reason):guide.skip_if)}</p><p class="source-detail">Area edges are shown on the chart. They are not entry or stop-loss orders.</p>`);
-      [[guide.zone_bottom,'Area lower edge'],[guide.zone_top,'Area upper edge']].forEach(([price,title])=>{if(setupPrice(price)&&Number.isFinite(Number(price)))series.createPriceLine({price:Number(price),color:'#f0c37e',lineWidth:2,lineStyle:2,axisLabelVisible:true,title});});
+      [[guide.zone_bottom,'Area lower edge'],[guide.zone_top,'Area upper edge']].forEach(([price,title])=>addLevel(price,title,'#f0c37e'));
       }
     }
     chart.timeScale().fitContent();resize=new ResizeObserver(()=>{if(chart&&$('#chart'))chart.applyOptions({width:$('#chart').clientWidth,height:$('#chart').clientHeight});});resize.observe($('#chart'));

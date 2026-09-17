@@ -142,7 +142,7 @@ class SimulatorConventions(unittest.TestCase):
         # this harness computes its own ATR, so its replay follows the engine.
         # v0.28 changes setup/scale input generations; settlement arithmetic
         # used by this harness is unchanged (2bc49cf).
-        self.assertEqual(execsim.EXEC_VERSION, "exec-v0.28-draft")
+        self.assertEqual(execsim.EXEC_VERSION, "exec-v0.29-draft")
 
     def test_same_bar_stop_and_target_counts_as_the_stop(self):
         """The metric this whole version moves is the same-bar stop-out rate.

@@ -10,9 +10,9 @@ from decimal import Decimal
 from . import costs, execution, execsim, forwardtrial, importer, store, swings
 
 STOP_STUDY_VERSION = "stop-study-v0.1-draft"
-# Frozen on purpose — see forwardtrial.DEPENDENCIES. S54 moved exec.
-DEPENDENCIES = {"exec": "exec-v0.28-draft", "swing": "swing-v0.11-draft",
-                "execution": "execution-core-v0.10-draft", "forwardtrial": "forward-trial-v0.1-draft"}
+# New-cohort dependencies only; existing configs stay frozen and pause.
+DEPENDENCIES = {"exec": "exec-v0.29-draft", "swing": "swing-v0.11-draft",
+                "execution": "execution-core-v0.11-draft", "forwardtrial": "forward-trial-v0.1-draft"}
 RULES = {"HOLD": "Original stop", "COST_COVER": "Cover costs after +1R",
          "STRUCTURE": "Follow confirmed swings"}
 

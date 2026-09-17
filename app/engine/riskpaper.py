@@ -35,7 +35,7 @@ from .runlog import RunRecorder
 from .setups import SETUP_VERSION
 
 
-PAPER_RISK_VERSION = "riskpaper-v0.5-draft"
+PAPER_RISK_VERSION = "riskpaper-v0.6-draft"
 # v0.5: the paper book's half of the risk-v0.29 move. Same reason.
 # v0.2: three corrections found by review, all of which let the book
 # approve more than it could fund.

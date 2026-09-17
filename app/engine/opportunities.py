@@ -20,7 +20,10 @@ from .contracts import (DecisionReason, EntryRecommendation, ExecutionDomain,
                         to_wire)
 
 
-OPPORTUNITY_VERSION = "opportunity-v0.9-draft"
+OPPORTUNITY_VERSION = "opportunity-v0.10-draft"
+# v0.10: separate confirmation and entry deadlines; terminal states and
+# existing custody outrank later new-entry rejection. Preserve attempt custody
+# across setup generations so rebuilding cannot offer an already-used attempt.
 # v0.9: the private ENTRY_* outbox states are mapped. `monitor_private` writes
 # ENTRY_FILLED / ENTRY_CANCELLED / ENTRY_CANCELED / ENTRY_REJECTED /
 # ENTRY_EXPIRED, and `sync_manual` writes "CANCELLED"; none were in
@@ -211,16 +214,17 @@ def lifecycle(setup_state: str, risk_fact: dict | None = None,
     domain has not acted**; it is never permission to read another domain's
     history, which is precisely the defect v0.8 exists to remove.
 
-    Risk still outranks a record, because risk is the authority on whether an
-    attempt was ever allowed to become exposure. A domain that recorded a fill
-    against a rejected decision is describing a bug, not a position.
+    Existing custody outranks a later new-entry risk verdict. Risk can reject
+    precisely because this order already owns the account's only slot.
     """
     state = (setup_state or "").upper()
     decision = str((risk_fact or {}).get("decision") or "").upper()
-    if decision == "REJECTED":
-        return OpportunityState.BLOCKED
     if record is not None:
         return record
+    if state in ("EXPIRED", "CANCELLED", "REJECTED"):
+        return OpportunityState(state)
+    if decision == "REJECTED":
+        return OpportunityState.BLOCKED
     if state == "VALIDATED":
         return OpportunityState.READY
     if state in ("FORMING", "CONFIRMING"):
@@ -379,16 +383,18 @@ def candidate(payload: dict, *, risk_fact: dict | None = None,
     risk_rejected = str((risk_fact or {}).get("decision") or "").upper() == "REJECTED"
     expiry_issue = None
     expires_at = payload.get("expires_at_ts") or payload.get("expires_at")
+    confirming = payload.get("state") == "CONFIRMING"
+    deadline = payload.get("confirm_deadline_ts") if confirming else expires_at
     if now is not None and state in {
             OpportunityState.READY, OpportunityState.FORMING,
-            OpportunityState.WATCHING}:
+            OpportunityState.WATCHING, OpportunityState.BLOCKED} and record is None:
         try:
-            if expires_at is None:
+            if deadline is None:
                 # Every executable playbook owns an expiry. A legacy or damaged
                 # setup without one can remain visible but cannot become risk.
                 state = OpportunityState.BLOCKED
                 expiry_issue = "missing"
-            elif int(expires_at) <= int(now):
+            elif int(deadline) <= int(now):
                 state = OpportunityState.EXPIRED
         except (TypeError, ValueError):
             # An unreadable expiry is unsafe for an entry decision.
@@ -450,7 +456,20 @@ def candidate(payload: dict, *, risk_fact: dict | None = None,
                not alignment_blocked
     evidence = _ungraded(payload)
     primary = str(payload.get("why") or reasons[0].summary)
-    if risk_rejected:
+    if state == OpportunityState.REJECTED and payload.get("rejection_reason"):
+        reason = payload["rejection_reason"]
+        counterargument = {
+            "RR_BELOW_MINIMUM": "The potential reward was too small for the risk.",
+            "UNECONOMIC_AFTER_COSTS": "Trading costs were too high for this setup.",
+            "NO_CAUSAL_TARGET": "No suitable price target was available.",
+            "INVALID_BRACKET": "The entry and stop-loss did not form a valid trade.",
+            "ATR_UNAVAILABLE": "There was not enough volatility history to size this trade.",
+            "VETOED": "The confirmation candle or stop distance failed the trade checks.",
+        }.get(reason, "The setup did not pass its strategy checks: " + reason.replace("_", " ").lower() + ".")
+    elif state == OpportunityState.EXPIRED:
+        counterargument = ("The confirmation window ended before a trade was ready."
+                           if confirming else "The entry window expired before a trade could be taken.")
+    elif risk_rejected and state == OpportunityState.BLOCKED:
         counterargument = (risk_reasons[0].summary if risk_reasons else
                            "Trade skipped — an account safety check blocked it.")
     elif expiry_issue == "missing":
@@ -459,8 +478,6 @@ def candidate(payload: dict, *, risk_fact: dict | None = None,
     elif expiry_issue == "unreadable":
         counterargument = ("The setup expiry is unreadable, so the entry window "
                            "cannot be verified.")
-    elif state == OpportunityState.EXPIRED:
-        counterargument = "The entry window expired before a trade could be taken."
     elif state == OpportunityState.CANCELLED:
         counterargument = "The setup was cancelled before an entry was taken."
     elif state == OpportunityState.ORDER_WORKING:
@@ -669,7 +686,7 @@ def _research_records(con, since: int) -> dict[str, tuple]:
     return out
 
 
-def _outbox_records(con, mode: str) -> dict[str, tuple]:
+def _outbox_records(con, mode: str, *, by_attempt: bool = False) -> dict[str, tuple]:
     """One dispatch domain's own account of each setup, as `(state, at)`.
 
     Reads only rows written under `mode`, which is what makes the domain rule
@@ -678,11 +695,11 @@ def _outbox_records(con, mode: str) -> dict[str, tuple]:
     """
     private = mode in (ExecutionDomain.TESTNET.value, ExecutionDomain.LIVE.value)
     sql = ("SELECT o.setup_id, o.state, m.state, "
-           "COALESCE(m.updated_at, o.updated_at) "
+           "COALESCE(m.updated_at, o.updated_at), o.attempt_id "
            "FROM execution_outbox o "
            "LEFT JOIN managed_positions m ON m.position_id = o.intent_id "
            "WHERE o.mode=? ORDER BY o.updated_at, o.id") if private else (
-           "SELECT setup_id, state, NULL, updated_at FROM execution_outbox "
+           "SELECT setup_id, state, NULL, updated_at, attempt_id FROM execution_outbox "
            "WHERE mode=? ORDER BY updated_at, id")
     try:
         rows = con.execute(sql, (mode,)).fetchall()
@@ -691,7 +708,7 @@ def _outbox_records(con, mode: str) -> dict[str, tuple]:
             return {}
         raise
     out: dict[str, tuple] = {}
-    for setup_id, outbox_state, custody_state, updated_at in rows:
+    for setup_id, outbox_state, custody_state, updated_at, attempt in rows:
         # Last row per setup wins: several intents share a setup when the
         # quantity changed, and the newest is the live one.
         state = _CUSTODY_LIFECYCLE.get(custody_state) if custody_state else None
@@ -702,7 +719,8 @@ def _outbox_records(con, mode: str) -> dict[str, tuple]:
                 f"opportunities: unmapped {mode} outbox state "
                 f"{outbox_state!r} for {setup_id} — treated as no record")
             continue
-        out[setup_id] = (state, int(updated_at or 0))
+        if not by_attempt or attempt:
+            out[attempt if by_attempt else setup_id] = (state, int(updated_at or 0))
     return out
 
 
@@ -781,6 +799,9 @@ def list_candidates(con, *, domain: str = ExecutionDomain.RESEARCH.value,
     records = ({sid: (state, at) for sid, (state, at, _story) in research.items()
                 if state is not None} if is_research
                else _outbox_records(con, domain))
+    # A strategy generation changes setup_id, but does not create a new
+    # market attempt. Keep custody across rebuilds rather than offering it twice.
+    attempt_records = {} if is_research else _outbox_records(con, domain, by_attempt=True)
     exposure = (real_exposure(con) if show_real_exposure and domain not in (
         ExecutionDomain.TESTNET.value, ExecutionDomain.LIVE.value) else {})
     # The operator's early closes, keyed on the version-free zone — the
@@ -795,10 +816,11 @@ def list_candidates(con, *, domain: str = ExecutionDomain.RESEARCH.value,
     items = []
     for sid, payload in setups_by_id.items():
         payload.setdefault("setup_id", sid)
-        record = records.get(sid)
+        same_attempt = attempt_records.get(attempt_id_for(sid, payload))
+        record = same_attempt or records.get(sid)
         state = None
-        if record is not None and not _describes_an_earlier_attempt(
-                record[0], record[1], payload):
+        if record is not None and (same_attempt or not _describes_an_earlier_attempt(
+                record[0], record[1], payload)):
             state = record[0]
         item = candidate(
             payload, risk_fact=risk_by_id.get(sid), record=state, domain=domain,

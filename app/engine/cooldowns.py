@@ -33,7 +33,7 @@ caller supplies, so a replay reaches the same verdict as the live pass did.
 from . import store
 from .runlog import RunRecorder
 
-COOLDOWN_VERSION = "cooldown-v0.16-draft"
+COOLDOWN_VERSION = "cooldown-v0.17-draft"
 # v0.16: reads exec-v0.28 facts to decide the re-entry lockout; a different
 # exec generation is a different lockout.
 # v0.15: the swing-v0.11 ATR cascade — reads exec facts.

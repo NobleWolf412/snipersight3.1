@@ -19,7 +19,10 @@ from .contracts import (AutomationMode, BrokerExecution, BrokerOrder, DecisionRe
                         RiskDecision, to_wire)
 
 
-EXECUTION_CORE_VERSION = "execution-core-v0.10-draft"
+EXECUTION_CORE_VERSION = "execution-core-v0.11-draft"
+# v0.11: an unfilled partial maker window expires once eligible history is
+# complete. A single pre-deadline bar previously left ZEC pending forever,
+# reserving the sole slot and blocking ETH/UNI after the deadline.
 # v0.9: `intent_key` accepts the ATTEMPT. `setup_id` names the zone, not the
 # occurrence, so a zone retested weeks later at the same quantity and entry
 # minted the same key, found the old row, and returned that attempt's
@@ -563,7 +566,38 @@ def _monitor_paper_locked(con):
             "SELECT open_ts,open,high,low,close FROM candles "
             "WHERE symbol=? AND tf=? AND open_ts>=? ORDER BY open_ts",
             (intent.symbol, tf, intent.created_at)).fetchall()
+        from . import importer
+        seconds = importer.TF_SECONDS[tf]
+        now = int(time.time())
+        candles = [c for c in candles if c[0] + seconds <= now]
+        first_open = ((intent.created_at + seconds - 1) // seconds) * seconds
+        anchor = con.execute(
+            "SELECT max(open_ts) FROM candles WHERE symbol=? AND tf=? AND open_ts<=?",
+            (intent.symbol, tf, intent.created_at)).fetchone()[0]
+        if anchor is not None:
+            first_open = anchor + ((intent.created_at - anchor + seconds - 1) // seconds) * seconds
+        def expiry_proven():
+            if intent.expires_at is None or now < intent.expires_at:
+                return False
+            expected = range(first_open, intent.expires_at, seconds)
+            available = {c[0] for c in candles}
+            # Missing history is not proof of a missed fill. Keep the
+            # reservation until every eligible completed bar can be checked.
+            return all(t in available for t in expected)
+
+        def expire():
+            payload = {"environment": "paper", "expired_at": intent.expires_at,
+                       "entry_model": intent.entry_model}
+            event(con, intent_id, "PAPER_EXPIRED", payload)
+            updated.append({"intent_id": intent_id, "state": "PAPER_EXPIRED"})
+            complete(con, intent_id, {"state": "PAPER_EXPIRED", **payload})
+
         if not candles:
+            if state == "PAPER_ROUTED" and expiry_proven():
+                expire()
+            elif state == "PAPER_ROUTED" and intent.expires_at is not None and now >= intent.expires_at:
+                refused.append({"intent_id": intent_id,
+                                "reason": "Cannot expire entry: eligible candle history is incomplete"})
             continue
         position = con.execute(
             "SELECT entry,filled_at,target,entry_role FROM paper_positions WHERE intent_id=?",
@@ -572,7 +606,16 @@ def _monitor_paper_locked(con):
             from . import costs, execsim
             eligible = [c for c in candles if intent.expires_at is None or
                         c[0] < intent.expires_at]
+            if intent.expires_at is not None and eligible and any(
+                    c[0] != first_open + i * seconds for i, c in enumerate(eligible)):
+                refused.append({"intent_id": intent_id,
+                                "reason": "Cannot resolve entry: eligible candle history is incomplete"})
+                continue
             if not eligible:
+                if not expiry_proven():
+                    refused.append({"intent_id": intent_id,
+                                    "reason": "Cannot resolve entry: eligible candle history is incomplete"})
+                    continue
                 expired_at = intent.expires_at or candles[0][0]
                 event(con, intent_id, "PAPER_EXPIRED", {
                     "environment": "paper", "expired_at": expired_at})
@@ -606,6 +649,11 @@ def _monitor_paper_locked(con):
                 get_logger().warning(
                     f"paper {intent.symbol} {tf}: {simulation['note']}")
             if simulation["status"] == "PENDING":
+                if expiry_proven():
+                    expire()
+                elif intent.expires_at is not None and now >= intent.expires_at:
+                    refused.append({"intent_id": intent_id,
+                                    "reason": "Cannot expire entry: eligible candle history is incomplete"})
                 continue
             if simulation["status"] == "MISSED":
                 expired_at = (intent.expires_at or
@@ -729,6 +777,10 @@ def _monitor_paper_locked(con):
             "state": "PAPER_CLOSED", **payload})
         updated.append({"intent_id": intent_id, "state": "PAPER_CLOSED",
                         "outcome": outcome, "r_multiple": str(r_multiple)})
+    if refused:
+        from .runlog import get_logger
+        for item in refused:
+            get_logger().warning(f"paper order {item['intent_id']} unresolved: {item['reason']}")
     return {"updated": updated, "refused": refused,
             "version": EXECUTION_CORE_VERSION}
 

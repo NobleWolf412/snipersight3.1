@@ -285,6 +285,55 @@ def test_paper_entry_uses_shared_maker_then_market_fill_authority():
     assert '"entry_role": "TAKER"' in fill
 
 
+@pytest.mark.parametrize('touch,missing', [(False,False),(True,False),(False,True)])
+def test_expired_partial_maker_window_resolves_without_losing_valid_fills(touch, missing):
+    con = memory()
+    automation.transition(con, "PAPER", expected_revision=0)
+    p = plan(AutomationMode.PAPER)
+    for key,value in {'timeframe':'5m','created_at':1,'expires_at':600,
+                      'entry_model':'MAKER_THEN_MARKET','maker_wait_bars':2}.items():
+        object.__setattr__(p.intent,key,value)
+    with mock.patch('engine.shared_account.time.time',return_value=1):
+        execution.Coordinator().dispatch(con,p)
+    if not missing:
+        con.execute("INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    ('BTCUSDT','5m',300,'50100','51000','49900' if touch else '50050','50500','1','test',600))
+    con.execute("INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)",
+                ('BTCUSDT','5m',600,'50500','51000','50050','50500','1','test',900))
+    con.commit()
+    with mock.patch('engine.execution.time.time',return_value=1000):
+        result = execution.monitor_paper(con)
+        execution.monitor_paper(con)
+    state = con.execute('SELECT state FROM execution_outbox').fetchone()[0]
+    assert state == ('PAPER_ROUTED' if missing else 'PAPER_FILLED' if touch else 'PAPER_EXPIRED')
+    assert con.execute('SELECT count(*) FROM paper_positions').fetchone()[0] == int(touch)
+    if missing:
+        assert result['refused']
+    if not missing and not touch:
+        assert con.execute("SELECT count(*) FROM execution_events WHERE event='PAPER_EXPIRED'").fetchone()[0] == 1
+        from engine import paperbook
+        assert paperbook.snapshot(con)['reserved_slots'] == 0
+
+
+def test_missing_first_candle_cannot_be_hidden_by_later_touch():
+    con = memory()
+    automation.transition(con,'PAPER',expected_revision=0)
+    p=plan(AutomationMode.PAPER)
+    for key,value in {'timeframe':'5m','created_at':1,'expires_at':900,
+                      'entry_model':'MAKER_THEN_MARKET','maker_wait_bars':2}.items():
+        object.__setattr__(p.intent,key,value)
+    with mock.patch('engine.shared_account.time.time',return_value=1):
+        execution.Coordinator().dispatch(con,p)
+    con.execute('INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)',
+                ('BTCUSDT','5m',600,'50100','51000','49900','50500','1','test',900))
+    con.commit()
+    with mock.patch('engine.execution.time.time',return_value=1000):
+        result=execution.monitor_paper(con)
+    assert result['refused']
+    assert con.execute('SELECT count(*) FROM paper_positions').fetchone()[0] == 0
+    assert con.execute('SELECT state FROM execution_outbox').fetchone()[0] == 'PAPER_ROUTED'
+
+
 def test_shadow_comparison_is_earned_only_after_paired_paper_result():
     con = memory()
     con.execute("CREATE TABLE IF NOT EXISTS candles(symbol TEXT,tf TEXT,open_ts INTEGER,"

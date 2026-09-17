@@ -111,22 +111,20 @@ def test_blocked_candidate_recommends_no_trade():
     assert item.eligible is False
 
 
-def test_rejected_risk_outranks_shadow_fill_and_explains_the_real_reason():
-    # A domain that recorded a fill against a REJECTED decision is describing
-    # a bug, not a position, so risk still outranks the record.
+def test_later_risk_rejection_cannot_hide_existing_position():
+    # Subsequent risk runs can reject new entries because this order owns a
+    # slot. That verdict must not erase the account's recorded custody.
     item = opportunities.candidate(
         setup(),
         risk_fact={"decision": "REJECTED",
                    "reasons": ["NOT_IN_POINT_IN_TIME_UNIVERSE"]},
         record=OpportunityState.POSITION_OPEN)
-    assert item.state == OpportunityState.BLOCKED
+    assert item.state == OpportunityState.POSITION_OPEN
     assert item.eligible is False
     assert item.entry_recommendation.order_kind == OrderKind.NONE
     assert item.strongest_counterargument == (
-        "Trade skipped — BTCUSDT did not meet the bot's market-selection rules "
-        "when the setup confirmed.")
+        "The position is already open and is being managed.")
     assert item.reasons[-1].code == "NOT_IN_POINT_IN_TIME_UNIVERSE"
-    assert item.reasons[-1].summary == item.strongest_counterargument
 
 
 def test_shadow_market_rejection_says_research_only_in_plain_language():

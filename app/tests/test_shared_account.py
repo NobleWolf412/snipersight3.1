@@ -179,8 +179,8 @@ def test_failure_between_fact_and_reservation_rolls_back_both(tmp_path, monkeypa
 def test_market_fill_cash_uses_exact_settlement_and_late_route_cannot_reopen(tmp_path, monkeypatch):
     con = account(tmp_path)
     plan = bot_plan('gap')
-    at = int(time.time()) - 7200
-    plan = replace(plan, intent=replace(plan.intent, created_at=at,
+    at = (int(time.time()) // 3600) * 3600 - 7200
+    plan = replace(plan, intent=replace(plan.intent, created_at=at + 1,
         order_kind=OrderKind.MARKET, entry_model='MARKET_NEXT_OPEN'))
     con.execute('INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)',
         ('BTCUSDT','1H',at+3600,'102','105','101','104','1','fixture',at+7200))
@@ -234,14 +234,16 @@ def test_untracked_legacy_manual_blocks_cutover(tmp_path):
         shared_account.request_cutover(con, "complete")
 
 
-def test_shared_bot_close_is_account_scoped_and_idempotent(tmp_path):
+def test_shared_bot_close_is_account_scoped_and_idempotent(tmp_path, monkeypatch):
     con = account(tmp_path)
     plan = bot_plan()
     shared_account.admit_plan(con, plan)
+    opened_at = ((plan.intent.created_at + 3599) // 3600) * 3600
     con.execute("INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)",
-                ("BTCUSDT", "1H", plan.intent.created_at + 3600,
-                 "100", "102", "99", "101", "1", "test", plan.intent.created_at + 7200))
+                ("BTCUSDT", "1H", opened_at,
+                 "100", "102", "99", "101", "1", "test", opened_at + 3600))
     con.commit()
+    monkeypatch.setattr('engine.execution.time.time',lambda:opened_at + 3600)
     execution.monitor_paper(con)
     closed = shared_account.close_paper(con, "bot")
     assert closed["state"] == "PAPER_CLOSED"

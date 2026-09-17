@@ -187,6 +187,30 @@ class ReadFailuresAreLoud(unittest.TestCase):
 class AttemptIdentity(unittest.TestCase):
     """Built to MERGE, because over-splitting is the failure that happened."""
 
+    def test_rebuilt_rejected_attempt_keeps_its_existing_position(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            con = store.connect(Path(tmp) / 'attempt.db')
+            try:
+                sid = _ready_setup(con)
+                old = sid.rsplit('|', 1)[0] + '|setup-v0.23-draft'
+                _outbox(con, old, 'PAPER', 'PAPER_FILLED', CONFIRMED_AT + 10)
+                attempt = opportunities.attempt_id_for(sid, {'confirmed_bar_ts':CONFIRM_BAR})
+                con.execute('UPDATE execution_outbox SET attempt_id=?', (attempt,))
+                store.insert_fact(con,symbol='BTCUSDT',tf='1H',kind='setup',
+                    market_time=CONFIRM_BAR,confirmed_at=CONFIRMED_AT+20,algo_version=setups.SETUP_VERSION,
+                    payload={'setup_id':sid,'state':'REJECTED','strategy':'PULLBACK','direction':'LONG',
+                             'confirmed_bar_ts':CONFIRM_BAR,'rejection_reason':'RR_BELOW_MINIMUM'})
+                rows = opportunities.list_candidates(con,domain='PAPER',now=CONFIRMED_AT+60)
+                self.assertEqual(rows[0]['state'],'POSITION_OPEN')
+                self.assertFalse(rows[0]['eligible'])
+                _outbox(con, old, 'PAPER', 'PAPER_EXPIRED', CONFIRMED_AT+30, intent_id='i-2')
+                con.execute("UPDATE execution_outbox SET attempt_id='later-attempt' WHERE intent_id='i-2'")
+                records=opportunities._outbox_records(con,'PAPER',by_attempt=True)
+                self.assertEqual(records[attempt][0],OpportunityState.POSITION_OPEN)
+                self.assertEqual(records['later-attempt'][0],OpportunityState.EXPIRED)
+            finally:
+                con.close()
+
     def test_an_engine_bump_does_not_split_one_attempt(self):
         """The 2026-08-06 regression: one UNIUSDT 4H REVERSAL touch minted
         five ids across setup-v0.13 to v0.17 with one confirmed_at and
@@ -267,14 +291,13 @@ class LifecycleOwnership(unittest.TestCase):
         self.assertEqual(opportunities.lifecycle("VALIDATED", None, None),
                          OpportunityState.READY)
 
-    def test_risk_rejection_outranks_a_domain_record(self):
-        """A domain that recorded a fill against a REJECTED decision is
-        describing a bug, not a position."""
+    def test_later_risk_rejection_does_not_erase_domain_custody(self):
+        """New-entry risk can reject because an existing position owns a slot."""
         self.assertEqual(
             opportunities.lifecycle(
                 "VALIDATED", {"decision": "REJECTED"},
                 OpportunityState.POSITION_OPEN),
-            OpportunityState.BLOCKED)
+            OpportunityState.POSITION_OPEN)
 
     def test_lifecycle_takes_no_research_argument_at_all(self):
         """Structural guard on the rule. `lifecycle()` used to accept the
