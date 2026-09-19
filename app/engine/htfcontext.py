@@ -249,15 +249,27 @@ def pools_around(pools_by_rung: dict, direction: str, price, as_of: int, atr=Non
 
     def show(p):
         swept = p["swept_at"] is not None and p["swept_at"] <= as_of
+        # "No sweep recorded", never "untouched". Two things the record cannot
+        # see (cold audit, 2026-09-18): a pool is read from COMPLETED candles
+        # on its own timeframe, so a daily candle still forming may already
+        # have run it; and `liquidity` records a sweep only on a close back
+        # inside and a break only on a close beyond its tolerance, so a candle
+        # that trades through and closes just past the level records neither.
         return {"tf": p["tf"], "level": str(p["level"]), "members": p["members"],
                 "swept": swept,
-                "status": "already swept once" if swept else "untouched",
+                "status": (f"swept once, by a closed {p['tf']} candle" if swept
+                           else f"no sweep recorded by the last closed {p['tf']} candle"),
                 **_distance(p["level"], price, atr)}
 
     against = above if direction == "SHORT" else below
     toward = below if direction == "SHORT" else above
+    # Which rungs carry any liquidity record at all. Without it, "the engine
+    # never produced a pool here" and "it did, and none is in the way" both
+    # read as "none found" — and a sort by room before a pool would rank an
+    # unmeasured market as the safest.
     return {"against": [show(p) for p in against],
-            "toward": [show(p) for p in toward]}
+            "toward": [show(p) for p in toward],
+            "measured": [rung for rung, pools in pools_by_rung.items() if pools]}
 
 
 def levels_around(con, symbol: str, tf: str, price, as_of: int, atr=None) -> list:

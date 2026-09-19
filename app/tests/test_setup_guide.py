@@ -101,8 +101,10 @@ def test_each_factor_points_the_way_the_trade_needs_it():
     short = states(dict(direction='SHORT', confluence=CONFLUENCE))
     assert short['htf'] == 'SUPPORTS'
     assert short['range_location'] == 'SUPPORTS'      # selling the upper half
-    assert short['volume'] == 'SUPPORTS'
     assert short['sweep'] == 'SUPPORTS'
+    # Volume is shown, never judged: the engine's own grading found no edge
+    # in it, so painting it green as support would be a false statement.
+    assert short['volume'] == 'INFO'
     # The same range location is a CONFLICT for a long: buying the upper half.
     assert states(dict(direction='LONG', confluence=CONFLUENCE))['range_location'] == 'CONFLICTS'
 
@@ -112,7 +114,6 @@ def test_the_neutral_and_unavailable_edges():
              volume_expansion='1.50', sweep_nearby=False)
     s = states(dict(direction='SHORT', confluence=c))
     assert s['htf'] == 'NEUTRAL' and s['range_location'] == 'NEUTRAL'
-    assert s['volume'] == 'NEUTRAL', 'elevated means ABOVE the engine threshold, not at it'
     assert s['sweep'] == 'NEUTRAL', 'no sweep is absent evidence, not a conflict'
     missing = states(dict(direction='SHORT', confluence=dict(
         CONFLUENCE, htf_composite=None, premium_discount=None, volume_expansion=None,
@@ -188,3 +189,24 @@ def test_an_expired_setup_keeps_its_confirmation_evidence(fixture):
     assert Decimal(econ['rr_net']) < Decimal(econ['rr_gross'])
     assert [c['passed'] for c in ev['required']] == [True, True, True]
     assert ev['recorded_context']['alignment_words'] == 'with this trade'
+
+
+def test_distances_are_measured_from_the_freshest_close_with_its_own_time(fixture):
+    """The price every "% away" uses was the setup timeframe's last close,
+    stamped with the moment the page opened — up to four hours old on a 4H
+    plan (cold audit). It is now the freshest closed candle, with ITS time."""
+    fixture.execute('INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)',
+                    ('TESTUSDT', '5m', 3600, '3.20', '3.21', '3.19', '3.20', '1', 'fixture', 3900))
+    fixture.commit()
+    htf = Reader(fixture, 4000).evidence('s')['higher_timeframe']
+    assert htf['price'] == '3.20' and htf['price_timeframe'] == '5m'
+    assert htf['price_at'] == 3900 and htf['price_stale'] is False
+    later = Reader(fixture, 3900 + 301).evidence('s')['higher_timeframe']
+    assert later['price_stale'] is True, 'a feed a full candle behind reads as stale, not as now'
+
+
+def test_the_note_does_not_claim_nothing_was_graded(fixture):
+    """The engine's own grading exists (setups.py, the retained-rank note);
+    the card must not deny it while colouring factors."""
+    note = Reader(fixture, 2800).evidence('s')['note']
+    assert 'graded' not in note and 'not proof' in note

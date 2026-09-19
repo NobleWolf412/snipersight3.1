@@ -144,15 +144,15 @@ class Reader:
         seconds = importer.TF_SECONDS.get(tf)
         out = dict(setup_id=setup_id, symbol=symbol, timeframe=tf, direction=direction,
                    strategy=payload.get('strategy'), state=payload.get('state'),
-                   note='Recorded evidence, not predictions. None of these factors has '
-                        'been graded against results yet, so no score is given.')
+                   note='Recorded evidence, not predictions. Colours show which way each '
+                        'factor points, not proof that it matters, and no score is given.')
         if direction not in ('LONG', 'SHORT') or not seconds:
             out['confluence_reason'] = 'This setup has no recorded direction or timeframe.'
             return out
 
         recent = self._candles(symbol, tf, seconds)
         atr_now = _last_atr(recent)
-        price = recent[-1]['close'] if recent else None
+        price, price_at, price_tf, price_stale = self._freshest_close(symbol, tf)
 
         # Present from VALIDATED onward: later states (EXPIRED, and the rest)
         # carry the confirmation-time block forward unchanged. Keying on the
@@ -175,7 +175,13 @@ class Reader:
             return out
         htf = htfcontext.read(self.con, symbol, tf, direction, price, self.now,
                               atr=atr_now, levels=levels)
-        htf['price'] = str(price)
+        # The price every "% away" is measured from, with ITS OWN time. It was
+        # the setup timeframe's last close stamped with the moment the page
+        # opened: on a 4H plan up to four hours old, on a daily nearly a day,
+        # while a pool it called "5% away" might already have been crossed
+        # (cold audit, 2026-09-18). Now the freshest closed candle stored.
+        htf.update(price=str(price), price_at=price_at, price_timeframe=price_tf,
+                   price_stale=price_stale)
         # Reversal fades a move at a zone, so counter-trend is its NORMAL case.
         # Say that beside the plain counter-trend reading, so it is not read as
         # an alarm — but never beside the running-move case, which is the one
@@ -194,6 +200,28 @@ class Reader:
             names = [column[0] for column in cursor.description]
             self.candles[key] = [dict(zip(names, c)) for c in cursor][::-1]
         return self.candles[key]
+
+    def _freshest_close(self, symbol, tf):
+        """The most recent closed candle on 5m, 15m or the setup's own timeframe.
+
+        Returns (close, closed_at, timeframe, stale). Stale when a full bar of
+        that timeframe has passed since it closed — the same rule the guide's
+        `data_stale` uses — so a stopped feed reads as stopped, not as now.
+        """
+        best = None
+        for candidate in dict.fromkeys(('5m', '15m', tf)):
+            secs = importer.TF_SECONDS.get(candidate)
+            if not secs:
+                continue
+            row = self.con.execute(
+                'SELECT close, open_ts FROM candles WHERE symbol=? AND tf=? AND open_ts+?<=? '
+                'ORDER BY open_ts DESC LIMIT 1', (symbol, candidate, secs, self.now)).fetchone()
+            if row and (best is None or row[1] + secs > best[1]):
+                best = (row[0], row[1] + secs, candidate, secs)
+        if best is None:
+            return None, None, None, True
+        close, closed_at, candidate, secs = best
+        return close, closed_at, candidate, closed_at + secs <= self.now
 
     def _plan_checks(self, symbol, tf, seconds, payload):
         """The gates this plan passed, and reward/risk before and after costs.
@@ -300,7 +328,9 @@ def confluence_rows(payload):
                      state={'WITH': SUPPORTS, 'AGAINST': CONFLICTS, 'FLAT': NEUTRAL}.get(comp, UNAVAILABLE),
                      value={'WITH': 'with this trade', 'AGAINST': 'against this trade',
                             'FLAT': 'no trend'}.get(comp, 'not recorded'),
-                     detail='The structural trend one timeframe up when the setup confirmed.'))
+                     detail=('The structural trend one timeframe up when the setup confirmed. '
+                             'An early grading (228 trades, an older strategy version) found this '
+                             'the one recorded factor related to results; it has not been re-graded.')))
 
     pd = c.get('premium_discount')
     if pd is None:
@@ -313,7 +343,8 @@ def confluence_rows(payload):
         state = NEUTRAL if pd == 50 else (SUPPORTS if good else CONFLICTS)
         rows.append(dict(key='range_location', factor='Where price sits in the recent range',
                          state=state, value=f'{pd}% of the way up',
-                         detail=('Shorts sell the upper half of the range, longs buy the lower half.')))
+                         detail=('Shorts sell the upper half of the range, longs buy the lower half. '
+                                 'Not yet graded: this is which way it points, not proof it matters.')))
 
     vr = c.get('volume_expansion')
     if vr is None:
@@ -321,17 +352,26 @@ def confluence_rows(payload):
                          value='fewer than 20 earlier candles',
                          detail='Needs 20 earlier candles to compare against.'))
     else:
+        # INFO, not SUPPORTS, however high it is. The engine's own grading
+        # (setups.py, the retained-rank note: 228 closed trades on an older
+        # version) found this term does not clear its own noise floor, while
+        # the higher-timeframe term does. Painting it green as "supports"
+        # beside a note saying nothing was graded was two false statements on
+        # one card (cold audit, 2026-09-18).
         hot = Decimal(str(vr)) > setups.VOLUME_HOT_RATIO
         rows.append(dict(key='volume', factor='Volume on the confirming candle',
-                         state=SUPPORTS if hot else NEUTRAL, value=f'{vr}× its 20-candle average',
-                         detail=f'Above {setups.VOLUME_HOT_RATIO}× counts as elevated.'))
+                         state=INFO,
+                         value=f"{vr}× its 20-candle average{' (elevated)' if hot else ''}",
+                         detail=(f'Above {setups.VOLUME_HOT_RATIO}× counts as elevated. An early grading '
+                                 'found no edge in it, so it is shown, not judged.')))
 
     sweep = c.get('sweep_nearby')
     side = 'highs' if short else 'lows'
     rows.append(dict(key='sweep', factor=f'Liquidity taken beyond recent {side}',
                      state=UNAVAILABLE if sweep is None else (SUPPORTS if sweep else NEUTRAL),
                      value='not recorded' if sweep is None else ('yes, just before' if sweep else 'no recent sweep'),
-                     detail=f'Price ran recent {side} and came back before the setup.'))
+                     detail=(f'Price ran recent {side} and came back before the setup. '
+                             'Not yet graded: this is which way it points, not proof it matters.')))
 
     for key, factor, value, detail in (
             ('zone_strength', 'Zone strength', c.get('zone_strength'),

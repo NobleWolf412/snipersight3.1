@@ -130,8 +130,27 @@ def test_a_swept_pool_says_so_and_only_once_the_sweep_happened():
     pools = {"1H": [pool("1H", "HIGH", "105", swept_at=800)]}
     before = htfcontext.pools_around(pools, "SHORT", "100", 700)["against"][0]
     after = htfcontext.pools_around(pools, "SHORT", "100", 900)["against"][0]
-    assert before["status"] == "untouched" and not before["swept"]
-    assert after["status"] == "already swept once" and after["swept"]
+    assert not before["swept"] and after["swept"]
+    assert after["status"] == "swept once, by a closed 1H candle"
+
+
+def test_an_unswept_pool_claims_only_what_was_recorded():
+    """Never "untouched". A pool is read from COMPLETED candles on its own
+    timeframe, and a candle that trades through and closes just past the level
+    records neither a sweep nor a break — so the most the record supports is
+    that no sweep was recorded by the last closed candle (cold audit)."""
+    status = htfcontext.pools_around({"1D": [pool("1D", "HIGH", "105")]},
+                                     "SHORT", "100", 1000)["against"][0]["status"]
+    assert status == "no sweep recorded by the last closed 1D candle"
+    assert "untouched" not in status
+
+
+def test_no_liquidity_record_is_not_the_same_as_no_pool_in_the_way():
+    """Otherwise an unmeasured market sorts as the one with the most room."""
+    measured = htfcontext.pools_around({"1H": [pool("1H", "LOW", "90")], "4H": []},
+                                       "SHORT", "100", 1000)
+    assert measured["against"] == [] and measured["measured"] == ["1H"]
+    assert htfcontext.pools_around({"1H": []}, "SHORT", "100", 1000)["measured"] == []
 
 
 def test_distance_in_atr_only_when_an_atr_is_given():
@@ -175,6 +194,6 @@ def test_the_whole_reading_on_a_market_with_no_history(con):
     r = htfcontext.read(con, "NEWUSDT", "15m", "SHORT", "1.00", 10_000)
     assert [x["tf"] for x in r["ladder"]] == ["1H", "4H", "1D"]
     assert r["stance"]["label"] == "NOT_ENOUGH_HISTORY"
-    assert r["pools"] == {"against": [], "toward": []}
+    assert r["pools"] == {"against": [], "toward": [], "measured": []}
     assert all(l["resistance"] is None and l["support"] is None for l in r["levels"])
     json.dumps(r)                                   # the wire shape is plain JSON

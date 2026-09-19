@@ -267,3 +267,32 @@ def test_the_label_and_the_count_cannot_drift_apart():
         f"{len(hits)} places test state == READY directly (lines {hits}); "
         f"the question 'can the operator act on this' has one answer and it "
         f"is `actionable`")
+
+
+def test_compare_lists_open_plans_only_and_says_who_can_place_them(cockpit):
+    """The compare tab: READY and BLOCKED plans with an open window, each marked
+    by whether the operator's venue can place it. A damaged expiry skips that
+    row rather than 500 the tab, and an unknown symbol is 'unknown', never
+    tradeable (cold audit, 2026-09-18)."""
+    client, _ = cockpit
+    now = int(time.time())
+    def row(sid, symbol, direction='SHORT', state='BLOCKED', expires=now + 3600):
+        return dict(state=state, reasons=[{'summary': 'slot taken', 'severity': 'BLOCK'},
+                                          {'summary': 'fyi', 'severity': 'INFO'}],
+                    setup=dict(setup_id=sid, symbol=symbol, direction=direction, timeframe='15m',
+                               confirmed_at=now, expires_at=expires))
+    rows = [row('perp', 'PF_SUIUSD'), row('spot', 'INJ-USD'), row('spotlong', 'INJ-USD', 'LONG', 'READY'),
+            row('unknown', 'NOPE', 'LONG'), row('expired', 'ETHUSDT', expires=now - 1),
+            row('damaged', 'ETHUSDT', expires='broken'), row('forming', 'ETHUSDT', state='FORMING')]
+    with patch('ui_api.opportunity_rows', return_value=rows), \
+         patch('setup_guide.Reader.evidence', return_value={'factors': []}):
+        response = client.get('/api/ui/v1/opportunities/compare')
+    assert response.status_code == 200, response.text
+    items = {i['setup']['setup_id']: i for i in response.json()['items']}
+    assert set(items) == {'perp', 'spot', 'spotlong', 'unknown'}
+    assert items['perp']['tradeable_by_hand'] is True
+    assert items['spot']['tradeable_by_hand'] is False, 'spot cannot be shorted by hand either'
+    assert items['spotlong']['tradeable_by_hand'] is True
+    assert items['unknown']['tradeable_by_hand'] is None
+    assert items['perp']['blocked_because'] == ['slot taken'], 'INFO notes are not reasons'
+    assert items['perp']['trade_evidence'] == {'factors': []}

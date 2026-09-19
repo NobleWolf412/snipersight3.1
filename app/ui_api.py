@@ -242,7 +242,13 @@ def compare_opportunities(workspace: str = "CRYPTO", epoch_id: str | None = None
             setup = row["setup"]
             if row["state"] not in ("READY", "BLOCKED"):
                 continue
-            if int(setup.get("expires_at") or 0) <= now:
+            # A damaged expiry is a plan whose window cannot be shown open; skip
+            # it rather than let one row 500 the whole tab (cold audit,
+            # 2026-09-18 — `opportunities` already expects unreadable ones).
+            try:
+                if int(setup.get("expires_at") or 0) <= now:
+                    continue
+            except (TypeError, ValueError):
                 continue
             evidence = reader.evidence(setup["setup_id"], levels=False)
             if evidence is None:
@@ -254,10 +260,13 @@ def compare_opportunities(workspace: str = "CRYPTO", epoch_id: str | None = None
             # as an invitation to take a trade no one can place. Read from the
             # venue contract, which raises rather than guesses; an unknown
             # symbol is reported as unknown, not as tradeable.
+            # Resolve the venue for EVERY plan, long or short: `venue_for`
+            # raises on an unknown symbol, and a long on one was reported as
+            # tradeable without the venue ever being asked.
             try:
                 from engine import venues
-                by_hand = (setup.get("direction") != "SHORT"
-                           or venues.allow_shorts(setup["symbol"]))
+                venue = venues.venue_for(setup["symbol"])
+                by_hand = setup.get("direction") != "SHORT" or venue.allow_shorts
             except ValueError:
                 by_hand = None
             # The whole opportunity row, so the card opens into the same trade
