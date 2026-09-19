@@ -234,6 +234,12 @@ REJECTION_REASONS = frozenset({
 })
 MIN_RR = Decimal("1.5")
 GOOD_RR = Decimal("2.5")
+#: Confirmation-bar volume above this multiple of its 20-bar average counts as
+#: elevated in the (retained, unused) rank. Named rather than inline so the
+#: operator's confluence panel reads the engine's number instead of restating
+#: it — a second copy is how two surfaces come to disagree (rule 9). Same
+#: value as before; no output changes.
+VOLUME_HOT_RATIO = Decimal("1.5")
 SL_ATR = Decimal("0.25")            # v0.6 zone-offset stop; kept for FORMING previews
 SWEEP_LOOKBACK_BARS = 10
 Q2 = Decimal("0.01")
@@ -1333,7 +1339,7 @@ def run(con, symbol: str, tf: str, tf_seconds: int) -> dict:
                 continue
 
             vr = volume_ratio(ci)
-            vol_hot = vr is not None and vr > Decimal("1.5")
+            vol_hot = vr is not None and vr > VOLUME_HOT_RATIO
             rank = (base_rank + (20 if swept else 0) + (15 if vol_hot else 0)
                     + (15 if rr >= GOOD_RR else 0))
             conf = confluence_block(direction, ci, created, bct, swept,
