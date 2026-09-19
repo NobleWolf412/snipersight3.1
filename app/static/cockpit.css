@@ -92,3 +92,24 @@
 .confirmation-trigger h4,.confirmation-outcomes h4{margin:0 0 .5rem}.confirmation-trigger p{margin:.3rem 0}.confirmation-trigger ol{padding-left:1.25rem;margin:.65rem 0 0}.confirmation-trigger li{margin:.35rem 0}
 .confirmation-progress{border-block:1px solid #2c3b48}.candle-steps{display:flex;gap:.6rem;margin-bottom:1rem}.candle-steps>div{flex:1;background:#182631;border:1px solid #536575;border-radius:8px;padding:.5rem;text-align:center}.candle-steps span{display:block;font-size:1.1rem}.candle-steps small{display:block;color:#c3cfda}.candle-steps .complete{border-color:#78e2b6;background:#15352c;color:#a0f0d0}
 .confirmation-clock{color:#b8c8ff;font-variant-numeric:tabular-nums}.confirmation-outcomes summary{cursor:pointer;font-weight:600;color:#c3ceff}.confirmation-outcomes p{font-size:.9rem}
+/* Trade evidence: higher timeframes, confluence, plan checks. One column on a
+   phone; every value visible without a tap (operator ruling 2026-09-18). */
+.trade-evidence{display:grid;gap:.75rem;margin:.75rem 0}
+.evidence-block{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:.75rem .9rem;background:var(--panel2)}
+.evidence-block h4{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:.25rem 0 .4rem}
+.evidence-block.htf-bad{border-left-color:var(--red)}
+.evidence-block.htf-warning{border-left-color:var(--amber)}
+.evidence-block.htf-good{border-left-color:var(--green)}
+.stance-sentence{font-weight:600;margin:.2rem 0 .5rem}
+.htf-ladder{list-style:none;padding:0;margin:.25rem 0 .5rem;display:grid;gap:.2rem}
+.htf-ladder strong{display:inline-block;min-width:3.5rem;color:var(--muted);font-weight:600}
+.pool-line{display:block}
+.factor-list{list-style:none;padding:0;margin:0;display:grid;gap:.5rem}
+.factor-row{display:grid;grid-template-columns:1fr;gap:.25rem;padding-bottom:.5rem;border-bottom:1px solid var(--line)}
+.factor-row:last-child{border-bottom:0;padding-bottom:0}
+.factor-row small{display:block}
+.factor-value{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}
+.plan-checks{list-style:none;padding:0;margin:0 0 .5rem;display:grid;gap:.2rem}
+.plan-checks span{color:var(--green)}
+.badge.good{background:#21372f;color:var(--green)}
+@media (min-width:720px){.factor-row{grid-template-columns:1fr auto;align-items:center}}

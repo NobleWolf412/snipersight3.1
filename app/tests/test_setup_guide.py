@@ -81,3 +81,110 @@ def test_no_candles_reports_missing_and_stale(fixture):
     g=Reader(fixture,2800).guide('s')
     assert g['mini_chart'] is None and g['last_price'] is None
     assert g['data_stale'] and g['missing_candles']
+
+
+# ---------------------------------------------------------------- trade evidence
+
+from setup_guide import confluence_rows  # noqa: E402
+
+CONFLUENCE = dict(htf_timeframe='1H', htf_regime='BEAR_TREND', htf_composite='WITH',
+                  premium_discount=70, volume_expansion='1.60', sweep_nearby=True,
+                  zone_strength=77, bars_since_break=12, target_distance_r='3.14159',
+                  score=0)
+
+
+def states(payload):
+    return {r['key']: r['state'] for r in confluence_rows(payload)}
+
+
+def test_each_factor_points_the_way_the_trade_needs_it():
+    short = states(dict(direction='SHORT', confluence=CONFLUENCE))
+    assert short['htf'] == 'SUPPORTS'
+    assert short['range_location'] == 'SUPPORTS'      # selling the upper half
+    assert short['volume'] == 'SUPPORTS'
+    assert short['sweep'] == 'SUPPORTS'
+    # The same range location is a CONFLICT for a long: buying the upper half.
+    assert states(dict(direction='LONG', confluence=CONFLUENCE))['range_location'] == 'CONFLICTS'
+
+
+def test_the_neutral_and_unavailable_edges():
+    c = dict(CONFLUENCE, htf_composite='FLAT', premium_discount=50,
+             volume_expansion='1.50', sweep_nearby=False)
+    s = states(dict(direction='SHORT', confluence=c))
+    assert s['htf'] == 'NEUTRAL' and s['range_location'] == 'NEUTRAL'
+    assert s['volume'] == 'NEUTRAL', 'elevated means ABOVE the engine threshold, not at it'
+    assert s['sweep'] == 'NEUTRAL', 'no sweep is absent evidence, not a conflict'
+    missing = states(dict(direction='SHORT', confluence=dict(
+        CONFLUENCE, htf_composite=None, premium_discount=None, volume_expansion=None,
+        sweep_nearby=None, zone_strength=None)))
+    assert {missing[k] for k in ('htf', 'range_location', 'volume', 'sweep',
+                                 'zone_strength')} == {'UNAVAILABLE'}
+
+
+def test_context_factors_are_shown_and_never_judged():
+    s = states(dict(direction='SHORT', confluence=CONFLUENCE))
+    assert s['zone_strength'] == s['bars_since_break'] == s['target_distance'] == 'INFO'
+    target = next(r for r in confluence_rows(dict(direction='SHORT', confluence=CONFLUENCE))
+                  if r['key'] == 'target_distance')
+    assert target['value'] == '3.14 R'
+
+
+def _keys(value):
+    if isinstance(value, dict):
+        for k, v in value.items():
+            yield k
+            yield from _keys(v)
+    elif isinstance(value, list):
+        for v in value:
+            yield from _keys(v)
+
+
+def test_no_score_ever_reaches_the_operator(fixture):
+    """THE POINT OF THE DESIGN. No factor has been graded, so nothing may add
+    them up, count them or rank by them. The engine's own placeholder `score`
+    (always 0) must not travel either — a zero next to a trade reads as a
+    verdict."""
+    ev = Reader(fixture, 2800).evidence('s')
+    rows = confluence_rows(dict(direction='SHORT', confluence=CONFLUENCE))
+    forbidden = {'score', 'total', 'rank', 'confidence', 'quality_score',
+                 'supports_count', 'rating'}
+    assert not forbidden & set(_keys(ev))
+    assert not forbidden & set(_keys(rows))
+
+
+def test_a_waiting_setup_says_confluence_comes_at_confirmation(fixture):
+    """Confluence is written when a setup confirms; before that there is no
+    plan for it to be about. The panel says so instead of inventing one — but
+    the higher-timeframe picture is live and still shown."""
+    ev = Reader(fixture, 2800).evidence('s')
+    assert 'factors' not in ev and 'required' not in ev
+    assert 'confirms' in ev['confluence_reason']
+    assert ev['higher_timeframe']['stance']['label'] == 'NOT_ENOUGH_HISTORY'
+    assert ev['higher_timeframe']['price'] == '3.12'
+
+
+def test_an_expired_setup_keeps_its_confirmation_evidence(fixture):
+    """The confluence block is carried forward past VALIDATED. Keying the panel
+    on state == VALIDATED blanked it on every setup the operator reviews after
+    its window closed — found on the first live read."""
+    for i in range(20):
+        ts = 10_000 + i * 900
+        fixture.execute('INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)',
+                        ('TESTUSDT', '15m', ts, '100', '102', '98', '100', '1', 'fixture', ts + 900))
+    confirm = 10_000 + 19 * 900
+    store.insert_fact(fixture, symbol='TESTUSDT', tf='15m', kind='setup',
+                      market_time=confirm, confirmed_at=confirm + 900,
+                      algo_version=setups.SETUP_VERSION,
+                      payload=dict(setup_id='x', zone_id='z', direction='SHORT', state='EXPIRED',
+                                   strategy='REVERSAL', entry='100', sl='101', tp='97', rr='3.00',
+                                   confirmed_bar_ts=confirm, confluence=CONFLUENCE,
+                                   htf_phase='DRIFT_UP', bias={'alignment': 'WITH'}))
+    fixture.commit()
+    ev = Reader(fixture, confirm + 1800).evidence('x')
+    assert ev['state'] == 'EXPIRED' and ev['factors']
+    econ = ev['economics']
+    # Net is gross less the cost, both in R; the browser never divides.
+    assert Decimal(econ['rr_net']) + Decimal(econ['cost_r']) == Decimal(econ['rr_gross'])
+    assert Decimal(econ['rr_net']) < Decimal(econ['rr_gross'])
+    assert [c['passed'] for c in ev['required']] == [True, True, True]
+    assert ev['recorded_context']['alignment_words'] == 'with this trade'

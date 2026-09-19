@@ -10,7 +10,11 @@ from engine import automation, importer, livegate, manual, opportunities, settin
 from engine.contracts import to_wire
 
 router = APIRouter(prefix="/api/ui/v1")
-VERSION = "cockpit-readmodel-v3"
+VERSION = "cockpit-readmodel-v4"
+# v4: `/setup-guide` carries `trade_evidence` (recorded confluence, the checks
+# the plan passed, reward/risk after estimated costs, and the higher-timeframe
+# picture now), and `/opportunities/compare` lists open plans side by side.
+# Additive wire change; nothing that decides a trade reads either.
 
 
 def workspace_scope(workspace):
@@ -203,10 +207,72 @@ def setup_guide(setup_id: str, workspace: str = "CRYPTO"):
         raise HTTPException(404, "Stock setup levels are not available")
     from setup_guide import Reader
     with account_read() as con:
-        guide = Reader(con, int(time.time())).guide(setup_id)
+        reader = Reader(con, int(time.time()))
+        guide = reader.guide(setup_id)
         if guide is None:
             raise HTTPException(404, "The recorded setup is no longer available")
+        # One setup's full picture, including support/resistance from the
+        # chart read, which loads whole candle histories and so never runs
+        # in the list below.
+        guide["trade_evidence"] = reader.evidence(setup_id, levels=True)
         return guide
+
+
+@router.get("/opportunities/compare")
+def compare_opportunities(workspace: str = "CRYPTO", epoch_id: str | None = None):
+    """Every confirmed plan whose entry window is still open, side by side.
+
+    READY and BLOCKED both qualify: a plan the bot refused — often only
+    because its one position slot was taken — is still one the operator may
+    take by hand. Each row carries the same evidence as the setup card, minus
+    the chart-read levels, which are too heavy to compute per row.
+
+    NO RANKING. There is no overall score or order-of-merit column, for the
+    reason `setup_guide.confluence_rows` gives. Rows arrive newest first; the
+    operator sorts by whichever column matters to them.
+    """
+    if workspace_scope(workspace) == "STOCKS":
+        return {"items": [], "workspace": workspace}
+    from setup_guide import Reader
+    with account_read(epoch_id) as con:
+        now = int(time.time())
+        reader = Reader(con, now)
+        items = []
+        for row in opportunity_rows(con):
+            setup = row["setup"]
+            if row["state"] not in ("READY", "BLOCKED"):
+                continue
+            if int(setup.get("expires_at") or 0) <= now:
+                continue
+            evidence = reader.evidence(setup["setup_id"], levels=False)
+            if evidence is None:
+                continue
+            # Can the OPERATOR take it by hand? Not if the venue cannot short:
+            # the bot's refusal there is not a judgement anyone can override.
+            # Measured on the first live read (2026-09-18): the only open plan
+            # was an INJ-USD short on Coinbase spot, and "the bot passed" read
+            # as an invitation to take a trade no one can place. Read from the
+            # venue contract, which raises rather than guesses; an unknown
+            # symbol is reported as unknown, not as tradeable.
+            try:
+                from engine import venues
+                by_hand = (setup.get("direction") != "SHORT"
+                           or venues.allow_shorts(setup["symbol"]))
+            except ValueError:
+                by_hand = None
+            # The whole opportunity row, so the card opens into the same trade
+            # view the other tabs use, plus why the bot passed and the evidence.
+            items.append({
+                **row,
+                "tradeable_by_hand": by_hand,
+                "blocked_because": [r.get("summary") for r in row.get("reasons") or []
+                                    if r.get("severity") not in ("INFO",)][:2],
+                "trade_evidence": evidence,
+            })
+        items.sort(key=lambda r: -int(r["setup"].get("confirmed_at") or 0))
+        return {"items": items, "workspace": workspace, "domain": "PAPER", "as_of": now,
+                "ordering": "Newest confirmed first. There is no overall ranking; sort by "
+                            "the column that matters to you."}
 
 
 @router.get("/home")
