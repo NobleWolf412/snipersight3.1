@@ -46,6 +46,8 @@ AUDIT_PREFIXES = (
     "ANALYSE",
     "RETENTION",
     "AUTOTRADER",
+    "SCAN TIMING",
+    "ORDER LATENCY",
     "REGRADE",
     # The paper book changing its mind about what it will fund. Evidence for
     # the same reason AUTOTRADER is: it is the record of what the account

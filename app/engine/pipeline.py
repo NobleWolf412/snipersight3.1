@@ -101,6 +101,18 @@ OPERATOR = (manual,)
 PER_SYMBOL = (DESCRIPTIVE + MEASURED_NOT_ENABLED + TRADING + OPERATOR
               + OBSERVATIONAL)
 
+# A partition of the same roster, not a second engine list. The live runner
+# considers ALL markets before dispatch, but descriptive research need not
+# delay an account order. Setup volume evidence comes from candles directly;
+# its fact dependencies are structure, zones, liquidity, regime and volatility.
+_PRIORITY = frozenset((swings, structure, zones, liquidity, regime, volatility,
+                       *TRADING, *OPERATOR))
+PRIORITY_TFS = ("15m", "1H", "4H", "1D", "1W")
+
+
+def phase_modules(priority=True):
+    return tuple(mod for mod in PER_SYMBOL if (mod in _PRIORITY) == priority)
+
 
 def names() -> list[str]:
     """Engine names in run order, for logging and for the roster test.
@@ -162,7 +174,8 @@ def _record_gate(con, symbol: str, tf: str, gate: str, detail: str,
         (symbol, tf, gate, detail[:300], now))
 
 
-def run_symbol(con, symbol: str, now: int | None = None, log=None) -> dict:
+def run_symbol(con, symbol: str, now: int | None = None, log=None, *,
+               modules=None, timeframes=None, cache=None, deferred=False) -> dict:
     """Run every per-symbol engine, gates first. THE loop — both runners call it.
 
     Returns {"blocked": str | None, "gates": {(tf, gate): detail}} so the
@@ -193,6 +206,8 @@ def run_symbol(con, symbol: str, now: int | None = None, log=None) -> dict:
     from . import importer, ingest, quality   # lazy: ingest imports this module
 
     now = int(_time.time()) if now is None else now
+    modules = PER_SYMBOL if modules is None else modules
+    timeframes = ALL_TFS if timeframes is None else timeframes
     tripped: dict = {}
 
     def trip(tf, gate, detail):
@@ -225,7 +240,7 @@ def run_symbol(con, symbol: str, now: int | None = None, log=None) -> dict:
             "SELECT tf, COUNT(*) FROM candles WHERE symbol=? GROUP BY tf",
             (symbol,))}
         live_tfs = []
-        for tf in ALL_TFS:
+        for tf in timeframes:
             if counts.get(tf):
                 live_tfs.append(tf)
             else:
@@ -246,11 +261,19 @@ def run_symbol(con, symbol: str, now: int | None = None, log=None) -> dict:
         from . import store as _store
         faulted = set()
         with _store.candle_cache(con):
-            for mod in PER_SYMBOL:
+            if cache is not None:
+                cache.begin_symbol()
+            for mod in modules:
                 name = mod.__name__.rsplit(".", 1)[-1]
                 for tf in live_tfs:
+                    if deferred and mod in _PRIORITY and tf in PRIORITY_TFS:
+                        continue
                     try:
+                        if cache is not None and cache.unchanged(con, mod, symbol, tf):
+                            continue
                         mod.run(con, symbol, tf, importer.TF_SECONDS[tf])
+                        if cache is not None:
+                            cache.remember(con, mod, symbol, tf)
                     except Exception as exc:
                         # One engine's failure is a fault to surface, not a
                         # rejection reason to count — an exception that becomes
@@ -273,9 +296,13 @@ def run_symbol(con, symbol: str, now: int | None = None, log=None) -> dict:
                                         f"{symbol} {tf}: {type(exc).__name__} {exc}")
         # a fault that did not recur this walk has been fixed — current state,
         # exactly like the gates table below
+        selected_names = {mod.__name__.rsplit('.', 1)[-1] for mod in modules}
         stale_faults = [(f_tf, f_eng) for (f_sym, f_tf, f_eng) in con.execute(
             "SELECT symbol, tf, engine FROM engine_faults WHERE symbol=?",
-            (symbol,)) if (f_tf, f_eng) not in faulted]
+            (symbol,)) if f_tf in timeframes and f_eng in selected_names
+            and not (deferred and f_tf in PRIORITY_TFS and
+                     any(m.__name__.rsplit('.', 1)[-1] == f_eng for m in _PRIORITY))
+            and (f_tf, f_eng) not in faulted]
         for f_tf, f_eng in stale_faults:
             con.execute("DELETE FROM engine_faults WHERE symbol=? AND tf=? "
                         "AND engine=?", (symbol, f_tf, f_eng))
@@ -284,7 +311,7 @@ def run_symbol(con, symbol: str, now: int | None = None, log=None) -> dict:
     # a stale row would keep reporting a hole the last cycle already closed.
     stale = [(s_tf, s_gate) for (s_sym, s_tf, s_gate) in con.execute(
         "SELECT symbol, tf, gate FROM pipeline_gates WHERE symbol=?", (symbol,))
-        if (s_tf, s_gate) not in tripped]
+        if (s_tf == '*' or s_tf in timeframes) and (s_tf, s_gate) not in tripped]
     for s_tf, s_gate in stale:
         con.execute("DELETE FROM pipeline_gates WHERE symbol=? AND tf=? AND gate=?",
                     (symbol, s_tf, s_gate))

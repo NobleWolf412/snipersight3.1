@@ -3,8 +3,9 @@
 Wakes are aligned to the candle grid: just past each 5m boundary (where every
 tracked timeframe closes — see next_wake), capped by the POLL_SECONDS drift
 heartbeat. Each pass: import newly CLOSED candles (never developing ones, §5),
-re-aggregate 4H/1W, re-run every engine (all idempotent/append-only — a cycle
-with no new data writes zero facts), then notify on any NEW validated setup.
+re-aggregate 4H/1W, analyse all markets for trading, consider account orders,
+then finish research. Descriptive engines reuse exact, unchanged inputs;
+account decisions and the quality gates always run fresh.
 This is the start of the forward paper track record (§15: paper results are
 their own category — nothing here was knowable to the calibration).
 
@@ -29,7 +30,10 @@ from engine import (automation, autotrader, broker_factory, execution, positions
                     quality, listings, marketdata, pipeline, venues, cooldowns, funding, forwardtrial, stopstudy, zonestudy)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.10-draft"
+LIVE_VERSION = "live-v0.11-draft"
+# v0.11: account maintenance and a global trading pass precede descriptive
+# research. Exact-input memoization skips equivalent descriptive reruns only.
+# Strategy formulas, plan versions, candidate ordering and admission stay fixed.
 # v0.9: the BOT's paper book pins its own markets for import. v0.1 (below) gave
 # that pin to the research replay's unresolved orders and the manual book got
 # its own; the domain split then left the bot's paper book — the one that
@@ -449,7 +453,30 @@ def execution_rebuild_work(con) -> dict[tuple[str, str], list[dict]]:
     return work
 
 
-def cycle(con, log, beat=None) -> tuple[int, list]:
+def record_order_latency(con, routed, log):
+    """Order-time evidence, distinct from candle time and total scan duration."""
+    for row in routed:
+        order = con.execute('SELECT created_at,payload FROM execution_outbox WHERE intent_id=?',
+                            (row.get('intent_id'),)).fetchone()
+        if not order:
+            continue
+        wire = json.loads(order[1])
+        intent = wire.get('intent', wire)
+        setup = con.execute(
+            "SELECT symbol,tf,confirmed_at FROM facts WHERE kind='setup' "
+            "AND json_extract(payload,'$.setup_id')=? AND json_extract(payload,'$.state')='VALIDATED' "
+            "AND algo_version=? AND (? IS NULL OR json_extract(payload,'$.attempt_id')=?) "
+            "ORDER BY confirmed_at,id LIMIT 1",
+            (row.get('setup_id'), intent.get('playbook_version'),
+             intent.get('attempt_id'), intent.get('attempt_id'))).fetchone()
+        if order and setup:
+            log.info('ORDER LATENCY ' + json.dumps(dict(
+                intent_id=row['intent_id'], symbol=setup[0], timeframe=setup[1],
+                confirmed_at=setup[2], order_created_at=order[0],
+                confirmation_to_order_s=order[0]-setup[2]), sort_keys=True))
+
+
+def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
     """Run one scan pass.
 
     `beat` is an optional progress callback invoked at each stage. A heartbeat
@@ -463,6 +490,8 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
         if beat:
             beat(phase)
 
+    started = time.monotonic()
+    stages = {}
     now = int(time.time())
     new_candles = 0
     # SCAN covers traded + shadow symbols; only the traded ones can reach the
@@ -629,8 +658,10 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
         log.warning(f"manual resolve pass failed: {type(exc).__name__} {exc}")
 
     # A migration may need replay over candles already held. An idle feed
-    # must not prevent recovery of a missing execution generation.
-    if not new_candles and not rebuild_exec:
+    # must not prevent recovery or checking an existing paper order. Keep
+    # settlement after aggregation and volatility, even on an idle import:
+    # settling first can permanently cost an exit using stale ATR evidence.
+    if not new_candles and not rebuild_exec and not paper_pins:
         try:
             stopstudy.run(con)
         except Exception:
@@ -652,52 +683,13 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     # no 4H candle, which the audit correctly reports as a permanent blocker
     # (ONDO-USD, 2026-07-26). Aggregation is a cheap roll-up of candles we
     # already hold; engines and scanning stay scoped to the admitted set.
-    tracked = sorted(set(universe.all_tracked_symbols(con)) | {symbol for symbol, _tf in trial_pins})
+    tracked = sorted(set(universe.all_tracked_symbols(con)) | paper_pins
+                     | {symbol for symbol, _tf in trial_pins})
     for i, sym in enumerate(tracked, 1):
         _beat(f"aggregate {sym} ({i}/{len(tracked)})")
         for tf in ("4H", "1W"):
             aggregator.aggregate(con, sym, tf)
 
-    # A universe decision governs NEW opportunities, never the lifecycle of an
-    # order already placed. Run execution and its exit cooldowns only: sending
-    # an off-universe symbol through the full pipeline could create fresh
-    # setups and keep it pinned forever. The quality gate remains mandatory
-    # because resolving an exit across an unexplained candle gap would invent
-    # which level hit first.
-    pinned_blocked = []
-    pinned_by_symbol: dict[str, list[str]] = {}
-    for symbol, tf in pinned_exec:
-        pinned_by_symbol.setdefault(symbol, []).append(tf)
-    for symbol, tfs in sorted(pinned_by_symbol.items()):
-        _beat(f"resolve pinned {symbol}")
-        try:
-            checks = quality.assert_market_ready(con, symbol, now)
-            # Until a current order exists, quality's order pin cannot see
-            # this missing generation. Retired holes are acceptable history,
-            # never acceptable evidence for reconstructing a reserved trade.
-            #
-            # This can only ever veto a REBUILD, which is why it is safe to
-            # veto at all. `quality.unsafe_to_retire()` contains every symbol
-            # in `execsim.unresolved`, and RETIRED_SEQUENCE_GAPS is emitted
-            # only for symbols outside that set, so a market carrying a PLACED
-            # or FILLED order reports BLOCKED SEQUENCE_GAPS and raises above
-            # this line instead. Do not add a live-order carve-out here: it
-            # reads as prudent, it cannot execute, and writing one requires
-            # believing the opposite of what the gate does.
-            if any(c["code"] == "RETIRED_SEQUENCE_GAPS" for c in checks):
-                _REBUILD_VETOED.add(symbol)
-                raise quality.DataQualityError(
-                    f"{symbol}: retired sequence gaps prevent execution recovery"
-                    " — not retried until the scanner restarts")
-            for tf in sorted(tfs, key=lambda value: importer.TF_SECONDS[value]):
-                execsim.run(con, symbol, tf, importer.TF_SECONDS[tf])
-                cooldowns.run(con, symbol, tf, importer.TF_SECONDS[tf])
-        except Exception as exc:
-            pinned_blocked.append(f"{symbol} ({type(exc).__name__}: {exc})")
-    if pinned_blocked:
-        log.warning(
-            f"open execution resolution blocked for {len(pinned_blocked)} "
-            f"symbol(s): {'; '.join(pinned_blocked[:4])}")
     # The engine loop lives in `pipeline.run_symbol` — ONE loop, shared with
     # `ingest.run_engines`, exactly as the roster already is. This block used
     # to carry its own copy with two behaviours the other loop lacked (the
@@ -707,10 +699,14 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     # gate doing its job, and it stays loud — it just cannot take the other 74
     # symbols and the risk authority down with it, as it did for 364 of 948
     # cycles (EUL-USD: SEQUENCE_GAPS).
+    stages["preparation_s"] = round(time.monotonic()-started, 3)
+    priority_started = time.monotonic()
     blocked_syms = []
     for i, sym in enumerate(scan, 1):
         _beat(f"engines {sym} ({i}/{len(scan)})")
-        r = pipeline.run_symbol(con, sym, now=now, log=log)
+        r = pipeline.run_symbol(con, sym, now=now, log=log,
+                                modules=pipeline.phase_modules(),
+                                timeframes=pipeline.PRIORITY_TFS, cache=analysis_cache)
         if r["blocked"]:
             blocked_syms.append(f"{sym} ({r['blocked']})")
     if blocked_syms:
@@ -718,19 +714,20 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
                     f"symbols this cycle (engines skipped, rest of the scan "
                     f"continued): {'; '.join(blocked_syms[:4])}")
 
-    _beat("forward strategy trial")
-    try:
-        forwardtrial.run(con, scan_set)
-    except Exception:
-        log.exception("Forward strategy trial failed; main account processing continues")
+    # Held markets keep settlement inputs current even after leaving the
+    # scan universe. This creates no fresh setups on a retired market.
+    for sym in sorted(paper_pins - scan_set):
+        _beat(f"paper settlement inputs {sym}")
+        pipeline.run_symbol(con, sym, now=now, log=log,
+                            modules=(pipeline.volatility,), cache=analysis_cache)
 
-    _beat("risk")
-    risk.run(con)
+    stages["priority_analysis_s"] = round(time.monotonic()-priority_started, 3)
+    dispatch_started = time.monotonic()
     _beat("autonomous intents")
     try:
         execution.monitor_paper(con)
         # ORDER MATTERS, and it is the whole reason this sits here rather than
-        # beside risk.run above. `monitor_paper` is what fills, closes and
+        # beside the research risk pass. `monitor_paper` fills, closes and
         # settles the paper book; the paper risk authority sizes against the
         # balance and exposure that leaves behind. Run before it and every
         # decision is made against the PREVIOUS cycle's account — a trade that
@@ -784,6 +781,12 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
                 log.error("private custody reconciliation blocked new entries: "
                           + json.dumps(reconciliation, sort_keys=True))
         routed = autotrader.run(con, broker=private_broker)
+        try:
+            record_order_latency(con, routed['routed'], log)
+        except Exception as exc:
+            # An observability failure cannot relabel a successful dispatch
+            # as a refused order or suppress the AUTOTRADER evidence below.
+            log.warning(f"order latency measurement failed: {type(exc).__name__}: {exc}")
         if routed["routed"] or routed["refused"]:
             # AUTOTRADER is an evidence prefix (runlog.AUDIT_PREFIXES): this
             # line is the system's own record of sending orders to a venue,
@@ -796,6 +799,64 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
         # A private execution fault is operational state to fix, never a reason
         # to stop recording the market.
         log.error(f"autotrader failed closed: {type(exc).__name__}: {exc}")
+    stages["account_decision_s"] = round(time.monotonic()-dispatch_started, 3)
+    stages["decision_after_start_s"] = round(time.monotonic()-started, 3)
+    research_started = time.monotonic()
+    # Finish the complementary portion of the shared roster. 5m data is still
+    # imported above and available to account/stop processing; only its
+    # descriptive engines wait until the funded decision has been considered.
+    for i, sym in enumerate(scan, 1):
+        _beat(f"research {sym} ({i}/{len(scan)})")
+        pipeline.run_symbol(con, sym, now=now, log=log,
+                            cache=analysis_cache, deferred=True)
+    # A universe decision governs NEW opportunities, never the lifecycle of an
+    # order already placed. Run execution and its exit cooldowns only: sending
+    # an off-universe symbol through the full pipeline could create fresh
+    # setups and keep it pinned forever. The quality gate remains mandatory
+    # because resolving an exit across an unexplained candle gap would invent
+    # which level hit first.
+    pinned_blocked = []
+    pinned_by_symbol: dict[str, list[str]] = {}
+    for symbol, tf in pinned_exec:
+        pinned_by_symbol.setdefault(symbol, []).append(tf)
+    for symbol, tfs in sorted(pinned_by_symbol.items()):
+        _beat(f"resolve pinned {symbol}")
+        try:
+            checks = quality.assert_market_ready(con, symbol, now)
+            # Until a current order exists, quality's order pin cannot see
+            # this missing generation. Retired holes are acceptable history,
+            # never acceptable evidence for reconstructing a reserved trade.
+            #
+            # This can only ever veto a REBUILD, which is why it is safe to
+            # veto at all. `quality.unsafe_to_retire()` contains every symbol
+            # in `execsim.unresolved`, and RETIRED_SEQUENCE_GAPS is emitted
+            # only for symbols outside that set, so a market carrying a PLACED
+            # or FILLED order reports BLOCKED SEQUENCE_GAPS and raises above
+            # this line instead. Do not add a live-order carve-out here: it
+            # reads as prudent, it cannot execute, and writing one requires
+            # believing the opposite of what the gate does.
+            if any(c["code"] == "RETIRED_SEQUENCE_GAPS" for c in checks):
+                _REBUILD_VETOED.add(symbol)
+                raise quality.DataQualityError(
+                    f"{symbol}: retired sequence gaps prevent execution recovery"
+                    " — not retried until the scanner restarts")
+            for tf in sorted(tfs, key=lambda value: importer.TF_SECONDS[value]):
+                execsim.run(con, symbol, tf, importer.TF_SECONDS[tf])
+                cooldowns.run(con, symbol, tf, importer.TF_SECONDS[tf])
+        except Exception as exc:
+            pinned_blocked.append(f"{symbol} ({type(exc).__name__}: {exc})")
+    if pinned_blocked:
+        log.warning(
+            f"open execution resolution blocked for {len(pinned_blocked)} "
+            f"symbol(s): {'; '.join(pinned_blocked[:4])}")
+    _beat("forward strategy trial")
+    try:
+        forwardtrial.run(con, scan_set)
+    except Exception:
+        log.exception("Forward strategy trial failed; main account processing continues")
+
+    _beat("risk")
+    risk.run(con)
     _beat("stop comparison")
     try:
         stopstudy.run(con)
@@ -859,6 +920,13 @@ def cycle(con, log, beat=None) -> tuple[int, list]:
     #     confirmed three months ago is history no matter which window it is in
     baseline_start = store.get_active_baseline(con)["started_at"]
     fired = announceable(con, before, now, baseline_start, log)
+    stages["deferred_s"] = round(time.monotonic()-research_started, 3)
+    stages["total_s"] = round(time.monotonic()-started, 3)
+    if analysis_cache is not None:
+        stages["descriptive_skipped"] = analysis_cache.skipped
+        stages["engine_calls"] = analysis_cache.executed
+        analysis_cache.skipped = analysis_cache.executed = 0
+    log.info("SCAN TIMING " + json.dumps(stages, sort_keys=True))
     return new_candles, fired
 
 
@@ -979,6 +1047,8 @@ def main():
     log = get_logger()
     install_exit_forensics()
     con = store.connect()
+    from engine.analysis_cache import AnalysisCache
+    analysis_cache = AnalysisCache()
     _exit_note("START", f"once={args.once}")
     log.info(f"live loop start (once={args.once}) poll={POLL_SECONDS}s")
     # A wake request left by a press that landed while the previous process
@@ -1022,7 +1092,7 @@ def main():
             # CANDLE_FINALIZATION_S — measured from production logs, the same
             # way the prior project arrived at its 5s.
             boundary_lag = time.time() % CANDLE_GRID_S
-            n, fired = cycle(con, log, beat=write_hb)
+            n, fired = cycle(con, log, beat=write_hb, analysis_cache=analysis_cache)
             n_cycles += 1
             state.update(cycles=n_cycles, last_new_candles=n,
                          last_new_setups=len(fired))

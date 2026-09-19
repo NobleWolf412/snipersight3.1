@@ -172,7 +172,8 @@ class ExecutionRebuild(unittest.TestCase):
         self.assertIn("UNIUSDT", [c.args[1] for c in imports.call_args_list])
         ready.assert_called_once_with(self.con, "UNIUSDT", 111600)
         run.assert_called_once_with(self.con, "UNIUSDT", "1H", 3600)
-        self.assertEqual([c.args[1] for c in pipeline.call_args_list], ["BTCUSDT"])
+        self.assertEqual([c.args[1] for c in pipeline.call_args_list], ["BTCUSDT", "BTCUSDT"])
+        self.assertTrue(pipeline.call_args_list[1].kwargs['deferred'])
         self.assertTrue(any("execution rebuild" in c.args[0] for c in log.warning.call_args_list))
 
     def test_quality_failure_never_fabricates_a_close(self):

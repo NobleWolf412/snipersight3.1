@@ -71,7 +71,7 @@ OPERATIONAL_EXPECTED = {
     # keeps the candles it needs. The constant moved in that commit with
     # no `# v0.10:` note beside it in live.py; this is the reason, read
     # off the diff.
-    "live": "live-v0.10-draft",
+    "live": "live-v0.11-draft",
     "stopstudy": "stop-study-v0.1-draft",
     # Writes its own `zone_study*` ledger and nothing else — no account
     # order, no fact under another engine's tag. Locked for the reason
