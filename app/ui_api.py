@@ -10,7 +10,7 @@ from engine import automation, importer, livegate, manual, opportunities, settin
 from engine.contracts import to_wire
 
 router = APIRouter(prefix="/api/ui/v1")
-VERSION = "cockpit-readmodel-v2"
+VERSION = "cockpit-readmodel-v3"
 
 
 def workspace_scope(workspace):
@@ -201,27 +201,12 @@ def opportunity_rows(con, search="", state="", domain="PAPER"):
 def setup_guide(setup_id: str, workspace: str = "CRYPTO"):
     if workspace_scope(workspace) != "CRYPTO":
         raise HTTPException(404, "Stock setup levels are not available")
-    from engine import setups, zones
+    from setup_guide import Reader
     with account_read() as con:
-        record = con.execute("SELECT payload,confirmed_at FROM facts WHERE kind='setup' AND algo_version=? "
-                             "AND json_extract(payload,'$.setup_id')=? ORDER BY confirmed_at DESC,id DESC LIMIT 1",
-                             (setups.SETUP_VERSION, setup_id)).fetchone()
-        if not record:
+        guide = Reader(con, int(time.time())).guide(setup_id)
+        if guide is None:
             raise HTTPException(404, "The recorded setup is no longer available")
-        payload = json.loads(record[0])
-        zone = con.execute("SELECT payload FROM facts WHERE kind='zone' AND algo_version=? "
-                           "AND json_extract(payload,'$.zone_id')=? AND json_extract(payload,'$.event')='CREATED' "
-                           "ORDER BY confirmed_at DESC,id DESC LIMIT 1", (zones.ZONE_VERSION, payload.get('zone_id'))).fetchone()
-        bounds = json.loads(zone[0]) if zone else {}
-        long = payload.get('direction') == 'LONG'
-        return {"setup_id":setup_id, "updated_at":record[1], "zone_bottom":bounds.get('bottom'),
-                "zone_top":bounds.get('top'), "confirmation_boundary":bounds.get('top' if long else 'bottom'),
-                "confirmation":("A completed candle must touch the area, close above its upper edge, and finish in the top 34% of its range." if long else
-                                "A completed candle must touch the area, close below its lower edge, and finish in the bottom 34% of its range."),
-                "confirmation_deadline":payload.get('confirm_deadline_ts'),
-                "entry_deadline":payload.get('expires_at_ts'), "stop":payload.get('sl'),
-                "skip_if":"The zone breaks before confirmation, confirmation takes too long, or later entry and risk checks fail. The zone-break threshold includes a changing volatility/tick buffer; the zone edge alone is not that threshold.",
-                "cancel_reason":payload.get('cancel_reason'), "state":payload.get('state')}
+        return guide
 
 
 @router.get("/home")
@@ -271,7 +256,13 @@ def opportunity_list(workspace: str = "CRYPTO", search: str = "", state: str = "
         rows.sort(key=order)
         ordering = {"progress": "Confirmation stage first, then recorded proximity to the zone. This is not a prediction of which trade will win.",
                     "newest": "Newest recorded setups first.", "distance": "Nearest zone when the setup was recorded. This is not live distance to entry."}[sort]
-        return {"items": rows[:limit], "total": len(rows), "counts": counts, "workspace": workspace, "domain": "PAPER",
+        from setup_guide import Reader
+        reader = Reader(con, now)
+        visible = rows[:limit]
+        for row in visible:
+            if row["state"] in ("FORMING", "WATCHING"):
+                row["confirmation_guide"] = reader.guide(row["setup"]["setup_id"])
+        return {"items": visible, "total": len(rows), "counts": counts, "workspace": workspace, "domain": "PAPER",
                 "ordering": ordering}
 
 

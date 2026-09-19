@@ -2,6 +2,49 @@
 const {test,expect}=require('@playwright/test');
 const AxeBuilder=require('@axe-core/playwright').default;
 
+test('confirmation cards explain actual conditions and candle progress',async({page},info)=>{
+  const now=Math.floor(Date.now()/1000);
+  const guide={available:true,state:'CONFIRMING',direction:'SHORT',timeframe:'15m',as_of:now,
+    intended_trade:'Short · Resistance rejection',market_context:'15m structure turning bearish; 4H bullish structure',
+    zone_bottom:'3.1105',zone_top:'3.1780',confirmation_boundary:'3.1105',last_price:'3.12',last_closed_at:now-20,
+    conditions:['High at or above 3.1105','Close strictly below 3.1105','Close in the bottom 34% of that candle’s range'],
+    max_followup_bars:3,completed_followup_bars:1,next_close_at:now+800,confirmation_deadline:now+1700,
+    steps:[{complete:true},{complete:false},{complete:false}],
+    skip_if:'A completed candle closes above 3.1780 by more than the volatility/tick buffer.',
+    expiry_action:'Cancel this setup if no candle confirms in time.',after_confirmation:'Account risk checks still apply.',
+    mini_chart:{zone_y:'40',zone_height:'45',boundary_y:'85',last_y:'78',bars:Array.from({length:16},(_,i)=>({x:20+i*18,high:String(20+i*3),low:String(55+i*3),body_top:String(30+i*3),body_height:'15',rising:i%3===0}))}};
+  const row={state:'WATCHING',eligible:false,actionable:false,evidence:{grade:'UNGRADED'},progress_label:'Waiting for confirmation',confirmation_guide:guide,
+    setup:{setup_id:'guide-test',symbol:'TESTUSDT',timeframe:'15m',strategy:'REVERSAL',direction:'SHORT',entry:null,stop:null,targets:[],confirmed_at:now-900},primary_explanation:'Old vague message',strongest_counterargument:'Wait'};
+  await page.route('**/api/ui/v1/opportunities?*',r=>r.fulfill({json:{items:[row],total:1,counts:{ready:0,watching:1}}}));
+  await page.route('**/api/ui/v1/setup-guide?*',r=>r.fulfill({json:guide}));
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('/#opportunities');
+  await page.getByRole('tab',{name:/Watching/}).click();
+  const card=page.locator('.setup-row');
+  await expect(card).toContainText('Close strictly below 3.1105');
+  await expect(card).toContainText('1 of 3 follow-up candles recorded');
+  await expect(card).toContainText('Next candle closes in');
+  await expect(card.locator('svg')).toBeVisible();
+  await expect(card).not.toContainText('Not set');
+  await card.getByText('What cancels it?',{exact:true}).click();
+  await expect(card).toContainText('volatility/tick buffer');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+  const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();
+  expect(audit.violations.map(v=>v.id)).toEqual([]);
+  await page.screenshot({path:info.outputPath('confirmation-card.png'),fullPage:true});
+  await page.getByRole('button',{name:'View chart',exact:true}).click();
+  await expect(page.locator('#setup-evidence')).toContainText('Close strictly below 3.1105');
+  await expect(page.locator('#setup-evidence')).not.toContainText('Old vague message');
+  row.state='BLOCKED';row.strongest_counterargument='The potential reward is too small for the risk.';
+  guide.state='REJECTED';delete guide.steps;delete guide.next_close_at;
+  await page.goto('/#blocked');
+  await page.getByRole('button',{name:'View chart',exact:true}).click();
+  await expect(page.locator('#setup-evidence')).toContainText('The potential reward is too small for the risk.');
+  await expect(page.locator('#confirmation-detail')).toContainText('This setup has left the confirmation stage.');
+  await expect(page.locator('#confirmation-detail')).not.toContainText('countdown starts');
+  expect(errors).toEqual([]);
+});
+
 test.beforeEach(async({page,request})=>{
   await page.route('**/api/command',route=>route.fulfill({json:{generated_at:Math.floor(Date.now()/1000),scanner:{state:'SCANNING',age_s:2,stage:'idle',cycles:3},automation:{mode:'PAPER',halted:false},opportunities:{counts:{}},data:{}}}));
   const response=await request.get('/api/ui/v1/context');
@@ -354,6 +397,12 @@ test('open simulated stop paths extend beyond the recorded exit',async({page})=>
 
 test('bot view separates fresh scanning, paused entries and delayed updates',async({page},info)=>{
   await page.clock.install();
+  // A poll also waits for positions after rendering status. Advancing the
+  // clock while that request is pending may legitimately skip one tick.
+  const nextStatus=async text=>expect.poll(async()=>{
+    await page.clock.fastForward(15000);
+    return page.locator('#bot-status').innerText();
+  }).toContain(text);
   let status={generated_at:Math.floor(Date.now()/1000),scanner:{state:'SCANNING',age_s:3,stage:'engines LINKUSDT (12/40)',cycles:7},automation:{mode:'PAPER',halted:true},opportunities:{counts:{WATCHING:2,READY:1,BLOCKED:4}},data:{headline:'Affected market: CAP-USD has missing price data.',observed_at:1789401600}};
   await page.route('**/api/command',route=>route.fulfill({json:status}));
   await page.goto('/#home');
@@ -365,14 +414,18 @@ test('bot view separates fresh scanning, paused entries and delayed updates',asy
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
   const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();expect(audit.violations.map(v=>v.id)).toEqual([]);
   await page.screenshot({path:info.outputPath('bot-view.png'),fullPage:true});
+  status={...status,scanner:{...status.scanner,stage:'research ETHUSDT (4/36)'}};
+  await nextStatus('Updating research');
+  await expect(page.locator('#bot-status')).toContainText('Current market: ETHUSDT');
+  await expect(page.locator('progress')).toHaveAttribute('value','4');
+  status={...status,scanner:{...status.scanner,stage:'paper risk'}};
+  await nextStatus('Checking account risk');
   status={...status,scanner:{...status.scanner,state:'STALE',age_s:240}};
-  await page.clock.fastForward(15000);
-  await expect(page.locator('#bot-status')).toContainText('Scanner update overdue');
+  await nextStatus('Scanner update overdue');
   await expect(page.locator('progress')).toHaveCount(0);
   await expect(page.locator('.bot-signal.reporting')).toHaveCount(0);
   await page.route('**/api/command',route=>route.fulfill({status:503,json:{detail:'Unavailable'}}));
-  await page.clock.fastForward(15000);
-  await expect(page.locator('#bot-status')).toContainText('Bot status unavailable');
+  await nextStatus('Bot status unavailable');
 });
 
 test('blocked count opens searchable reasons and links to the setup chart',async({page},info)=>{

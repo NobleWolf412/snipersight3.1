@@ -79,3 +79,16 @@
 .chart-view-tabs{width:100%}.tabs button[aria-pressed="true"]{background:#244139;color:#b5f9dd;border-color:#78e2b6}
 .opportunity-level-key{display:flex;flex-wrap:wrap;gap:10px 20px;padding:12px 16px;font-size:12px;border-top:1px solid var(--line)}.opportunity-level-key:empty{display:none}.opportunity-level-key span{min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.opportunity-level-key span::before{content:'';display:inline-block;width:18px;border-top:1px dashed var(--level-color);margin-right:7px;vertical-align:middle}
 .opportunity-level-key .entry-level::before{border-top-style:solid;border-top-width:2px}.opportunity-level-key .entry-level{color:var(--accent)}
+.confirmation-guide{margin:1rem 0;border:1px solid #344652;border-radius:14px;overflow:hidden;background:#101a22}
+.confirmation-idea,.confirmation-trigger,.confirmation-progress,.confirmation-outcomes{padding:1rem 1.15rem}
+.confirmation-idea p{margin:.4rem 0}.confirmation-idea small{color:#afbdc8}
+.confirmation-chart{padding:.5rem 1rem;background:#0d151d;border-block:1px solid #2c3b48}
+.confirmation-chart svg{display:block;width:100%;max-height:220px}
+.watched-zone{fill:#f0c37e0a;stroke:#f0c37e;stroke-dasharray:4 3;stroke-width:1}
+.mini-candle.up{fill:#78e2b6;stroke:#78e2b6}.mini-candle.down{fill:#ed929c;stroke:#ed929c}
+.confirmation-edge{stroke:#a4baff;stroke-width:1.5;stroke-dasharray:5 3}.recorded-price{stroke:#d6e2eb;stroke-width:1;stroke-dasharray:2 4}
+.confirmation-key{display:flex;flex-wrap:wrap;gap:.45rem 1.1rem;font-size:.8rem}.confirmation-key strong{font-variant-numeric:tabular-nums}
+.zone-key{color:#f0c37e}.trigger-key{color:#a4baff}.price-key{color:#d6e2eb}
+.confirmation-trigger h4,.confirmation-outcomes h4{margin:0 0 .5rem}.confirmation-trigger p{margin:.3rem 0}.confirmation-trigger ol{padding-left:1.25rem;margin:.65rem 0 0}.confirmation-trigger li{margin:.35rem 0}
+.confirmation-progress{border-block:1px solid #2c3b48}.candle-steps{display:flex;gap:.6rem;margin-bottom:1rem}.candle-steps>div{flex:1;background:#182631;border:1px solid #536575;border-radius:8px;padding:.5rem;text-align:center}.candle-steps span{display:block;font-size:1.1rem}.candle-steps small{display:block;color:#c3cfda}.candle-steps .complete{border-color:#78e2b6;background:#15352c;color:#a0f0d0}
+.confirmation-clock{color:#b8c8ff;font-variant-numeric:tabular-nums}.confirmation-outcomes summary{cursor:pointer;font-weight:600;color:#c3ceff}.confirmation-outcomes p{font-size:.9rem}
