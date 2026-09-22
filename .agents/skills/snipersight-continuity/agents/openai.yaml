@@ -1,0 +1,4 @@
+interface:
+  display_name: "SniperSight Continuity"
+  short_description: "Preserve decisions, preferences and unfinished work"
+  default_prompt: "Use $snipersight-continuity to reconcile the current request with the work ledger and save an evidence-based handoff."

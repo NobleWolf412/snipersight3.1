@@ -1,6 +1,6 @@
 ---
 name: snipersight-development
-description: Safely investigate, implement, test, review, or debug changes in the SniperSight 3.1 repository, including token-conscious multi-agent architect, implementer, auditor, and contrarian workflows when explicitly requested. Use for work involving its Python engines, FastAPI server, static JavaScript cockpit, append-only fact store, algo_version cascade, live supervisor, tests, Graphify map, or Serena project memory.
+description: Investigate, design, implement, test or review SniperSight 3.1 trading behavior and its UI. Use the shared Trading Analyst, Product Designer and engineering roles when relevant, with bounded delegation for broad, risky or uncertain work. Applies to this repository, not general trading advice.
 ---
 
 # SniperSight development
@@ -16,34 +16,30 @@ in the notebook; discover current layout, versions, and counts from the repo.
    broad searching. Skip vendored chart-library communities.
 3. Read source before claiming a cross-file flow; the graph is file-shaped.
 4. Check `git status --short` and preserve unrelated changes.
+5. Read `docs/WORK-STATE.md`; follow the repository continuity contract and
+   [continuity skill](../snipersight-continuity/SKILL.md) for relevant unfinished
+   outcomes, user corrections and handoffs.
 
 ## Route the work
 
-Default to a single agent. Delegate on **task shape**, not on request — the
-operator asked for automatic routing on 2026-08-08 — but delegating a bounded
-edit against a known authority spends context to rediscover what the lead
-already has.
+Default to one agent. For substantive trading, product-design or engineering
+work, read the shared rules and relevant sections of the canonical
+[role contract](references/agent-roles.md). It owns role selection, evidence
+requirements and completion criteria for both Codex and Claude.
 
-| Signal in the task | Role |
-|---|---|
-| crosses engines, moves an `algo_version`, more than one plausible home | **Architect**, first |
-| the cause of the symptom is still a theory | **Contrarian**, before editing |
-| implementation is being handed off | **Implementer**, exactly one |
-| facts, versions, sizing arithmetic, a safety guard, a live endpoint | **Auditor**, after |
+Apply a role's questions directly for bounded work. Delegate on task shape
+when work is broad, risky or uncertain and independent scrutiny adds value;
+this is the operator's requested routing, not a requirement to run every role.
+"No subagents" keeps work local; "contrarian pass" selects Contrarian;
+"full workflow" uses Architect → one Implementer → Auditor, with trading or
+design input only where needed. An unavailable independent review stays an
+explicit gap, not a claim that switching roles supplied it.
 
-Explicit phrases still override: *lightweight* or *no subagents* keeps it
-single-agent; *audit this* adds the Auditor; *contrarian pass* adds the
-Contrarian; *full workflow* runs Architect → Implementer → Auditor.
-
-Read [references/agent-roles.md](references/agent-roles.md) before delegating.
-Use the smallest workflow the task shape warrants. State which roles are being
-used and why. (This copy said "only when explicitly requested" until
-2026-09-10, contradicting CLAUDE.md and the Claude copy; the two are kept in
-step by hand — see CLAUDE.md "Four roles".)
-
-Maintain a single writer. Never allow two agents to edit the shared working
-tree concurrently. Architect, Contrarian, and Auditor are read-only. Give each
-agent a bounded question, the minimum relevant context, and a stopping rule.
+State which delegated roles are used and why. Give each a bounded question,
+the canonical contract path and relevant role name, the original requested
+outcome, necessary evidence and a stopping rule. Keep exactly one writer:
+the Lead or Implementer. All other delegated roles are read-only. The Lead
+reconciles findings and updates the shared work ledger.
 
 ## Change
 
@@ -72,3 +68,5 @@ agent a bounded question, the minimum relevant context, and a stopping rule.
 Lead with what is true now and its practical consequence. Report tests actually
 run, anything not verified, version changes, live-state risk avoided, and which
 delegated findings materially changed the result. Do not dump agent transcripts.
+Reconcile the relevant work item before claiming completion; name any remaining
+activation or verification gap in the requested user journey.

@@ -43,11 +43,39 @@ a document that misdescribes the code as worse than no document.
 - `AGENTS.md`: agent authority and safety boundaries.
 - `CLAUDE.md`: durable behavioural invariants and learned traps, never current
   code inventory, version lists, or counts.
+- `docs/WORK-STATE.md`: current requested outcomes, unresolved decisions,
+  delivery evidence and the next handoff. Dated state, not a second rulebook.
 - `docs/` and `sources/`: specifications and deliberate design decisions.
 - `graphify-out/wiki/`: generated navigation, not durable memory or proof of a
   cross-file flow.
 - Serena memory: investigation notes only. Promote durable facts to the proper
   tracked document instead of maintaining competing truths.
+
+## Shared roles
+
+Use the [development skill](.agents/skills/snipersight-development/SKILL.md)
+and its [role contract](.agents/skills/snipersight-development/references/agent-roles.md)
+for task-specific trading, product-design and engineering perspectives. Codex
+and Claude use the same definitions. Roles share this authority and the work
+ledger; they do not establish separate personas, permissions or memories.
+
+## Continuity between sessions
+
+Before substantive project work, read `docs/WORK-STATE.md` with `CLAUDE.md`.
+Reconcile the relevant item against the latest user request and current source;
+a backlog entry does not authorize unrelated work or override newer direction.
+Use `.agents/skills/snipersight-continuity/SKILL.md` when resuming work,
+recording a material user correction, or preparing a handoff.
+
+Update the existing work item when scope, evidence, decisions or status change,
+and before a substantial task ends or context is handed off. Preserve the
+requested outcome and state what remains unfinished. Keep implementation,
+verification, activation and commit/push status distinct when relevant. Mark
+an outcome complete only with evidence in the requested operating context;
+research, a chart or passing tests alone do not establish active account behavior.
+Store stable lessons once in `CLAUDE.md`; keep current results in the work ledger
+or a linked dated report. Re-read shared files before patching another session's
+state. Do not turn every conversation into another instruction or transcript.
 
 ## What this file used to say
 

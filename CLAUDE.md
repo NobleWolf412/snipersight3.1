@@ -4,6 +4,10 @@ Deterministic market-structure research platform. Append-only, content-hashed
 fact store; every engine writes facts under an `algo_version` and nothing
 mutates. The product constitution is `sources/ss3_v0.1.txt`.
 
+`AGENTS.md` owns agent authority and safety boundaries. Read it and
+`docs/WORK-STATE.md` before substantive project work. The latter holds dated
+unfinished outcomes and handoffs; this notebook holds durable lessons.
+
 **The conventions the code does not state live here**, under "The conventions"
 below. They were `docs/PROGRAM-PLAN.md` §6 until 2026-08-07; comments in the
 code citing `§6` mean that list. They are in this file because this is the one
@@ -75,6 +79,29 @@ Length is not the goal — clarity is, and the first sentence has to stand alone
 But when a long answer and a short one are equally clear, the short one wins.
 Asked for this on 2026-09-02, after several answers that were correct and too
 long to read.
+
+**Product preferences reinforced in the September 2026 conversations:**
+
+- The operator explicitly describes himself as a visual learner. Use actual
+  charts, price levels, timelines and useful comparisons when they explain a
+  trade or decision. Decorative graphics and charts that hide price do not
+  satisfy that preference. A visual must explain what happened or what happens
+  next; it is not required for every answer.
+- Use trader-readable words in the product too. Keep internal migration,
+  version and research terminology out of the main flow unless it changes a
+  user decision. Put optional strategy detail in a discoverable place.
+- When a request repeats, first check the earlier commitment and the actual
+  user journey. Treat a delivery gap as unfinished work; do not make the user
+  explain the same objective again or silently replace it with another plan.
+
+**An explanation or experiment does not deliver account behavior.** A journal
+can show profit given back and a study can draw a simulated trailing stop while
+the trading account still uses its original stop. These are different outcomes.
+Completion of a behavior request needs evidence at the component that performs
+the action and its user-visible result. Research-only requests remain
+research-only. Keep the gap explicit in `docs/WORK-STATE.md`; do not turn an
+experimental parameter into an agreed production rule. A version change can
+also pause a frozen study, so "implemented" never proves it is still running.
 
 ## Run
 
@@ -454,39 +481,24 @@ whoever flips the live switch, plus repository visibility. `engine/regimefresh.p
 carries the pattern to copy: keep the reasoning, drop the account figures, and
 tell the reader to run the module against their own book.
 
-## Four roles, and when to call them
+## Shared roles and independent review
 
-`.claude/agents/` holds four bounded roles. They are jobs, not personalities,
-and their output is evidence — it does not overrule this file or the repo.
+Use the [canonical role contract](.agents/skills/snipersight-development/references/agent-roles.md)
+for role selection, questions, evidence and stopping points. Codex and Claude
+read the same definitions; `.claude/agents/` contains discovery entrypoints.
+The development skill owns the shared workflow. Do not copy role instructions
+into another notebook or maintain separate role memories.
 
-| Role | When | Writes? |
-|---|---|---|
-| **architect** | before a change that crosses engines, moves an `algo_version`, or has more than one plausible home | no |
-| **contrarian** | before editing, when the *cause* is still uncertain | no |
-| **implementer** | when implementation is delegated. Exactly one, ever | yes |
-| **auditor** | after a change to facts, versions, sizing arithmetic, a safety guard, or a live endpoint | no |
+Choose roles by task shape and keep ordinary work with one agent. The operator
+requested automatic routing on 2026-08-08 and shared trading-analysis and
+product-design perspectives on 2026-09-21. A role helps ask better questions;
+its title is not evidence of expertise or completion.
 
-**Call them on task shape, without being asked.** The operator asked for this
-on 2026-08-08. Risk and uncertainty are the trigger, not the size of the diff:
-a one-line change to a sizing constant earns an auditor, and a day of renaming
-does not.
-
-Single agent is still the default. Most work here is one bounded edit against a
-known authority, and delegating that spends tokens and context to re-derive
-what the lead already knows. Delegate when the task is genuinely broad, genuinely
-risky, or genuinely uncertain — and say which role you used and why.
-
-**Never two writers.** Architect, contrarian and auditor are read-only; the
-implementer is the only role that edits, and the lead must not edit alongside
-one. Read-only roles may run in parallel when their questions are independent.
-
-The auditor works best cold: give it the task and the diff, not the reasoning
-that produced them. Its value is that it does not share the implementer's
-assumptions, and explaining the intent hands those assumptions straight over.
-
-There is a parallel Codex copy of these roles at
-`.agents/skills/snipersight-development/` — same four jobs, different runner.
-Keep them in step when either changes.
+Independent review earns its value by checking the actual result against the
+request without adopting the implementer's defense. Give a reviewer the
+original outcome, acceptance criteria and final artifacts. The Lead changing
+hats is self-review, not an independent check. Preserve one writer and let the
+Lead reconcile findings into the shared work ledger.
 
 ## Not part of this project
 
