@@ -6,8 +6,9 @@ hashed, not just its timestamp: repairing an old bar must invalidate the run.
 import hashlib
 import json
 
-from . import (fvg, liquidity, ma, momentum, ranges, regime, sessions, store,
-               structure, swings, volatility, volprofile, volume, zones)
+from . import (fvg, liquidity, ma, momentum, ranges, regime, research,
+               researchsignals, sessions, setups, store, structure, swings,
+               volatility, volprofile, volume, zones)
 
 
 def dependencies():
@@ -17,6 +18,15 @@ def dependencies():
         structure: swing, zones: swing, liquidity: swing,
         regime: (('structure', structure.STRUCTURE_VERSION),),
         ranges: swing, momentum: swing,
+        research: (('structure', structure.STRUCTURE_VERSION),
+                   ('liquidity', liquidity.LIQ_VERSION),
+                   ('ma', ma.MA_VERSION), ('momentum', momentum.MOMENTUM_VERSION)),
+        researchsignals: (('setup', setups.SETUP_VERSION),
+                          ('order_block', research.ORDER_BLOCK_VERSION),
+                          ('structure_sequence', research.STRUCTURE_SEQUENCE_VERSION),
+                          ('stoch_rsi', research.STOCH_RSI_VERSION),
+                          ('hidden_divergence', research.HIDDEN_DIVERGENCE_VERSION),
+                          ('open_interest_signal', research.OPEN_INTEREST_SIGNAL_VERSION)),
         ma: (), volatility: (), volume: (), fvg: (), volprofile: (), sessions: (),
     }
 
@@ -24,7 +34,10 @@ def dependencies():
 OUTPUT_KIND = {swings: 'swing', structure: 'structure', zones: 'zone',
                liquidity: 'liquidity', regime: 'regime', ranges: 'range',
                momentum: 'momentum', ma: 'ma', volatility: 'volatility',
-               volume: 'volume', fvg: 'fvg', volprofile: 'volprofile', sessions: 'sessions'}
+               volume: 'volume', fvg: 'fvg', volprofile: 'volprofile', sessions: 'sessions',
+               research: ('order_block', 'structure_sequence', 'stoch_rsi',
+                          'hidden_divergence'),
+               researchsignals: 'research_snapshot'}
 
 
 class AnalysisCache:
@@ -66,9 +79,12 @@ class AnalysisCache:
                 (symbol, tf, kind, version)).fetchone()))
         # Facts are append-only. Count/max-id also detect removal/rebuild of
         # this engine's output by maintenance outside this process.
-        output = tuple(con.execute(
+        output_kinds = OUTPUT_KIND[mod]
+        if isinstance(output_kinds, str):
+            output_kinds = (output_kinds,)
+        output = tuple(tuple(con.execute(
             'SELECT COUNT(*),COALESCE(MAX(id),0) FROM facts WHERE symbol=? AND tf=? AND kind=?',
-            (symbol, tf, OUTPUT_KIND[mod])).fetchone())
+            (symbol, tf, kind)).fetchone()) for kind in output_kinds)
         return (self.candle_hashes[key], versions, tuple(revisions), output)
 
     def unchanged(self, con, mod, symbol, tf):

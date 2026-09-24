@@ -132,6 +132,7 @@
         <div><dt>Expires</dt><dd>${esc(when(s.expires_at))}</dd></div>
       </dl>
       <section class="op-callout"><span class="op-kicker">Why it exists</span><p>${esc(row.primary_explanation)}</p></section>
+      ${window.SSSignalMap ? window.SSSignalMap.disclosure(row.research_observations) : ''}
       <section class="op-callout caution"><span class="op-kicker">${cautionLabel(row.state)}</span><p>${esc(row.strongest_counterargument)}</p></section>
       <section class="op-callout"><span class="op-kicker">What kills this trade</span><p>${esc(s.invalidation)}</p></section>
       <details class="op-detail-evidence"><summary>How the bot scored it</summary>
@@ -142,7 +143,7 @@
         ${action}</div>`;
   }
 
-  function tradeEvidence(row){
+  function tradeEvidence(row, currentResearch){
     if(!row) return `<div class="trade-evidence-empty"><span class="op-state">No setup selected</span>
       <h2>Recorded setup</h2><p>Choose a setup to review its recorded decision and planned levels.</p>
       <a class="btn btn-primary" href="#opportunities">Open Setups</a></div>`;
@@ -159,6 +160,7 @@
         <div><dt>Setup score</dt><dd>${esc(row.quality_score)}/100</dd></div>
         ${hasGrade(grade) ? `<div><dt>Performance grade</dt><dd>${esc(grade.grade)} · ${esc(label(grade.confidence))}</dd></div>` : ''}</dl>
       <section class="trade-brief"><span class="op-kicker">Why it exists</span><p>${esc(row.primary_explanation)}</p></section>
+      ${window.SSSignalMap ? window.SSSignalMap.trade(row.research_observations, currentResearch) : ''}
       <section class="trade-brief caution"><span class="op-kicker">${cautionLabel(row.state)}</span><p>${esc(row.strongest_counterargument)}</p></section>
       <section class="trade-brief"><span class="op-kicker">What kills this trade</span><p>${esc(s.invalidation)}</p></section>
       <details class="trade-evidence-more"><summary>How the bot scored it</summary>

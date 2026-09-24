@@ -485,6 +485,7 @@
               <button data-preset="clean" aria-pressed="true" title="candles, volume and your own levels — nothing else">Clean</button>
               <button data-preset="trade" aria-pressed="false" title="adds the zones the setup was built on">Trade</button>
               <button data-preset="structure" aria-pressed="false" title="adds swings, market structure and liquidity pools">Structure</button>
+              <button data-preset="research" aria-pressed="false" title="research-only observations and synchronized indicator panes">Research</button>
               <button data-preset="everything" aria-pressed="false" title="every layer, including the four that fetch on demand">Everything</button>
             </div>
             <!-- THE LOUDEST THING ON THIS CHART, and until now the only thing
@@ -544,6 +545,14 @@
               <button data-o="ranges" data-label="Ranges" data-note="sideways boxes the market is still respecting">Ranges</button>
               <button data-o="signals" data-label="Momentum" data-note="divergences, RSI extremes, volume spikes and volatility squeezes — is price arriving with force behind it">Momentum</button>
             </div>
+            <div class="research-layer-group"><span>Research observations</span>
+              <button data-o="orderblocks" data-label="Order blocks">Order blocks</button>
+              <button data-o="sequences" data-label="Structure sequence">Structure sequence</button>
+              <button data-o="divergence" data-label="Divergence">Divergence</button>
+              <button data-o="stochrsi" data-label="Stoch RSI">Stoch RSI</button>
+              <button data-o="openinterest" data-label="Open interest">Open interest</button>
+              <small>Research only — these layers do not alter the trade plan.</small>
+            </div>
           </div>
         </div>
         <button class="btn" id="cAnalyse"
@@ -562,6 +571,19 @@
         </aside>
         <div class="panel chart-pane" id="chartPane">
           <div id="chartBox"></div>
+          <svg id="researchPriceOverlay" class="research-price-overlay" aria-hidden="true"></svg>
+          <div id="researchPanes" class="research-panes" hidden>
+            <section id="stochResearchPane" class="research-pane" hidden>
+              <header><b>Stoch RSI · K / D · 20 / 80</b><small data-last-time>Unavailable</small></header>
+              <div class="research-pane-chart"></div>
+              <div class="pane-resizer" role="separator" tabindex="0" aria-label="Resize Stoch RSI pane" aria-orientation="horizontal" aria-valuemin="90" aria-valuemax="260" aria-valuenow="126" aria-valuetext="126 pixels high"></div>
+            </section>
+            <section id="oiResearchPane" class="research-pane" hidden>
+              <header><b>Open interest · 1H change</b><small data-last-time>Unavailable</small></header>
+              <div class="research-pane-chart"></div>
+              <div class="pane-resizer" role="separator" tabindex="0" aria-label="Resize open-interest pane" aria-orientation="horizontal" aria-valuemin="90" aria-valuemax="260" aria-valuenow="126" aria-valuetext="126 pixels high"></div>
+            </section>
+          </div>
           <!-- What the bar under the cursor actually is. Hovering a candle
                told the operator nothing — the most basic thing a chart does.
                Overlaid on the chart rather than added to the control strip:
@@ -843,7 +865,7 @@
       <div class="workspace-tabs" id="performanceTabs" data-workspace-tabs="performance" aria-label="Performance views">
         <button class="on" type="button" data-view="overview" aria-pressed="true">Performance</button>
         <button type="button" data-view="strategies" aria-pressed="false">Strategies</button>
-        <button type="button" data-view="factors" aria-pressed="false">Factors</button>
+        <button type="button" data-view="factors" aria-pressed="false">Signals</button>
         <button type="button" data-view="promotion" aria-pressed="false">Promotion</button>
       </div>
       <div class="performance-scope" id="performanceScope" aria-label="Performance evidence scope and filters">
@@ -1474,6 +1496,9 @@
         <button class="btn" id="btnDiagnose"
                 title="run eight checks and say which one to fix first">Diagnose</button>
       </div>
+      <section class="panel oi-feed diag-oi-feed" id="diagOi" aria-live="polite">
+        <h4>Open-interest feed</h4><p>Reading collection health…</p>
+      </section>
       <!-- THE TWO STATUS READOUTS, PAIRED.
 
            Failures first, per operator ruling: engine exceptions
@@ -1826,8 +1851,10 @@
 <!-- Before chart.js and shell.js: both call SSConfirm at their commit points,
      and defer scripts run in document order. -->
 <script defer src="/static/confirm-dialog.js?v=20"></script>
+<script defer src="/static/signal-map.js?v=1"></script>
 <script defer src="/static/opportunity-ui.js?v=20"></script>
 <script defer src="/static/chart.js?v=20"></script>
+<script defer src="/static/research-chart.js?v=1"></script>
 <!-- funnel.js FIRST: it owns the plain-language reason dictionary that
      shell.js reads on its very first render. Deferred scripts execute in
      document order, so with shell.js ahead of it the deck and the

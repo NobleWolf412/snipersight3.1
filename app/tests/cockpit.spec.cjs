@@ -32,13 +32,13 @@ test('confirmation cards explain actual conditions and candle progress',async({p
   const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();
   expect(audit.violations.map(v=>v.id)).toEqual([]);
   await page.screenshot({path:info.outputPath('confirmation-card.png'),fullPage:true});
-  await page.getByRole('button',{name:'View chart',exact:true}).click();
+  await openSetupChart(page);
   await expect(page.locator('#setup-evidence')).toContainText('Close strictly below 3.1105');
   await expect(page.locator('#setup-evidence')).not.toContainText('Old vague message');
   row.state='BLOCKED';row.strongest_counterargument='The potential reward is too small for the risk.';
   guide.state='REJECTED';delete guide.steps;delete guide.next_close_at;
   await page.goto('/#blocked');
-  await page.getByRole('button',{name:'View chart',exact:true}).click();
+  await openSetupChart(page);
   await expect(page.locator('#setup-evidence')).toContainText('The potential reward is too small for the risk.');
   await expect(page.locator('#confirmation-detail')).toContainText('This setup has left the confirmation stage.');
   await expect(page.locator('#confirmation-detail')).not.toContainText('countdown starts');
@@ -62,6 +62,12 @@ async function ticket(page){
   await page.locator('#entry').fill('100');
   await page.locator('#sl').fill('98');
   await page.locator('#tp').fill('104');
+}
+
+async function openSetupChart(page){
+  await page.getByRole('button',{name:/^(View chart|Review trade)$/}).first().click();
+  const open=page.getByRole('button',{name:'Open in Trade',exact:true});
+  try{await open.waitFor({state:'visible',timeout:2000});await open.click();}catch{ /* direct chart route */ }
 }
 
 function preview(){return {request:{workspace:'CRYPTO',symbol:'BTCUSDT',tf:'1H',direction:'LONG',entry:'100',sl:'98',tp:'104',risk_usd:'25',created_at:Math.floor(Date.now()/1000),expected_epoch:'fixture'},quantity:'12.5',risk_usd:'25',rr:'2',expires_at:Math.floor(Date.now()/1000)+120,note:'Preview fixture'};}
@@ -101,6 +107,41 @@ test('six screens, chart, keyboard navigation and accessibility',async({page},in
     await expect(page.locator('#more-menu')).toBeHidden();
   }
   expect(errors).toEqual([]);
+});
+
+test('research panes cannot replace the price chart opening range',async({page})=>{
+  const now=Math.floor(Date.now()/3600000)*3600;
+  await page.route('**/api/research-series?*',route=>route.fulfill({json:{
+    order_blocks:[{block_id:'visible-ob',direction:'BULL',source_candle_ts:now-6*3600,break_ts:now-5*3600,bottom:'100.4',top:'101.2',version:'order-block-fixture'}],
+    structure_sequences:[{block_id:'visible-ob',direction:'BULL',block_ts:now-6*3600,break_ts:now-5*3600,sweep_ts:null,state:'PARTIAL',version:'sequence-fixture'}],
+    regular_divergence:[{prev_pivot_ts:now-8*3600,time:now-7*3600,price_prev:'100.3',price:'100.9',divergence:'BULLISH',version:'regular-fixture'}],
+    hidden_divergence:[{prev_pivot_ts:now-4*3600,time:now-3*3600,price_prev:'101.1',price:'100.6',divergence:'BEARISH_HIDDEN',version:'hidden-fixture'}],
+    stoch_rsi:Array.from({length:120},(_,i)=>({time:now-(119-i)*3600,confirmed_at:now-(118-i)*3600,k:'45',d:'50'})),
+    // A fresh collector often has only a few OI readings. Those timestamps
+    // used to auto-fit the main chart down to two giant candles.
+    open_interest:[{time:now-600,value:'1000',change_1h:null},{time:now-300,value:null,status:'MISSING'},{time:now,value:'1001',change_1h:'1'}],
+  }}));
+  await page.goto('/#trade');
+  await expect(page.locator('#chart canvas').first()).toBeVisible();
+  const before=await page.evaluate(()=>window.SSCockpitChartHost?.chart()?.timeScale().getVisibleLogicalRange());
+  expect(before).toBeTruthy();
+  await page.locator('[data-chart-preset="research"]').click();
+  await expect(page.locator('#research-indicator-panes')).toBeVisible();
+  await expect(page.locator('.research-ob-label')).toHaveText('OB ↑');
+  await expect(page.locator('.research-ob-label')).toBeVisible();
+  await expect(page.locator('.research-sequence.partial')).toBeVisible();
+  await expect(page.locator('.research-sequence-state')).toHaveText('B→OB · partial');
+  await expect(page.locator('.research-layer-summary')).toContainText('1 structure sequences (0 complete · 1 partial; partial means no sweep recorded)');
+  await expect(page.locator('.research-layer-summary')).toHaveAttribute('data-sequence-markers','1');
+  await expect(page.locator('.research-layer-summary')).toHaveAttribute('data-regular-divergence-series','1');
+  await expect(page.locator('.research-layer-summary')).toHaveAttribute('data-hidden-divergence-series','1');
+  await expect(page.locator('[data-research-pane="stoch"]')).toHaveAttribute('data-point-count','120');
+  await expect(page.locator('[data-research-pane="oi"]')).toHaveAttribute('data-point-count','2');
+  await expect(page.locator('[data-research-pane="oi"]')).toHaveAttribute('data-gap-count','1');
+  await page.waitForTimeout(50);
+  const after=await page.evaluate(()=>window.SSCockpitChartHost?.chart()?.timeScale().getVisibleLogicalRange());
+  expect(after).toBeTruthy();
+  expect(after.to-after.from).toBeGreaterThanOrEqual((before.to-before.from)*0.8);
 });
 
 test('stock selection never renders crypto money or calls a crypto chart',async({page})=>{
@@ -233,11 +274,11 @@ test('strategy examples load locally and enlarge without leaving the guide',asyn
 
 test('opportunities preserve confirmed prices and leave missing setup prices blank',async({page})=>{
   let ready=false;
-  await page.route('**/api/ui/v1/opportunities?*',route=>route.fulfill({json:{total:1,items:[{setup:{symbol:'BTCUSDT',timeframe:'1H',strategy:'PULLBACK',direction:'LONG',entry:ready?'100.125':'0',stop:ready?'98.250':'0.00',targets:[ready?'104.875':'0'],invalidation:'Stop-loss',expires_at:Math.floor(Date.now()/1000)+3600},state:ready?'READY':'FORMING',evidence:{grade:'UNGRADED'},primary_explanation:'Waiting for confirmation.',strongest_counterargument:'No entry deadline is recorded.'}]}}));
+  await page.route('**/api/ui/v1/opportunities?*',route=>route.fulfill({json:{total:1,items:[{setup:{setup_id:'prices-test',symbol:'BTCUSDT',timeframe:'1H',strategy:'PULLBACK',direction:'LONG',entry:ready?'100.125':'0',stop:ready?'98.250':'0.00',targets:[ready?'104.875':'0'],invalidation:'Stop-loss',expires_at:Math.floor(Date.now()/1000)+3600},state:ready?'READY':'FORMING',evidence:{grade:'UNGRADED'},primary_explanation:'Waiting for confirmation.',strongest_counterargument:'No entry deadline is recorded.'}]}}));
   await page.goto('/#opportunities');
   await expect(page.getByText('No confirmed trades ready right now')).toBeVisible();
   await page.getByRole('tab',{name:/Watching/}).click();
-  await page.getByRole('button',{name:'View chart',exact:true}).click();
+  await openSetupChart(page);
   for(const name of ['entry','sl','tp']){
     await expect(page.locator('#'+name)).toHaveValue('');
     await expect(page.locator('#'+name)).toHaveAttribute('placeholder','Not available yet');
@@ -245,7 +286,7 @@ test('opportunities preserve confirmed prices and leave missing setup prices bla
   await expect(page.locator('#setup-prices-pending')).toBeVisible();
   ready=true;
   await page.goto('/#opportunities');
-  await page.getByRole('button',{name:'Review',exact:false}).click();
+  await openSetupChart(page);
   await expect(page.locator('#entry')).toHaveValue('100.125');
   await expect(page.locator('#sl')).toHaveValue('98.250');
   await expect(page.locator('#tp')).toHaveValue('104.875');
@@ -262,7 +303,7 @@ test('watching shows recorded timing, prices and chart conditions',async({page})
   await expect(page.locator('.setup-row')).toContainText('Setup recorded');
   await expect(page.locator('.setup-row')).toContainText('Stop-loss');
   await expect(page.locator('.setup-row')).toContainText('Not set');
-  await page.getByRole('button',{name:'View chart',exact:true}).click();
+  await openSetupChart(page);
   await expect(page.locator('#setup-evidence')).toContainText('98.125');
   await expect(page.locator('#setup-evidence')).toContainText('99.875');
   await expect(page.locator('#setup-evidence')).toContainText('Skip if the zone breaks');
@@ -281,7 +322,7 @@ test('entry remains distinct when it shares the watched zone edge',async({page})
   await page.route('**/api/ui/v1/setup-guide?*',route=>route.fulfill({json:{zone_bottom:'99',zone_top:'99.875',confirmation:'Waiting for confirmation.',skip_if:'Skip if the zone breaks.'}}));
   await page.goto('/#opportunities');
   await page.getByRole('tab',{name:/Watching/}).click();
-  await page.getByRole('button',{name:'View chart',exact:true}).click();
+  await openSetupChart(page);
   await expect(page.locator('#opportunity-level-key .entry-level')).toHaveText('Entry: 99.8750 · area upper edge at the same price');
   await expect(page.locator('#opportunity-level-key span')).toHaveCount(4);
   await expect(page.locator('#chart canvas').first()).toBeVisible();
@@ -484,6 +525,10 @@ test('defended zone comparison shows timing, reasons, and chart timeframe toggle
 
 test('opportunity tabs prioritize actionable plans and filter instantly',async({page},info)=>{
   const queries=[];
+  await page.route('**/api/ui/v1/opportunities/tabs-*?*',route=>{
+    const setupId=new URL(route.request().url()).pathname.split('/').at(-1);
+    return route.fulfill({json:{state:'READY',eligible:true,actionable:true,evidence:{grade:'UNGRADED'},primary_explanation:'Recorded fixture',strongest_counterargument:'Account risk is checked again.',research_observations:{availability:'UNAVAILABLE',rows:[],missing_reason:'Research collection had not started when this setup was confirmed.'},setup:{setup_id:setupId,symbol:'BTC0USDT',timeframe:'1H',strategy:'PULLBACK',direction:'LONG',entry:'100',stop:'98',targets:['104'],expires_at:Math.floor(Date.now()/1000)+3600,confirmed_at:Math.floor(Date.now()/1000)}}});
+  });
   await page.route('**/api/ui/v1/opportunities?*',route=>{
     const q=new URL(route.request().url()).searchParams;queries.push(Object.fromEntries(q));
     const watching=q.get('group')==='watching';
@@ -513,7 +558,34 @@ test('opportunity tabs prioritize actionable plans and filter instantly',async({
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
   await page.screenshot({path:info.outputPath('opportunity-tabs.png')});
   await page.getByRole('button',{name:'Review trade',exact:true}).first().click();
+  await expect(page.locator('#opportunity-detail')).toContainText('Why it exists');
+  await expect(page.locator('#opportunity-detail > .signal-map-notice')).toBeVisible();
+  await expect(page.locator('#opportunity-detail > .signal-map-notice')).toHaveText('Research observation — did not affect this setup.');
+  await page.locator('#opportunity-detail summary').filter({hasText:'Signal map at decision time'}).click();
+  await expect(page.locator('#opportunity-detail')).toContainText('Research collection had not started');
+  await page.getByRole('button',{name:'Open in Trade',exact:true}).click();
   await page.getByRole('button',{name:'Short',exact:true}).click();
   await expect(page.locator('#direction')).toHaveValue('SHORT');
   await expect(page.getByRole('button',{name:'Short',exact:true})).toHaveAttribute('aria-pressed','true');
+});
+
+test('signal map keeps every state explicit and expands by evidence row',async({page})=>{
+  const now=Math.floor(Date.now()/1000);
+  const states=['ALIGNED','OPPOSED','NEUTRAL','MISSING','STALE','NOT_APPLICABLE','ALIGNED','NEUTRAL'];
+  const frames=['15m','1H','4H','1D'];
+  const observations={availability:'PARTIAL',timeframes:frames,notice:'Research observation — did not affect this setup.',rows:['trend','structure'].map((key,row)=>({key,label:key==='trend'?'Trend':'Structure',cells:frames.map((timeframe,column)=>({family:key,timeframe,status:states[row*4+column],raw:states[row*4+column].replace('_',' '),source_timeframe:timeframe,confirmed_at:now-60,detector_version:'fixture-v1',values:{raw:'1.2500'},missing_reason:states[row*4+column]==='MISSING'?'No causal reading.':null}))}))};
+  const item={state:'READY',eligible:true,actionable:true,evidence:{grade:'UNGRADED'},primary_explanation:'Recorded fixture',strongest_counterargument:'Wait.',research_observations:observations,setup:{setup_id:'signal-map-fixture',symbol:'MAPUSDT',timeframe:'1H',strategy:'PULLBACK',direction:'LONG',entry:'100',stop:'98',targets:['104'],expires_at:now+3600,confirmed_at:now}};
+  await page.route('**/api/ui/v1/opportunities?*',route=>route.fulfill({json:{items:[item],total:1,counts:{ready:1,watching:0}}}));
+  await page.route('**/api/ui/v1/opportunities/signal-map-fixture?*',route=>route.fulfill({json:item}));
+  await page.goto('/#opportunities');
+  await page.getByRole('button',{name:'Review trade',exact:true}).click();
+  await expect(page.locator('#opportunity-detail > .signal-map-notice')).toBeVisible();
+  await page.locator('#opportunity-detail summary').filter({hasText:'Signal map at decision time'}).click();
+  for(const state of new Set(states))await expect(page.locator(`#opportunity-detail td[data-state="${state}"]`).first()).toBeVisible();
+  const toggle=page.locator('#opportunity-detail .signal-row-toggle').first();
+  await toggle.focus();await page.keyboard.press('Enter');
+  await expect(toggle).toHaveAttribute('aria-expanded','true');
+  await expect(page.locator('#opportunity-detail tr[data-signal-row]').first().locator('.signal-cell-detail:visible')).toHaveCount(4);
+  const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();
+  expect(audit.violations.map(v=>v.id)).toEqual([]);
 });

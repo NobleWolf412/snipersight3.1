@@ -135,6 +135,21 @@ class CandleTest(unittest.TestCase):
         self.assertIn("4H", phemex.NATIVE_TFS)
 
 
+class OpenInterestTest(unittest.TestCase):
+    def test_snapshot_reports_venue_supported_usdt_contract_count(self):
+        payload = {"fields": ["symbol", "openInterestRv", "lastRp"], "data": [
+            ["BTCUSDT", "10.2500", "50000.10"],
+            ["ETHUSDT", "20.5000", "3000.20"],
+            ["BTCUSD", "30.0", "50001"],
+            ["BADUSDT", "", "1"],
+        ]}
+        with mock.patch.object(phemex, "_get", return_value=payload):
+            out = phemex.open_interest_snapshot({"BTCUSDT"})
+        self.assertEqual(list(out), ["BTCUSDT"])
+        self.assertEqual(out["BTCUSDT"]["open_interest"], "10.2500")
+        self.assertEqual(out.supported_contract_count, 2)
+
+
 class SafetyTest(unittest.TestCase):
     def test_module_holds_no_credentials_and_cannot_trade(self):
         """Market data only. Key handling is the operator's, in OS credential

@@ -6,11 +6,13 @@ import json
 import time
 
 from fastapi import APIRouter, HTTPException, Query
-from engine import automation, importer, livegate, manual, opportunities, settings, shared_account, stocks, store
+from engine import (automation, importer, livegate, manual, open_interest,
+                    opportunities, research as signal_research,
+                    researchsignals, settings, shared_account, stocks, store)
 from engine.contracts import to_wire
 
 router = APIRouter(prefix="/api/ui/v1")
-VERSION = "cockpit-readmodel-v4"
+VERSION = "cockpit-readmodel-v5"
 # v4: `/setup-guide` carries `trade_evidence` (recorded confluence, the checks
 # the plan passed, reward/risk after estimated costs, and the higher-timeframe
 # picture now), and `/opportunities/compare` lists open plans side by side.
@@ -341,6 +343,24 @@ def opportunity_list(workspace: str = "CRYPTO", search: str = "", state: str = "
                 "ordering": ordering}
 
 
+@router.get("/opportunities/{setup_id}")
+def opportunity_detail(setup_id: str, workspace: str = "CRYPTO",
+                       epoch_id: str | None = None):
+    """One full setup record with its immutable decision-time research map."""
+    if workspace_scope(workspace) != "CRYPTO":
+        raise HTTPException(404, "Stock research observations are not available")
+    with account_read(epoch_id) as con:
+        row = next((item for item in opportunity_rows(con)
+                    if item["setup"]["setup_id"] == setup_id), None)
+        if row is None:
+            raise HTTPException(404, "The recorded setup is no longer available")
+        row["research_observations"] = (
+            researchsignals.for_setup(con, setup_id) or
+            researchsignals.unavailable(
+                row["setup"].get("symbol"), row["setup"].get("confirmed_at")))
+        return row
+
+
 @router.get("/positions")
 def positions(workspace: str = "CRYPTO", epoch_id: str | None = None):
     if workspace_scope(workspace) == "STOCKS":
@@ -389,7 +409,17 @@ def research(workspace: str = "CRYPTO"):
         return {"scope": "FIXTURE", "training": stockdemo.report()}
     with account_read() as con:
         return {"scope": "RESEARCH", "items": opportunity_rows(con, domain="RESEARCH"),
+                "signals": signal_research.evidence_report(con),
                 "note": "Counterfactual strategy replay. These are not orders in your account."}
+
+
+@router.get("/phemex/status")
+def phemex_status(workspace: str = "CRYPTO"):
+    if workspace_scope(workspace) != "CRYPTO":
+        return {"open_interest": {"freshness": "NOT_APPLICABLE",
+                                   "affects_trading": False}}
+    with account_read() as con:
+        return {"open_interest": open_interest.status(con, int(time.time()))}
 
 
 @router.get("/market-pulse")

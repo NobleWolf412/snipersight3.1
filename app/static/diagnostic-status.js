@@ -15,6 +15,13 @@
     if (a.accepted_notes.length) result.push(`${a.accepted_notes.length} accepted data notes. No repair is required by these notes alone.`);
     if (a.blockers.length) result.push(`Recorded blockers: ${a.blockers.map(b => b.code || 'unknown').join(', ')}. Review these before considering a restart.`);
     if (a.warnings?.length) result.push(`${a.warnings.length} audit warnings. Review Open issues below for affected markets.`);
+    const oi = s.research_feeds?.open_interest;
+    if (oi) {
+      const failures = Number(oi.failed_collection_attempts || 0);
+      const missing = Number(oi.missing_contract_observations || 0);
+      result.push(`Open-interest research feed: ${oi.freshness || 'UNKNOWN'} · last success ${date(oi.last_successful_observation)} · ${failures} failed collection attempt(s) · ${missing} missing contract observation(s). Collecting only; unused by trading.`);
+      if (oi.last_error) result.push(`Latest open-interest feed failure: ${oi.last_error}`);
+    }
     if (s.supervisor) result.push(`Supervisor: ${s.supervisor.verdict || 'UNKNOWN'} · ${date(s.supervisor.observed_at)}. This separate check is not the scanner verdict.`);
     return result;
   }

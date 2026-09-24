@@ -118,6 +118,8 @@ def snapshot(con, *, now=None, data_dir=None):
              "warnings": report.get("warnings", []),
              "rung_counts": report.get("rung_counts", {}),
              "accepted_notes": report.get("notes", [])}
+    from . import open_interest
+    oi = open_interest.status(con, now)
     watchdog = tail(directory / "watchdog.log")
     history = []
     latest_supervisor = None
@@ -152,6 +154,7 @@ def snapshot(con, *, now=None, data_dir=None):
             "scope": "whole scanner, independent of trade filters", "state": state,
             "headline": headline, "scanner": scanner, "audit": audit,
             "current": {"engine_faults": faults, "data_gates": gates},
+            "research_feeds": {"open_interest": oi},
             "supervisor": latest_supervisor, "history": history,
             "history_source": {"available": watchdog["available"], "truncated": watchdog["truncated"],
                                "meaning": "Up to 12 restart/exit events in the last 256 KiB of watchdog.log; not full history."}}

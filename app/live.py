@@ -27,10 +27,14 @@ from pathlib import Path
 import notify
 from engine import (automation, autotrader, broker_factory, execution, positions, store,
                     importer, aggregator, execsim, risk, riskpaper, universe, ingest,
-                    quality, listings, marketdata, pipeline, venues, cooldowns, funding, forwardtrial, stopstudy, zonestudy)
+                    quality, listings, marketdata, pipeline, venues, cooldowns, funding,
+                    forwardtrial, stopstudy, zonestudy, open_interest, research)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.11-draft"
+LIVE_VERSION = "live-v0.12-draft"
+# v0.12: register research collection boundaries and collect one public Phemex
+# open-interest snapshot on the scan's fixed opening clock. Failures are
+# recorded and never gate importing, setup qualification, sizing or routing.
 # v0.11: account maintenance and a global trading pass precede descriptive
 # research. Exact-input memoization skips equivalent descriptive reruns only.
 # Strategy formulas, plan versions, candidate ordering and admission stay fixed.
@@ -500,6 +504,7 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
     # without a dollar of paper risk touching it. Using `current_symbols` here
     # would leave Kraken cold and defeat the whole point of warming it.
     scan = universe.scan_symbols(con)
+    research.activate(con, now)
     unresolved_exec = execsim.unresolved(con)
     rebuild_exec = execution_rebuild_work(con)
     for key, plans in rebuild_exec.items():
@@ -674,6 +679,11 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
             forwardtrial.run(con, scan_set)
         except Exception:
             log.exception("Forward strategy trial update failed")
+        try:
+            _beat("open interest research")
+            open_interest.collect(con, scan, now)
+        except Exception:
+            log.exception("Open-interest research collection failed; trading is unaffected")
         return 0, []
 
     before = con.execute("SELECT COALESCE(MAX(id),0) FROM facts").fetchone()[0]
@@ -802,13 +812,23 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
     stages["account_decision_s"] = round(time.monotonic()-dispatch_started, 3)
     stages["decision_after_start_s"] = round(time.monotonic()-started, 3)
     research_started = time.monotonic()
+    # Public research I/O runs only after account monitoring and routing. A
+    # slow venue response therefore cannot delay a stop, risk check or order.
+    # `now` remains the cycle-opening timestamp, so response timing cannot
+    # move the observation cutoff.
+    try:
+        _beat("open interest research")
+        open_interest.collect(con, scan, now)
+    except Exception:
+        log.exception("Open-interest research collection failed; trading is unaffected")
     # Finish the complementary portion of the shared roster. 5m data is still
     # imported above and available to account/stop processing; only its
     # descriptive engines wait until the funded decision has been considered.
     for i, sym in enumerate(scan, 1):
         _beat(f"research {sym} ({i}/{len(scan)})")
         pipeline.run_symbol(con, sym, now=now, log=log,
-                            cache=analysis_cache, deferred=True)
+                            cache=analysis_cache, deferred=True,
+                            research_fact_floor=before)
     # A universe decision governs NEW opportunities, never the lifecycle of an
     # order already placed. Run execution and its exit cooldowns only: sending
     # an off-universe symbol through the full pipeline could create fresh

@@ -61,6 +61,46 @@ CREATE TABLE IF NOT EXISTS funding_rates (
     PRIMARY KEY (symbol, settlement_ts)
 );
 
+-- Raw Phemex open-interest observations. `observed_at` is the scanner's fixed
+-- cycle-opening clock; `collected_at` is when the network response completed.
+-- Keeping both prevents response timing from moving the candle cutoff.
+CREATE TABLE IF NOT EXISTS open_interest (
+    symbol       TEXT NOT NULL,
+    observed_at  INTEGER NOT NULL,
+    value        TEXT NOT NULL,
+    price        TEXT NOT NULL,
+    source       TEXT NOT NULL,
+    source_ts    INTEGER,
+    collected_at INTEGER NOT NULL,
+    version      TEXT NOT NULL,
+    PRIMARY KEY (symbol, observed_at, version)
+);
+CREATE INDEX IF NOT EXISTS ix_open_interest_series
+    ON open_interest (symbol, observed_at);
+
+CREATE TABLE IF NOT EXISTS open_interest_runs (
+    id           INTEGER PRIMARY KEY,
+    observed_at  INTEGER NOT NULL,
+    collected_at INTEGER NOT NULL,
+    attempted    INTEGER NOT NULL,
+    succeeded    INTEGER NOT NULL,
+    missing      INTEGER NOT NULL,
+    failed       INTEGER NOT NULL,
+    supported_contracts INTEGER,
+    error        TEXT,
+    version      TEXT NOT NULL
+);
+
+-- A detector deployed today must not backfill an observation into yesterday's
+-- decision. Every research read and immutable setup snapshot is floored by
+-- this activation time.
+CREATE TABLE IF NOT EXISTS research_collections (
+    detector     TEXT NOT NULL,
+    version      TEXT NOT NULL,
+    started_at   INTEGER NOT NULL,
+    PRIMARY KEY (detector, version)
+);
+
 CREATE TABLE IF NOT EXISTS facts (
     id            INTEGER PRIMARY KEY,
     symbol        TEXT NOT NULL,
@@ -329,6 +369,19 @@ def _migrate(con: sqlite3.Connection) -> None:
         con.execute(
             "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
             (8, "funding_rates_series"))
+    if 9 not in applied:
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (9, "open_interest_and_research_collection"))
+    if 10 not in applied:
+        columns = {r[1] for r in con.execute(
+            "PRAGMA table_info(open_interest_runs)").fetchall()}
+        if "supported_contracts" not in columns:
+            con.execute("ALTER TABLE open_interest_runs "
+                        "ADD COLUMN supported_contracts INTEGER")
+        con.execute(
+            "INSERT INTO schema_migrations(version,name) VALUES (?,?)",
+            (10, "open_interest_supported_contract_count"))
     con.commit()
 
 

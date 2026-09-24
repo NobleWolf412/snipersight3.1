@@ -367,18 +367,17 @@ ok('performance reads its scoreboard and dimensions from server contracts', () =
   assert(HTML.includes('id="journalSource"'));
   for(const id of ['performancePopulation','performanceWindow']) assert(HTML.includes(`id="${id}"`));
   assert(SERVER.includes('"confidence_interval_r": confidence'));
-  assert(SERVER.includes('CUMULATIVE_CURRENT_FACTORSTATS_VERSION'));
+  assert(SERVER.includes('CUMULATIVE_CURRENT_RESEARCH_VERSION'));
   assert(SERVER.includes('CUMULATIVE_CURRENT_AUTOMATION_VERSION'));
   for(const stage of ['PAPER','SHADOW','TESTNET','LIVE']) assert(COCKPIT.includes(`['${stage}'`));
   /* The cohort table moved behind "Show me why" and kept everything in it.
      A grade this codebase cannot defend is worse than no grade, and the
      defence IS the table — folded away, never dropped. */
-  assert(FACTORS.includes('factor-why') && FACTORS.includes('Show me why'),
-    'the disclosure that holds the working-out is gone')
-  assert(FACTORS.includes('factor-table') && FACTORS.includes('Adjusted q'),
-    'the cohort table was dropped rather than folded away — the verdict now ' +
-    'has no defence behind it');
-  for(const field of ['shrunk_uplift_r', 'ci_lo', 'q_value', 'high_samples'])
+  assert(FACTORS.includes('signal-evidence-stats') && FACTORS.includes('Corrected significance'),
+    'the detector cards no longer expose their working-out');
+  assert(FACTORS.includes('Other patterns observed'),
+    'exploratory observations are no longer separated from the primary comparison');
+  for(const field of ['uplift_r', 'ci_lo', 'q_value', 'exposed_symbol_clusters'])
     assert(FACTORS.includes(field), field + ' factor evidence is absent');
 });
 
@@ -401,8 +400,8 @@ ok('mixed evidence views never claim one uniform scope', () => {
   }
   assert.strictEqual(scopes.strategies.window, 'ACTIVE_BASELINE');
   assert(EDGE.includes('whole recorded book'));
-  assert(FACTORS.includes('Factor Stats scope'));
-  assert(FACTORS.includes('FactorGrade scope'));
+  assert(FACTORS.includes('Research only · does not affect trading'));
+  assert(FACTORS.includes('Used in trading: No'));
   assert(COCKPIT.includes("stage === 'PAPER' ? summary : mode.evidence_scope"));
 });
 

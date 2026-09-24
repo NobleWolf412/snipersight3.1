@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from engine import registry, store, swings, importer, structure, zones, liquidity, regime, setups, execsim, risk, scalein, cycles, universe, marketdata, telemetry, quality, apexbridge
 from engine import momentum, volatility, volume, ma, fvg, volprofile, ranges
+from engine import open_interest, research, researchsignals
 from engine import costs, venues, stocks
 from engine import achievements, automation, broker_factory, contracts, execution, learning, market_context, opportunities, positions, shared_account, venues
 from engine import factorgrade as factorgrade_engine, factorstats as factorstats_engine
@@ -54,7 +55,12 @@ KIND_VERSIONS = {"swing": swings.SWING_VERSION,
                  "ma": ma.MA_VERSION,
                  "fvg": fvg.FVG_VERSION,
                  "volprofile": volprofile.VOLPROFILE_VERSION,
-                 "range": ranges.RANGES_VERSION}
+                 "range": ranges.RANGES_VERSION,
+                 "order_block": research.ORDER_BLOCK_VERSION,
+                 "structure_sequence": research.STRUCTURE_SEQUENCE_VERSION,
+                 "hidden_divergence": research.HIDDEN_DIVERGENCE_VERSION,
+                 "stoch_rsi": research.STOCH_RSI_VERSION,
+                 "open_interest_signal": research.OPEN_INTEREST_SIGNAL_VERSION}
 
 app = FastAPI(title="SniperSight", version="0.1-draft")
 STATIC = Path(__file__).resolve().parent / "static"
@@ -2016,12 +2022,61 @@ def manifest(manifest_hash: str):
 
 @app.get("/api/chart-insight")
 def chart_insight(symbol: str = Query("BTC-USD", pattern=SYMBOL_PATTERN),
-                  tf: str = Query("1H", pattern="^(5m|15m|1H|4H|1D|1W)$")):
+                  tf: str = Query("1H", pattern="^(5m|15m|1H|4H|1D|1W)$"),
+                  setup_id: str | None = None):
     """Current, closed-bar evidence only. No scanner or trading side effects."""
     from engine import chart_insight as insight
     con = store.connect()
     try:
-        return insight.snapshot(con, symbol, tf)
+        setup_payload = None
+        direction = None
+        if setup_id:
+            row = con.execute(
+                "SELECT payload,tf FROM facts WHERE kind='setup' AND "
+                "json_extract(payload,'$.setup_id')=? ORDER BY confirmed_at,id LIMIT 1",
+                (setup_id,)).fetchone()
+            if row:
+                setup_payload = json.loads(row[0])
+                setup_payload.setdefault("tf", row[1])
+                direction = setup_payload.get("direction")
+        return insight.snapshot(con, symbol, tf, direction=direction,
+                                setup_payload=setup_payload)
+    finally:
+        con.close()
+
+
+@app.get("/api/research-series")
+def research_series(symbol: str = Query("BTC-USD", pattern=SYMBOL_PATTERN),
+                    tf: str = Query("1H", pattern="^(5m|15m|1H|4H|1D|1W)$"),
+                    as_of: int | None = None):
+    """Versioned, server-calculated chart evidence. Missing OI stays null."""
+    con = store.connect()
+    try:
+        def facts(kind, version, event=None):
+            out = []
+            for fact in store.get_facts(con, symbol, tf, kind, version, as_of):
+                payload = json.loads(fact["payload"])
+                if event and payload.get("event") != event:
+                    continue
+                out.append({"time": fact["market_time"],
+                            "confirmed_at": fact["confirmed_at"],
+                            "version": fact["algo_version"], **payload})
+            return out
+        return {
+            "version": research.READ_MODEL_VERSION,
+            "symbol": symbol, "timeframe": tf, "as_of": as_of,
+            "basis": "CLOSED_CANDLES_AND_FIXED_OBSERVATION_TIMES",
+            "affects_trading": False,
+            "order_blocks": facts("order_block", research.ORDER_BLOCK_VERSION),
+            "structure_sequences": facts(
+                "structure_sequence", research.STRUCTURE_SEQUENCE_VERSION),
+            "regular_divergence": facts(
+                "momentum", momentum.MOMENTUM_VERSION, "DIVERGENCE"),
+            "hidden_divergence": facts(
+                "hidden_divergence", research.HIDDEN_DIVERGENCE_VERSION),
+            "stoch_rsi": facts("stoch_rsi", research.STOCH_RSI_VERSION),
+            "open_interest": open_interest.series(con, symbol, as_of=as_of),
+        }
     finally:
         con.close()
 
@@ -3074,7 +3129,11 @@ def opportunity_detail(setup_id: str, domain: str | None = Query(None)):
                 con, domain=scope, include_history=True,
                 show_real_exposure=True):
             if row["setup"]["setup_id"] == setup_id:
-                return row
+                detail = dict(row)
+                observations = researchsignals.for_setup(con, setup_id)
+                detail["research_observations"] = observations or researchsignals.unavailable(
+                    row["setup"].get("symbol"), row["setup"].get("confirmed_at"))
+                return detail
         raise HTTPException(404, "opportunity not found in the current baseline")
     finally:
         con.close()
@@ -3754,15 +3813,23 @@ def learning_registry():
 
 @app.get("/api/factor-evidence")
 def factor_evidence():
-    """Point-in-time, chronological factor uplift; never a trade permission."""
+    """Locked detector cohorts; research evidence, never trade permission."""
     con = store.connect()
     try:
-        candidates, warnings = factorstats_engine.load_candidates(con)
-        report = factorstats_engine.evidence_report(candidates)
-        report["population"] = "POINT_IN_TIME_CLOSED_TRADES"
-        report["window"] = "CUMULATIVE_CURRENT_FACTORSTATS_VERSION"
-        report["warnings"] = warnings + report.get("warnings", [])
+        report = research.evidence_report(con)
+        report["population"] = "IMMUTABLE_SETUP_TIME_SNAPSHOTS_WITH_CLOSED_TRADES"
+        report["window"] = "CUMULATIVE_CURRENT_RESEARCH_VERSION"
         return report
+    finally:
+        con.close()
+
+
+@app.get("/api/phemex/status")
+def phemex_status():
+    """Public-feed collection health; no credentials or trading authority."""
+    con = store.connect()
+    try:
+        return {"open_interest": open_interest.status(con, int(time.time()))}
     finally:
         con.close()
 

@@ -188,6 +188,13 @@ boundary makes a newly imported bar look developing to the older quality clock.
 That false verdict skipped 12-18 otherwise healthy markets at a time. A network
 request finishing later is not permission to move the input boundary.
 
+**A causal cutoff does not make a newly deployed detector historical.** An
+`as_of` query can exclude later facts, but it cannot prove that the detector
+existed when an old setup was confirmed. Start every research detector at an
+explicit activation boundary and persist an immutable setup-time snapshot. A
+missing snapshot stays unavailable; never reconstruct it later from a newer
+detector and present that as evidence available to the original decision.
+
 **An unresolved order owns its market-data feed until it is terminal.** Universe
 membership decides whether a market may create new opportunities; it must never
 retire the candles needed by an already-placed order. XLMUSDT filled at 16:00Z

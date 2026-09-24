@@ -1453,6 +1453,50 @@ details.panel.floating > summary{padding-left:var(--lg)}
 /* Price data remains free of decorative overlays. */
 .chart-pane::before{display:none}
 #chartBox{position:absolute;inset:0}
+
+/* Research observations are visually separate from the strategy's zones and
+   remain word-labelled everywhere. */
+.research-layer-group{display:grid;gap:5px;padding:8px 10px;border-top:1px solid var(--line,rgba(255,255,255,.08))}
+.research-layer-group>span{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-3,#a5b0a8)}
+.research-layer-group>small{color:var(--fg-4,#7d8c83);line-height:1.35}
+.research-price-overlay{position:absolute;inset:0;z-index:4;width:100%;height:100%;pointer-events:none;overflow:visible}
+.research-panes{position:absolute;z-index:5;inset:auto 0 0;background:rgba(10,14,11,.96);border-top:1px solid rgba(255,255,255,.1)}
+.research-panes[hidden],.research-pane[hidden]{display:none}
+.research-pane{height:126px;min-height:90px;max-height:260px;position:relative;border-top:1px solid rgba(255,255,255,.06)}
+.research-pane header{height:24px;display:flex;align-items:center;justify-content:space-between;padding:0 34px 0 10px;font-size:10px;color:var(--fg-3,#a5b0a8)}
+.research-pane header small{font:9px/1.2 ui-monospace,monospace;color:var(--fg-4,#7d8c83)}
+.research-pane-chart{height:calc(100% - 24px)}
+.pane-resizer{position:absolute;top:0;right:0;width:44px;height:44px;cursor:ns-resize;border-radius:4px}
+.pane-resizer::before{content:'↕';position:absolute;inset:2px;text-align:center;color:var(--fg-3,#a5b0a8)}
+.pane-resizer:focus{outline:2px solid #65d4a2;outline-offset:1px}
+.chart-pane.research-panes-on #chartBox,.chart-pane.research-panes-on .research-price-overlay{bottom:126px;height:auto}
+.chart-pane.stoch-pane-on.oi-pane-on #chartBox,.chart-pane.stoch-pane-on.oi-pane-on .research-price-overlay{bottom:252px}
+.research-ob{fill-opacity:.24;stroke-width:2}.research-ob.bull{fill:#65d4a2;stroke:#65d4a2}.research-ob.bear{fill:#d98282;stroke:#d98282}
+.research-ob-label{font:800 9px ui-monospace,monospace;paint-order:stroke;stroke:#101411;stroke-width:3px;stroke-linejoin:round}.research-ob-label.bull{fill:#a9f3cf}.research-ob-label.bear{fill:#ffc0c0}
+.research-sequence{fill:none;stroke:#d8b46b;stroke-width:1.5}.research-sequence.partial{stroke-dasharray:4 3;opacity:.9}.research-sequence.complete{stroke-dasharray:none}
+.research-label{font:700 9px ui-monospace,monospace;fill:#d8b46b;paint-order:stroke;stroke:#101411;stroke-width:2px}.research-sequence-state{font-size:8px}
+.research-divergence{stroke:#79b8dc;stroke-width:2}.research-divergence.hidden{stroke-dasharray:5 4}.research-divergence.regular{stroke-dasharray:none}
+
+.signal-map-disclosure{margin:12px 0;border:1px solid rgba(255,255,255,.08);border-radius:8px}
+.signal-map-disclosure>summary{cursor:pointer;padding:11px 12px;font-weight:700}
+.signal-map{padding:12px}.signal-map-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.signal-map-head h3{margin:0;font-size:13px}.signal-map-head span,.signal-map-notice{font-size:10px;color:var(--fg-3,#a5b0a8)}
+.signal-map-scroll{overflow:auto}.signal-map table{width:100%;border-collapse:collapse;min-width:560px;font-size:10px}
+.signal-map th,.signal-map td{border:1px solid rgba(255,255,255,.07);padding:5px;text-align:left;vertical-align:top}
+.signal-map th[scope=row]{white-space:nowrap}.signal-cell{width:100%;min-height:44px;display:grid;grid-template-columns:auto 1fr;gap:2px 5px;text-align:left;background:none;border:0;color:inherit;padding:2px;cursor:pointer}
+.signal-cell b{font-size:10px}.signal-cell small{grid-column:2;color:var(--fg-4,#7d8c83)}
+.signal-map td[data-state=ALIGNED] .signal-cell>span{color:#65d4a2}.signal-map td[data-state=OPPOSED] .signal-cell>span{color:#d98282}
+.signal-map td[data-state=MISSING] .signal-cell>span,.signal-map td[data-state=STALE] .signal-cell>span{color:#d8b46b}
+.signal-cell:focus{outline:2px solid #65d4a2;outline-offset:2px}.signal-cell-detail{padding:6px;background:rgba(255,255,255,.025)}
+.signal-cell-detail dl,.signal-evidence-stats,.oi-feed dl{display:grid;gap:5px;margin:0}.signal-cell-detail dl div,.signal-evidence-stats div,.oi-feed dl div{display:grid;grid-template-columns:minmax(80px,1fr) minmax(100px,1.4fr);gap:8px}
+.signal-cell-detail dt,.signal-evidence-stats dt,.oi-feed dt{color:var(--fg-4,#7d8c83)}.signal-cell-detail dd,.signal-evidence-stats dd,.oi-feed dd{margin:0;overflow-wrap:anywhere}
+.signal-map-notice{margin:10px 0 0;font-weight:700}.signal-view-tabs{display:flex;gap:5px;margin:12px 0 0}
+.signal-row-toggle{min-height:44px;padding:6px;background:none;border:0;color:inherit;font:inherit;font-weight:700;text-align:left;cursor:pointer}.signal-row-toggle::after{content:' ▸';color:var(--fg-3,#a5b0a8)}.signal-row-toggle[aria-expanded=true]::after{content:' ▾'}
+.signal-view-tabs button{border:1px solid rgba(255,255,255,.1);background:none;color:inherit;border-radius:999px;padding:6px 10px}.signal-view-tabs button[aria-selected=true]{background:rgba(101,212,162,.12);border-color:#65d4a2}
+.signal-research-head{margin:16px 0 12px}.signal-research-head h2{margin:8px 0 4px}.signal-research-verdict{font:750 24px/1.25 var(--f-body);margin:8px 0;text-transform:none}
+.signal-evidence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px}.signal-evidence-card{padding:16px}.signal-evidence-card header{display:flex;justify-content:space-between;gap:12px}.signal-evidence-card h3{margin:4px 0}.signal-evidence-card header>strong{font-size:11px;white-space:nowrap}.signal-evidence-stats{margin:12px 0}
+.oi-feed{margin-top:10px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:8px}.oi-feed h4{margin:0 0 8px}.diag-oi-feed{margin:12px 0}
+@media(max-width:640px){.signal-map{padding:8px}.signal-map table{min-width:520px}.signal-evidence-grid{grid-template-columns:1fr}.signal-evidence-card header{display:block}.research-pane{height:110px}.chart-pane.research-panes-on #chartBox,.chart-pane.research-panes-on .research-price-overlay{bottom:110px}.chart-pane.stoch-pane-on.oi-pane-on #chartBox,.chart-pane.stoch-pane-on.oi-pane-on .research-price-overlay{bottom:220px}.research-pane header{padding-left:6px}.research-pane header small{max-width:52%;text-align:right}}
 #chartHandles{position:absolute;inset:0;pointer-events:none}
 .chart-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   font-family:var(--f-mono);font-size:var(--fs-2);letter-spacing:.16em;text-transform:uppercase;

@@ -40,6 +40,9 @@
   let selectedId = null;
   let selectionMissing = false;
   let returnFocusId = null;
+  let detailLoading = false;
+  let detailError = false;
+  let detailRequest = 0;
   let initializedFilter = false;
   const mobile = matchMedia('(max-width:900px)');
 
@@ -71,7 +74,11 @@
     const row = selected();
     const visible = !!row || selectionMissing;
     detail.hidden = !visible;
-    detail.innerHTML = row ? window.SSOpportunityUI.detail(row) : selectionMissing
+    detail.innerHTML = detailLoading ? `<div class="op-detail-empty"><span class="op-state">Loading</span>
+      <h2>Loading setup evidence</h2><p>Reading the immutable decision-time record.</p></div>`
+      : detailError ? `<div class="op-detail-empty bad"><span class="op-state">Data unavailable</span>
+        <h2>Setup evidence could not be loaded</h2><p>No missing reading has been treated as neutral or zero.</p></div>`
+      : row ? window.SSOpportunityUI.detail(row) : selectionMissing
       ? window.SSOpportunityUI.missing(selectedId) : '';
     if(visible && mobile.matches) detail.setAttribute('aria-label','Setup detail drawer');
     else detail.removeAttribute('aria-label');
@@ -110,12 +117,27 @@
     paintDetail();
   }
 
-  function choose(id){
+  async function choose(id){
     returnFocusId = id;
     selectedId = id;
     selectionMissing = false;
-    window.SSSelectedOpportunity = selected();
+    detailError = false;
+    detailLoading = true;
     paint();
+    const request = ++detailRequest;
+    try{
+      const full = await api('/api/opportunities/' + encodeURIComponent(id));
+      if(request !== detailRequest || selectedId !== id) return;
+      const index = payload.items.findIndex(item => item.setup.setup_id === id);
+      if(index >= 0) payload.items[index] = full;
+      detailLoading = false;
+      window.SSSelectedOpportunity = full;
+      paintDetail();
+    }catch(err){
+      if(request !== detailRequest || selectedId !== id) return;
+      detailLoading = false; detailError = true;
+      paintDetail();
+    }
     requestAnimationFrame(() => {
       const target = mobile.matches ? detail.querySelector('.op-detail-close') : detail;
       if(target && target.focus) target.focus({preventScroll:true});
@@ -125,6 +147,9 @@
   function closeDetail(){
     const id = returnFocusId || selectedId;
     selectedId = null;
+    detailRequest += 1;
+    detailLoading = false;
+    detailError = false;
     selectionMissing = false;
     window.SSSelectedOpportunity = null;
     paint();
@@ -157,7 +182,7 @@
   window.SSSelectOpportunity = async id => {
     if(!payload.items.some(row => row.setup.setup_id === id)) await refresh();
     if(!payload.items.some(row => row.setup.setup_id === id)) return false;
-    choose(id); return true;
+    await choose(id); return !selectionMissing;
   };
 
   filters.addEventListener('click', event => {
@@ -170,7 +195,7 @@
 
   root.addEventListener('click', event => {
     const button = event.target.closest('.op-review');
-    if(button) choose(button.dataset.id);
+    if(button) void choose(button.dataset.id);
   });
   root.addEventListener('keydown', event => {
     const button = event.target.closest('.op-review');

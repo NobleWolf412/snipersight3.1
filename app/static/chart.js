@@ -169,7 +169,9 @@ window.SSChart = (() => {
   const overlays = {yours: true, engine: true,
                     swings: false, structure: false, zones: false,
                     liquidity: false, cycle: false,
-                    gaps: false, shelf: false, ranges: false, signals: false};
+                    gaps: false, shelf: false, ranges: false, signals: false,
+                    orderblocks: false, sequences: false, divergence: false,
+                    stochrsi: false, openinterest: false};
   /* ...and they are drawn from the book and the ticket rather than from the
      fact cache, so drawOverlays() cannot redraw them. Toggling one of these
      goes through drawPosition()/applyLevels() instead — see the Layers
@@ -201,15 +203,19 @@ window.SSChart = (() => {
      Clean is the default for the same reason the four lazy layers ship off —
      a first chart should be readable before it is informative. */
   const PRESET_KEYS = ['swings', 'structure', 'zones', 'liquidity', 'cycle',
-                       'gaps', 'shelf', 'ranges', 'signals'];
+                       'gaps', 'shelf', 'ranges', 'signals', 'orderblocks',
+                       'sequences', 'divergence', 'stochrsi', 'openinterest'];
   const PRESETS = {
     clean:      [],
     trade:      ['zones'],
     structure:  ['zones', 'swings', 'structure', 'liquidity'],
+    research:   ['zones', 'orderblocks', 'sequences', 'divergence',
+                 'stochrsi', 'openinterest'],
     everything: PRESET_KEYS,
   };
   const PRESET_LABEL = {clean: 'Clean', trade: 'Trade',
-                        structure: 'Structure', everything: 'Everything'};
+                        structure: 'Structure', research: 'Research',
+                        everything: 'Everything'};
   const PRESET_FALLBACK = 'clean';
   /* localStorage, not sessionStorage: this is a standing preference about how
      the operator reads a chart, not a per-session position like the workspace
@@ -1817,7 +1823,7 @@ window.SSChart = (() => {
     const markers = [];
     const first = candles.length ? candles[0].time : 0;
     const n = Object.assign({swings: 0, structure: 0, zones: 0, liquidity: 0,
-                             cycle: 0}, levelCounts());
+                             cycle: 0}, levelCounts(), window.SSResearchLayerCounts || {});
 
     for(const s of facts.swing){
       // MICRO/LOCAL are the engine's noise tiers — thousands of them would
@@ -2090,6 +2096,10 @@ window.SSChart = (() => {
     series.setMarkers(drawn);
     lastCounts = n;
     labelOverlays(n);
+    dispatchEvent(new CustomEvent('ss:chart-research-state', {detail: {
+      symbol: sym, timeframe: tf, overlays: {...overlays},
+      lastClosedAt: candles.length ? candles[candles.length - 1].time : null
+    }}));
   }
 
   /* WHAT EACH LEVEL SWITCH WOULD DRAW — not what is on the chart right now.
@@ -3493,6 +3503,13 @@ window.SSChart = (() => {
   }
 
   wire();
+  window.SSChartResearchHost = {
+    chart: () => chart, series: () => series,
+    market: () => ({symbol: sym, timeframe: tf}),
+  };
+  addEventListener('ss:research-layer-counts', () => {
+    if(candles.length) drawOverlays();
+  });
   return {open, prepare, onShow, onHide,
     /* Introspection, for the suites and for answering "why can I not see that
        swing on my phone" without guessing. A cap nobody can observe is

@@ -31,6 +31,7 @@ engines because it derives purely from exec facts, so it must see the adds too.
 from . import (basis, breakout, cooldowns, cycles, execsim, fvg, liquidity,
                ma, manual, momentum, ranges, regime, scalein, sessions,
                setups, structure, swings, trend, volatility, volprofile,
+               research, researchsignals,
                volume, zones)
 
 # Facts the market DESCRIPTION layer derives. No trading consumer reads the
@@ -46,7 +47,11 @@ DESCRIPTIVE = (swings, structure, zones, liquidity, regime, ranges,
                # basis self-selects: it early-returns for every symbol without
                # a reference feed (venues.REFERENCE) and every tf but its own,
                # so its presence here costs the other 91 symbols nothing.
-               basis)
+               basis,
+               # Research runs after the account decision in the deferred
+               # phase. The snapshot module follows it and captures only the
+               # readings causally available at each newly validated setup.
+               research, researchsignals)
 
 # MEASURED AND NOT ENABLED. `breakout` emits setup facts and neither `execsim`
 # nor `risk` reads BREAKOUT_VERSION, so it trades nothing. That much is true
@@ -175,7 +180,8 @@ def _record_gate(con, symbol: str, tf: str, gate: str, detail: str,
 
 
 def run_symbol(con, symbol: str, now: int | None = None, log=None, *,
-               modules=None, timeframes=None, cache=None, deferred=False) -> dict:
+               modules=None, timeframes=None, cache=None, deferred=False,
+               research_fact_floor: int | None = None) -> dict:
     """Run every per-symbol engine, gates first. THE loop — both runners call it.
 
     Returns {"blocked": str | None, "gates": {(tf, gate): detail}} so the
@@ -271,7 +277,11 @@ def run_symbol(con, symbol: str, now: int | None = None, log=None, *,
                     try:
                         if cache is not None and cache.unchanged(con, mod, symbol, tf):
                             continue
-                        mod.run(con, symbol, tf, importer.TF_SECONDS[tf])
+                        if mod is researchsignals and research_fact_floor is not None:
+                            mod.run(con, symbol, tf, importer.TF_SECONDS[tf],
+                                    fact_floor=research_fact_floor)
+                        else:
+                            mod.run(con, symbol, tf, importer.TF_SECONDS[tf])
                         if cache is not None:
                             cache.remember(con, mod, symbol, tf)
                     except Exception as exc:

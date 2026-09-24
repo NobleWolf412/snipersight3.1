@@ -4829,6 +4829,8 @@ weighed in. Name the facts you used.`;
           </div>`;
         }).join('')}
         <p class="cred-scope t-body">${esc(scope)}</p>
+        ${v === 'phemex-perp' ? `<section class="oi-feed" data-oi-status aria-live="polite">
+          <h4>Open-interest feed</h4><p>Reading collection health…</p></section>` : ''}
         <div class="cred-actions">
           <button class="btn btn-primary" type="button" data-credsaveall="${esc(v)}">Save ${esc(nice)}</button>
           <button class="btn" type="button" data-credtest="${esc(v)}">Test connection</button>
@@ -4836,6 +4838,30 @@ weighed in. Name the facts you used.`;
         </div>
       </section>`;
     }).join('');
+  }
+
+  async function loadOpenInterestStatus(){
+    const targets = [...document.querySelectorAll('[data-oi-status], #diagOi')];
+    if(!targets.length) return;
+    try{
+      const payload = await api('/api/phemex/status');
+      const oi = payload.open_interest || {};
+      const when = ts => ts == null ? 'Not reported' : new Date(ts * 1000).toISOString().replace('T',' ').slice(0,16) + 'Z';
+      const html = `<h4>Open-interest feed</h4><dl>
+        <div><dt>Supported contracts</dt><dd>${oi.supported_contract_count == null ? 'Not reported' : esc(oi.supported_contract_count)}</dd></div>
+        <div><dt>Last successful observation</dt><dd>${esc(when(oi.last_successful_observation))}</dd></div>
+        <div><dt>Freshness</dt><dd>${esc(oi.freshness || 'Not reported')}</dd></div>
+        <div><dt>Missing contract observations</dt><dd>${oi.missing_contract_observations == null ? 'Not reported' : esc(oi.missing_contract_observations)}</dd></div>
+        <div><dt>Failed collection attempts</dt><dd>${oi.failed_collection_attempts == null ? 'Not reported' : esc(oi.failed_collection_attempts)}</dd></div>
+        <div><dt>Collection start</dt><dd>${esc(when(oi.collection_start))}</dd></div>
+      </dl><strong>Collecting only — unused by trading.</strong>
+      ${oi.last_error ? `<p class="op-warning">Latest feed failure: ${esc(oi.last_error)}</p>` : ''}`;
+      targets.forEach(target => target.innerHTML = html);
+    }catch(err){
+      targets.forEach(target => target.innerHTML = `<h4>Open-interest feed</h4>
+        <p class="op-warning">Collection status unavailable. Missing values are not shown as zero.</p>
+        <strong>Collecting only — unused by trading.</strong>`);
+    }
   }
 
   async function loadCredentials(){
@@ -4873,6 +4899,7 @@ weighed in. Name the facts you used.`;
         chip.className = 'chip ' + (stored === 0 ? '' : stored < n ? 'chip-amber' : 'chip-green');
       }
     }
+    loadOpenInterestStatus();
   }
 
   /* Reveal. A masked field the operator cannot check is a field they paste

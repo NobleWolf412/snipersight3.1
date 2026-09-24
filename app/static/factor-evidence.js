@@ -1,118 +1,56 @@
-/* Factor calibration belongs in Debrief. Quality and evidence confidence are
-   separate, and UNGRADED is a valid answer rather than a score-shaped guess. */
+/* Results → Signals. All cohorts, grades, and verdicts are server-owned. */
 (() => {
   const root = document.getElementById('factorEvidenceRoot');
   if(!root) return;
   const esc = value => String(value == null ? '' : value)
     .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',
       '"':'&quot;',"'":'&#39;'}[c]));
+  const pct = value => value == null ? 'Unavailable' : `${(Number(value) * 100).toFixed(0)}%`;
+  const metric = (v, suffix='') => v == null ? 'Not gradeable' : `${Number(v).toFixed(3)}${suffix}`;
   const api = path => window.SSData ? SSData.get(path, 30000) :
     fetch(path).then(r => { if(!r.ok) throw new Error(r.status); return r.json(); });
-  /* One scope vocabulary for the whole app, owned by cockpit-workspaces.js.
-     Falls back to the raw enum rather than inventing a second table — two
-     tables for one vocabulary is how two screens come to name one scope
-     differently (§6 rule 9). */
-  const scope = value => (window.SSScopeLabel || (v => String(v || 'not reported')))(value);
-  const plainWarning = value => {
-    const text = String(value || '');
-    if(text.includes('No stable out-of-sample factor survived'))
-      return 'No factor has enough reliable completed-trade evidence yet.';
-    if(text.includes('forward high-factor and control buckets each need'))
-      return 'Each comparison needs at least 30 completed trades in both groups.';
-    if(text.includes('no closed trades matched'))
-      return 'No completed trades are available for grading yet.';
-    return text;
-  };
   let loaded = false;
+
+  function card(row){
+    const p = row.progress || {};
+    const interval = row.ci_lo == null || row.ci_hi == null ? 'Not gradeable' :
+      `[${Number(row.ci_lo).toFixed(3)}, ${Number(row.ci_hi).toFixed(3)}]R`;
+    return `<article class="panel signal-evidence-card">
+      <header><div><span class="op-state">${esc(row.verdict || 'Collecting evidence')}</span>
+        <h3>${esc(row.label)}</h3></div><strong>Used in trading: No</strong></header>
+      <p>${esc(row.hypothesis)}</p>
+      <dl class="signal-evidence-stats">
+        <div><dt>Exposed</dt><dd>${esc(row.exposed_count)} trades · ${esc(row.exposed_symbol_clusters)} symbols</dd></div>
+        <div><dt>Control</dt><dd>${esc(row.control_count)} trades · ${esc(row.control_symbol_clusters)} symbols</dd></div>
+        <div><dt>Progress</dt><dd>Exposed ${esc(p.exposed_trades)}/${esc(p.trades_required_each)} trades, ${esc(p.exposed_symbols)}/${esc(p.symbols_required_each)} symbols<br>
+          Control ${esc(p.control_trades)}/${esc(p.trades_required_each)} trades, ${esc(p.control_symbols)}/${esc(p.symbols_required_each)} symbols</dd></div>
+        <div><dt>Coverage</dt><dd>${esc(pct(row.coverage))} · missing ${esc(pct(row.missing_rate))}</dd></div>
+        <div><dt>Net-R uplift after costs</dt><dd>${esc(metric(row.uplift_r,'R'))}</dd></div>
+        <div><dt>95% interval</dt><dd>${esc(interval)}</dd></div>
+        <div><dt>Stability</dt><dd>${row.sample_ok ? (row.stable ? 'Stable across time split' : 'Not stable') : 'Not gradeable'}</dd></div>
+        <div><dt>Corrected significance</dt><dd>${row.q_value == null ? 'Not gradeable' : esc(Number(row.q_value).toFixed(3))}</dd></div>
+        <div><dt>Collection start</dt><dd>${row.collection_start ? esc(new Date(row.collection_start * 1000).toISOString().slice(0,10)) : 'Not started'}</dd></div>
+        <div><dt>Detector version</dt><dd>${esc(row.detector_version)}</dd></div>
+      </dl>
+      <details><summary>Other patterns observed</summary><ul>
+        ${(row.other_patterns_observed || []).map(item => `<li>${esc(item.label)} <small>${item.status === 'EXPLORATORY_UNCOLLECTED' ? 'Planned exploratory pattern — no observations collected.' : 'Exploratory — cannot be Proven useful'}</small></li>`).join('') || '<li>None reported</li>'}
+      </ul></details>
+    </article>`;
+  }
 
   async function load(){
     if(loaded) return; loaded = true;
     try{
-      const [grade, evidence] = await Promise.all([
-        api('/api/factor-grade'), api('/api/factor-evidence')]);
-      const passing = (evidence.rows || []).filter(r => r.passes_evidence);
-      const rows = evidence.rows || [];
-      /* Both read models carry the same back-fill warning, and rendering each
-         list where it arrived printed it twice on one screen — a UI audit
-         (2026-08-09) read the repetition as two separate defects. Deduped by
-         text, and NOT dropped: a warning that appears in only one payload is
-         still the only place it appears (§6 rule 6). */
-      const warnings = [...new Set([...(grade.warnings || []),
-                                    ...(evidence.warnings || [])].map(plainWarning))];
-      const warningHtml = warnings.map(w =>
-        `<p class="op-warning">${esc(w)}</p>`).join('');
-      /* THE VERDICT IS THE SCREEN. Everything below "Show me why" is the
-         working-out, and it used to be the whole thing: shrunk uplift, 95%
-         intervals, adjusted q-values, chronological train/validation/forward
-         splits, two provenance lines and an eight-column table, all above the
-         fold. That answers "is this cohort significant after correcting for
-         multiple comparisons", which is a statistician's question. The
-         operator's question is "is anything here making me money" — and the
-         panel already computed that answer, on its own first line, under
-         everything else.
-
-         Nothing was deleted. A grade this codebase cannot defend is worse
-         than no grade, and the defence IS the working-out; it moved behind a
-         disclosure, it did not go away. */
-      const verdict = passing.length
-        ? `${passing.length} factor${passing.length === 1 ? ' has' : 's have'} proven useful`
-        : 'No factor has proven useful yet';
-      /* MEASURED_NOT_ENABLED in plain English, and it stays ABOVE the fold in
-         both branches. Rule 7: evidence is recorded, not filtered on, until it
-         has been graded — so the one thing the operator must never conclude
-         from this screen is that a grade let a trade through. */
-      const consequence = passing.length
-        ? 'They help rank what the scanner finds. They cannot approve a trade, ' +
-          'size one, or overrule a rejection — only the risk authority does that.'
-        : 'Nothing here is picking or sizing your trades, and that is the ' +
-          'design: a factor has to beat the book before it gets a vote.';
-      root.innerHTML = `<section class="panel factor-panel">
-        <div class="panel-head"><h2 class="t-section">Factor calibration</h2>
-          <span class="chip">${esc(grade.grade === 'UNGRADED' || !grade.grade ? 'Not proven yet' : grade.grade)}</span></div>
-        <div class="panel-body">
-          <p class="factor-verdict${passing.length ? ' has-passing' : ''}">${esc(verdict)}</p>
-          <p class="factor-consequence">${esc(consequence)}</p>
-          ${warningHtml}
-          <details class="factor-why">
-            <summary>Show me why</summary>
-            <div class="factor-why-body">
-              <p class="t-note">${passing.length} of ${rows.length} cohort${rows.length === 1 ? '' : 's'}
-                survived chronological validation, forward stability, confidence,
-                shrinkage, and multiple-testing correction — five filters, applied
-                in that order, each one able to end a cohort's case on its own.</p>
-              <div class="factor-summary">
-                <div><span>Performance score</span><b>${esc(grade.score == null ? 'No reliable score yet' : grade.score)}</b></div>
-                <div><span>Confidence</span><b>${esc(grade.confidence === 'INSUFFICIENT_EVIDENCE' || !grade.confidence ? 'Not enough completed trades' : grade.confidence)}</b></div>
-                <div><span>Coverage</span><b>${esc(grade.coverage == null ? '—' : grade.coverage)}</b></div>
-                <div><span>Forward samples</span><b>${esc(grade.sample_size || 0)}</b></div>
-              </div>
-              <p class="population-note">Factor Stats scope · Population: ${esc(scope(evidence.population))} ·
-                Window: ${esc(scope(evidence.window))}</p>
-              <p class="population-note">FactorGrade scope · Population: ${esc(scope(grade.population))} ·
-                Window: ${esc(scope(grade.window))}</p>
-              <p class="t-note">${esc(evidence.closed_trades || 0)} closed trades · chronological
-                ${esc(Math.round((evidence.split || {}).train * 100 || 0))}% train,
-                ${esc(Math.round((evidence.split || {}).validation * 100 || 0))}% validation,
-                ${esc(Math.round((evidence.split || {}).forward * 100 || 0))}% forward ·
-                ${evidence.point_in_time ? 'point-in-time joins' : 'point-in-time status not reported'}</p>
-              <div class="dimension-scroll"><table class="factor-table"><thead><tr>
-                <th>Factor / cohort</th><th>Status</th><th>Forward sample</th><th>Coverage</th>
-                <th>Uplift</th><th>95% interval</th><th>Stable</th><th>Adjusted q</th></tr></thead><tbody>
-                ${rows.length ? rows.map(row => `<tr><td><b>${esc(row.factor)}</b><small>${esc(row.cohort_key)}</small></td>
-                  <td>${row.passes_evidence ? 'Proven' : row.status === 'INSUFFICIENT_EVIDENCE' ? 'Too few trades' : esc(row.status)}</td>
-                  <td>${esc((row.high_samples || {}).forward || 0)} high / ${esc((row.control_samples || {}).forward || 0)} control</td>
-                  <td>${row.coverage == null ? 'Not reported' : esc((Number(row.coverage) * 100).toFixed(0) + '%')}</td>
-                  <td>${row.shrunk_uplift_r == null ? 'Not established' : esc(Number(row.shrunk_uplift_r).toFixed(3) + 'R shrunk')}</td>
-                  <td>${row.ci_lo == null || row.ci_hi == null ? 'Not computed' : esc(`[${Number(row.ci_lo).toFixed(3)}, ${Number(row.ci_hi).toFixed(3)}]R`)}</td>
-                  <td>${row.stable ? 'YES' : 'NO'}</td><td>${row.q_value == null ? 'Not computed' : esc(Number(row.q_value).toFixed(3))}</td></tr>`).join('')
-                  : '<tr><td colspan="8">No factor cohorts were reported.</td></tr>'}
-              </tbody></table></div>
-            </div>
-          </details>
-        </div></section>`;
+      const report = await api('/api/factor-evidence');
+      root.innerHTML = `<section class="signal-research-head">
+        <span class="op-state">Research only · does not affect trading</span>
+        <h2>Signal research — which readings have earned trust?</h2>
+        <p class="signal-research-verdict">${esc(report.verdict || 'Data unavailable')}</p>
+        <small>Each side needs ${esc(report.minimums && report.minimums.closed_trades_each || 30)} closed trades and ${esc(report.minimums && report.minimums.symbol_clusters_each || 8)} symbol clusters.</small>
+      </section><div class="signal-evidence-grid">${(report.rows || []).map(card).join('')}</div>`;
     }catch(err){
-      root.innerHTML = `<section class="panel op-empty bad"><h2>Factor evidence unavailable</h2>
-        <p>No grade may be inferred while the evidence read model is unavailable.</p></section>`;
+      root.innerHTML = `<section class="panel op-empty bad"><span class="op-state">Data unavailable</span>
+        <h2>Signal research unavailable</h2><p>No missing sample is shown as zero, neutral, or proven.</p></section>`;
     }
   }
   if('IntersectionObserver' in window){

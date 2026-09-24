@@ -213,6 +213,64 @@ def last_prices(symbols=None) -> dict:
     return out
 
 
+class OpenInterestSnapshot(dict):
+    """Ticker rows plus venue-wide supported USDT perpetual coverage."""
+    def __init__(self, *args, supported_contract_count=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.supported_contract_count = supported_contract_count
+
+
+def open_interest_snapshot(symbols=None) -> dict[str, dict]:
+    """One public bulk snapshot of exact Phemex price and open interest strings.
+
+    Phemex recommends the v3 all-ticker route. Its payload is columnar: rows
+    are arrays and `fields` supplies their names. A dict form is accepted as a
+    defensive compatibility path, but no numeric value is converted to float.
+    """
+    payload = _get("/md/v3/ticker/24hr/all") or {}
+    body = payload.get("data") or payload.get("result") or []
+    if isinstance(body, dict):
+        fields = body.get("fields") or payload.get("fields") or []
+        raw = body.get("rows") or body.get("data") or []
+    else:
+        fields = payload.get("fields") or []
+        raw = body
+    rows = []
+    for item in raw:
+        if isinstance(item, dict):
+            rows.append(item)
+        elif fields and isinstance(item, (list, tuple)):
+            rows.append(dict(zip(fields, item)))
+    want = set(symbols) if symbols is not None else None
+    out = {}
+    supported = 0
+    for row in rows:
+        symbol = row.get("symbol")
+        if not symbol:
+            continue
+        oi = row.get("openInterestRv")
+        price = row.get("lastRp") or row.get("closeRp")
+        if oi in (None, "") or price in (None, ""):
+            continue
+        if symbol.endswith("USDT"):
+            supported += 1
+        if want is not None and symbol not in want:
+            continue
+        source_ts = (payload.get("timestamp") or
+                     (body.get("timestamp") if isinstance(body, dict) else None) or
+                     row.get("timestamp"))
+        try:
+            if source_ts is not None and int(source_ts) > 10**12:
+                source_ts = int(source_ts) // 1_000_000_000
+            elif source_ts is not None:
+                source_ts = int(source_ts)
+        except (TypeError, ValueError):
+            source_ts = None
+        out[symbol] = {"open_interest": str(oi), "price": str(price),
+                       "source_ts": source_ts}
+    return OpenInterestSnapshot(out, supported_contract_count=supported)
+
+
 def fetch_candles(symbol: str, tf: str, start_ts: int, end_ts: int) -> list[dict]:
     """Closed candles in [start_ts, end_ts), ascending, as store-shaped dicts.
 

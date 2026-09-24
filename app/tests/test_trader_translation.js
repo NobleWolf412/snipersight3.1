@@ -184,9 +184,10 @@ ok('store enums are given sentences, and unmapped ones stay shouting', () => {
   assert(/\|\|\s*label\(value\)/.test(COCKPIT.slice(i, i + 400)),
     'an unmapped enum no longer falls back to its raw form — new vocabulary ' +
     'would be silently prettified instead of visibly untranslated');
-  assert(/window\.SSScopeLabel/.test(COCKPIT) && /SSScopeLabel/.test(FACTOR),
-    'Factors keeps its own scope table — two tables for one vocabulary is ' +
-    'how two screens come to name one scope differently');
+  assert(/window\.SSScopeLabel/.test(COCKPIT),
+    'the shared performance scope translator is no longer exported');
+  assert(!/SCOPE_SENTENCES/.test(FACTOR),
+    'Signals introduced a second scope vocabulary instead of using its server-owned verdict');
 });
 
 ok('the readable scope values are not uppercased back into enums', () => {
@@ -213,46 +214,35 @@ ok('both gate kinds speak when both are present', () => {
     'the consequence sentence belonging to the other');
 });
 
-ok('Factors leads with its conclusion, not its population', () => {
+ok('Signals leads with its conclusion and states the trading boundary', () => {
   /* The screen had a real answer — no factor is calibrated, do not size on
      grades — under two lines of enum provenance and a paragraph of policy
      language. The conclusion goes first. */
-  assert(/factor-verdict/.test(FACTOR) && /factor-verdict/.test(CSS),
-    'the Factors verdict line is gone, or is unstyled');
-  const v = FACTOR.indexOf('factor-verdict');
-  const p = FACTOR.indexOf('population-note');
-  assert(v > 0 && p > 0 && v < p,
-    'the population strip is back above the verdict — the screen leads with ' +
-    'where the numbers came from instead of what they mean');
+  assert(/signal-research-verdict/.test(FACTOR) && /signal-research-verdict/.test(CSS),
+    'the Signals verdict line is gone, or is unstyled');
+  assert(FACTOR.indexOf('signal-research-verdict') < FACTOR.indexOf('signal-evidence-grid'),
+    'detector cards appear before the one page-level verdict');
   /* Rule 7 — evidence is recorded, not filtered on, until it has been graded
      — has to reach the operator in words, in BOTH branches, and it has to
      stay above the disclosure. The one conclusion nobody may draw from this
      panel is that a grade let a trade through. Pinned by meaning rather than
      by the old sentence: the wording moved to plain English on purpose, and
      an assertion on the phrasing would have blocked exactly that. */
-  const consequence = FACTOR.slice(FACTOR.indexOf('const consequence'),
-                                   FACTOR.indexOf('root.innerHTML'));
-  assert(consequence.length > 0, 'the consequence line is gone entirely');
-  assert(/cannot approve a trade|cannot approve/.test(consequence),
-    'the graded branch stopped saying a passing factor still cannot approve ' +
-    'or size a trade');
-  assert(/not picking or sizing|is picking or sizing/.test(consequence),
-    'the ungraded branch no longer tells the operator what not to do with it');
-  assert(FACTOR.indexOf('factor-consequence') < FACTOR.indexOf('factor-why'),
-    'the consequence moved inside the disclosure — the one thing that must ' +
-    'never be optional reading on this panel');
+  assert(FACTOR.includes('Research only · does not affect trading'),
+    'the page-level trading boundary is no longer explicit');
+  assert(FACTOR.includes('Used in trading: No'),
+    'detector cards no longer repeat the research-only boundary');
 });
 
-ok('a warning carried by two payloads prints once', () => {
+ok('Signals has one evidence payload and no duplicate warning merge', () => {
   /* grade and evidence both carry the back-fill warning, and rendering each
      list where it arrived printed the same amber line twice on one screen.
      Deduped by text — and still rendered, because a warning in only one
      payload is the only place it appears. */
-  assert(/new Set\(\[\.\.\.\(grade\.warnings/.test(FACTOR),
-    'the two warning lists are no longer merged and deduped');
-  assert(!/\(evidence\.warnings \|\| \[\]\)\.map/.test(FACTOR),
-    'the second warning list renders again on its own — the same sentence ' +
-    'appears twice and reads as two defects');
+  assert(!/grade\.warnings/.test(FACTOR),
+    'Signals still merges the retired FactorGrade payload into detector evidence');
+  assert((FACTOR.match(/api\('\/api\/factor-evidence'\)/g) || []).length === 1,
+    'Signals reads more than one authority for its verdict');
 });
 
 /* ------------------------------------------------------------- readability */
@@ -261,7 +251,7 @@ ok('the verdict lines are body type, not tracked mono', () => {
   /* The audit\'s structural note: near-everything is uppercase tracked mono,
      so nothing is differentiated and the operator must read all of it. The
      lines meant to be READ as sentences say so in their type. */
-  const i = CSS.indexOf('.factor-verdict');
+  const i = CSS.indexOf('.signal-research-verdict');
   assert(i > 0, 'the verdict styling is gone');
   const block = CSS.slice(i, i + 420);
   assert(/--f-body/.test(block),

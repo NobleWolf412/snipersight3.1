@@ -25,6 +25,7 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
   let sheetReturnFocus = null;
   let selectedSetupId = row && row.setup && row.setup.setup_id || null;
   let selectionError = null;
+  let currentResearch = null;
 
   const custodyPanel = document.createElement('section');
   custodyPanel.className = 'managed-custody'; custodyPanel.hidden = true;
@@ -74,8 +75,10 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
   }
 
   function renderEvidence(){
+    const currentInsight = document.getElementById('chartInsight');
+    if(currentInsight) currentInsight.hidden = !!row;
     document.getElementById('tradeSetupEvidence').innerHTML = selectionError ? window.SSOpportunityUI.missing(selectedSetupId)
-      : window.SSOpportunityUI.tradeEvidence(row);
+      : window.SSOpportunityUI.tradeEvidence(row, currentResearch);
     renderState();
   }
 
@@ -132,7 +135,7 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
 
   addEventListener('ss:opportunity-selected', event => {
     row = event.detail; selectedSetupId = row && row.setup && row.setup.setup_id || null;
-    selectionError = null; renderEvidence(); refreshAuthority();
+    selectionError = null; currentResearch = null; renderEvidence(); refreshAuthority();
   });
   addEventListener('ss:opportunity-refreshed', event => {
     const refreshed = event.detail;
@@ -148,17 +151,25 @@ if(typeof window !== 'undefined') window.SSTradeWorkspaceProjection = tradeWorks
   async function refreshAuthority(){
     if(window.SSMarkets && window.SSMarkets.current() !== 'crypto') return;
     if(location.hash !== '#trade') return;
-    try{
-      const requests = [api('/api/automation/status'), api('/api/positions/managed')];
-      if(selectedSetupId) requests.push(api('/api/opportunities/' + encodeURIComponent(selectedSetupId)));
-      const [mode, custody, fresh] = await Promise.all(requests);
-      automation = mode;
-      managed = custody.items || [];
-      if(selectedSetupId){ row = fresh; selectionError = null; }
-    }catch(err){
-      if(selectedSetupId){ row = null; selectionError = String(err.message || err); }
-      else { automation = null; managed = []; }
-      console.warn('trade workspace authority unavailable', err);
+    const requests = [api('/api/automation/status'), api('/api/positions/managed')];
+    if(selectedSetupId) requests.push(api('/api/opportunities/' + encodeURIComponent(selectedSetupId)));
+    const results = await Promise.allSettled(requests);
+    if(results[0].status === 'fulfilled') automation = results[0].value;
+    if(results[1].status === 'fulfilled') managed = results[1].value.items || [];
+    if(selectedSetupId && results[2]){
+      if(results[2].status === 'fulfilled'){
+        row = results[2].value; selectionError = null;
+      }else selectionError = String(results[2].reason && results[2].reason.message || results[2].reason);
+    }
+    if(row && row.setup){
+      try{
+        const insight = await api('/api/chart-insight?symbol=' + encodeURIComponent(row.setup.symbol) +
+          '&tf=' + encodeURIComponent(row.setup.timeframe) + '&setup_id=' + encodeURIComponent(row.setup.setup_id));
+        currentResearch = insight.research_observations;
+      }catch(err){
+        currentResearch = {availability:'UNAVAILABLE', rows:[],
+          missing_reason:'Current research observations are unavailable. The setup-time record is unchanged.'};
+      }
     }
     renderEvidence();
   }

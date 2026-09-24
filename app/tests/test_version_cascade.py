@@ -39,6 +39,7 @@ from engine import (abtest, achievements, analyst_context, chart_insight,
                     diagnostic_status, edgestats, entrystats, factorstats,
                     funding, fvg, learning, macro_calendar, market_context,
                     registry, settings, volprofile)
+from engine import open_interest, research, researchsignals
 
 
 # Operational authorities do not write research facts, so they do not belong
@@ -71,7 +72,10 @@ OPERATIONAL_EXPECTED = {
     # keeps the candles it needs. The constant moved in that commit with
     # no `# v0.10:` note beside it in live.py; this is the reason, read
     # off the diff.
-    "live": "live-v0.11-draft",
+    # v0.12 starts public Phemex OI collection at the scan's fixed clock and
+    # schedules research-only detectors after account decisions.
+    "live": "live-v0.12-draft",
+    "open_interest": "open-interest-v0.1-draft",
     "stopstudy": "stop-study-v0.1-draft",
     # Writes its own `zone_study*` ledger and nothing else — no account
     # order, no fact under another engine's tag. Locked for the reason
@@ -250,6 +254,7 @@ def operational_versions():
     from engine import opportunities, paperbook, shared_account, forwardtrial, stopstudy, zonestudy
     return {
         "live": live.LIVE_VERSION,
+        "open_interest": open_interest.OPEN_INTEREST_VERSION,
         "forwardtrial": forwardtrial.TRIAL_VERSION,
         "stopstudy": stopstudy.STOP_STUDY_VERSION,
         "zonestudy": zonestudy.ZONE_STUDY_VERSION,
@@ -375,6 +380,18 @@ LOCKED = {
     "achievements": achievements.ACHIEVEMENT_VERSION,
     "analyst_context": analyst_context.ANALYST_CONTEXT_VERSION,
     "chart_insight": chart_insight.INSIGHT_VERSION,
+    # Research facts are deliberately distinct from strategy facts. Snapshot
+    # is the immutable decision-time boundary consumed by Results.
+    "research": research.RESEARCH_VERSION,
+    "order_block": research.ORDER_BLOCK_VERSION,
+    "structure_sequence": research.STRUCTURE_SEQUENCE_VERSION,
+    "stoch_rsi": research.STOCH_RSI_VERSION,
+    "hidden_divergence": research.HIDDEN_DIVERGENCE_VERSION,
+    "open_interest": open_interest.OPEN_INTEREST_VERSION,
+    "open_interest_signal": research.OPEN_INTEREST_SIGNAL_VERSION,
+    "research_snapshot": researchsignals.SNAPSHOT_VERSION,
+    "research_read_model": research.READ_MODEL_VERSION,
+    "research_evidence": research.EVIDENCE_VERSION,
     "diagnostic_status": diagnostic_status.DIAGNOSTIC_STATUS_VERSION,
     "learning": learning.LEARNING_VERSION,
     "macro_calendar": macro_calendar.MACRO_CALENDAR_VERSION,
@@ -796,7 +813,17 @@ EXPECTED = {
     "funding": "funding-v0.2-draft",
     "achievements": "achievements-v0.1-draft",
     "analyst_context": "analyst-context-v0.2-draft",
-    "chart_insight": "chart-insight-v0.1-draft",
+    "chart_insight": "chart-insight-v0.2-draft",
+    "research": "research-v0.1-draft",
+    "order_block": "order-block-v0.1-draft",
+    "structure_sequence": "structure-sequence-v0.1-draft",
+    "stoch_rsi": "stoch-rsi-v0.1-draft",
+    "hidden_divergence": "hidden-divergence-v0.1-draft",
+    "open_interest": "open-interest-v0.1-draft",
+    "open_interest_signal": "open-interest-signal-v0.1-draft",
+    "research_snapshot": "research-snapshot-v0.1-draft",
+    "research_read_model": "research-observation-v0.1-draft",
+    "research_evidence": "research-evidence-v0.1-draft",
     "diagnostic_status": "diagnostic-status-v0.1-draft",
     "learning": "learning-v0.1-draft",
     "macro_calendar": "macro-calendar-v0.1-draft",
@@ -832,7 +859,8 @@ CONSUMERS = {
     # is a separate open decision, flagged 2026-08-09).
     "agg": ("swing", "structure", "ranges", "ma", "momentum", "volatility",
             "volume", "liquidity", "setup", "exec", "scale", "breakout",
-            "trend", "chartread"),
+            "trend", "chartread", "research", "order_block",
+            "structure_sequence", "stoch_rsi", "hidden_divergence"),
     # CODE-level coupling, not fact-level, and it counts the same. momentum,
     # volatility and volume import `ma.ema` / `ma.sma` / `ma.sig` directly, so a
     # change to the EMA formula changes THEIR facts without touching a line of
@@ -842,21 +870,28 @@ CONSUMERS = {
     # case of it yet: it reads no `ma` FACT at all, it computes the ribbon with
     # ma.ema / ma.sma / ma.stack / ma.position, so an EMA change moves its
     # entries without touching its source or any version constant it imports.
-    "ma": ("momentum", "volatility", "volume", "trend"),
+    "ma": ("momentum", "volatility", "volume", "trend", "research",
+           "stoch_rsi", "hidden_divergence", "research_read_model"),
     # S53: setup and breakout were MISSING here despite reading swing facts
     # directly (setups.py takes targets from INTERMEDIATE+ swings; breakout.py
     # does the same) — and the cascade plan drafted from this map missed them,
     # which is precisely the failure mode the map exists to prevent. Same for
     # structure: setup and breakout both read structure facts.
     "swing": ("structure", "zone", "liquidity", "ranges", "momentum",
-              "setup", "breakout", "trend"),
-    "structure": ("regime", "scale", "setup", "breakout", "bias", "regimeread"),
-    "zone": ("setup", "htfread"),
+              "setup", "breakout", "trend", "research", "hidden_divergence"),
+    "structure": ("regime", "scale", "setup", "breakout", "bias",
+                  "regimeread", "research", "order_block",
+                  "structure_sequence", "research_read_model"),
+    "zone": ("setup", "htfread", "research", "research_snapshot",
+             "research_read_model"),
     # breakout was MISSING here. breakout.py stamps LIQ_VERSION into its
     # own manifest, so a liquidity bump changes its payload — the same
     # class of omission as the S53 note above, found the same way: by
     # grepping for the constant rather than trusting the map.
-    "liquidity": ("setup", "htfread", "breakout"),
+    "liquidity": ("setup", "htfread", "breakout", "research",
+                  "structure_sequence"),
+    "momentum": ("research", "stoch_rsi", "hidden_divergence",
+                 "research_read_model"),
     "ranges": ("htfread",),
     # THE WIDENING. volatility had no consumers by design; regimeread reads its
     # ATR_REGIME and SQUEEZE facts into the phase. Today that costs nothing —
@@ -877,7 +912,15 @@ CONSUMERS = {
     # one and this map must already have said so. A consumer added in the same
     # commit as the bump it was supposed to warn about warns nobody.
     "bias": ("trend", "breakout", "setup"),
-    "setup": ("exec", "risk", "riskpaper", "scale"),
+    "setup": ("exec", "risk", "riskpaper", "scale", "research_snapshot"),
+    "order_block": ("structure_sequence", "research_read_model"),
+    "structure_sequence": ("research_read_model",),
+    "stoch_rsi": ("research_read_model",),
+    "hidden_divergence": ("research_read_model",),
+    "open_interest_signal": ("research_read_model",),
+    "open_interest": ("open_interest_signal",),
+    "research_snapshot": ("research_evidence",),
+    "research_read_model": ("chart_insight", "research_snapshot"),
     "exec": ("risk", "riskpaper", "scale", "cooldown"),
     # scale had NO entry at all, while execsim.expected_versions returns
     # (SETUP_VERSION, SCALE_VERSION) — it reads scale facts. An ADD's

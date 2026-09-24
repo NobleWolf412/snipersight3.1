@@ -1,10 +1,10 @@
 """Read-only presentation of existing chart evidence. Never writes trading facts."""
-from . import analyst_context, chartread, setups
+from . import analyst_context, chartread, research, setups
 
-INSIGHT_VERSION = "chart-insight-v0.1-draft"
+INSIGHT_VERSION = "chart-insight-v0.2-draft"
 
 
-def snapshot(con, symbol, tf, *, as_of=None):
+def snapshot(con, symbol, tf, *, as_of=None, direction=None, setup_payload=None):
     evidence = analyst_context.snapshot(con, symbol, tf, as_of=as_of)
     frames = []
     for row in evidence["top_down"]:
@@ -21,9 +21,13 @@ def snapshot(con, symbol, tf, *, as_of=None):
                        "location": chart.get("location"), "phase": row["phase"]["phase"],
                        "trading_regime": row["phase"]["regime"],
                        "top_down_call": row["top_down_call"]})
+    observations = research.matrix(
+        con, symbol, as_of=evidence["as_of"], direction=direction,
+        setup_payload=setup_payload, now=evidence["as_of"])
     return {"version": INSIGHT_VERSION, "symbol": symbol, "timeframe": tf,
             "as_of": evidence["as_of"], "basis": "CURRENT_CLOSED_CANDLES",
             "frames": frames, "scanner_quality": evidence["scanner_quality"],
+            "research_observations": observations,
             "usage": {"regime": "TRADING_INPUT",
                       "chart": "OBSERVATION_ONLY" if all(v == "ALLOW" for v in setups.WINDOW_POLICY.values()) else "POLICY_DEPENDENT",
                       "higher_timeframes": "OBSERVATION_ONLY" if all(v == "ALLOW" for v in setups.BIAS_POLICY.values()) and all(v == "ALLOW" for v in setups.PULLBACK_CONTEXT_POLICY.values()) else "POLICY_DEPENDENT"},
