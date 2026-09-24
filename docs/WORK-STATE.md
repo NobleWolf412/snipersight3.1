@@ -99,8 +99,12 @@ stop-management outcome below remains outstanding and must survive this work.
   the first new cycle completed, OI status correctly reported `MISSING` with
   no zero substitute and Signals reported `Data unavailable`. The user
   authorized committing and pushing this implementation on 2026-09-23; this
-  checkpoint is included in that `origin/main` delivery.
-- **2026-09-24 review correction (not yet active):** two research defects were
+  checkpoint is included in that `origin/main` delivery. At the user's explicit
+  request on 2026-09-24, the guarded scanner-only restart stopped the prior
+  child and the watchdog respawned it at 09:52 ET. The replacement scanner's
+  heartbeat advanced with `live-v0.12-draft`, and the API remained reachable;
+  the original 2026-09-23 research activation boundary is unchanged.
+- **2026-09-24 review correction (active):** two research defects were
   fixed after review. (1) The sweep → break → block exposure had no link to the
   setup: one complete sequence anywhere in a series marked every later setup on
   it exposed. It now links through the setup's originating zone, like the
@@ -114,7 +118,11 @@ stop-management outcome below remains outstanding and must survive this work.
   `chart-insight-v0.3-draft`. v0.1 snapshots are not re-read or rebuilt, so
   setups from the first activation stay unavailable; the new versions start a
   fresh forward-only boundary **only after the supervised scanner restarts**.
-  Research-only; no trading behaviour changed.
+  Research-only; no trading behaviour changed. **Activated 2026-09-24:** the
+  user pulled `4b28d2a` and ran the guarded both-process restart; the served
+  research read model then reported `research-observation-v0.2-draft`. That
+  restart is the v0.2 activation boundary. A first attempt restarted on the
+  old code because an uncommitted local work-log edit blocked the pull.
 - **Remaining:** confirm the first completed post-activation scan persisted OI
   and detector observations. Exploratory variants need separately locked
   detector definitions before collection; they remain visible as uncollected
