@@ -589,3 +589,28 @@ test('signal map keeps every state explicit and expands by evidence row',async({
   const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();
   expect(audit.violations.map(v=>v.id)).toEqual([]);
 });
+
+test('home shows open trades alone, and folds recent closes out only when nothing is open',async({page})=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const real=await (await page.request.get('/api/ui/v1/home')).json();
+  const trade=(id,symbol,extra)=>({intent_id:id,symbol,direction:'LONG',timeframe:'1H',state:'OPEN',active:true,closed_at:null,...extra});
+  const closes=[trade('c1','ETHUSDT',{state:'CLOSED',outcome:'TARGET',active:false,closed_at:1}),trade('c2','SOLUSDT',{state:'CLOSED',outcome:'STOP',active:false,closed_at:2})];
+  let positions=[trade('o1','BTCUSDT')];
+  await page.route('**/api/ui/v1/home*',route=>route.fulfill({json:{...real,positions,recent:closes}}));
+  await page.goto('/#home');
+  const card=page.locator('section.card',{has:page.getByRole('heading',{name:'Open trades & pending orders'})});
+  await expect(card).toContainText('BTCUSDT');
+  await expect(card).not.toContainText('ETHUSDT');
+  await expect(page.getByRole('heading',{name:'Recent closes'})).toHaveCount(0);
+  positions=[];
+  await page.goto('/#opportunities');await page.goto('/#home');
+  await expect(card).toContainText('Nothing open right now');
+  const fold=card.locator('details.recent-closes');
+  await expect(fold.locator('summary')).toHaveText('Recent closes (2)');
+  await expect(fold.getByText('ETHUSDT')).toBeHidden();
+  await fold.locator('summary').click();
+  await expect(fold.getByText('ETHUSDT')).toBeVisible();
+  await expect(fold.getByRole('link',{name:/Open journal/})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+  expect(errors).toEqual([]);
+});

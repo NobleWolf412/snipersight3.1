@@ -388,12 +388,25 @@ async function refreshHome(){
   finally{refreshingHome=false;}
 }
 
+// Home answers "what needs me now". While anything is open or pending, that
+// list is the whole card; recent closes only matter when nothing is live, and
+// then fold out of the same card instead of holding a permanent row. The open
+// state is remembered because the 30s refresh patches attributes and would
+// otherwise collapse the list under the reader.
+let recentClosesOpen=false;
+function homeTrades(positions,recent){
+  if(positions.length)return tradeTable(positions);
+  const idle=empty('Nothing open right now','No open trades or pending orders. New orders from you or the bot appear here.');
+  if(!recent.length)return idle;
+  return `${idle}<details class="recent-closes" id="recent-closes"${recentClosesOpen?' open':''}><summary>Recent closes (${recent.length})</summary>${tradeTable(recent)}<a href="#journal" class="text-link">Open journal →</a></details>`;
+}
+
 async function home(background=false){const data=await read('home','home');if(!data)return;context=data.context;if(workspace==='STOCKS'){$('#content').innerHTML=heading('Your stock workspace','A separate account. A clear path to readiness.')+stockGate();return;}
 
-  const html=heading('A clear view of your account.','One balance. Every trade accounted for.',`<button id="pause">${context.automation.halted?'Resume entries':'Pause entries'}</button><button class="primary" id="open-trade">New paper trade</button>`)+accountBanner()+`<section class="card bot-panel" id="bot-status"><p class="loading">Reading bot activity…</p></section>`+metrics()+`<div class="grid two"><div class="stack"><section class="card"><div class="card-head"><h2>Opportunities</h2><a href="#opportunities" class="text-link">View all →</a></div>${opportunitiesTable(data.opportunities)}<p class="source-detail section-gap">Closest to being ready first, then closest to the entry price.</p></section><section class="card"><div class="card-head"><h2>Open trades & pending orders</h2>${badge(context.automation.halted?'ENTRIES PAUSED':context.automation.mode)}</div>${tradeTable(data.positions)}</section></div><div class="stack"><section class="card"><div class="card-head"><h2>Account limits</h2>${badge(context.state)}</div>${facts([['Risk per trade',context.risk_percent_label],['Maximum open trades',context.slot_ceiling],['Cash',money(context.account.cash)],['Closed profit / loss today (UTC)',money(context.today_realised_usd)],['Oldest price update',date(context.account.oldest_mark_at)]])}<p class="ticket-note">You and the bot share one open-trade limit. Pausing new orders leaves existing stop-losses and targets in place.</p></section><section class="card" id="pulse"><h2>Market Pulse</h2><p class="loading">Checking news updates…</p></section></div></div><section class="card section-gap"><div class="card-head"><h2>Recent closes</h2><a href="#journal" class="text-link">Open journal →</a></div>${tradeTable(data.recent)}</section>`;
+  const html=heading('A clear view of your account.','One balance. Every trade accounted for.',`<button id="pause">${context.automation.halted?'Resume entries':'Pause entries'}</button><button class="primary" id="open-trade">New paper trade</button>`)+accountBanner()+`<section class="card bot-panel" id="bot-status"><p class="loading">Reading bot activity…</p></section>`+metrics()+`<div class="grid two"><div class="stack"><section class="card"><div class="card-head"><h2>Opportunities</h2><a href="#opportunities" class="text-link">View all →</a></div>${opportunitiesTable(data.opportunities)}<p class="source-detail section-gap">Closest to being ready first, then closest to the entry price.</p></section><section class="card"><div class="card-head"><h2>Open trades & pending orders</h2>${badge(context.automation.halted?'ENTRIES PAUSED':context.automation.mode)}</div>${homeTrades(data.positions,data.recent)}</section></div><div class="stack"><section class="card"><div class="card-head"><h2>Account limits</h2>${badge(context.state)}</div>${facts([['Risk per trade',context.risk_percent_label],['Maximum open trades',context.slot_ceiling],['Cash',money(context.account.cash)],['Closed profit / loss today (UTC)',money(context.today_realised_usd)],['Oldest price update',date(context.account.oldest_mark_at)]])}<p class="ticket-note">You and the bot share one open-trade limit. Pausing new orders leaves existing stop-losses and targets in place.</p></section><section class="card" id="pulse"><h2>Market Pulse</h2><p class="loading">Checking news updates…</p></section></div></div>`;
 
   if(background)updateContent($('#content'),html,true);else $('#content').innerHTML=html;
-  bindSetups(data.opportunities);bindDiagnoses();$('#open-trade').onclick=()=>{selectedSetup=null;goto('trade');};$('#pause').onclick=async()=>{try{const result=await post('/api/settings',{changes:{halted:!context.automation.halted},note:'Cockpit account entry control'});if(result){notify('Account entry control updated.');await render();}}catch(e){notify(e.message);}};void loadPulse();void loadBot();
+  bindSetups(data.opportunities);bindDiagnoses();const closes=$('#recent-closes');if(closes)closes.ontoggle=()=>{recentClosesOpen=closes.open;};$('#open-trade').onclick=()=>{selectedSetup=null;goto('trade');};$('#pause').onclick=async()=>{try{const result=await post('/api/settings',{changes:{halted:!context.automation.halted},note:'Cockpit account entry control'});if(result){notify('Account entry control updated.');await render();}}catch(e){notify(e.message);}};void loadPulse();void loadBot();
 
 }
 
