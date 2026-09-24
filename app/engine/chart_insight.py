@@ -1,7 +1,8 @@
 """Read-only presentation of existing chart evidence. Never writes trading facts."""
 from . import analyst_context, chartread, research, setups
 
-INSIGHT_VERSION = "chart-insight-v0.2-draft"
+# v0.3: embeds research-observation-v0.2.
+INSIGHT_VERSION = "chart-insight-v0.3-draft"
 
 
 def snapshot(con, symbol, tf, *, as_of=None, direction=None, setup_payload=None):

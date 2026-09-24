@@ -4,7 +4,9 @@ import json
 from . import research, setups, store
 from .runlog import RunRecorder
 
-SNAPSHOT_VERSION = "research-snapshot-v0.1-draft"
+# v0.2: embeds research-observation-v0.2. A v0.1 snapshot is never rewritten
+# or reconstructed; its setup reads as unavailable under v0.2.
+SNAPSHOT_VERSION = "research-snapshot-v0.2-draft"
 
 
 def unavailable(symbol=None, as_of=None) -> dict:

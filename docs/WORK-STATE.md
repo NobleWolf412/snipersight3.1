@@ -100,6 +100,21 @@ stop-management outcome below remains outstanding and must survive this work.
   no zero substitute and Signals reported `Data unavailable`. The user
   authorized committing and pushing this implementation on 2026-09-23; this
   checkpoint is included in that `origin/main` delivery.
+- **2026-09-24 review correction (not yet active):** two research defects were
+  fixed after review. (1) The sweep → break → block exposure had no link to the
+  setup: one complete sequence anywhere in a series marked every later setup on
+  it exposed. It now links through the setup's originating zone, like the
+  order-block hypothesis, and judges order on the break's real confirmation
+  rather than the activation-floored one. (2) OI signals were confirmed at the
+  scan's opening clock although fetched minutes later, so a setup confirmed at
+  a mid-scan candle close could read them. They are now confirmed at
+  collection. Versions: `structure-sequence-v0.2-draft`,
+  `open-interest-signal-v0.2-draft`, `research-observation-v0.2-draft`,
+  `research-snapshot-v0.2-draft`, `research-evidence-v0.2-draft`,
+  `chart-insight-v0.3-draft`. v0.1 snapshots are not re-read or rebuilt, so
+  setups from the first activation stay unavailable; the new versions start a
+  fresh forward-only boundary **only after the supervised scanner restarts**.
+  Research-only; no trading behaviour changed.
 - **Remaining:** confirm the first completed post-activation scan persisted OI
   and detector observations. Exploratory variants need separately locked
   detector definitions before collection; they remain visible as uncollected

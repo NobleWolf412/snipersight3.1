@@ -17,12 +17,24 @@ from .runlog import RunRecorder
 
 RESEARCH_VERSION = "research-v0.1-draft"
 ORDER_BLOCK_VERSION = "order-block-v0.1-draft"
-STRUCTURE_SEQUENCE_VERSION = "structure-sequence-v0.1-draft"
+# v0.2: order is judged on the break's REAL confirmation, not the activation-
+# floored one, and the block's bounds ride on the fact so a setup can be linked
+# to it. v0.1 could call a pre-activation sweep that confirmed after its break
+# "ordered", because the floor pushed every historical break to the start date.
+STRUCTURE_SEQUENCE_VERSION = "structure-sequence-v0.2-draft"
 STOCH_RSI_VERSION = "stoch-rsi-v0.1-draft"
 HIDDEN_DIVERGENCE_VERSION = "hidden-divergence-v0.1-draft"
-OPEN_INTEREST_SIGNAL_VERSION = "open-interest-signal-v0.1-draft"
-READ_MODEL_VERSION = "research-observation-v0.1-draft"
-EVIDENCE_VERSION = "research-evidence-v0.1-draft"
+# v0.2: confirmed when the venue response was collected, not at the scan's
+# opening clock. v0.1 could be read by a setup whose candle closed before the
+# value was actually fetched.
+OPEN_INTEREST_SIGNAL_VERSION = "open-interest-signal-v0.2-draft"
+# v0.2: consumes structure-sequence-v0.2 (setup-linked through its zone) and
+# open-interest-signal-v0.2 (confirmed at collection).
+READ_MODEL_VERSION = "research-observation-v0.2-draft"
+# v0.2: grades research-snapshot-v0.2 only. v0.1 snapshots could carry an
+# unlinked sequence exposure and a post-close OI reading, so they are not
+# re-read as evidence; those setups stay unavailable rather than rebuilt.
+EVIDENCE_VERSION = "research-evidence-v0.2-draft"
 
 TIMEFRAMES = ("15m", "1H", "4H", "1D")
 TF_SECONDS = {"5m": 300, "15m": 900, "1H": 3600, "4H": 14400,
@@ -231,7 +243,8 @@ def _emit_order_blocks(con, symbol, tf, candles) -> tuple[int, list[dict]]:
                              algo_version=ORDER_BLOCK_VERSION, payload=payload):
             count += 1
         blocks.append({"market_time": chosen["open_ts"],
-                       "confirmed_at": confirmed, **payload})
+                       "confirmed_at": confirmed,
+                       "causal_confirmed_at": br["confirmed_at"], **payload})
     return count, blocks
 
 
@@ -245,9 +258,13 @@ def _emit_sequences(con, symbol, tf, blocks, tf_seconds) -> int:
                   if s.get("side") == want_side
                   and abs(block["break_ts"] - s["market_time"])
                   <= SEQUENCE_LOOKBACK * tf_seconds]
+        # Order compares real confirmations. `confirmed_at` on the block is
+        # floored to the activation boundary for historical breaks, and every
+        # historical sweep would precede that floor whatever its true timing.
+        break_known = block.get("causal_confirmed_at", block["confirmed_at"])
         ordered = [s for s in nearby
                    if s["market_time"] < block["break_ts"]
-                   and s["confirmed_at"] < block["confirmed_at"]]
+                   and s["confirmed_at"] < break_known]
         sweep = (max(ordered, key=lambda s: (s["confirmed_at"], s["market_time"]))
                  if ordered else
                  min(nearby, key=lambda s: (abs(s["market_time"] - block["break_ts"]),
@@ -258,6 +275,7 @@ def _emit_sequences(con, symbol, tf, blocks, tf_seconds) -> int:
                    "direction": block["direction"],
                    "block_id": block["block_id"],
                    "block_ts": block["source_candle_ts"],
+                   "bottom": block.get("bottom"), "top": block.get("top"),
                    "break_ts": block["break_ts"],
                    "sweep_ts": sweep["market_time"] if sweep else None,
                    "sweep_pool_id": sweep.get("pool_id") if sweep else None,
@@ -504,15 +522,33 @@ def matrix(con, symbol: str, *, as_of: int, direction: str | None = None,
                 if available("structure_sequence", STRUCTURE_SEQUENCE_VERSION) else [])
         wanted_sequence = ("BULL" if direction == "LONG" else
                            "BEAR" if direction == "SHORT" else None)
+        # A setup is linked to a sequence only through its originating zone,
+        # the same link the order-block hypothesis uses. v0.1 had no link at
+        # all: one complete sequence anywhere in a series' history made every
+        # later setup on it "exposed", so the cohort measured the symbol, not
+        # the pattern. Without a setup (chart reads) the series view stands.
+        zone_bound = bool(setup_payload.get("zone_id"))
+        sequence_zone_known = (setup_payload.get("zone_bottom") is not None
+                               and setup_payload.get("zone_top") is not None)
+
+        def linked(r):
+            return (not zone_bound or
+                    (sequence_zone_known and _zone_overlap(r, setup_payload) is True))
         exposed_sequences = [r for r in rows if r.get("state") == "COMPLETE"
-                             and r.get("direction") == wanted_sequence]
+                             and r.get("direction") == wanted_sequence
+                             and linked(r)]
         control_sequences = [r for r in rows if r.get("state") in (
-            "UNORDERED", "UNLINKED") and r.get("direction") == wanted_sequence]
+            "UNORDERED", "UNLINKED") and r.get("direction") == wanted_sequence
+            and linked(r)]
         # A later partial/opposed event must not erase a qualifying causal
         # observation that was already available at the decision cutoff.
         row = (_latest(exposed_sequences) or _latest(control_sequences)
-               or _latest(rows))
-        if row:
+               or _latest([r for r in rows if linked(r)]))
+        if zone_bound and not sequence_zone_known and rows:
+            cells.append(_cell("structure_sequence", tf, raw="—", status="MISSING",
+                               version=STRUCTURE_SEQUENCE_VERSION,
+                               missing_reason="The originating 3.1 zone bounds are unavailable."))
+        elif row:
             d = row.get("direction")
             state = row.get("state")
             cells.append(_cell("structure_sequence", tf,

@@ -55,7 +55,7 @@ def collect(con, symbols: list[str], observed_at: int) -> dict:
                      "phemex-perp", (row or {}).get("source_ts"), collected_at,
                      OPEN_INTEREST_VERSION))
         succeeded += 1
-        _emit_signal(con, symbol, observed_at, oi, price)
+        _emit_signal(con, symbol, observed_at, collected_at, oi, price)
     missing = attempted - succeeded
     collected_at = int(time.time())
     con.execute("INSERT INTO open_interest_runs "
@@ -68,7 +68,15 @@ def collect(con, symbols: list[str], observed_at: int) -> dict:
             "failed": 0, "observed_at": observed_at}
 
 
-def _emit_signal(con, symbol, observed_at, oi, price):
+def _emit_signal(con, symbol, observed_at, collected_at, oi, price):
+    """One-hour change, knowable only once the response was in hand.
+
+    `observed_at` is the cycle-opening clock that pairs this sample with the
+    one an hour earlier; it is NOT when the value became known. Collection
+    runs after routing, minutes into a scan, so a candle can close between the
+    two. v0.1 confirmed at `observed_at`, which let a setup confirmed at that
+    close read a reading fetched after it. `confirmed_at` is now `collected_at`.
+    """
     prior = con.execute(
         "SELECT observed_at,value,price FROM open_interest WHERE symbol=? "
         "AND observed_at BETWEEN ? AND ? ORDER BY observed_at DESC LIMIT 1",
@@ -99,9 +107,10 @@ def _emit_signal(con, symbol, observed_at, oi, price):
                "price": plain(price), "previous_price": plain(prior_price),
                "price_change_1h_pct": plain(price_pct) if price_pct is not None else None,
                "interval_seconds": observed_at - prior[0],
-               "previous_observed_at": prior[0], "observed_at": observed_at}
+               "previous_observed_at": prior[0], "observed_at": observed_at,
+               "collected_at": collected_at}
     store.insert_fact(con, symbol=symbol, tf="1H", kind="open_interest_signal",
-                      market_time=observed_at, confirmed_at=observed_at,
+                      market_time=observed_at, confirmed_at=collected_at,
                       algo_version=research.OPEN_INTEREST_SIGNAL_VERSION,
                       payload=payload)
 
@@ -114,7 +123,7 @@ def series(con, symbol: str, *, as_of: int | None = None,
         "WHERE symbol=? AND observed_at<=? ORDER BY observed_at DESC LIMIT ?",
         (symbol, cutoff, limit)).fetchall()
     rows.reverse()
-    signals = {r["confirmed_at"]: r for r in research._facts(
+    signals = {r["observed_at"]: r for r in research._facts(
         con, symbol, "1H", "open_interest_signal", research.OPEN_INTEREST_SIGNAL_VERSION)}
     out = []
     previous = None

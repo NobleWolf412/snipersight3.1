@@ -106,7 +106,8 @@ def test_open_interest_uses_fixed_observed_at_and_exact_strings(tmp_path):
                       return_value=open_interest.phemex.OpenInterestSnapshot(
                           {"BTCUSDT": {"open_interest": "1100.1250",
                                        "price": "51000.0100", "source_ts": 100}},
-                          supported_contract_count=138)):
+                          supported_contract_count=138)), \
+            patch.object(open_interest.time, "time", return_value=13_900):
         open_interest.collect(con, ["BTCUSDT"], 13_600)
     rows = con.execute("SELECT observed_at,value,price FROM open_interest ORDER BY observed_at").fetchall()
     assert rows == [(10_000, "1000.1250", "50000.0100"),
@@ -114,7 +115,11 @@ def test_open_interest_uses_fixed_observed_at_and_exact_strings(tmp_path):
     signal = store.get_facts(con, "BTCUSDT", "1H", "open_interest_signal",
                              research.OPEN_INTEREST_SIGNAL_VERSION)[-1]
     payload = json.loads(signal["payload"])
-    assert signal["confirmed_at"] == 13_600
+    # Paired on the scan clock, knowable only when the response arrived.
+    assert signal["market_time"] == 13_600
+    assert payload["observed_at"] == 13_600
+    assert signal["confirmed_at"] == 13_900
+    assert payload["collected_at"] == 13_900
     assert payload["direction"] == "BULL"
     assert payload["value"] == "1100.1250"
     assert open_interest.status(con, 13_601)["supported_contract_count"] == 138
@@ -371,4 +376,93 @@ def test_matrix_has_explicit_top_level_availability(tmp_path):
     research.activate(con, 1)
     result = research.matrix(con, "BTCUSDT", as_of=2, direction="LONG", now=2)
     assert result["availability"] in {"AVAILABLE", "PARTIAL", "UNAVAILABLE"}
+    con.close()
+
+
+def test_open_interest_collected_after_a_candle_close_is_not_visible_to_it(tmp_path):
+    """The scan opens at 3_900, a 15m candle closes at 4_500 mid-scan, and the
+    OI response arrives at 4_620. A setup confirmed at that close must not see it."""
+    con = store.connect(tmp_path / "oi-late.db")
+    research.activate(con, 1)
+    for observed_at, collected_at, value in ((0, 30, "1000"), (3_900, 4_620, "1100")):
+        with patch.object(open_interest.phemex, "open_interest_snapshot",
+                          return_value={"BTCUSDT": {"open_interest": value,
+                                                    "price": value, "source_ts": None}}), \
+                patch.object(open_interest.time, "time", return_value=collected_at):
+            open_interest.collect(con, ["BTCUSDT"], observed_at)
+    at_close = research.matrix(con, "BTCUSDT", as_of=4_500, direction="LONG", now=4_500)
+    cell = next(row for row in at_close["rows"]
+                if row["key"] == "open_interest")["cells"][1]
+    assert cell["status"] == "MISSING"
+    later = research.matrix(con, "BTCUSDT", as_of=4_620, direction="LONG", now=4_620)
+    cell = next(row for row in later["rows"]
+                if row["key"] == "open_interest")["cells"][1]
+    assert cell["status"] == "ALIGNED"
+    series = open_interest.series(con, "BTCUSDT")
+    assert series[-1]["quadrant"] == "PRICE_UP_OI_UP"
+    con.close()
+
+
+def test_historical_sequence_order_uses_the_real_break_confirmation(tmp_path):
+    """Activation floors a historical break to the start date. A sweep that was
+    confirmed AFTER the real break must still be unordered, not complete."""
+    con = store.connect(tmp_path / "sequence-floor.db")
+    research.activate(con, 10_000)
+    store.insert_fact(con, symbol="BTCUSDT", tf="1H", kind="liquidity",
+                      market_time=300, confirmed_at=900,
+                      algo_version=liquidity.LIQ_VERSION,
+                      payload={"event": "SWEEP", "side": "LOW", "pool_id": "late"})
+    block = {"direction": "BULL", "block_id": "b", "source_candle_ts": 200,
+             "break_ts": 400, "confirmed_at": 10_000, "causal_confirmed_at": 500,
+             "bottom": "8", "top": "11"}
+    research._emit_sequences(con, "BTCUSDT", "1H", [block], 3600)
+    row = store.get_facts(con, "BTCUSDT", "1H", "structure_sequence",
+                          research.STRUCTURE_SEQUENCE_VERSION)[0]
+    assert json.loads(row["payload"])["state"] == "UNORDERED"
+    con.close()
+
+
+def _complete_sequence(con, at, bottom, top, block_id):
+    fact(con, kind="structure_sequence", at=at,
+         version=research.STRUCTURE_SEQUENCE_VERSION,
+         payload={"event": "SEQUENCE", "state": "COMPLETE", "direction": "BULL",
+                  "block_id": block_id, "bottom": bottom, "top": top,
+                  "ordered": True, "linked": True})
+
+
+def _zone(con, zone_id, bottom, top, at=100):
+    fact(con, kind="zone", at=at, version=research.zones.ZONE_VERSION,
+         payload={"zone_id": zone_id, "bottom": bottom, "top": top})
+
+
+def test_sequence_exposure_is_linked_to_the_setup_zone(tmp_path):
+    """One complete sequence somewhere in the series must not expose every
+    later setup on it: only a setup whose zone the block overlaps is exposed."""
+    con = store.connect(tmp_path / "sequence-linked.db")
+    research.activate(con, 1)
+    _complete_sequence(con, 500, "100", "110", "far")
+    _zone(con, "z-near", "200", "210")
+    _zone(con, "z-far", "105", "108")
+    setup = {"zone_id": "z-near", "tf": "1H", "direction": "LONG"}
+    result = research.matrix(con, "BTCUSDT", as_of=700, direction="LONG",
+                             setup_payload=setup, now=700)
+    assert research.primary_exposure(result, "1H")["structure_sequence"] == "MISSING"
+    setup = {"zone_id": "z-far", "tf": "1H", "direction": "LONG"}
+    result = research.matrix(con, "BTCUSDT", as_of=700, direction="LONG",
+                             setup_payload=setup, now=700)
+    assert research.primary_exposure(result, "1H")["structure_sequence"] == "EXPOSED"
+    con.close()
+
+
+def test_sequence_with_unresolved_setup_zone_is_missing_not_exposed(tmp_path):
+    con = store.connect(tmp_path / "sequence-no-zone.db")
+    research.activate(con, 1)
+    _complete_sequence(con, 500, "100", "110", "b")
+    setup = {"zone_id": "unknown", "tf": "1H", "direction": "LONG"}
+    result = research.matrix(con, "BTCUSDT", as_of=700, direction="LONG",
+                             setup_payload=setup, now=700)
+    cell = next(row for row in result["rows"]
+                if row["key"] == "structure_sequence")["cells"][1]
+    assert cell["status"] == "MISSING"
+    assert research.primary_exposure(result, "1H")["structure_sequence"] == "MISSING"
     con.close()
