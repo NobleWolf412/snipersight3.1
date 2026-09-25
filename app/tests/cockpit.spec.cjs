@@ -77,8 +77,10 @@ test('forward trial separates new evidence and expands trade reasons',async({pag
   await page.route('**/api/ui/v1/simple-strategy-trial*',route=>route.fulfill({json:{state:'COLLECTING',affects_trading:false,started_at:now-86400,ends_at:now+86400,checked_at:now,arms:{CURRENT:{closed:1,symbols:1,net_usd:'-5',return_pct:'-0.05',max_drawdown_pct:'0.05',mean_r:'-0.05',unresolved:0,by_direction:{LONG:{closed:1,net_usd:'-5'},SHORT:{closed:0,net_usd:'0'}}},CHANNEL:{closed:1,symbols:1,net_usd:'10',return_pct:'0.1',max_drawdown_pct:'0',mean_r:'0.1',unresolved:0,by_direction:{LONG:{closed:1,net_usd:'10'},SHORT:{closed:0,net_usd:'0'}}}},primary:{verdict:'UNKNOWN',minimum_trades_each:30,minimum_symbols_each:8,interval:null}}}));
   await page.route('**/api/ui/v1/forward-trial*',route=>route.fulfill({json:{state:'COLLECTING',started_at:now-86400,checked_at:now,starting_balance:'10000',balance:'10123.45',pnl_usd:'123.45',risk_usd:'100',max_slots:5,counts:{PLACED:1,FILLED:1,CLOSED:1,SKIPPED:1,EXPIRED:0},curve:[{time:now-86400,value:'10000'},{time:now,value:'10123.45'}],items:[{symbol:'BTCUSDT',tf:'15m',observed_at:now,state:'SKIPPED',entry:'100',sl:'98',tp:'104',direction:'LONG',reason:'The trial is already watching a trade in this market.'}]}}));
   await page.goto('/#research');
+  await page.getByText('Simpler strategy',{exact:true}).click();
   await expect(page.getByRole('heading',{name:'Does a simpler strategy work better?'})).toBeVisible();
-  await expect(page.getByText('Too few completed trades')).toBeVisible();
+  await expect(page.locator('.research-study-body').first().getByText('Too few completed trades')).toBeVisible();
+  await page.getByText('Breakout and retest',{exact:true}).click();
   await expect(page.locator('.trial-balance')).toHaveText('$10,123.45');
   await expect(page.locator('.trial-curve')).toBeVisible();
   await page.locator('.trial-trade summary').click();
@@ -88,6 +90,41 @@ test('forward trial separates new evidence and expands trade reasons',async({pag
   const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();
   expect(audit.violations.map(v=>v.id)).toEqual([]);
   await page.screenshot({path:info.outputPath('forward-trial.png'),fullPage:true});
+});
+
+test('research gives a short status first and keeps methods and records accessible',async({page},info)=>{
+  const now=Math.floor(Date.now()/1000);
+  const row={label:'Stochastic RSI',verdict:'Too few completed trades',hypothesis:'Oversold exits help long setups.',exposed_count:3,control_count:2,exposed_symbol_clusters:2,control_symbol_clusters:2,progress:{exposed_trades:3,control_trades:2,trades_required_each:30,exposed_symbols:2,control_symbols:2,symbols_required_each:8},coverage:0.5,missing_rate:0.5,sample_ok:false,collection_start:now,detector_version:'test-v1',other_patterns_observed:[]};
+  const items=Array.from({length:50},(_,i)=>({setup:{symbol:`TEST${i}USDT`,timeframe:'1H',strategy:'PULLBACK',direction:'LONG'},state:'FORMING',primary_explanation:'Waiting for confirmation.',strongest_counterargument:'Wait for a closed candle.'}));
+  await page.route('**/api/ui/v1/research?*',route=>route.fulfill({json:{signals:{verdict:'Too few completed trades',minimums:{closed_trades_each:30,symbol_clusters_each:8},rows:[row]},items,note:'Research only.'}}));
+  await page.goto('/#research');
+  await page.getByRole('button',{name:'Setup records'}).click();
+  await expect(page).toHaveURL(/#research$/);
+  await expect(page.locator('#research-signals')).toContainText('Used in trading: No');
+  await expect(page.locator('.signal-evidence-card > summary')).toContainText('Signal present: 3 trades · absent: 2 trades');
+  await expect(page.locator('.signal-evidence-detail')).not.toBeVisible();
+  await expect(page.locator('.research-study').first().locator('.study-arms')).not.toBeVisible();
+  await expect(page.locator('.research-records .research-list')).not.toBeVisible();
+  await page.screenshot({path:info.outputPath('research-overview.png'),fullPage:true});
+  await page.locator('.signal-evidence-card > summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.signal-evidence-detail')).toContainText('Present 3/30 trades');
+  await page.getByText('Browse recent setup records').click();
+  await expect(page.locator('.research-records .research-row')).toHaveCount(50);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+  const audit=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa']).analyze();
+  expect(audit.violations.map(v=>v.id)).toEqual([]);
+});
+
+test('one unavailable study does not erase the other research',async({page})=>{
+  await page.route('**/api/ui/v1/stop-comparison*',route=>route.fulfill({status:503,json:{detail:'Study temporarily unavailable'}}));
+  await page.route('**/api/ui/v1/forward-trial*',route=>route.fulfill({status:503,json:{detail:'Trial temporarily unavailable'}}));
+  await page.goto('/#research');
+  await expect(page.getByRole('heading',{name:'Strategy tests'})).toBeVisible();
+  await expect(page.locator('.research-study').nth(2).locator('summary')).toContainText('Data unavailable');
+  await expect(page.locator('.research-study').nth(3).locator('summary')).toContainText('Data unavailable');
+  await page.locator('.research-study').nth(2).locator('summary').click();
+  await expect(page.locator('.research-study').nth(2)).toContainText('Comparison data unavailable.');
 });
 
 test('six screens, chart, keyboard navigation and accessibility',async({page},info)=>{
@@ -261,6 +298,7 @@ test('research explanation and strategy guide stay in the current app',async({pa
   const row={setup:{symbol:'BCHUSDT',timeframe:'15m',strategy:'PULLBACK',direction:'LONG',entry:null},state:'BLOCKED',primary_explanation:'price reached the DEMAND zone 214.270-214.371 in BULL_TREND · waiting for a close that proves it held (3 bars)',strongest_counterargument:'The setup has no expiry, so the entry window cannot be verified.'};
   await page.route('**/api/ui/v1/research?*',route=>route.fulfill({json:{items:[row],note:'Research only.'}}));
   await page.goto('/#research');
+  await page.getByText('Browse recent setup records').click();
   await page.getByRole('button',{name:'Inspect',exact:true}).click();
   await expect(page.locator('#research-detail')).toContainText('support area at 214.270-214.371 during an uptrend');
   await expect(page.locator('#research-detail')).toContainText('No entry deadline is recorded');
@@ -421,6 +459,7 @@ test('stop comparison counts only completed triplets and explains pending arms',
   const rules={HOLD:'Original stop',COST_COVER:'Cover costs after +1R',STRUCTURE:'Follow confirmed swings'};
   await page.route('**/api/ui/v1/stop-comparison*',r=>r.fulfill({json:{state:'COLLECTING',started_at:now-86400,checked_at:now,rules,paired_count:2,pending_count:3,excluded_count:1,totals:{HOLD:{pnl_usd:'-200',difference_usd:'0'},COST_COVER:{pnl_usd:'50',difference_usd:'250',better:1,worse:0},STRUCTURE:{pnl_usd:'-25',difference_usd:'175',better:1,worse:1}},items:[]}}));
   await page.goto('/#research');
+  await page.getByText('Protective stops',{exact:true}).click();
   await expect(page.locator('.study-panel:not(.zone-study)')).toContainText('3 still being followed');
   await expect(page.locator('.study-cost')).toContainText('$250.00 versus the original stop');
   await page.getByText('What each rule does',{exact:true}).click();
@@ -515,6 +554,7 @@ test('defended zone comparison shows timing, reasons, and chart timeframe toggle
   await page.route('**/api/ui/v1/trades/zone/diagnosis?*',r=>r.fulfill({json:{trade,zone_comparison:comparison}}));
   await page.route('**/api/candles?*',r=>{const step=new URL(r.request().url()).searchParams.get('tf')==='5m'?300:900;return r.fulfill({json:Array.from({length:40},(_,i)=>({time:start+(i-5)*step,open:100+Math.sin(i*.6)*.8,high:101.2+Math.sin(i*.6)*.8,low:99.4+Math.sin(i*.6)*.8,close:100+Math.sin(i*.6)*.8+(i%3===0?-.35:.45),volume:1}))});});
   await page.goto('/#research');
+  await page.getByText('Defended zones',{exact:true}).click();
   await expect(page.locator('.zone-study .study-arm')).toHaveCount(5);
   await page.getByText('Individual trades and reasons',{exact:true}).click();
   await expect(page.locator('.zone-study')).toContainText('Price had already crossed');
