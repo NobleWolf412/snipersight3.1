@@ -54,7 +54,7 @@ def test_primary_cockpit_reuses_signal_research_contracts():
     assert '/static/signal-map.js' in html
     assert "signalMap.disclosure" in app
     assert "signalMap.trade" in app
-    assert "Signal research — which readings have earned trust?" in app
+    assert "Which signals have earned trust?" in app
     assert "Used in trading: No" in app
     assert "Open-interest feed" in app
     assert "Collecting only — unused by trading." in app

@@ -1,6 +1,6 @@
 # Current work and handoff
 
-Last reconciled: **2026-09-24**, against the isolated `codex/complete-open-trading-work` worktree and the running application's read-only logs.
+Last reconciled: **2026-09-24** for trading outcomes; the Research-page UX item below was checked on **2026-09-25** against `origin/main` and the running page.
 These are dated observations. Recheck relevant code/runtime state on resumption.
 This file tracks outcomes; `AGENTS.md` owns rules, `CLAUDE.md` owns durable
 lessons, and linked specifications/reports own detail. It is not an exhaustive
@@ -29,6 +29,27 @@ stop-management outcome below remains outstanding and must survive this work.
 | SS-003 | Align research and paper entry plans, costs and filled exposure | Defects verified; remediation proposed by the same audit | Maker price, causal ATR and actual paper fill risk coded and scratch-tested; private maker-to-market conversion still absent, now explicitly refused; not activated |
 | SS-004 | Reduce and measure signal-to-order delay | Audit recommendation | Late-decision guard and recorded intent-to-route timing coded and tested; faster cycle and measured dispatch-time replay comparison remain open |
 | SS-005 | Compare simpler strategy hypotheses using fixed future evidence | Pasted proposal and audit recommendation | Prospective research collector, API and Results card coded and scratch-tested in the isolated branch; no future cohort or account activation yet |
+| SS-007 | Make the Research page understandable without changing research or trading rules | User request, 2026-09-25 | Compact signal and study summaries, drill-downs and setup-record disclosure coded in `codex/research-page-clarity`; browser-verified, not activated |
+
+### SS-007 — Research-page clarity
+
+The running page made traders scroll through five full signal cards, several
+large studies and up to 50 expanded setup records. Most statistical fields
+repeated “Not gradeable” before a trader could see what was being tested.
+The isolated UI change leads with the evidence verdict, uses plain
+present/absent counts for each signal, and groups strategy comparisons and
+setup records behind keyboard-accessible disclosures. Every original study,
+method and record remains available on demand. The work changes no detector,
+grading threshold, setup decision, account setting or routing behavior.
+Section jumps stay on the Research route, and one unavailable study displays
+an explicit failure without erasing other research. Desktop Chromium at
+1440px and mobile WebKit at 390px passed 12 focused browser checks, including
+research interactions, overflow and WCAG 2.1 AA, using the scratch-only
+preview. The full repository gate passed 2,137 Python tests, 13 skipped and
+230 subtests; its JavaScript, ESLint and source-byte checks also passed. The
+JavaScript gate and focused browser checks passed again after the navigation
+and failure-state correction. This branch has not been deployed to the running
+application.
 
 ### SS-006 — indicator research and signal map
 
