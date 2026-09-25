@@ -29,7 +29,7 @@ stop-management outcome below remains outstanding and must survive this work.
 | SS-003 | Align research and paper entry plans, costs and filled exposure | Defects verified; remediation proposed by the same audit | Maker price, causal ATR and actual paper fill risk coded and scratch-tested; private maker-to-market conversion still absent, now explicitly refused; not activated |
 | SS-004 | Reduce and measure signal-to-order delay | Audit recommendation | Late-decision guard and recorded intent-to-route timing coded and tested; faster cycle and measured dispatch-time replay comparison remain open |
 | SS-005 | Compare simpler strategy hypotheses using fixed future evidence | Pasted proposal and audit recommendation | Prospective research collector, API and Results card coded and scratch-tested in the isolated branch; no future cohort or account activation yet |
-| SS-007 | Make the Research page understandable without changing research or trading rules | User request, 2026-09-25 | Compact signal and study summaries, drill-downs and setup-record disclosure merged to `main` in PR #8; browser-verified, running app not yet checked |
+| SS-007 | Make the Research page understandable without changing research or trading rules | User request, 2026-09-25 | Merged in PR #8, restarted and verified in the running paper app on 2026-09-25; research studies remain subject to their own collection state |
 
 ### SS-007 — Research-page clarity
 
@@ -49,8 +49,18 @@ preview. The full repository gate passed 2,137 Python tests, 13 skipped and
 230 subtests; its JavaScript, ESLint and source-byte checks also passed. The
 JavaScript gate and focused browser checks passed again after the navigation
 and failure-state correction. PR #8 merged to `origin/main` as `5d607c4` on
-2026-09-25. The running application has not been restarted or checked against
-this merge; main-source delivery is not evidence of active UI behavior.
+2026-09-25. At the user's request, the operating checkout fast-forwarded to
+`8c09edd` with unrelated staged Graphify edits preserved. The guarded
+`/api/system/restart?target=both` acknowledged both children with no warnings
+at 16:32 ET; the watchdog respawned the server and scanner. A read-only check
+found the server serving the new Research headings and section controls, the
+paper read model at `paperbook-v0.7-draft`, and the scanner heartbeat at
+`live-v0.17-draft`. The running Research page visibly showed the compact five
+signal rows, study disclosures and setup-record disclosure. The breakout,
+stop and zone studies still displayed Paused; this restart does not establish
+their collection or any trading outcome. The older local work-state edit was
+preserved in a stash during the fast-forward; its changed facts were already
+present in main. No trading write endpoint was used for verification.
 
 ### SS-006 — indicator research and signal map
 
