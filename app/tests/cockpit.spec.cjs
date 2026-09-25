@@ -74,8 +74,11 @@ function preview(){return {request:{workspace:'CRYPTO',symbol:'BTCUSDT',tf:'1H',
 
 test('forward trial separates new evidence and expands trade reasons',async({page},info)=>{
   const now=Math.floor(Date.now()/1000);
+  await page.route('**/api/ui/v1/simple-strategy-trial*',route=>route.fulfill({json:{state:'COLLECTING',affects_trading:false,started_at:now-86400,ends_at:now+86400,checked_at:now,arms:{CURRENT:{closed:1,symbols:1,net_usd:'-5',return_pct:'-0.05',max_drawdown_pct:'0.05',mean_r:'-0.05',unresolved:0,by_direction:{LONG:{closed:1,net_usd:'-5'},SHORT:{closed:0,net_usd:'0'}}},CHANNEL:{closed:1,symbols:1,net_usd:'10',return_pct:'0.1',max_drawdown_pct:'0',mean_r:'0.1',unresolved:0,by_direction:{LONG:{closed:1,net_usd:'10'},SHORT:{closed:0,net_usd:'0'}}}},primary:{verdict:'UNKNOWN',minimum_trades_each:30,minimum_symbols_each:8,interval:null}}}));
   await page.route('**/api/ui/v1/forward-trial*',route=>route.fulfill({json:{state:'COLLECTING',started_at:now-86400,checked_at:now,starting_balance:'10000',balance:'10123.45',pnl_usd:'123.45',risk_usd:'100',max_slots:5,counts:{PLACED:1,FILLED:1,CLOSED:1,SKIPPED:1,EXPIRED:0},curve:[{time:now-86400,value:'10000'},{time:now,value:'10123.45'}],items:[{symbol:'BTCUSDT',tf:'15m',observed_at:now,state:'SKIPPED',entry:'100',sl:'98',tp:'104',direction:'LONG',reason:'The trial is already watching a trade in this market.'}]}}));
   await page.goto('/#research');
+  await expect(page.getByRole('heading',{name:'Does a simpler strategy work better?'})).toBeVisible();
+  await expect(page.getByText('Too few completed trades')).toBeVisible();
   await expect(page.locator('.trial-balance')).toHaveText('$10,123.45');
   await expect(page.locator('.trial-curve')).toBeVisible();
   await page.locator('.trial-trade summary').click();

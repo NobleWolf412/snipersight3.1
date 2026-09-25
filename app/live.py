@@ -28,10 +28,10 @@ import notify
 from engine import (automation, autotrader, broker_factory, execution, positions, store,
                     importer, aggregator, execsim, risk, riskpaper, universe, ingest,
                     quality, listings, marketdata, pipeline, venues, cooldowns, funding,
-                    forwardtrial, stopstudy, zonestudy, open_interest, research)
+                    forwardtrial, simpletrial, stopstudy, zonestudy, open_interest, research)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.16-draft"
+LIVE_VERSION = "live-v0.17-draft"
 # v0.12: register research collection boundaries and collect one public Phemex
 # open-interest snapshot on the scan's fixed opening clock. Failures are
 # recorded and never gate importing, setup qualification, sizing or routing.
@@ -553,9 +553,15 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
             forwardtrial.run(con, scan_set)
         except Exception:
             log.exception("Forward strategy trial activation failed")
+    if not simpletrial.exists(con):
+        try:
+            simpletrial.run(con, scan_set, cutoff=now, observed_at=int(time.time()))
+        except Exception:
+            log.exception("Simple strategy comparison activation failed")
     pinned_exec = {key: value for key, value in unresolved_exec.items()
                    if key[0] not in scan_set}
-    trial_pins = forwardtrial.unresolved(con) | stopstudy.unresolved(con) | zonestudy.unresolved(con)
+    trial_pins = (forwardtrial.unresolved(con) | simpletrial.unresolved(con)
+                  | stopstudy.unresolved(con) | zonestudy.unresolved(con))
     # THE BOT'S PAPER BOOK PINS ITS OWN MARKETS. Everything else in this
     # expression is another domain: `unresolved_exec` is the RESEARCH replay,
     # `trial_pins` are the forward studies, and the manual book takes its own
@@ -701,6 +707,10 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
             forwardtrial.run(con, scan_set)
         except Exception:
             log.exception("Forward strategy trial update failed")
+        try:
+            simpletrial.run(con, scan_set, cutoff=now, observed_at=int(time.time()))
+        except Exception:
+            log.exception("Simple strategy comparison update failed")
         try:
             _beat("open interest research")
             open_interest.collect(con, scan, now)
@@ -912,6 +922,10 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
         forwardtrial.run(con, scan_set)
     except Exception:
         log.exception("Forward strategy trial failed; main account processing continues")
+    try:
+        simpletrial.run(con, scan_set, cutoff=now, observed_at=int(time.time()))
+    except Exception:
+        log.exception("Simple strategy comparison failed; account processing is unaffected")
 
     _beat("risk")
     risk.run(con)

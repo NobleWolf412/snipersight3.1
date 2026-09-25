@@ -123,6 +123,25 @@ def test_fill_handoff_records_standalone_stop_and_target_identities():
         ("STOP", "intent-1-sl"), ("TARGET_1", "intent-1-tp1")]
 
 
+def test_later_partial_fill_keeps_vwap_and_never_resets_a_tightened_stop():
+    con = sqlite3.connect(":memory:")
+    p, broker = plan(), LifecycleBroker(exit_role="")
+    execution.enqueue(con, p.intent, plan=p)
+    positions.apply_fill(con, broker, p, Fill(
+        "fill-a", "venue-entry", "BTCUSDT", Decimal("0.004"),
+        Decimal("50000"), Decimal("0.10"), 11))
+    con.execute("UPDATE managed_positions SET stop='50005' WHERE position_id='intent-1'")
+    con.commit()
+    positions.apply_fill(con, broker, p, Fill(
+        "fill-b", "venue-entry", "BTCUSDT", Decimal("0.006"),
+        Decimal("50020"), Decimal("0.15"), 12))
+    quantity, entry, stop = con.execute(
+        "SELECT quantity,entry,stop FROM managed_positions WHERE position_id='intent-1'").fetchone()
+    assert (Decimal(quantity), Decimal(entry), Decimal(stop)) == (
+        Decimal("0.010"), Decimal("50012"), Decimal("50005"))
+    assert con.execute("SELECT count(*) FROM position_events WHERE event='FILL'").fetchone()[0] == 2
+
+
 def test_stop_price_change_replaces_protection_even_at_same_quantity():
     con, broker = prepared()
     calls = []

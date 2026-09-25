@@ -74,17 +74,18 @@ OPERATIONAL_EXPECTED = {
     # off the diff.
     # v0.12 starts public Phemex OI collection at the scan's fixed clock and
     # schedules research-only detectors after account decisions.
-    "live": "live-v0.16-draft",
+    "live": "live-v0.17-draft",
     "profit_protection": "profit-protection-v0.2-draft",
     "open_interest": "open-interest-v0.1-draft",
-    "stopstudy": "stop-study-v0.4-draft",
+    "stopstudy": "stop-study-v0.5-draft",
     # Writes its own `zone_study*` ledger and nothing else — no account
     # order, no fact under another engine's tag. Locked for the reason
     # the other studies are: it freezes DEPENDENCIES and pauses rather
     # than repricing across a rule change, so the tag is what says which
     # rules a stored comparison was made under.
-    "zonestudy": "zone-study-v0.4-draft",
+    "zonestudy": "zone-study-v0.5-draft",
     "forwardtrial": "forward-trial-v0.2-draft",
+    "simpletrial": "simple-trial-v0.1-draft",
     # Not a fact producer: it reads `paper_positions` and the PAPER outbox and
     # returns an account. Locked anyway, for the reason `agg` is — it sits
     # upstream of every paper sizing decision, so a rule change here changes
@@ -138,12 +139,12 @@ OPERATIONAL_EXPECTED = {
     # losses that hurt most.
     # execution-core-v0.9: `intent_key` accepts the attempt, so a retested
     # zone stops inheriting the previous attempt's terminal state.
-    "execution_core": "execution-core-v0.14-draft",
-    "positions": "positions-v0.4-draft",
+    "execution_core": "execution-core-v0.15-draft",
+    "positions": "positions-v0.5-draft",
     # phemex-private-v0.4: the stop (sent on every order) and every target
     # are tick-validated for all order kinds; submit() sets the leverage the
     # plan implies rather than a hardcoded 1x bucket.
-    "phemex_private": "phemex-private-v0.5-draft",
+    "phemex_private": "phemex-private-v0.6-draft",
     "lifecycle": "lifecycle-v0.3-draft",
     # opportunity-v0.6: one HTF policy authority — only the playbook's own
     # recorded bias verdict blocks; CONFLICT/CONDITIONAL are display states
@@ -252,12 +253,13 @@ OPERATIONAL_EXPECTED = {
 
 
 def operational_versions():
-    from engine import opportunities, paperbook, shared_account, forwardtrial, stopstudy, zonestudy
+    from engine import opportunities, paperbook, shared_account, forwardtrial, simpletrial, stopstudy, zonestudy
     return {
         "live": live.LIVE_VERSION,
         "profit_protection": profit_protection.PROFIT_PROTECTION_VERSION,
         "open_interest": open_interest.OPEN_INTEREST_VERSION,
         "forwardtrial": forwardtrial.TRIAL_VERSION,
+        "simpletrial": simpletrial.TRIAL_VERSION,
         "stopstudy": stopstudy.STOP_STUDY_VERSION,
         "zonestudy": zonestudy.ZONE_STUDY_VERSION,
         "paperbook": paperbook.PAPERBOOK_VERSION,
@@ -428,7 +430,7 @@ ATR_CONSUMERS = (
     "structure", "trend", "volatility", "volume", "zones", "shared_account", "forwardtrial", "stopstudy",
     # Imports `swings.compute_atr` and writes facts, so an ATR rule change
     # moves its output without touching a version constant it imports.
-    "zonestudy",
+    "zonestudy", "simpletrial",
 )
 
 

@@ -17,7 +17,7 @@ from . import settings
 from .contracts import ControlOwner, ExecutionPlan, Fill, to_wire
 
 
-POSITION_VERSION = "positions-v0.4-draft"
+POSITION_VERSION = "positions-v0.5-draft"
 PROTECTION_DEADLINE_SECONDS = 5
 RECONCILIATION_MAX_AGE_SECONDS = 60
 CUSTODY_CONFIRMATION_GAP_SECONDS = 5
@@ -316,10 +316,18 @@ def apply_fill(con, broker, plan: ExecutionPlan, fill: Fill) -> dict:
     _ensure(con)
     position_id = plan.intent.intent_id
     row = con.execute(
-        "SELECT quantity,protection_client_id FROM managed_positions WHERE position_id=?",
+        "SELECT quantity,entry,stop,protection_client_id FROM managed_positions WHERE position_id=?",
         (position_id,)).fetchone()
-    quantity = (Decimal(row[0]) if row else Decimal(0)) + fill.quantity
-    prior_protection_client_id = row[1] if row else None
+    prior_quantity = Decimal(row[0]) if row else Decimal(0)
+    quantity = prior_quantity + fill.quantity
+    if fill.quantity <= 0 or quantity <= 0:
+        raise ValueError("entry fill quantity must be positive")
+    entry = ((prior_quantity * Decimal(row[1]) + fill.quantity * fill.price)
+             / quantity) if row else fill.price
+    # A later partial fill must neither erase the weighted entry nor loosen a
+    # protective stop already moved by the pinned profit rule.
+    active_stop = Decimal(row[2]) if row else plan.intent.stop
+    prior_protection_client_id = row[3] if row else None
     now = int(time.time())
     con.execute(
         "INSERT INTO managed_positions(position_id,intent_id,symbol,direction,"
@@ -328,7 +336,7 @@ def apply_fill(con, broker, plan: ExecutionPlan, fill: Fill) -> dict:
         "quantity=excluded.quantity,entry=excluded.entry,stop=excluded.stop,"
         "protection_status='PENDING',state='OPEN',updated_at=excluded.updated_at",
         (position_id, plan.intent.intent_id, fill.symbol, plan.intent.direction,
-         str(quantity), str(fill.price), str(plan.intent.stop), ControlOwner.BOT.value,
+         str(quantity), str(entry), str(active_stop), ControlOwner.BOT.value,
          None, "PENDING", "OPEN", now))
     _event(con, position_id, "FILL", to_wire(fill))
     con.commit()
@@ -343,7 +351,7 @@ def apply_fill(con, broker, plan: ExecutionPlan, fill: Fill) -> dict:
         if not prior_protection_client_id and hasattr(broker, "confirm_attached_protection"):
             attached = broker.confirm_attached_protection(
                 symbol=fill.symbol, direction=plan.intent.direction,
-                quantity=quantity, stop=plan.intent.stop,
+                quantity=quantity, stop=active_stop,
                 client_order_id=f"{position_id[:24]}-sl",
                 timeout_seconds=remaining())
         if remaining() <= 0 and attached is None:
@@ -352,7 +360,7 @@ def apply_fill(con, broker, plan: ExecutionPlan, fill: Fill) -> dict:
         protection = lifecycle.ensure_stop(
             con, broker, position_id=position_id, symbol=fill.symbol,
             direction=plan.intent.direction, quantity=quantity,
-            stop=plan.intent.stop, timeout_seconds=remaining())
+            stop=active_stop, timeout_seconds=remaining())
         confirmed = str(protection.status).upper() in {
             "NEW", "CREATED", "UNTRIGGERED", "OPEN", "PARTIALLYFILLED"}
         if not confirmed or time.monotonic() - start > plan.protection_deadline_seconds:

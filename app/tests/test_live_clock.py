@@ -40,6 +40,9 @@ class LiveClockContract(unittest.TestCase):
              patch.object(live.forwardtrial, "exists", return_value=True), \
              patch.object(live.forwardtrial, "unresolved", return_value={("BTCUSDT", "15m")}), \
              patch.object(live.forwardtrial, "run") as run, \
+             patch.object(live.simpletrial, "exists", return_value=True), \
+             patch.object(live.simpletrial, "unresolved", return_value=set()), \
+             patch.object(live.simpletrial, "run"), \
              patch.object(live.importer, "native_tfs", return_value={"5m": 300}), \
              patch.object(live.importer, "backfill", side_effect=lambda *args, **kwargs: calls.append(args[1]) or {"candles": 0, "gaps": 0}), \
              patch.object(live.ingest, "history_floor", return_value=0), \
@@ -75,6 +78,9 @@ class LiveClockContract(unittest.TestCase):
              patch.object(live.forwardtrial, "exists", return_value=True), \
              patch.object(live.forwardtrial, "unresolved", return_value=set()), \
              patch.object(live.forwardtrial, "run"), \
+             patch.object(live.simpletrial, "exists", return_value=True), \
+             patch.object(live.simpletrial, "unresolved", return_value=set()), \
+             patch.object(live.simpletrial, "run"), \
              patch("engine.manual.unresolved", return_value={}):
             self.assertEqual(live.cycle(_Connection(), Mock()), (0, []))
 
@@ -103,6 +109,9 @@ class LiveClockContract(unittest.TestCase):
              patch.object(live.forwardtrial, "exists", return_value=True), \
              patch.object(live.forwardtrial, "unresolved", return_value=set()), \
              patch.object(live.forwardtrial, "run"), \
+             patch.object(live.simpletrial, "exists", return_value=True), \
+             patch.object(live.simpletrial, "unresolved", return_value=set()), \
+             patch.object(live.simpletrial, "run"), \
              patch.object(live.importer, "native_tfs",
                           return_value={"5m": 300}), \
              patch.object(live.importer, "backfill", side_effect=backfill), \

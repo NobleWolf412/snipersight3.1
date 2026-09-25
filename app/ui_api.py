@@ -452,6 +452,22 @@ def forward_trial(workspace: str = "CRYPTO"):
         con.close()
 
 
+@router.get("/simple-strategy-trial")
+def simple_strategy_trial(workspace: str = "CRYPTO"):
+    from engine import simpletrial
+    if workspace_scope(workspace) != "CRYPTO":
+        return {"state": "UNAVAILABLE", "affects_trading": False,
+                "note": "This comparison uses crypto markets."}
+    con = store.connect()
+    try:
+        con.execute("PRAGMA query_only=ON")
+        con.execute("BEGIN")
+        return simpletrial.report(con)
+    finally:
+        con.rollback()
+        con.close()
+
+
 @router.get("/stop-comparison")
 def stop_comparison(workspace: str = "CRYPTO"):
     from engine import stopstudy

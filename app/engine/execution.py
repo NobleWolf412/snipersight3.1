@@ -19,7 +19,7 @@ from .contracts import (AutomationMode, BrokerExecution, BrokerOrder, DecisionRe
                         RiskDecision, to_wire)
 
 
-EXECUTION_CORE_VERSION = "execution-core-v0.14-draft"
+EXECUTION_CORE_VERSION = "execution-core-v0.15-draft"
 # v0.11: an unfilled partial maker window expires once eligible history is
 # complete. A single pre-deadline bar previously left ZEC pending forever,
 # reserving the sole slot and blocking ETH/UNI after the deadline.
@@ -405,17 +405,38 @@ def monitor_private(con, broker) -> dict:
             (intent_id,)).fetchone()
         recorded_quantity = Decimal(local[0]) if local else Decimal(0)
         delta = order.filled_quantity - recorded_quantity
+        if delta < 0:
+            refused.append({"intent_id": intent_id,
+                            "reason": "venue cumulative fill is below recorded custody"})
+            continue
         if delta > 0:
             fee_rows = con.execute(
                 "SELECT payload FROM position_events WHERE position_id=? AND event='FILL'",
                 (intent_id,)).fetchall() if local else []
-            recorded_fee = sum((Decimal(str(json.loads(x[0]).get("fee") or "0"))
-                                for x in fee_rows), Decimal(0))
-            delta_fee = max(Decimal(0), order.cumulative_fee - recorded_fee)
-            fill_price = order.average_fill_price or order.limit_price or plan.intent.entry
+            prior_fills = [json.loads(x[0]) for x in fee_rows]
+            recorded_fee = sum((Decimal(str(x.get("fee") or "0"))
+                                for x in prior_fills), Decimal(0))
+            if order.cumulative_fee < recorded_fee:
+                refused.append({"intent_id": intent_id,
+                                "reason": "venue cumulative fee is below recorded fills"})
+                continue
+            delta_fee = order.cumulative_fee - recorded_fee
+            if order.average_fill_price is not None:
+                recorded_notional = sum((Decimal(x["quantity"])*Decimal(x["price"])
+                                         for x in prior_fills), Decimal(0))
+                fill_price = (order.filled_quantity*order.average_fill_price
+                              - recorded_notional)/delta
+            elif recorded_quantity == 0:
+                fill_price = order.limit_price or plan.intent.entry
+            else:
+                fill_price = None
             if fill_price is None:
                 refused.append({"intent_id": intent_id,
                                 "reason": "fill price unavailable; protection cannot be audited"})
+                continue
+            if fill_price <= 0:
+                refused.append({"intent_id": intent_id,
+                                "reason": "venue cumulative fill value disagrees with recorded fills"})
                 continue
             fill = Fill(
                 fill_id=f"{order.broker_order_id or order.client_order_id}:{order.filled_quantity}",

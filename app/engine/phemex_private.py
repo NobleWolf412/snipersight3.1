@@ -24,7 +24,7 @@ from . import automation, phemex
 from .contracts import BrokerExecution, BrokerOrder, ExecutionPlan, OrderKind
 
 
-PHEMEX_PRIVATE_VERSION = "phemex-private-v0.5-draft"
+PHEMEX_PRIVATE_VERSION = "phemex-private-v0.6-draft"
 # v0.4: validate_plan tick-checks the STOP for every order kind (submit sends
 # stopLossRp unconditionally, but only LIMIT entries were checked — an
 # off-tick stop on a MARKET order survived to confirm_attached_protection,
@@ -357,7 +357,7 @@ class PhemexBroker:
     def cancel(self, symbol: str, client_order_id: str) -> BrokerOrder:
         result = self._request(
             "DELETE", "/g-orders/cancel",
-            query={"symbol": symbol, "origClOrdID": client_order_id,
+            query={"symbol": symbol, "clOrdID": client_order_id,
                    "posSide": "Merged"})
         return self._order(result.get("data") or {}, fallback_client_id=client_order_id)
 

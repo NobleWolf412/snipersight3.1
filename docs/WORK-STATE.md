@@ -1,6 +1,6 @@
 # Current work and handoff
 
-Last reconciled: **2026-09-24**, against `f3e4830` plus the running read-only application state and isolated worktree changes.
+Last reconciled: **2026-09-24**, against the isolated `codex/complete-open-trading-work` worktree and the running application's read-only logs.
 These are dated observations. Recheck relevant code/runtime state on resumption.
 This file tracks outcomes; `AGENTS.md` owns rules, `CLAUDE.md` owns durable
 lessons, and linked specifications/reports own detail. It is not an exhaustive
@@ -28,7 +28,7 @@ stop-management outcome below remains outstanding and must survive this work.
 | SS-002 | Correct market-specific data failures blocking the entire account | Defect verified; remediation proposed by the September 21 audit | Candidate-scoped gate coded and scratch-tested in an isolated worktree; not activated or account-proven |
 | SS-003 | Align research and paper entry plans, costs and filled exposure | Defects verified; remediation proposed by the same audit | Maker price, causal ATR and actual paper fill risk coded and scratch-tested; private maker-to-market conversion still absent, now explicitly refused; not activated |
 | SS-004 | Reduce and measure signal-to-order delay | Audit recommendation | Late-decision guard and recorded intent-to-route timing coded and tested; faster cycle and measured dispatch-time replay comparison remain open |
-| SS-005 | Compare simpler strategy hypotheses using fixed future evidence | Pasted proposal and audit recommendation | Proposed; no new strategy approved for account routing |
+| SS-005 | Compare simpler strategy hypotheses using fixed future evidence | Pasted proposal and audit recommendation | Prospective research collector, API and Results card coded and scratch-tested in the isolated branch; no future cohort or account activation yet |
 
 ### SS-006 — indicator research and signal map
 
@@ -178,6 +178,38 @@ stop-management outcome below remains outstanding and must survive this work.
   [audit, including profit giveback](BOT-LOSS-AUDIT-2026-09-21.md).
 
 ### SS-002 through SS-005 — audit follow-up
+
+- **2026-09-24 continuation, still isolated:** Private Phemex cancel now uses
+  the venue's `clOrdID` cancel parameter (`phemex-private-v0.6`). Private
+  cumulative partial fills are priced from incremental notional and fee, and
+  a later fill cannot reset a tightened stop or overwrite the weighted entry
+  (`execution-core-v0.15`, `positions-v0.5`). The dependent stop and zone
+  studies moved to v0.5. The separate `simple-trial-v0.1` prospective ledger
+  locks one primary comparison: a prior-20-bar 4H close breakout versus the
+  current 4H pullback/reversal playbooks. Trend pullback/reclaim is exploratory.
+  Each arm has its own $10,000 simulated book, $100 planned price risk,
+  five-slot/cash limits, identical entry/exit cost model and a fixed 90-day
+  window. Observation and fixed candle cutoff are recorded separately;
+  no earlier setups are admitted, fills use only frozen future bars, and
+  neither trial touches account routing. Its main comparison stays UNKNOWN
+  until both groups have at least 30 closed trades and 8 symbols. The Results
+  card shows separate long/short and net outcomes, drawdown and uncertainty.
+  Focused Python checks and desktop/phone Research card browser checks passed
+  with protected POSTs stubbed. The full repository gate passed after the
+  three clock-test fixtures were updated for the new collector: 2,137 Python
+  tests passed, 13 skipped, 230 subtests passed, then JavaScript, ESLint and
+  control-byte checks passed. No running process, account, setting, private
+  order or root store was changed.
+
+- **Remaining after this branch:** SS-004 still misses some 5-minute entry
+  deadlines: read-only scanner logs show roughly 141–168 seconds preparing
+  data and 126–171 seconds in priority analysis on three consecutive cycles,
+  with whole cycles taking 1,000–1,291 seconds because deferred research ran
+  afterward. No measured scheduling improvement has been made yet, so do not
+  call SS-004 complete. SS-003's private maker-wait-to-market conversion still
+  needs a durable two-leg order/cancel/reconcile state machine; the private
+  route refuses such plans today. SS-005's future result cannot exist until
+  a new cohort is activated and observed; passing tests is not proof of edge.
 
 - **2026-09-24 isolated worktree checkpoint:** `codex/complete-open-trading-work`
   contains a candidate-scoped risk gate (`risk-v0.32`, `riskpaper-v0.8`),
