@@ -29,7 +29,7 @@ stop-management outcome below remains outstanding and must survive this work.
 | SS-003 | Align research and paper entry plans, costs and filled exposure | Defects verified; remediation proposed by the same audit | Maker price, causal ATR and actual paper fill risk coded and scratch-tested; private maker-to-market conversion still absent, now explicitly refused; not activated |
 | SS-004 | Reduce and measure signal-to-order delay | Audit recommendation | Late-decision guard and recorded intent-to-route timing coded and tested; faster cycle and measured dispatch-time replay comparison remain open |
 | SS-005 | Compare simpler strategy hypotheses using fixed future evidence | Pasted proposal and audit recommendation | Prospective research collector, API and Results card coded and scratch-tested in the isolated branch; no future cohort or account activation yet |
-| SS-007 | Make the Research page understandable without changing research or trading rules | User request, 2026-09-25 | Compact signal and study summaries, drill-downs and setup-record disclosure coded in `codex/research-page-clarity`; browser-verified, not activated |
+| SS-007 | Make the Research page understandable without changing research or trading rules | User request, 2026-09-25 | Compact signal and study summaries, drill-downs and setup-record disclosure merged to `main` in PR #8; browser-verified, running app not yet checked |
 
 ### SS-007 — Research-page clarity
 
@@ -48,8 +48,9 @@ research interactions, overflow and WCAG 2.1 AA, using the scratch-only
 preview. The full repository gate passed 2,137 Python tests, 13 skipped and
 230 subtests; its JavaScript, ESLint and source-byte checks also passed. The
 JavaScript gate and focused browser checks passed again after the navigation
-and failure-state correction. This branch has not been deployed to the running
-application.
+and failure-state correction. PR #8 merged to `origin/main` as `5d607c4` on
+2026-09-25. The running application has not been restarted or checked against
+this merge; main-source delivery is not evidence of active UI behavior.
 
 ### SS-006 — indicator research and signal map
 
