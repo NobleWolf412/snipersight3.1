@@ -27,7 +27,7 @@ stop-management outcome below remains outstanding and must survive this work.
 | SS-001 | Protect established profit by moving the actual paper account stop, with a visible explanation | Repeated user request; user chose a toggle and paper/private rule parity on 2026-09-24 | Off-by-default cost-cover rule, paper stop changes, private testnet amendment, Settings control and journal history coded and scratch-tested in isolated worktree; not activated or account-proven |
 | SS-002 | Correct market-specific data failures blocking the entire account | Defect verified; remediation proposed by the September 21 audit | Candidate-scoped gate coded and scratch-tested in an isolated worktree; not activated or account-proven |
 | SS-003 | Align research and paper entry plans, costs and filled exposure | Defects verified; remediation proposed by the same audit | Maker price, causal ATR and actual paper fill risk coded and scratch-tested; private maker-to-market conversion still absent, now explicitly refused; not activated |
-| SS-004 | Reduce and measure signal-to-order delay | Audit recommendation | Late-decision guard coded and tested; faster cycle and measured dispatch-time comparison remain open |
+| SS-004 | Reduce and measure signal-to-order delay | Audit recommendation | Late-decision guard and recorded intent-to-route timing coded and tested; faster cycle and measured dispatch-time replay comparison remain open |
 | SS-005 | Compare simpler strategy hypotheses using fixed future evidence | Pasted proposal and audit recommendation | Proposed; no new strategy approved for account routing |
 
 ### SS-006 — indicator research and signal map
@@ -167,7 +167,7 @@ stop-management outcome below remains outstanding and must survive this work.
 - **Implementation checkpoint:** `profit-protection-v0.2`, `settings-v0.3`,
   `contracts-v0.8`, `autotrader-v0.10`, `execution-core-v0.14`,
   `positions-v0.4`, `lifecycle-v0.3`, `phemex-private-v0.5` and
-  `live-v0.15` are coded only in `codex/complete-open-trading-work`.
+  `live-v0.16` are coded only in `codex/complete-open-trading-work`.
   Scratch tests cover Off, on, stop-after-trigger timing, journal history,
   delayed scanner observation, a private testnet amendment and repeated monitoring. No running scanner,
   actual paper book or private order was changed by this branch.
@@ -185,7 +185,10 @@ stop-management outcome below remains outstanding and must survive this work.
   `contracts-v0.8`, `execution-core-v0.14`, `paperbook-v0.7`), and a causal
   prior-closed-bar cross ATR (`exec-v0.30`) with its version cascade. A late
   account decision now logs a missed next-candle deadline and skips new entry
-  dispatch (`live-v0.15`). Existing paper settlement still runs. Private
+  dispatch (`live-v0.16`). The order-latency logger now reads the actual
+  routed row's nested intent id and reports both intent-creation and durable
+  paper-route/private-ack times; its previous top-level lookup produced no
+  production records. Existing paper settlement still runs. Private
   `MAKER_THEN_MARKET` conversion is explicitly refused until implemented; this
   is a visible parity gap, not a matching live execution path. A same-size
   protective stop price change now calls the private replace path

@@ -142,11 +142,16 @@ def test_order_latency_uses_recorded_time_and_matching_version_and_attempt(book)
                  ('key', 'order', 'PAPER', 'setup', 'BTCUSDT',
                   json.dumps({'intent': {'playbook_version': 'fixture', 'attempt_id': 'current'}}),
                   'PAPER_ROUTED', 450, 999))
+    book.execute('INSERT INTO execution_events(intent_id,event,occurred_at,payload) VALUES(?,?,?,?)',
+                 ('order', 'PAPER_ROUTED', 480, '{}'))
     book.commit()
     log = Mock()
     with patch('live.time.time', return_value=9999):
-        live.record_order_latency(book, [{'intent_id': 'order', 'setup_id': 'setup'}], log)
+        live.record_order_latency(book, [{'queue': {'intent_id': 'order'},
+                                          'setup_id': 'setup'}], log)
     event = json.loads(log.info.call_args.args[0].removeprefix('ORDER LATENCY '))
     assert event['confirmed_at'] == 300
-    assert event['order_created_at'] == 450
-    assert event['confirmation_to_order_s'] == 150
+    assert event['intent_created_at'] == 450
+    assert event['confirmation_to_intent_s'] == 150
+    assert event['routed_at'] == 480
+    assert event['confirmation_to_route_s'] == 180

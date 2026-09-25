@@ -74,7 +74,7 @@ OPERATIONAL_EXPECTED = {
     # off the diff.
     # v0.12 starts public Phemex OI collection at the scan's fixed clock and
     # schedules research-only detectors after account decisions.
-    "live": "live-v0.15-draft",
+    "live": "live-v0.16-draft",
     "profit_protection": "profit-protection-v0.2-draft",
     "open_interest": "open-interest-v0.1-draft",
     "stopstudy": "stop-study-v0.4-draft",

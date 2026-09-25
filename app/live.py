@@ -31,7 +31,7 @@ from engine import (automation, autotrader, broker_factory, execution, positions
                     forwardtrial, stopstudy, zonestudy, open_interest, research)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.15-draft"
+LIVE_VERSION = "live-v0.16-draft"
 # v0.12: register research collection boundaries and collect one public Phemex
 # open-interest snapshot on the scan's fixed opening clock. Failures are
 # recorded and never gate importing, setup qualification, sizing or routing.
@@ -463,10 +463,17 @@ def execution_rebuild_work(con) -> dict[tuple[str, str], list[dict]]:
 
 
 def record_order_latency(con, routed, log):
-    """Order-time evidence, distinct from candle time and total scan duration."""
+    """Measure each recorded handoff, rather than timing the log call.
+
+    A routed row carries its intent id inside ``queue``.  Looking only for a
+    top-level id made this log silently empty in ordinary scan cycles.
+    """
     for row in routed:
-        order = con.execute('SELECT created_at,payload FROM execution_outbox WHERE intent_id=?',
-                            (row.get('intent_id'),)).fetchone()
+        intent_id = row.get('intent_id') or (row.get('queue') or {}).get('intent_id')
+        if not intent_id:
+            continue
+        order = con.execute('SELECT created_at,payload,mode FROM execution_outbox WHERE intent_id=?',
+                            (intent_id,)).fetchone()
         if not order:
             continue
         wire = json.loads(order[1])
@@ -478,11 +485,20 @@ def record_order_latency(con, routed, log):
             "ORDER BY confirmed_at,id LIMIT 1",
             (row.get('setup_id'), intent.get('playbook_version'),
              intent.get('attempt_id'), intent.get('attempt_id'))).fetchone()
-        if order and setup:
+        if setup:
+            routed_at = con.execute(
+                "SELECT occurred_at FROM execution_events WHERE intent_id=? "
+                "AND event=? ORDER BY id LIMIT 1",
+                (intent_id, 'PAPER_ROUTED' if order[2] == 'PAPER'
+                 else 'SUBMITTED')).fetchone()
             log.info('ORDER LATENCY ' + json.dumps(dict(
-                intent_id=row['intent_id'], symbol=setup[0], timeframe=setup[1],
-                confirmed_at=setup[2], order_created_at=order[0],
-                confirmation_to_order_s=order[0]-setup[2]), sort_keys=True))
+                intent_id=intent_id, mode=order[2], symbol=setup[0],
+                timeframe=setup[1], confirmed_at=setup[2],
+                intent_created_at=order[0],
+                confirmation_to_intent_s=order[0]-setup[2],
+                routed_at=routed_at[0] if routed_at else None,
+                confirmation_to_route_s=(routed_at[0]-setup[2]
+                                         if routed_at else None)), sort_keys=True))
 
 
 def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
