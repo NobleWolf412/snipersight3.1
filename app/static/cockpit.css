@@ -134,3 +134,8 @@
 .plan-checks span{color:var(--green)}
 .badge.good{background:#21372f;color:var(--green)}
 @media (min-width:720px){.factor-row{grid-template-columns:1fr auto;align-items:center}}
+
+/* Recent closes fold out of the trades card only when nothing is open. */
+.recent-closes{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.recent-closes>summary{cursor:pointer;font-weight:600;padding:12px 0}
+.recent-closes .text-link{display:inline-block;margin-top:8px}
