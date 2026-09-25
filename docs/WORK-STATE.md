@@ -202,7 +202,8 @@ stop-management outcome below remains outstanding and must survive this work.
   390px phone using a scratch-only preview with protected POSTs stubbed.
   The full gate was rerun after the observation-time fix and passed on
   2026-09-24. No live account, process, settings or route was changed.
-  Verify real scan timing before closing SS-004.
+  Verify real scan timing before closing SS-004. The isolated branch is
+  committed and pushed as draft PR #7; it has not been merged or activated.
 
 The [September 21 audit](BOT-LOSS-AUDIT-2026-09-21.md) owns the evidence,
 limitations and proposed repair order. Its recommendations are not an accepted
