@@ -224,9 +224,23 @@ test('paper risk setting sends the user percentage and current account guard',as
   await expect(page.locator('#account-risk')).toHaveValue('0.75');
 });
 
+test('profit protection is an explicit new-trade toggle at desktop and phone sizes',async({page})=>{
+  await page.route('**/api/settings',route=>route.fulfill({json:{values:{profit_protection_cost_cover:false},spec:[],history:[]}}));
+  await page.goto('/#settings');
+  const toggle=page.getByRole('checkbox',{name:/Move the stop to cover estimated costs/});
+  await expect(toggle).toBeVisible();
+  await expect(toggle).not.toBeChecked();
+  await toggle.check();
+  await page.getByRole('button',{name:'Save profit protection'}).click();
+  await expect(page.getByRole('dialog')).toContainText('Open trades keep their recorded choice');
+  await expect(page.getByRole('dialog')).toContainText('new forward results window');
+  await page.getByRole('button',{name:'Keep as is'}).click();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+});
+
 
 test('journal details are directly reachable and older history is tucked away',async({page})=>{
-  const trade={intent_id:'test-order',symbol:'LINKUSDT',direction:'LONG',timeframe:'1H',origin:'BOT',controller:'BOT',outcome:'SL',r_multiple:'-1',grade_eligible:true};
+  const trade={intent_id:'test-order',symbol:'LINKUSDT',direction:'LONG',timeframe:'1H',origin:'BOT',controller:'BOT',outcome:'SL',r_multiple:'-1',grade_eligible:true,planned_stop:'98',stop:'100.2',profit_protection:'COST_COVER',stop_history:[{effective_at:1789401600,stop:'100.2',reason:'COST_COVER_AFTER_1R'}]};
   await page.route('**/api/ui/v1/journal?*',route=>route.fulfill({json:{items:[trade],scope:'EXECUTED_ACCOUNT',note:'Recorded paper trades.'}}));
   await page.route('**/api/ui/v1/trades/test-order/diagnosis?*',route=>route.fulfill({json:{trade,facts:[],limits:''}}));
   await page.goto('/#journal');
@@ -235,6 +249,8 @@ test('journal details are directly reachable and older history is tucked away',a
   await expect(page.getByRole('button',{name:'View older accounts'})).toBeHidden();
   await button.click();
   await expect(page.getByRole('heading',{name:'LINKUSDT · Trade details'})).toBeVisible();
+  await expect(page.getByRole('dialog')).toContainText('Actual protective stop');
+  await expect(page.getByRole('dialog')).toContainText('stop tightened to 100.2');
   expect(await page.locator('.trade-list').evaluate(node=>node.scrollWidth<=node.clientWidth)).toBeTruthy();
 });
 

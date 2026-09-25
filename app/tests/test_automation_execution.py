@@ -1,4 +1,5 @@
 import sqlite3
+import json
 from decimal import Decimal
 from unittest import mock
 
@@ -283,6 +284,10 @@ def test_paper_entry_uses_shared_maker_then_market_fill_authority():
     ).fetchone()[0]
     assert '"entry_model": "MAKER_THEN_MARKET"' in fill
     assert '"entry_role": "TAKER"' in fill
+    evidence = json.loads(fill)
+    assert evidence["over_plan_risk"] is False
+    assert Decimal(evidence["filled_risk_usd"]) == (
+        paper_plan.intent.quantity * Decimal("2000"))
 
 
 @pytest.mark.parametrize('touch,missing', [(False,False),(True,False),(False,True)])

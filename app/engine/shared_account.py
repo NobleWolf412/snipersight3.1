@@ -18,7 +18,7 @@ from . import execution, paperbook, risk, settings, cooldowns
 from .contracts import (AutomationMode, DecisionReason, ExecutionPlan, OrderIntent,
                         OrderKind, RiskDecision, to_wire)
 
-SHARED_ACCOUNT_VERSION = "shared-account-v0.2-draft"
+SHARED_ACCOUNT_VERSION = "shared-account-v0.3-draft"
 PROFILE_VERSION = "shared-paper-profile-v0.2-draft"
 TERMINAL = ("PAPER_CLOSED", "PAPER_EXPIRED", "CANCELLED", "RISK_REJECTED",
             "HELD_OFF", "REJECTED", "CLOSED", "ORDER_LIFECYCLE_COMPLETE")

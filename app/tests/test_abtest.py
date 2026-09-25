@@ -132,7 +132,7 @@ class SimulatorConventions(unittest.TestCase):
                                  "paired delta must be the exit rule, not the fill")
 
     def test_research_version_names_the_new_execution_convention(self):
-        self.assertEqual(abtest.ABTEST_VERSION, "abtest-v0.7")
+        self.assertEqual(abtest.ABTEST_VERSION, "abtest-v0.8")
         # The convention itself lives in the ENGINE now, so the harness tag
         # alone no longer identifies it. abtest-v0.5 and exec-v0.26 moved
         # together FOR THAT. v0.6 then moved alone, for calibration scoping,
@@ -142,7 +142,7 @@ class SimulatorConventions(unittest.TestCase):
         # this harness computes its own ATR, so its replay follows the engine.
         # v0.28 changes setup/scale input generations; settlement arithmetic
         # used by this harness is unchanged (2bc49cf).
-        self.assertEqual(execsim.EXEC_VERSION, "exec-v0.29-draft")
+        self.assertEqual(execsim.EXEC_VERSION, "exec-v0.30-draft")
 
     def test_same_bar_stop_and_target_counts_as_the_stop(self):
         """The metric this whole version moves is the same-bar stop-out rate.

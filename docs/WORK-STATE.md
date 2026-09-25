@@ -1,6 +1,6 @@
 # Current work and handoff
 
-Last reconciled: **2026-09-23**, against `ecd475d` plus local implementation changes.
+Last reconciled: **2026-09-24**, against `f3e4830` plus the running read-only application state and isolated worktree changes.
 These are dated observations. Recheck relevant code/runtime state on resumption.
 This file tracks outcomes; `AGENTS.md` owns rules, `CLAUDE.md` owns durable
 lessons, and linked specifications/reports own detail. It is not an exhaustive
@@ -23,11 +23,11 @@ stop-management outcome below remains outstanding and must survive this work.
 
 | ID | Outcome | Request basis | Delivery |
 |---|---|---|---|
-| SS-006 | Collect five locked detector hypotheses as point-in-time research and expose their unscored confluence and graded results | User specification, 2026-09-22 | Implemented, verified and activated forward-only under the supervised scanner; first post-activation collection cycle pending |
-| SS-001 | Protect established profit by moving the actual paper account stop, with a visible explanation | Repeated user request; outcome accepted, exact active policy unresolved | Incomplete; research and charting exist, account stop remains fixed |
-| SS-002 | Correct market-specific data failures blocking the entire account | Defect verified; remediation proposed by the September 21 audit | Not implemented |
-| SS-003 | Align research and paper entry plans, costs and filled exposure | Defects verified; remediation proposed by the same audit | Not implemented |
-| SS-004 | Reduce and measure signal-to-order delay | Audit recommendation | Not implemented |
+| SS-006 | Collect five locked detector hypotheses as point-in-time research and expose their unscored confluence and graded results | User specification, 2026-09-22 | Implemented, verified and activated forward-only; collection is healthy and waiting for future closed trades |
+| SS-001 | Protect established profit by moving the actual paper account stop, with a visible explanation | Repeated user request; user chose a toggle and paper/private rule parity on 2026-09-24 | Off-by-default cost-cover rule, paper stop changes, private testnet amendment, Settings control and journal history coded and scratch-tested in isolated worktree; not activated or account-proven |
+| SS-002 | Correct market-specific data failures blocking the entire account | Defect verified; remediation proposed by the September 21 audit | Candidate-scoped gate coded and scratch-tested in an isolated worktree; not activated or account-proven |
+| SS-003 | Align research and paper entry plans, costs and filled exposure | Defects verified; remediation proposed by the same audit | Maker price, causal ATR and actual paper fill risk coded and scratch-tested; private maker-to-market conversion still absent, now explicitly refused; not activated |
+| SS-004 | Reduce and measure signal-to-order delay | Audit recommendation | Late-decision guard coded and tested; faster cycle and measured dispatch-time comparison remain open |
 | SS-005 | Compare simpler strategy hypotheses using fixed future evidence | Pasted proposal and audit recommendation | Proposed; no new strategy approved for account routing |
 
 ### SS-006 — indicator research and signal map
@@ -123,10 +123,15 @@ stop-management outcome below remains outstanding and must survive this work.
   research read model then reported `research-observation-v0.2-draft`. That
   restart is the v0.2 activation boundary. A first attempt restarted on the
   old code because an uncommitted local work-log edit blocked the pull.
-- **Remaining:** confirm the first completed post-activation scan persisted OI
-  and detector observations. Exploratory variants need separately locked
-  detector definitions before collection; they remain visible as uncollected
-  and cannot receive a research verdict.
+- **Current collection:** a read-only check on 2026-09-24 confirmed the v0.2
+  research read model, 124 fresh Phemex OI contracts with no failed or missing
+  collection attempts, and current BTCUSDT 1H order-block, sequence, hidden-
+  divergence, Stoch-RSI and OI series. The five grade cohorts remain at zero
+  because no qualifying setup snapshot has yet reached a closed trade under the
+  new forward-only versions; this is expected collection time, not unfinished
+  implementation. Exploratory variants need separately locked detector
+  definitions before collection; they remain visible as uncollected and cannot
+  receive a research verdict.
 
 ### SS-001 — actual profit protection
 
@@ -136,32 +141,65 @@ stop-management outcome below remains outstanding and must survive this work.
   smaller-timeframe structure and defended zones. On September 21 the user
   reiterated that this had been raised several times. These establish the
   outcome; they do not resolve every later strategy parameter.
-- **Verified reality:** `execution.monitor_paper` passes `intent.stop` to the
-  fixed `execsim.walk_exit`. `tradevisuals.excursion` supplies a retrospective
-  chart marker. `stopstudy` and `zonestudy` simulate alternatives in separate
-  ledgers and do not adjust actual account protection. The September 21 read
-  found both comparisons paused following dependency changes.
-- **Decision still open:** which rule becomes the actual account policy, its
-  activation trigger, management timeframe and application to existing trades.
-  The +1R cost-cover rule and defended-zone/swing alternatives are documented
-  research hypotheses, not proof of a selected production setting. Do not
-  invent agreement or re-ask the user to restate the entire objective; resolve
-  the specific policy from its source discussion/design and current evidence.
+- **Prior verified reality:** `execution.monitor_paper` passed `intent.stop` to
+  the fixed `execsim.walk_exit`; `tradevisuals.excursion` was retrospective.
+  `stopstudy` and `zonestudy` remain separate simulations and do not adjust
+  account protection. Their existing stored comparisons pause when pinned
+  dependencies no longer match.
+- **2026-09-24 decision:** the user wants paper and future live to share the
+  rule and asked for a toggle. The isolated branch implements **Off** by
+  default or **cost cover after +1R** on new bot intents. The intent pins the
+  choice, so a later Settings change leaves existing trades alone. One full
+  parent candle must survive; the confirmation candle must reach +1R and
+  close beyond the proposed stop; missing ATR leaves the stop unchanged. A
+  paper move takes effect no earlier than the next candle after the scanner
+  actually observes the trigger; a late scan cannot backdate protection.
+  Private custody uses the same
+  candidate calculation, rounded to an exchange tick, and records a move only
+  after the broker confirms the requested stop. The live router remains locked.
+  Swing and defended-zone policies remain unselected research alternatives.
 - **Acceptance:** the chosen rule updates actual paper protective state when
   its causal trigger occurs, never loosens a stop, records reason and effective
   time, survives restart without duplicate adjustments, and shows the active
   stop/history in the journal. Verify costs, delayed processing, adverse gaps,
   trades that later recover, and isolation from simulated study results using
   scratch stores. Runtime activation remains a separate claim to verify safely.
-- **Next:** trace the existing study rules into a bounded account-management
-  implementation brief, explicitly settle the unresolved policy, and carry the
-  agreed behavior through implementation and verification. Do not close this
-  item because the comparisons or their charts work.
+- **Implementation checkpoint:** `profit-protection-v0.2`, `settings-v0.3`,
+  `contracts-v0.8`, `autotrader-v0.10`, `execution-core-v0.14`,
+  `positions-v0.4`, `lifecycle-v0.3`, `phemex-private-v0.5` and
+  `live-v0.15` are coded only in `codex/complete-open-trading-work`.
+  Scratch tests cover Off, on, stop-after-trigger timing, journal history,
+  delayed scanner observation, a private testnet amendment and repeated monitoring. No running scanner,
+  actual paper book or private order was changed by this branch.
+- **Next:** activate only through an ordinary reviewed rollout,
+  and confirm an actual forward paper stop movement before closing SS-001.
 - **References:** [stop comparison](FORWARD-STOP-COMPARISON.md),
   [defended-zone design](DEFENDED-ZONE-STOP-PLAN.md),
   [audit, including profit giveback](BOT-LOSS-AUDIT-2026-09-21.md).
 
 ### SS-002 through SS-005 — audit follow-up
+
+- **2026-09-24 isolated worktree checkpoint:** `codex/complete-open-trading-work`
+  contains a candidate-scoped risk gate (`risk-v0.32`, `riskpaper-v0.8`),
+  actual maker-limit routing and paper fill risk (`opportunity-v0.11`,
+  `contracts-v0.8`, `execution-core-v0.14`, `paperbook-v0.7`), and a causal
+  prior-closed-bar cross ATR (`exec-v0.30`) with its version cascade. A late
+  account decision now logs a missed next-candle deadline and skips new entry
+  dispatch (`live-v0.15`). Existing paper settlement still runs. Private
+  `MAKER_THEN_MARKET` conversion is explicitly refused until implemented; this
+  is a visible parity gap, not a matching live execution path. A same-size
+  protective stop price change now calls the private replace path
+  (`lifecycle-v0.3`); the new optional rule uses that path on testnet only
+  after venue custody matches. The new rule has not been activated.
+  Existing forward trials and stop studies retain their old stored dependency
+  pins and will pause; newly created scratch cohorts use the new versions.
+  The fixed tree passed 2,127 Python tests, 13 skipped, 230 subtests and the
+  JavaScript, lint and control-byte checks. Four focused browser checks of the
+  Settings toggle and actual-stop Journal detail passed at 1440px desktop and
+  390px phone using a scratch-only preview with protected POSTs stubbed.
+  The full gate was rerun after the observation-time fix and passed on
+  2026-09-24. No live account, process, settings or route was changed.
+  Verify real scan timing before closing SS-004.
 
 The [September 21 audit](BOT-LOSS-AUDIT-2026-09-21.md) owns the evidence,
 limitations and proposed repair order. Its recommendations are not an accepted
@@ -182,9 +220,11 @@ its specific scope before treating it as authority for a new recommendation.
 
 ## Checkpoint
 
-- **Trading application:** SS-006 adds research collection, read models, APIs and
-  UI only. It does not alter setup score, eligibility, order plan, risk, sizing
-  or routing. No order, setting, account stop or live process was changed.
+- **Trading application:** SS-006 itself remains research-only and does not
+  alter setup score, eligibility, order plan, risk, sizing or routing. The
+  separate SS-001 through SS-004 work above changes prospective trading rules
+  only in an isolated worktree. No live account, setting, stop or process was
+  changed by that work.
 - **Continuity files:** repository skill, startup/handoff instructions, this
   ledger and durable communication lessons written. Serena contains an entrypoint
   pointer only. Both skill entrypoints passed `quick_validate.py`; nine text

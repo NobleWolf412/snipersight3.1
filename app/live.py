@@ -31,7 +31,7 @@ from engine import (automation, autotrader, broker_factory, execution, positions
                     forwardtrial, stopstudy, zonestudy, open_interest, research)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.12-draft"
+LIVE_VERSION = "live-v0.15-draft"
 # v0.12: register research collection boundaries and collect one public Phemex
 # open-interest snapshot on the scan's fixed opening clock. Failures are
 # recorded and never gate importing, setup qualification, sizing or routing.
@@ -180,6 +180,11 @@ CANDLE_GRID_S = 300
 # slower than this is not lost — the next heartbeat tick retries within 60s,
 # exactly as before this change.
 CANDLE_FINALIZATION_S = 5
+
+
+def decision_deadline(cycle_cutoff: int) -> int:
+    """The next candle boundary; an entry after it belongs to another scan."""
+    return cycle_cutoff - cycle_cutoff % CANDLE_GRID_S + CANDLE_GRID_S
 
 
 def next_wake(now: float, poll: float = POLL_SECONDS,
@@ -497,6 +502,7 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
     started = time.monotonic()
     stages = {}
     now = int(time.time())
+    entry_deadline = decision_deadline(now)
     new_candles = 0
     # SCAN covers traded + shadow symbols; only the traded ones can reach the
     # risk authority. `admitted_at` gates every sizing decision on ADMITTED
@@ -735,7 +741,7 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
     dispatch_started = time.monotonic()
     _beat("autonomous intents")
     try:
-        execution.monitor_paper(con)
+        execution.monitor_paper(con, cutoff=now)
         # ORDER MATTERS, and it is the whole reason this sits here rather than
         # beside the research risk pass. `monitor_paper` fills, closes and
         # settles the paper book; the paper risk authority sizes against the
@@ -790,7 +796,23 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
             if not reconciliation["matched"]:
                 log.error("private custody reconciliation blocked new entries: "
                           + json.dumps(reconciliation, sort_keys=True))
-        routed = autotrader.run(con, broker=private_broker)
+            else:
+                protected = positions.protect_profit(con, private_broker,
+                                                     cutoff=now)
+                if protected["refused"]:
+                    log.warning("private profit protection unresolved: " +
+                                json.dumps(protected["refused"][:5], sort_keys=True))
+        decision_clock = int(time.time())
+        if decision_clock >= entry_deadline:
+            stages["entry_deadline_miss_s"] = decision_clock - entry_deadline
+            log.warning("SCAN DEADLINE MISSED " + json.dumps({
+                "cutoff": now, "deadline": entry_deadline,
+                "decision_at": decision_clock,
+                "miss_s": decision_clock - entry_deadline,
+                "new_entries_skipped": True}, sort_keys=True))
+            routed = {"mode": active_mode.value, "routed": [], "refused": []}
+        else:
+            routed = autotrader.run(con, broker=private_broker)
         try:
             record_order_latency(con, routed['routed'], log)
         except Exception as exc:

@@ -4082,6 +4082,7 @@ weighed in. Name the facts you used.`;
     strategy_pullback: 'Pullback playbook',
     strategy_reversal: 'Reversal playbook',
     strategy_scale_in: 'Scale-in adds',
+    profit_protection_cost_cover: 'Protect profit after a +1R move',
     strategy_breakout_retest: 'Breakout-retest playbook',
     strategy_range_fade: 'Range-fade playbook',
     max_drawdown_pct: 'Halt if equity falls this far below its peak',

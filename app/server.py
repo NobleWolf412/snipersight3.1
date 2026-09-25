@@ -647,12 +647,16 @@ def _paper_trace(con, setup_id: str) -> dict:
         intents = []
     seen = {str(row[1] or "").upper() for row in intents}
     events: dict[str, dict] = {}
+    stop_history = []
     position = None
     if intents:
         intent_id = intents[-1][0]
         for event, occurred_at, raw in con.execute(
                 "SELECT event,occurred_at,payload FROM execution_events "
                 "WHERE intent_id=? ORDER BY id", (intent_id,)):
+            if event == "PAPER_STOP_MOVED":
+                stop_history.append({"recorded_at": occurred_at,
+                                     **json.loads(raw)})
             events[str(event).upper()] = {"at": occurred_at,
                                           "payload": json.loads(raw)}
         seen |= set(events)
@@ -664,6 +668,7 @@ def _paper_trace(con, setup_id: str) -> dict:
             position = dict(zip(
                 ("state", "entry", "stop", "target", "exit_price", "outcome",
                  "r_multiple", "entry_role", "filled_at", "closed_at"), row))
+            position["stop_history"] = stop_history
 
     stages = [_trace_stage(
         "PAPER_RISK", "Paper account approved it",

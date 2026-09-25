@@ -17,7 +17,8 @@ from . import aggregator, importer, listings, venues
 # stale near the end of every cycle (measured: 640 s cycles vs a 600 s bar).
 STALE_FLOOR_S = 1800
 
-QUALITY_VERSION = "quality-v0.8-draft"
+QUALITY_VERSION = "quality-v0.9-draft"
+# v0.9: audits the new exec-v0.30 and risk-v0.32 generations.
 # v0.8: `evaluation_allowed` — the switch `risk.decide` reads — counts only
 # blocking findings on markets the book can actually trade, plus every
 # store-wide one. It was `status != "BLOCKED"`, so a hole on any of 600+ stored

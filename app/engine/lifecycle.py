@@ -16,7 +16,7 @@ from . import settings
 from .contracts import BrokerExecution, BrokerOrder, ControlOwner, to_wire
 
 
-LIFECYCLE_VERSION = "lifecycle-v0.1-draft"
+LIFECYCLE_VERSION = "lifecycle-v0.3-draft"
 EVIDENCE_SCHEMA = "testnet-lifecycle-v1"
 FLAT_CONFIRMATION_GAP_SECONDS = 5
 ACTIVE = {"NEW", "CREATED", "UNTRIGGERED", "OPEN", "PARTIALLYFILLED",
@@ -103,7 +103,7 @@ def ensure_stop(con, broker, *, position_id: str, symbol: str,
     _ensure(con)
     client_id = f"{position_id[:24]}-sl"[:40]
     row = con.execute(
-        "SELECT broker_order_id,quantity,state FROM lifecycle_orders "
+        "SELECT broker_order_id,quantity,state,price FROM lifecycle_orders "
         "WHERE position_id=? AND role='STOP'", (position_id,)).fetchone()
     if row and _status(row[2]) == "SUBMITTING":
         recovered = broker.order_status(symbol, client_id, row[0])
@@ -117,7 +117,9 @@ def ensure_stop(con, broker, *, position_id: str, symbol: str,
         raise LifecycleBlocked("protective stop state is not definitive")
     if row and _status(current.status) in TERMINAL:
         raise LifecycleBlocked("a late fill arrived after the protective stop terminated")
-    if row and Decimal(row[1]) == quantity and _status(current.status) in ACTIVE:
+    if row and Decimal(row[1]) == quantity and row[3] is not None and \
+            Decimal(row[3]) == stop and _status(current.status) in ACTIVE and \
+            (current.stop_price is None or current.stop_price == stop):
         order = current
         if order is None:
             raise LifecycleBlocked("protective stop acceptance is not definitive")

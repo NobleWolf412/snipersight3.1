@@ -123,6 +123,25 @@ def test_fill_handoff_records_standalone_stop_and_target_identities():
         ("STOP", "intent-1-sl"), ("TARGET_1", "intent-1-tp1")]
 
 
+def test_stop_price_change_replaces_protection_even_at_same_quantity():
+    con, broker = prepared()
+    calls = []
+    original = broker.replace
+
+    def replace(symbol, client_order_id, **kwargs):
+        calls.append((symbol, client_order_id, kwargs))
+        return original(symbol, client_order_id, **kwargs)
+
+    broker.replace = replace
+    lifecycle.ensure_stop(
+        con, broker, position_id="intent-1", symbol="BTCUSDT",
+        direction="LONG", quantity=Decimal("0.010"), stop=Decimal("50020"))
+    assert len(calls) == 1
+    assert calls[0][2]["stop"] == Decimal("50020")
+    assert con.execute("SELECT price FROM lifecycle_orders WHERE position_id='intent-1' "
+                       "AND role='STOP'").fetchone()[0] == "50020"
+
+
 @pytest.mark.parametrize("exit_role,expected", [
     ("TARGET_1", "52000"), ("STOP", "49000")])
 def test_known_exit_receipt_cleanup_and_two_flat_polls_earn_one_lifecycle(

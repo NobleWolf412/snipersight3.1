@@ -27,7 +27,9 @@ from .setups import SETUP_VERSION
 from .swings import compute_atr
 from .runlog import RunRecorder
 
-EXEC_VERSION = "exec-v0.29-draft"
+EXEC_VERSION = "exec-v0.30-draft"
+# v0.30: a maker order's eventual market cross uses ATR from the last
+# completed bar, never the crossing candle's later high/low.
 # v0.28: simulates setup-v0.23 plans, and reads SCALE_VERSION. An add's
 # setup_id is f"{parent}|ADD{n}" and embeds no scale tag, so a scale bump
 # alone would leave two generations of ADD exec facts sharing one
@@ -445,7 +447,8 @@ def simulate_entry(candles, atr, order_i, entry, sl, long, *, entry_model,
             fill_i = wait_end
             entry_role = "TAKER"
             entry, slipped = cross_fill(candles, fill_i, long,
-                                        atr[fill_i], profile)
+                                        atr[fill_i - 1] if fill_i else None,
+                                        profile)
             if not slipped:
                 note = (f"cross slippage NOT applied at bar "
                         f"{candles[fill_i]['open_ts']} (no ATR);")

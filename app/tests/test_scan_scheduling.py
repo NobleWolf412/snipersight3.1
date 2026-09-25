@@ -18,13 +18,14 @@ def book(tmp_path):
     con.close()
 
 
-def run_cycle(con, new_candles, paper_pins=None):
+def run_cycle(con, new_candles, paper_pins=None, *, late=False):
     events = []
+    clock = {"now": 100000}
     with ExitStack() as stack:
         def stub(target, **kw):
             return stack.enter_context(patch(target, **kw))
 
-        stub('live.time.time', return_value=100000)
+        stub('live.time.time', side_effect=lambda: clock["now"])
         stub('live.universe.scan_symbols', return_value=['BTCUSDT', 'ETHUSDT'])
         stub('live.universe.all_tracked_symbols', return_value=[])
         stub('live.execsim.unresolved', return_value={})
@@ -43,9 +44,16 @@ def run_cycle(con, new_candles, paper_pins=None):
         stub('live.aggregator.aggregate')
         stub('live.pipeline.run_symbol', side_effect=lambda c, s, **kw:
              events.append(('deferred' if kw.get('deferred') else 'priority', s)) or {'blocked': None})
-        stub('live.execution.monitor_paper', side_effect=lambda c: events.append('monitor'))
-        stub('live.riskpaper.run', side_effect=lambda c:
-             events.append('paper_risk') or {'written': 0, 'unpriced_intents': 0})
+        def paper_monitor(c, *, cutoff):
+            assert cutoff == 100000, 'paper cutoff moved'
+            events.append('monitor')
+        stub('live.execution.monitor_paper', side_effect=paper_monitor)
+        def paper_risk(c):
+            events.append('paper_risk')
+            if late:
+                clock["now"] = live.decision_deadline(100000) + 1
+            return {'written': 0, 'unpriced_intents': 0}
+        stub('live.riskpaper.run', side_effect=paper_risk)
         stub('live.risk.run', side_effect=lambda c: events.append('research_risk'))
         stub('live.automation.current', return_value=(live.automation.AutomationMode.PAPER, 0))
         stub('live.positions.private_environments_with_exposure', return_value=set())
@@ -74,6 +82,13 @@ def test_idle_import_still_checks_existing_orders(book):
     events = run_cycle(book, new_candles=0, paper_pins={'BTCUSDT'})
     assert events.index('monitor') > events.index(('priority', 'BTCUSDT'))
     assert events.index('monitor') < events.index('paper_risk')
+
+
+def test_deadline_miss_keeps_settlement_but_refuses_new_dispatch(book):
+    events = run_cycle(book, new_candles=1, late=True)
+    assert 'monitor' in events and 'paper_risk' in events
+    assert 'dispatch' not in events
+    assert live.decision_deadline(100000) == 100200
 
 
 def test_retired_paper_market_refreshes_settlement_inputs_before_monitor(book):

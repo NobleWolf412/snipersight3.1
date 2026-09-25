@@ -17,7 +17,7 @@ from . import settings
 from .contracts import ControlOwner, ExecutionPlan, Fill, to_wire
 
 
-POSITION_VERSION = "positions-v0.3-draft"
+POSITION_VERSION = "positions-v0.4-draft"
 PROTECTION_DEADLINE_SECONDS = 5
 RECONCILIATION_MAX_AGE_SECONDS = 60
 CUSTODY_CONFIRMATION_GAP_SECONDS = 5
@@ -493,3 +493,120 @@ def managed(con, *, include_closed: bool = False) -> list[dict]:
         "setup_id": setup_id(row[1]),
         "version": POSITION_VERSION,
     } for row in rows]
+
+
+def protect_profit(con, broker, *, cutoff: int) -> dict:
+    """Amend bot-owned private stops from the pinned closed-candle rule.
+
+    Call only after current venue custody reconciles.  Unknown bars, ATR,
+    instrument ticks or broker acknowledgements leave the existing stop in
+    place and return a visible refusal.  No account setting is read here.
+    """
+    from . import execution, importer, lifecycle, profit_protection
+    from .swings import compute_atr
+
+    _ensure(con)
+    observed_at = int(time.time())
+    rows = con.execute(
+        "SELECT p.position_id,p.symbol,p.direction,p.quantity,p.entry,p.stop,"
+        "p.owner,p.protection_status,o.payload FROM managed_positions p "
+        "JOIN execution_outbox o ON o.intent_id=p.intent_id "
+        "WHERE p.state='OPEN' AND o.mode IN ('TESTNET','LIVE') "
+        "ORDER BY p.position_id").fetchall()
+    moved, refused = [], []
+    for pid, symbol, direction, raw_qty, raw_entry, raw_stop, owner, status, raw in rows:
+        plan = execution._plan_from_wire(raw)
+        if plan is None or plan.intent.profit_protection != profit_protection.COST_COVER:
+            continue
+        if owner != ControlOwner.BOT.value or status != "CONFIRMED":
+            continue
+        tf = plan.intent.timeframe
+        if tf not in importer.TF_SECONDS:
+            refused.append({"position_id": pid, "reason": "unknown setup timeframe"})
+            continue
+        step = importer.TF_SECONDS[tf]
+        fills = [json.loads(raw_event) for (raw_event,) in con.execute(
+            "SELECT payload FROM position_events WHERE position_id=? "
+            "AND event='FILL' ORDER BY id", (pid,))]
+        if not fills:
+            refused.append({"position_id": pid, "reason": "fill history unavailable"})
+            continue
+        first_fill = min(int(f["occurred_at"]) for f in fills)
+        first_full_open = ((first_fill + step - 1)//step)*step
+        rows_all = con.execute(
+            "SELECT open_ts,open,high,low,close FROM candles "
+            "WHERE symbol=? AND tf=? AND open_ts<? ORDER BY open_ts",
+            (symbol, tf, cutoff)).fetchall()
+        history = [{"open_ts": c[0], "open": c[1], "high": c[2],
+                    "low": c[3], "close": c[4]} for c in rows_all
+                   if c[0]+step <= cutoff]
+        eligible = [c for c in history if c["open_ts"] >= first_full_open]
+        if not eligible:
+            continue
+        if eligible[0]["open_ts"] != first_full_open or any(
+                eligible[j]["open_ts"] != eligible[j-1]["open_ts"]+step
+                for j in range(1, len(eligible))):
+            refused.append({"position_id": pid, "reason": "closed-candle history has a gap"})
+            continue
+        bar = eligible[-1]
+        if observed_at >= bar["open_ts"]+2*step:
+            refused.append({"position_id": pid,
+                            "reason": "latest setup candle is too old to amend the stop"})
+            continue
+        entry, stop = Decimal(raw_entry), Decimal(raw_stop)
+        long = direction == "LONG"
+        target = plan.intent.targets[0] if plan.intent.targets else None
+        if ((Decimal(bar["low"]) <= stop if long else Decimal(bar["high"]) >= stop)
+                or (target is not None and
+                    (Decimal(bar["high"]) >= target if long else Decimal(bar["low"]) <= target))):
+            continue
+        quantity = sum((Decimal(f["quantity"]) for f in fills), Decimal(0))
+        if quantity != Decimal(raw_qty) or quantity <= 0:
+            refused.append({"position_id": pid, "reason": "fill quantity disagrees with custody"})
+            continue
+        entry = sum((Decimal(f["price"])*Decimal(f["quantity"]) for f in fills),
+                    Decimal(0))/quantity
+        try:
+            tick = broker.price_tick(symbol)
+            candidate = profit_protection.candidate(
+                policy=plan.intent.profit_protection, symbol=symbol,
+                direction=direction, entry=entry,
+                original_stop=plan.intent.stop, current_stop=stop,
+                target=target, bar=bar, bars_survived=len(eligible)+1,
+                atr=compute_atr(history)[-1],
+                entry_role=("TAKER" if plan.intent.order_kind.value == "MARKET"
+                            else "MAKER"), tf_seconds=step, tick=tick)
+            if candidate is None:
+                continue
+            close = Decimal(bar["close"])
+            if (close <= candidate if long else close >= candidate):
+                refused.append({"position_id": pid,
+                                "reason": "latest closed price has crossed candidate stop"})
+                continue
+            order = lifecycle.ensure_stop(
+                con, broker, position_id=pid, symbol=symbol,
+                direction=direction, quantity=quantity, stop=candidate)
+            confirmed = broker.order_status(symbol, order.client_order_id,
+                                            order.broker_order_id)
+            if (confirmed is None or confirmed.stop_price != candidate or
+                    str(confirmed.status).upper().replace("_", "") not in
+                    {"NEW", "CREATED", "UNTRIGGERED", "OPEN", "PARTIALLYFILLED"}):
+                raise ProtectionFailed("replacement stop not confirmed at requested price")
+            con.execute("UPDATE managed_positions SET stop=?,updated_at=? "
+                        "WHERE position_id=? AND state='OPEN' AND owner=?",
+                        (str(candidate), int(time.time()), pid, ControlOwner.BOT.value))
+            _event(con, pid, "PROFIT_STOP_MOVED", {
+                "old_stop": str(stop), "stop": str(candidate),
+                "reason": "COST_COVER_AFTER_1R",
+                "confirmed_at": bar["open_ts"]+step,
+                "effective_at": int(time.time()),
+                "policy": plan.intent.profit_protection,
+                "version": profit_protection.PROFIT_PROTECTION_VERSION})
+            con.commit()
+            moved.append(pid)
+        except Exception as exc:
+            con.rollback()
+            refused.append({"position_id": pid,
+                            "reason": f"protective amendment unresolved: {type(exc).__name__}: {exc}"})
+    return {"moved": moved, "refused": refused,
+            "version": POSITION_VERSION}

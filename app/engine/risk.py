@@ -24,7 +24,11 @@ from .execsim import EXEC_VERSION, plan_versions as execsim_plan_versions
 from .runlog import RunRecorder
 from .universe import admitted_at
 
-RISK_VERSION = "risk-v0.30-draft"
+RISK_VERSION = "risk-v0.32-draft"
+# v0.32: replays the causal exec-v0.30 entry model and cooldown-v0.18 facts.
+# v0.31: a symbol-level audit blocker refuses that symbol only. Store-wide
+# blockers and unreadable audits still refuse the whole account. `size_order`
+# is unchanged, so the setup producer that imports that function does not move.
 # v0.29: sizes setup-v0.23 against exec-v0.28 and replays the account from
 # those facts. No sizing rule changed.
 # v0.28: the swing-v0.11 ATR cascade — the account is replayed from setup, exec and
@@ -422,17 +426,42 @@ def policy_for(con, gates: dict, baseline_start: int) -> dict:
     # forward record that proves nothing — the results would be attributable to
     # the corruption as much as to the strategy.
     data_blocked = False
+    data_blocked_symbols: frozenset[str] = frozenset()
     if opcfg["halt_on_data_blocked"]:
         try:
             from . import quality
             rep = quality.cached_audit(con)
-            data_blocked = bool(rep) and not rep.get("evaluation_allowed", True)
-        except Exception:
-            data_blocked = False          # never block on the gate itself failing
+            if rep is None and quality._db_key(con) == quality._default_db_key():
+                # A production scanner has no recorded verdict yet. A scratch
+                # replay may deliberately start without one; the active book
+                # may not treat that absence as a clean report.
+                data_blocked = True
+            elif rep:
+                blockers = rep.get("blockers")
+                if blockers is None:
+                    # Older audit reports had only the aggregate switch.
+                    data_blocked = not rep.get("evaluation_allowed", True)
+                else:
+                    data_blocked = any(
+                        c.get("status") == "BLOCKED" and not c.get("symbol")
+                        for c in blockers)
+                    data_blocked_symbols = frozenset(
+                        str(c["symbol"]) for c in blockers
+                        if c.get("status") == "BLOCKED" and c.get("symbol"))
+                    if not rep.get("evaluation_allowed", True) and not (
+                            data_blocked or data_blocked_symbols):
+                        # An internally inconsistent verdict is not a clean
+                        # market roster and cannot grant account admission.
+                        data_blocked = True
+        except Exception as exc:
+            from .runlog import get_logger
+            get_logger().error("risk: cannot read data-health audit: %s", exc)
+            data_blocked = True
     return {
         "gates": gates,
         "operator_halted": bool(opcfg["halted"]),
         "data_blocked": data_blocked,
+        "data_blocked_symbols": data_blocked_symbols,
         "strategy_enabled": {"PULLBACK": opcfg["strategy_pullback"],
                              "REVERSAL": opcfg["strategy_reversal"],
                              "SCALE_IN": opcfg["strategy_scale_in"]},
@@ -500,7 +529,8 @@ def decide(intent: dict, account: dict, policy: dict) -> dict:
     parents_open = {p["setup_id"] for p in open_pos}
     if policy["operator_halted"]:
         decision, reasons = "REJECTED", ["OPERATOR_HALT"]
-    elif policy["data_blocked"]:
+    elif policy["data_blocked"] or intent["symbol"] in policy.get(
+            "data_blocked_symbols", ()):
         decision, reasons = "REJECTED", ["DATA_HEALTH_BLOCKED"]
     elif drawdown:
         decision, reasons = "REJECTED", [

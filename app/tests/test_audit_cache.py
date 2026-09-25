@@ -17,6 +17,8 @@ Any second store hits this: a replay copy, a scratch database, an A/B run.
 import tempfile
 import unittest
 from pathlib import Path
+from decimal import Decimal
+from unittest.mock import patch
 
 from engine import quality, store
 
@@ -103,6 +105,59 @@ class RiskGateConsequence(unittest.TestCase):
                              "another store's audit must never gate this one's trades")
         finally:
             other.cleanup()
+
+    def test_market_blocker_is_candidate_scoped(self):
+        from engine import risk
+        report = {"evaluation_allowed": False, "blockers": [
+            {"status": "BLOCKED", "symbol": "BTC-USD", "code": "SEQUENCE_GAPS"}]}
+        with patch.object(quality, "cached_audit", return_value=report):
+            policy = risk.policy_for(self.con, {}, 0)
+        self.assertFalse(policy["data_blocked"])
+        self.assertEqual(policy["data_blocked_symbols"], {"BTC-USD"})
+        self.assertEqual(self._verdict(policy, "BTC-USD")["reasons"],
+                         ["DATA_HEALTH_BLOCKED"])
+        self.assertNotIn("DATA_HEALTH_BLOCKED",
+                         self._verdict(policy, "ETH-USD")["reasons"])
+
+    def test_store_blocker_still_refuses_every_candidate(self):
+        from engine import risk
+        report = {"evaluation_allowed": False, "blockers": [
+            {"status": "BLOCKED", "symbol": None, "code": "ACCOUNT_SUMMARY_MISSING"}]}
+        with patch.object(quality, "cached_audit", return_value=report):
+            policy = risk.policy_for(self.con, {}, 0)
+        self.assertTrue(policy["data_blocked"])
+        self.assertEqual(self._verdict(policy, "ETH-USD")["reasons"],
+                         ["DATA_HEALTH_BLOCKED"])
+
+    def test_audit_read_failure_is_visible_and_fails_closed(self):
+        from engine import risk
+        with patch.object(quality, "cached_audit", side_effect=RuntimeError("bad store")):
+            policy = risk.policy_for(self.con, {}, 0)
+        self.assertTrue(policy["data_blocked"])
+        self.assertEqual(self._verdict(policy, "ETH-USD")["reasons"],
+                         ["DATA_HEALTH_BLOCKED"])
+
+    def test_production_book_cannot_trade_before_first_audit(self):
+        from engine import risk
+        with patch.object(quality, "cached_audit", return_value=None), \
+                patch.object(quality, "_db_key", return_value="same"), \
+                patch.object(quality, "_default_db_key", return_value="same"):
+            policy = risk.policy_for(self.con, {}, 0)
+        self.assertTrue(policy["data_blocked"])
+
+    @staticmethod
+    def _verdict(policy, symbol):
+        from engine import risk
+        intent = {"entry": "100", "sl": "90", "strategy": "PULLBACK",
+                  "confirmed_at": 1, "symbol": symbol, "direction": "LONG",
+                  "universe_eligible": True}
+        account = {"equity": Decimal("10000"), "open_positions": [],
+                   "side_losses": {}, "halted_days": set()}
+        policy = dict(policy, gates={"risk_pct": Decimal("0.01"),
+                                     "scale_risk_pct": Decimal("0"),
+                                     "max_concurrent": 1,
+                                     "max_total_open_risk_pct": Decimal("0.03")})
+        return risk.decide(intent, account, policy)
 
 
 if __name__ == "__main__":

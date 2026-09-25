@@ -174,7 +174,8 @@ class ThePaperBookUsesIt(unittest.TestCase):
         import inspect
         src = inspect.getsource(execution.monitor_paper)
         self.assertIn("shared_account.immediate(con)", src)
-        self.assertIn("_monitor_paper_locked(con)", src)
+        self.assertIn("_monitor_paper_locked(", src)
+        self.assertIn("observed_at if cutoff is None else cutoff", src)
         src += inspect.getsource(execution._monitor_paper_locked)
         self.assertIn("execsim.walk_exit", src)
         self.assertNotIn("stop_hit", src,
