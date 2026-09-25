@@ -39,3 +39,14 @@ def test_no_trade_or_risk_rejection_never_becomes_intent():
     row["risk_decision"]["decision"] = "REJECTED"
     with pytest.raises(ValueError, match="risk authority"):
         autotrader.build_plan(row, AutomationMode.PAPER)
+
+
+def test_private_path_refuses_a_paper_only_market_conversion():
+    row = ready(entry_recommendation={
+        "order_kind": "LIMIT", "limit_price": "49900",
+        "entry_model": "MAKER_THEN_MARKET", "maker_wait_bars": 2})
+    assert autotrader.build_plan(row, AutomationMode.PAPER).intent.entry == Decimal("49900")
+    with pytest.raises(ValueError, match="does not implement"):
+        autotrader.build_plan(row, AutomationMode.TESTNET)
+    with pytest.raises(ValueError, match="does not implement"):
+        autotrader.build_plan(row, AutomationMode.LIVE)

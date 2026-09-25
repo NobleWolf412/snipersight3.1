@@ -39,7 +39,9 @@ from decimal import Decimal
 from .contracts import AutomationMode
 
 
-PAPERBOOK_VERSION = "paperbook-v0.6-draft"
+PAPERBOOK_VERSION = "paperbook-v0.7-draft"
+# v0.7: open exposure uses quantity times actual fill-to-stop distance;
+# the initial reservation remains the risk decision's planned amount.
 # v0.6: the snapshot reports `max_drawdown_pct` — the worst peak-to-trough
 # fall, measured whether or not the guardrail tripped. `drawdown` is a
 # breach marker (None, then a dict) and cannot answer that question; the
@@ -214,6 +216,7 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
     setup_of: dict[str, str] = {}
     reserved: dict[str, Decimal] = {}
     unpriced = 0
+    unpriced_active = 0
     epoch_clause = " AND account_epoch_id=?" if epoch else ""
     params = (mode.value, epoch["id"]) if epoch else (mode.value,)
     for intent_id, setup_id, state, payload in con.execute(
@@ -224,6 +227,8 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
         setup_of[intent_id] = setup_id
         if not risk_usd:
             unpriced += 1
+            if str(state or "").upper() in (*_RESERVED, "PAPER_FILLED"):
+                unpriced_active += 1
         if str(state or "").upper() in _RESERVED:
             reserved[intent_id] = risk_usd
 
@@ -231,14 +236,16 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
     closed: list[dict] = []
     for row in con.execute(
             "SELECT intent_id,symbol,tf,direction,state,filled_at,closed_at,"
-            "outcome,r_multiple,realised_usd FROM paper_positions ORDER BY filled_at, rowid"):
+            "outcome,r_multiple,realised_usd,filled_risk_usd "
+            "FROM paper_positions ORDER BY filled_at, rowid"):
         (intent_id, symbol, tf, direction, state, filled_at, closed_at,
-         outcome, r, realised_usd) = row
+         outcome, r, realised_usd, filled_risk_usd) = row
         if intent_id not in plans:
             # A paper position whose intent is not in the PAPER outbox belongs
             # to another mode's book. Never silently pooled.
             continue
-        risk_usd = plans[intent_id]
+        risk_usd = (Decimal(filled_risk_usd) if filled_risk_usd is not None
+                    else plans[intent_id])
         setup_id = setup_of.get(intent_id, "")
         if str(state or "").upper() == "CLOSED" and r is not None:
             closed.append({"intent_id": intent_id, "setup_id": setup_id,
@@ -391,5 +398,6 @@ def snapshot(con, *, mode: AutomationMode = AutomationMode.PAPER,
         #: cannot see how many there are cannot tell a quiet book from a
         #: broken one.
         "unpriced_intents": unpriced,
+        "unpriced_active_intents": unpriced_active,
         "version": PAPERBOOK_VERSION,
     }

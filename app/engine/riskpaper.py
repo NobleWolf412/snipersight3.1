@@ -35,7 +35,10 @@ from .runlog import RunRecorder
 from .setups import SETUP_VERSION
 
 
-PAPER_RISK_VERSION = "riskpaper-v0.6-draft"
+PAPER_RISK_VERSION = "riskpaper-v0.8-draft"
+# v0.8: reads actual filled-risk exposure from paperbook-v0.7 and the
+# exec-v0.30 research lineage rather than the former planned-only amount.
+# v0.7: consumes risk-v0.31 candidate-scoped data-health decisions.
 # v0.5: the paper book's half of the risk-v0.29 move. Same reason.
 # v0.2: three corrections found by review, all of which let the book
 # approve more than it could fund.
@@ -122,6 +125,8 @@ def run(con, *, now: int | None = None) -> dict:
         account = paperbook.snapshot(
             con, mode=AutomationMode.PAPER, gates=gates,
             max_drawdown_pct=policy["max_drawdown_pct"])
+        if account["unpriced_active_intents"]:
+            policy = dict(policy, data_blocked=True)
         # THE COOLDOWNS ARE THIS BOOK'S, not the replay's. `policy_for` loads
         # the research locks â€” derived from `exec` facts â€” and reading those
         # here would refuse a paper entry because the SIMULATOR stopped out on

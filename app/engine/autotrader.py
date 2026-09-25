@@ -12,12 +12,12 @@ import hashlib
 import time
 from decimal import Decimal
 
-from . import automation, execution, opportunities
+from . import automation, execution, opportunities, profit_protection, settings
 from .contracts import (AutomationMode, DecisionReason, ExecutionPlan,
                         OrderIntent, OrderKind, RiskDecision, domain_for_mode)
 
 
-AUTOTRADER_VERSION = "autotrader-v0.8-draft"
+AUTOTRADER_VERSION = "autotrader-v0.10-draft"
 # v0.7: two wire corrections. `equity_basis_source` is read from the
 # decision instead of hardcoded "PAPER_REPLAY" — true while the replay was
 # the only risk authority, a lie once the paper ledger started sizing, and
@@ -56,14 +56,23 @@ def _d(value, default="0") -> Decimal:
     return Decimal(str(default if value in (None, "") else value))
 
 
-def build_plan(row: dict, mode: AutomationMode) -> ExecutionPlan:
+def build_plan(row: dict, mode: AutomationMode, *,
+               protection_policy: str = profit_protection.OFF) -> ExecutionPlan:
     setup = row["setup"]
     risk = row.get("risk_decision") or {}
     if not row.get("eligible") or row.get("state") != "READY":
         raise ValueError("only an eligible READY opportunity can become an intent")
     if risk.get("decision") not in ("APPROVED", "REDUCED"):
         raise ValueError("risk authority did not approve this opportunity")
+    if protection_policy not in (profit_protection.OFF,
+                                 profit_protection.COST_COVER):
+        raise ValueError("unknown profit-protection policy")
     recommendation = row.get("entry_recommendation") or {}
+    if (mode in (AutomationMode.TESTNET, AutomationMode.LIVE)
+            and recommendation.get("entry_model") == "MAKER_THEN_MARKET"):
+        raise ValueError(
+            "private execution does not implement the maker-wait-to-market "
+            "conversion; refusing a plan paper would execute differently")
     kind = OrderKind(recommendation.get("order_kind") or "NONE")
     if kind == OrderKind.NONE:
         raise ValueError("entry selector recommends no order")
@@ -87,7 +96,8 @@ def build_plan(row: dict, mode: AutomationMode) -> ExecutionPlan:
     # that attempt's terminal state, and never routes.
     key = execution.intent_key(
         setup["setup_id"], mode, kind.value, str(quantity),
-        None if entry is None else str(entry), setup.get("attempt_id"))
+        None if entry is None else str(entry), setup.get("attempt_id"),
+        protection_policy=protection_policy)
     intent_id = "auto-" + hashlib.sha256(
         f"{AUTOTRADER_VERSION}|{key}".encode()).hexdigest()[:32]
     intent = OrderIntent(
@@ -102,7 +112,9 @@ def build_plan(row: dict, mode: AutomationMode) -> ExecutionPlan:
         expires_at=setup.get("expires_at"),
         entry_model=recommendation.get("entry_model"),
         maker_wait_bars=recommendation.get("maker_wait_bars"),
-        attempt_id=setup.get("attempt_id"))
+        attempt_id=setup.get("attempt_id"),
+        reference_entry=_d(setup.get("entry")),
+        profit_protection=protection_policy)
     decision = RiskDecision(
         approved=True, decision=risk["decision"],
         risk_usd=(_d(risk.get("risk_usd")) * scale).quantize(Decimal("0.01")),
@@ -138,12 +150,16 @@ def run(con, *, broker=None, live_gate: dict | None = None) -> dict:
     rows = opportunities.list_candidates(
         con, domain=domain_for_mode(active.mode).value, include_history=False)
     coordinator = execution.Coordinator(broker)
+    protection_policy = (profit_protection.COST_COVER
+                         if settings.get(con, "profit_protection_cost_cover")
+                         else profit_protection.OFF)
     routed, refused = [], []
     for row in rows:
         if row.get("state") != "READY" or not row.get("eligible"):
             continue
         try:
-            plan = build_plan(row, active.mode)
+            plan = build_plan(row, active.mode,
+                              protection_policy=protection_policy)
             routed.append({"setup_id": row["setup"]["setup_id"],
                            **coordinator.dispatch(
                                con, plan, live_gate=live_gate,

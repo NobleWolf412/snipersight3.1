@@ -12,7 +12,7 @@ from engine import (automation, importer, livegate, manual, open_interest,
 from engine.contracts import to_wire
 
 router = APIRouter(prefix="/api/ui/v1")
-VERSION = "cockpit-readmodel-v5"
+VERSION = "cockpit-readmodel-v6"
 # v4: `/setup-guide` carries `trade_evidence` (recorded confluence, the checks
 # the plan passed, reward/risk after estimated costs, and the higher-timeframe
 # picture now), and `/opportunities/compare` lists open plans side by side.
@@ -74,6 +74,12 @@ def context(workspace: str = "CRYPTO"):
 
 def trade_rows(con, archive=False):
     rows = shared_account.journal(con, include_legacy=archive)
+    moves = {}
+    for iid, occurred, raw in con.execute(
+            "SELECT intent_id,occurred_at,payload FROM execution_events "
+            "WHERE event='PAPER_STOP_MOVED' ORDER BY id"):
+        moves.setdefault(iid, []).append({"recorded_at": occurred,
+                                          **json.loads(raw)})
     epoch = shared_account.current_epoch(con)
     out = []
     for row in rows:
@@ -85,7 +91,9 @@ def trade_rows(con, archive=False):
                    direction=intent.get("direction"), planned_entry=intent.get("entry"),
                    stop=row.get("current_stop") or intent.get("stop"), planned_stop=intent.get("stop"), targets=intent.get("targets", []),
                    quantity=intent.get("quantity"), risk_usd=risk.get("risk_usd"),
-                   evidence_scope="ARCHIVED_ACCOUNT" if archive else "EXECUTED_ACCOUNT")
+                   evidence_scope="ARCHIVED_ACCOUNT" if archive else "EXECUTED_ACCOUNT",
+                   profit_protection=intent.get("profit_protection", "OFF"),
+                   stop_history=moves.get(row["intent_id"], []))
         row["pnl_basis"] = 'EXACT_SETTLEMENT' if row['realised_usd'] is not None else 'LEGACY_R_ESTIMATE'
         if row['realised_usd'] is None:
             row["realised_usd"] = (str(Decimal(row["r_multiple"]) * Decimal(risk["risk_usd"]))
@@ -439,6 +447,22 @@ def forward_trial(workspace: str = "CRYPTO"):
         con.execute("PRAGMA query_only=ON")
         con.execute("BEGIN")
         return forwardtrial.report(con)
+    finally:
+        con.rollback()
+        con.close()
+
+
+@router.get("/simple-strategy-trial")
+def simple_strategy_trial(workspace: str = "CRYPTO"):
+    from engine import simpletrial
+    if workspace_scope(workspace) != "CRYPTO":
+        return {"state": "UNAVAILABLE", "affects_trading": False,
+                "note": "This comparison uses crypto markets."}
+    con = store.connect()
+    try:
+        con.execute("PRAGMA query_only=ON")
+        con.execute("BEGIN")
+        return simpletrial.report(con)
     finally:
         con.rollback()
         con.close()

@@ -18,13 +18,14 @@ def book(tmp_path):
     con.close()
 
 
-def run_cycle(con, new_candles, paper_pins=None):
+def run_cycle(con, new_candles, paper_pins=None, *, late=False):
     events = []
+    clock = {"now": 100000}
     with ExitStack() as stack:
         def stub(target, **kw):
             return stack.enter_context(patch(target, **kw))
 
-        stub('live.time.time', return_value=100000)
+        stub('live.time.time', side_effect=lambda: clock["now"])
         stub('live.universe.scan_symbols', return_value=['BTCUSDT', 'ETHUSDT'])
         stub('live.universe.all_tracked_symbols', return_value=[])
         stub('live.execsim.unresolved', return_value={})
@@ -43,9 +44,16 @@ def run_cycle(con, new_candles, paper_pins=None):
         stub('live.aggregator.aggregate')
         stub('live.pipeline.run_symbol', side_effect=lambda c, s, **kw:
              events.append(('deferred' if kw.get('deferred') else 'priority', s)) or {'blocked': None})
-        stub('live.execution.monitor_paper', side_effect=lambda c: events.append('monitor'))
-        stub('live.riskpaper.run', side_effect=lambda c:
-             events.append('paper_risk') or {'written': 0, 'unpriced_intents': 0})
+        def paper_monitor(c, *, cutoff):
+            assert cutoff == 100000, 'paper cutoff moved'
+            events.append('monitor')
+        stub('live.execution.monitor_paper', side_effect=paper_monitor)
+        def paper_risk(c):
+            events.append('paper_risk')
+            if late:
+                clock["now"] = live.decision_deadline(100000) + 1
+            return {'written': 0, 'unpriced_intents': 0}
+        stub('live.riskpaper.run', side_effect=paper_risk)
         stub('live.risk.run', side_effect=lambda c: events.append('research_risk'))
         stub('live.automation.current', return_value=(live.automation.AutomationMode.PAPER, 0))
         stub('live.positions.private_environments_with_exposure', return_value=set())
@@ -74,6 +82,13 @@ def test_idle_import_still_checks_existing_orders(book):
     events = run_cycle(book, new_candles=0, paper_pins={'BTCUSDT'})
     assert events.index('monitor') > events.index(('priority', 'BTCUSDT'))
     assert events.index('monitor') < events.index('paper_risk')
+
+
+def test_deadline_miss_keeps_settlement_but_refuses_new_dispatch(book):
+    events = run_cycle(book, new_candles=1, late=True)
+    assert 'monitor' in events and 'paper_risk' in events
+    assert 'dispatch' not in events
+    assert live.decision_deadline(100000) == 100200
 
 
 def test_retired_paper_market_refreshes_settlement_inputs_before_monitor(book):
@@ -127,11 +142,16 @@ def test_order_latency_uses_recorded_time_and_matching_version_and_attempt(book)
                  ('key', 'order', 'PAPER', 'setup', 'BTCUSDT',
                   json.dumps({'intent': {'playbook_version': 'fixture', 'attempt_id': 'current'}}),
                   'PAPER_ROUTED', 450, 999))
+    book.execute('INSERT INTO execution_events(intent_id,event,occurred_at,payload) VALUES(?,?,?,?)',
+                 ('order', 'PAPER_ROUTED', 480, '{}'))
     book.commit()
     log = Mock()
     with patch('live.time.time', return_value=9999):
-        live.record_order_latency(book, [{'intent_id': 'order', 'setup_id': 'setup'}], log)
+        live.record_order_latency(book, [{'queue': {'intent_id': 'order'},
+                                          'setup_id': 'setup'}], log)
     event = json.loads(log.info.call_args.args[0].removeprefix('ORDER LATENCY '))
     assert event['confirmed_at'] == 300
-    assert event['order_created_at'] == 450
-    assert event['confirmation_to_order_s'] == 150
+    assert event['intent_created_at'] == 450
+    assert event['confirmation_to_intent_s'] == 150
+    assert event['routed_at'] == 480
+    assert event['confirmation_to_route_s'] == 180

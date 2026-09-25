@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import tempfile
 import time
+import json
 import unittest
 from unittest.mock import patch
 from decimal import Decimal
 from pathlib import Path
 
 from engine import (autotrader, execution, opportunities, paperbook, riskpaper,
-                    setups, store)
+                    settings, setups, store)
 from engine.contracts import ExecutionDomain
 
 
@@ -155,6 +156,66 @@ class OnePaperAttempt(unittest.TestCase):
                          "the next verdict sizes against the NEW balance — "
                          "this is the loop that did not exist")
 
+    def test_optional_cost_cover_moves_account_stop_and_journals_it(self):
+        from ui_api import trade_rows
+        _hourly(self.con, self.symbol, self.tf, self.now - 21*HOUR,
+                [(50000, 50100, 49900, 50000)] * 20)
+        settings._ensure(self.con)
+        self.con.execute("INSERT INTO settings(name,value,updated_at) VALUES(?,?,?)",
+                         ("profit_protection_cost_cover", "true", self.now))
+        self.con.commit()
+        riskpaper.run(self.con, now=self.now)
+        routed = autotrader.run(self.con)
+        self.assertEqual(len(routed["routed"]), 1, routed)
+        iid = routed["routed"][0]["queue"]["intent_id"]
+        plan = execution._plan_from_wire(self.con.execute(
+            "SELECT payload FROM execution_outbox WHERE intent_id=?",
+            (iid,)).fetchone()[0])
+        self.assertEqual(plan.intent.profit_protection, "COST_COVER")
+        # Later setting changes do not rewrite an already queued trade.
+        self.con.execute("UPDATE settings SET value='false' "
+                         "WHERE name='profit_protection_cost_cover'")
+        self.con.commit()
+        _hourly(self.con, self.symbol, self.tf, self.now + HOUR, [
+            (50400, 50450, 49900, 50100),
+            (50100, 51100, 50050, 50900),
+        ])
+        with patch('engine.execution.time.time', return_value=self.now+3*HOUR+300):
+            execution.monitor_paper(self.con, cutoff=self.now+3*HOUR)
+        self.assertEqual(self.con.execute(
+            "SELECT state FROM execution_outbox WHERE intent_id=?",
+            (iid,)).fetchone()[0], "PAPER_FILLED")
+        self.assertEqual(self.con.execute(
+            "SELECT stop FROM paper_positions WHERE intent_id=?",
+            (iid,)).fetchone()[0], "49000")
+        with patch('engine.execution.time.time', return_value=self.now+3*HOUR+300):
+            execution.monitor_paper(self.con, cutoff=self.now+3*HOUR)
+        _hourly(self.con, self.symbol, self.tf, self.now+3*HOUR,
+                [(50900, 50950, 49900, 50000)])
+        with patch('engine.execution.time.time', return_value=self.now+4*HOUR+300):
+            execution.monitor_paper(self.con, cutoff=self.now+4*HOUR)
+        self.assertEqual(self.con.execute(
+            "SELECT state FROM execution_outbox WHERE intent_id=?",
+            (iid,)).fetchone()[0], "PAPER_FILLED")
+        _hourly(self.con, self.symbol, self.tf, self.now+4*HOUR,
+                [(50000, 50200, 49900, 50100)])
+        with patch('engine.execution.time.time', return_value=self.now+5*HOUR+300):
+            execution.monitor_paper(self.con, cutoff=self.now+5*HOUR)
+        position = self.con.execute(
+            "SELECT stop,state,outcome FROM paper_positions WHERE intent_id=?",
+            (iid,)).fetchone()
+        self.assertEqual(position[1:], ("CLOSED", "SL"))
+        self.assertGreater(Decimal(position[0]), Decimal("50000"))
+        moves = self.con.execute(
+            "SELECT payload FROM execution_events WHERE intent_id=? "
+            "AND event='PAPER_STOP_MOVED'", (iid,)).fetchall()
+        self.assertEqual(len(moves), 1)
+        self.assertEqual(json.loads(moves[0][0])["effective_at"],
+                         self.now+4*HOUR)
+        row = next(r for r in trade_rows(self.con) if r["intent_id"] == iid)
+        self.assertEqual(row["stop"], position[0])
+        self.assertEqual(len(row["stop_history"]), 1)
+
     def test_the_trace_shows_the_paper_chain_beside_the_research_one(self):
         """The gate's second half: the whole chain has to be READABLE.
 
@@ -202,6 +263,51 @@ class OnePaperAttempt(unittest.TestCase):
                          "a setup the replay has closed still routes to paper")
         # And the replay's story is still on the row, labelled and inert.
         self.assertEqual(self._row()["research_story"]["outcome"], "SL")
+
+    def test_paper_rests_at_recorded_maker_limit_and_books_fill_risk(self):
+        raw = self.con.execute(
+            "SELECT payload FROM facts WHERE kind='setup' AND symbol=?",
+            (self.symbol,)).fetchone()[0]
+        payload = json.loads(raw)
+        payload["maker_limit"] = "49900"
+        self.con.execute("UPDATE facts SET payload=? WHERE kind='setup' AND symbol=?",
+                         (json.dumps(payload), self.symbol))
+        self.con.commit()
+        riskpaper.run(self.con, now=self.now)
+        row = self._row()
+        self.assertEqual(row["entry_recommendation"]["limit_price"], "49900")
+        routed = autotrader.run(self.con)
+        intent_id = routed["routed"][0]["queue"]["intent_id"]
+        plan = self.con.execute(
+            "SELECT payload FROM execution_outbox WHERE intent_id=?",
+            (intent_id,)).fetchone()[0]
+        intent = json.loads(plan)["intent"]
+        self.assertEqual(intent["entry"], "49900")
+        self.assertEqual(intent["reference_entry"], "50000")
+        _hourly(self.con, self.symbol, self.tf, self.now + HOUR,
+                [(50400, 50500, 49800, 50100)])
+        with patch('engine.execution.time.time', return_value=self.now + 2 * HOUR):
+            execution.monitor_paper(self.con)
+        entry, quantity, filled_risk = self.con.execute(
+            "SELECT entry,quantity,filled_risk_usd FROM paper_positions "
+            "WHERE intent_id=?", (intent_id,)).fetchone()
+        self.assertEqual(entry, "49900")
+        self.assertEqual(Decimal(filled_risk), Decimal(quantity) * Decimal("900"))
+        book = paperbook.snapshot(self.con)
+        self.assertEqual(book["open_positions"][0]["risk_usd"],
+                         Decimal(filled_risk))
+
+    def test_unpriced_active_account_exposure_blocks_a_new_paper_order(self):
+        self.con.execute(
+            "INSERT INTO execution_outbox(idempotency_key,intent_id,mode,setup_id,"
+            "symbol,payload,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            ("legacy-key", "legacy-intent", "PAPER", "old-setup", self.symbol,
+             "{}", "PAPER_ROUTED", self.now - HOUR, self.now - HOUR))
+        self.con.commit()
+        result = riskpaper.run(self.con, now=self.now)
+        self.assertEqual(result["REJECTED"], 1)
+        self.assertEqual(riskpaper._latest(self.con)[self.setup_id]["reasons"],
+                         ["DATA_HEALTH_BLOCKED"])
 
 
 if __name__ == "__main__":

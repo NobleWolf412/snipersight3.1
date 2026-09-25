@@ -19,7 +19,7 @@ from .contracts import (AutomationMode, BrokerExecution, BrokerOrder, DecisionRe
                         RiskDecision, to_wire)
 
 
-EXECUTION_CORE_VERSION = "execution-core-v0.11-draft"
+EXECUTION_CORE_VERSION = "execution-core-v0.15-draft"
 # v0.11: an unfilled partial maker window expires once eligible history is
 # complete. A single pre-deadline bar previously left ZEC pending forever,
 # reserving the sole slot and blocking ETH/UNI after the deadline.
@@ -80,7 +80,8 @@ class DispatchRejected(RuntimeError):
 
 def intent_key(setup_id: str, mode: AutomationMode, order_kind: str,
                quantity: str, entry: str | None,
-               attempt_id: str | None = None) -> str:
+               attempt_id: str | None = None,
+               protection_policy: str = "OFF") -> str:
     """The identity that makes a re-dispatch a no-op instead of a second order.
 
     `attempt_id` is what stops it doing that to a DIFFERENT trade. `setup_id`
@@ -97,6 +98,8 @@ def intent_key(setup_id: str, mode: AutomationMode, order_kind: str,
     parts = [setup_id, mode.value, order_kind, quantity, entry or "MARKET"]
     if attempt_id:
         parts.append(attempt_id)
+    if protection_policy != "OFF":
+        parts.append(protection_policy)
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
 
@@ -107,7 +110,8 @@ def _ensure(con) -> None:
     paper = {r[1] for r in con.execute("PRAGMA table_info(paper_positions)")}
     if {"attempt_id", "account_epoch_id", "origin", "controller", "grade_eligible"} <= outbox and {
             "entry_role", "r_multiple", "fees_price_units", "funding_price_units",
-            "slippage_price_units", "cost_profile_version", "realised_usd"} <= paper:
+            "slippage_price_units", "cost_profile_version", "realised_usd",
+            "filled_risk_usd"} <= paper:
         return
     owns_transaction = not con.in_transaction
     if owns_transaction:
@@ -157,7 +161,8 @@ def _ensure_schema(con) -> None:
     paper_columns = {row[1] for row in con.execute(
         "PRAGMA table_info(paper_positions)").fetchall()}
     for name in ("entry_role", "r_multiple", "fees_price_units", "funding_price_units",
-                 "slippage_price_units", "cost_profile_version", "realised_usd"):
+                 "slippage_price_units", "cost_profile_version", "realised_usd",
+                 "filled_risk_usd"):
         if name not in paper_columns:
             con.execute(f"ALTER TABLE paper_positions ADD COLUMN {name} TEXT")
     columns = {r[1] for r in con.execute("PRAGMA table_info(execution_outbox)")}
@@ -303,7 +308,10 @@ def _plan_from_wire(raw: str) -> ExecutionPlan | None:
             entry_model=i.get("entry_model"),
             maker_wait_bars=i.get("maker_wait_bars"),
             attempt_id=i.get("attempt_id"), account_epoch_id=i.get("account_epoch_id"),
-            origin=i.get("origin", "BOT"))
+            origin=i.get("origin", "BOT"),
+            reference_entry=(Decimal(i["reference_entry"])
+                             if i.get("reference_entry") is not None else None),
+            profit_protection=i.get("profit_protection", "OFF"))
         risk = RiskDecision(
             approved=bool(r["approved"]), decision=r["decision"],
             risk_usd=Decimal(r["risk_usd"]), quantity=Decimal(r["quantity"]),
@@ -397,17 +405,38 @@ def monitor_private(con, broker) -> dict:
             (intent_id,)).fetchone()
         recorded_quantity = Decimal(local[0]) if local else Decimal(0)
         delta = order.filled_quantity - recorded_quantity
+        if delta < 0:
+            refused.append({"intent_id": intent_id,
+                            "reason": "venue cumulative fill is below recorded custody"})
+            continue
         if delta > 0:
             fee_rows = con.execute(
                 "SELECT payload FROM position_events WHERE position_id=? AND event='FILL'",
                 (intent_id,)).fetchall() if local else []
-            recorded_fee = sum((Decimal(str(json.loads(x[0]).get("fee") or "0"))
-                                for x in fee_rows), Decimal(0))
-            delta_fee = max(Decimal(0), order.cumulative_fee - recorded_fee)
-            fill_price = order.average_fill_price or order.limit_price or plan.intent.entry
+            prior_fills = [json.loads(x[0]) for x in fee_rows]
+            recorded_fee = sum((Decimal(str(x.get("fee") or "0"))
+                                for x in prior_fills), Decimal(0))
+            if order.cumulative_fee < recorded_fee:
+                refused.append({"intent_id": intent_id,
+                                "reason": "venue cumulative fee is below recorded fills"})
+                continue
+            delta_fee = order.cumulative_fee - recorded_fee
+            if order.average_fill_price is not None:
+                recorded_notional = sum((Decimal(x["quantity"])*Decimal(x["price"])
+                                         for x in prior_fills), Decimal(0))
+                fill_price = (order.filled_quantity*order.average_fill_price
+                              - recorded_notional)/delta
+            elif recorded_quantity == 0:
+                fill_price = order.limit_price or plan.intent.entry
+            else:
+                fill_price = None
             if fill_price is None:
                 refused.append({"intent_id": intent_id,
                                 "reason": "fill price unavailable; protection cannot be audited"})
+                continue
+            if fill_price <= 0:
+                refused.append({"intent_id": intent_id,
+                                "reason": "venue cumulative fill value disagrees with recorded fills"})
                 continue
             fill = Fill(
                 fill_id=f"{order.broker_order_id or order.client_order_id}:{order.filled_quantity}",
@@ -528,7 +557,7 @@ def paper_open_symbols(con) -> set[str]:
         "AND state IN ('PAPER_ROUTED','PAPER_FILLED')").fetchall()}
 
 
-def monitor_paper(con) -> dict:
+def monitor_paper(con, *, cutoff: int | None = None) -> dict:
     """Resolve durable PAPER intents from closed candles, deterministically.
 
     This is research execution, not a broker surrogate: limits fill on touch,
@@ -540,10 +569,12 @@ def monitor_paper(con) -> dict:
     shared_account.sync_manual(con)
     shared_account.recover_pending(con)
     with shared_account.immediate(con):
-        return _monitor_paper_locked(con)
+        observed_at = int(time.time())
+        return _monitor_paper_locked(
+            con, observed_at if cutoff is None else cutoff, observed_at)
 
 
-def _monitor_paper_locked(con):
+def _monitor_paper_locked(con, now, observed_at):
     def event(connection, iid, state, payload):
         _event(connection, iid, state, payload, commit=False)
 
@@ -568,7 +599,6 @@ def _monitor_paper_locked(con):
             (intent.symbol, tf, intent.created_at)).fetchall()
         from . import importer
         seconds = importer.TF_SECONDS[tf]
-        now = int(time.time())
         candles = [c for c in candles if c[0] + seconds <= now]
         first_open = ((intent.created_at + seconds - 1) // seconds) * seconds
         anchor = con.execute(
@@ -631,13 +661,22 @@ def _monitor_paper_locked(con):
                 else "MAKER_PULLBACK")
             model_entry = (Decimal(eligible[0][1])
                            if intent.order_kind == OrderKind.MARKET
-                           else intent.entry)
+                           else intent.reference_entry or intent.entry)
             if model_entry is None:
                 refused.append({"intent_id": intent_id,
                                 "reason": "paper plan has no entry price"})
                 continue
+            from .swings import compute_atr
+            warmup = con.execute(
+                "SELECT open_ts,open,high,low,close FROM candles "
+                "WHERE symbol=? AND tf=? AND open_ts<? ORDER BY open_ts",
+                (intent.symbol, tf, eligible[0][0])).fetchall()
+            history = [
+                {"open_ts": c[0], "open": c[1], "high": c[2],
+                 "low": c[3], "close": c[4]} for c in reversed(warmup)] + paper_candles
+            atr = compute_atr(history)[len(warmup):]
             simulation = execsim.simulate_entry(
-                paper_candles, [None] * len(paper_candles), 0,
+                paper_candles, atr, 0,
                 model_entry, intent.stop, intent.direction == "LONG",
                 entry_model=entry_model,
                 maker_limit=intent.entry,
@@ -669,18 +708,23 @@ def _monitor_paper_locked(con):
             fill_price = simulation["entry"]
             entry_role = simulation["entry_role"]
             target = intent.targets[0] if intent.targets else None
+            filled_risk_usd = intent.quantity * simulation["risk"]
             con.execute(
                 "INSERT INTO paper_positions(intent_id,symbol,tf,direction,quantity,"
-                "entry,stop,target,state,filled_at,entry_role) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "entry,stop,target,state,filled_at,entry_role,filled_risk_usd) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (intent_id, intent.symbol, tf, intent.direction, str(intent.quantity),
                  str(fill_price), str(intent.stop),
                  None if target is None else str(target), "OPEN", fill_row[0],
-                 entry_role))
+                 entry_role, str(filled_risk_usd)))
             event(con, intent_id, "PAPER_FILLED", {
                 "environment": "paper", "price": str(fill_price),
                 "quantity": str(intent.quantity), "filled_at": fill_row[0],
-                "entry_role": entry_role, "entry_model": entry_model})
+                "entry_role": entry_role, "entry_model": entry_model,
+                "filled_risk_usd": str(filled_risk_usd),
+                "planned_risk_usd": str(plan.risk.risk_usd),
+                "over_plan_risk": filled_risk_usd > plan.risk.risk_usd,
+                "profit_protection": intent.profit_protection})
             position = (str(fill_price), fill_row[0],
                         None if target is None else str(target), entry_role)
             state = "PAPER_FILLED"
@@ -691,7 +735,7 @@ def _monitor_paper_locked(con):
             "TAKER" if intent.order_kind == OrderKind.MARKET else "MAKER")
         target = None if raw_target is None else Decimal(raw_target)
         held = [c for c in candles if c[0] >= filled_at]
-        from . import costs, execsim, importer, volatility
+        from . import costs, execsim, importer, profit_protection, volatility
         long = intent.direction == "LONG"
         # THE SHARED EXIT WALK. This used to be re-implemented here, and the
         # copy had drifted: it closed a stop at `intent.stop` even when the bar
@@ -709,10 +753,58 @@ def _monitor_paper_locked(con):
         # an unreachable target expresses that without a second code path.
         tp_effective = target if target is not None else (
             Decimal("Infinity") if long else Decimal("-Infinity"))
-        walked = execsim.walk_exit(
-            [{"open": c[1], "high": c[2], "low": c[3], "close": c[4]}
-             for c in held],
-            0, intent.stop, tp_effective, long, max_bars=PAPER_MAX_HOLDING_BARS)
+        active_stop = intent.stop
+        if intent.profit_protection == profit_protection.COST_COVER:
+            from .swings import compute_atr
+            prior = con.execute(
+                "SELECT open_ts,open,high,low,close FROM candles "
+                "WHERE symbol=? AND tf=? AND open_ts<? ORDER BY open_ts",
+                (intent.symbol, tf, filled_at)).fetchall()
+            history = [{"open_ts": c[0], "open": c[1], "high": c[2],
+                        "low": c[3], "close": c[4]} for c in prior+held]
+            # A gap cannot prove the account survived the missing candle.
+            contiguous = all(held[j][0] == held[j-1][0]+seconds
+                             for j in range(1, len(held)))
+            if not contiguous:
+                refused.append({"intent_id": intent_id,
+                                "reason": "Cannot advance protected stop: closed-candle history has a gap"})
+                continue
+            atr = compute_atr(history)[len(prior):]
+            scheduled = con.execute(
+                "SELECT payload FROM execution_events WHERE intent_id=? "
+                "AND event='PAPER_STOP_SCHEDULED' ORDER BY id LIMIT 1",
+                (intent_id,)).fetchone()
+            scheduled_move = json.loads(scheduled[0]) if scheduled else None
+            managed = profit_protection.walk_paper(
+                policy=intent.profit_protection, symbol=intent.symbol,
+                direction=intent.direction, entry=entry,
+                original_stop=intent.stop, target=target,
+                bars=history[len(prior):], atr=atr, entry_role=entry_role,
+                tf_seconds=seconds, max_bars=PAPER_MAX_HOLDING_BARS,
+                cutoff=now, observed_at=observed_at,
+                scheduled_move=scheduled_move)
+            walked, active_stop = managed["exit"], managed["stop"]
+            if managed["proposal"] is not None:
+                _audit_event(con, intent_id, "PAPER_STOP_SCHEDULED",
+                             managed["proposal"], commit=False)
+            if (scheduled_move is not None and
+                    observed_at >= scheduled_move["effective_at"] and
+                    (walked is None or
+                     held[walked[2]][0] >= scheduled_move["effective_at"])):
+                recorded = con.execute(
+                    "SELECT 1 FROM execution_events WHERE intent_id=? "
+                    "AND event='PAPER_STOP_MOVED' LIMIT 1", (intent_id,)).fetchone()
+                if not recorded:
+                    _audit_event(con, intent_id, "PAPER_STOP_MOVED",
+                                 scheduled_move, commit=False)
+            con.execute("UPDATE paper_positions SET stop=? WHERE intent_id=? AND state='OPEN'",
+                        (str(active_stop), intent_id))
+        else:
+            walked = execsim.walk_exit(
+                [{"open": c[1], "high": c[2], "low": c[3], "close": c[4]}
+                 for c in held],
+                0, intent.stop, tp_effective, long,
+                max_bars=PAPER_MAX_HOLDING_BARS)
         if walked is None:
             updated.append({"intent_id": intent_id, "state": "PAPER_FILLED"})
             continue
@@ -770,7 +862,9 @@ def _monitor_paper_locked(con):
                    "slippage_price_units": str(settlement["slip"]),
                    "slippage_missing": settlement["slip_missing"],
                    "cost_profile_version": profile.version,
-                   "closed_at": closed_at}
+                   "closed_at": closed_at,
+                   "active_stop": str(active_stop),
+                   "profit_protection": intent.profit_protection}
         event(con, intent_id, "PAPER_CLOSED", payload)
         event(con, intent_id, "ORDER_LIFECYCLE_COMPLETE", payload)
         complete(con, intent_id, {

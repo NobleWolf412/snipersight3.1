@@ -28,7 +28,8 @@ from . import costs
 from .execsim import EXEC_VERSION
 from .runlog import RunRecorder
 
-SCALE_VERSION = "scale-v0.23-draft"
+SCALE_VERSION = "scale-v0.24-draft"
+# v0.24: reads exec-v0.30; the causal cross can change parent exits.
 # v0.22: the add's economics gate prices FUNDING. `estimated_round_trip_cost`
 # charges it only when symbol and tf_seconds are both supplied, and this was
 # the ONE caller passing neither — every other playbook's gate passed both.

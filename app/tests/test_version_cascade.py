@@ -39,7 +39,7 @@ from engine import (abtest, achievements, analyst_context, chart_insight,
                     diagnostic_status, edgestats, entrystats, factorstats,
                     funding, fvg, learning, macro_calendar, market_context,
                     registry, settings, volprofile)
-from engine import open_interest, research, researchsignals
+from engine import open_interest, profit_protection, research, researchsignals
 
 
 # Operational authorities do not write research facts, so they do not belong
@@ -74,16 +74,18 @@ OPERATIONAL_EXPECTED = {
     # off the diff.
     # v0.12 starts public Phemex OI collection at the scan's fixed clock and
     # schedules research-only detectors after account decisions.
-    "live": "live-v0.12-draft",
+    "live": "live-v0.17-draft",
+    "profit_protection": "profit-protection-v0.2-draft",
     "open_interest": "open-interest-v0.1-draft",
-    "stopstudy": "stop-study-v0.1-draft",
+    "stopstudy": "stop-study-v0.5-draft",
     # Writes its own `zone_study*` ledger and nothing else — no account
     # order, no fact under another engine's tag. Locked for the reason
     # the other studies are: it freezes DEPENDENCIES and pauses rather
     # than repricing across a rule change, so the tag is what says which
     # rules a stored comparison was made under.
-    "zonestudy": "zone-study-v0.1-draft",
-    "forwardtrial": "forward-trial-v0.1-draft",
+    "zonestudy": "zone-study-v0.5-draft",
+    "forwardtrial": "forward-trial-v0.2-draft",
+    "simpletrial": "simple-trial-v0.1-draft",
     # Not a fact producer: it reads `paper_positions` and the PAPER outbox and
     # returns an account. Locked anyway, for the reason `agg` is — it sits
     # upstream of every paper sizing decision, so a rule change here changes
@@ -100,14 +102,14 @@ OPERATIONAL_EXPECTED = {
     # that; livegate read it as a number and therefore scored its drawdown
     # criterion 0.00% on every healthy book, which made one of the four
     # conditions on real-money routing unfailable. Durable output grew.
-    "paperbook": "paperbook-v0.6-draft",
+    "paperbook": "paperbook-v0.7-draft",
     # contracts-v0.4: a RiskDecision states the equity basis its size is a
     # percentage of, and where that figure was read. Nothing converted the
     # ACCOUNT between the paper replay and a dispatched order.
     # contracts-v0.5: an opportunity carries the execution DOMAIN its state
     # came from, an `attempt_id` for the occurrence, and the replay's account
     # as an inert `research_story`. Wire grew; no number changed.
-    "contracts": "contracts-v0.6-draft",
+    "contracts": "contracts-v0.8-draft",
     # automation-v0.5: every drill names and enforces its required evidence;
     # restart demands a boot-id change, so lost-response recovery inside one
     # process can no longer pass one of the seven TESTNET->LIVE gates.
@@ -124,7 +126,7 @@ OPERATIONAL_EXPECTED = {
     # dispatched. No sizing or routing rule moved; it asks the right book.
     # autotrader-v0.7: equity_basis_source is read from the decision rather
     # than hardcoded, and the idempotency key carries the attempt.
-    "autotrader": "autotrader-v0.8-draft",
+    "autotrader": "autotrader-v0.10-draft",
     # execution-core-v0.6: private entries honour expires_at (cancel at the
     # venue), a proven pre-wire refusal is SUBMIT_FAILED and retryable
     # instead of stuck-SUBMITTING-forever, and RESTART_RECOVERED carries
@@ -137,13 +139,13 @@ OPERATIONAL_EXPECTED = {
     # losses that hurt most.
     # execution-core-v0.9: `intent_key` accepts the attempt, so a retested
     # zone stops inheriting the previous attempt's terminal state.
-    "execution_core": "execution-core-v0.11-draft",
-    "positions": "positions-v0.3-draft",
+    "execution_core": "execution-core-v0.15-draft",
+    "positions": "positions-v0.5-draft",
     # phemex-private-v0.4: the stop (sent on every order) and every target
     # are tick-validated for all order kinds; submit() sets the leverage the
     # plan implies rather than a hardcoded 1x bucket.
-    "phemex_private": "phemex-private-v0.4-draft",
-    "lifecycle": "lifecycle-v0.1-draft",
+    "phemex_private": "phemex-private-v0.6-draft",
+    "lifecycle": "lifecycle-v0.3-draft",
     # opportunity-v0.6: one HTF policy authority — only the playbook's own
     # recorded bias verdict blocks; CONFLICT/CONDITIONAL are display states
     # and a missing ladder reading never holds dispatch. v0.5: risk reasons
@@ -168,7 +170,7 @@ OPERATIONAL_EXPECTED = {
     # branch and returned NO RECORD — which under the v0.8 rule above means
     # "this domain has not acted", and the setup read READY again after the
     # venue had filled or refused its entry.
-    "opportunities": "opportunity-v0.10-draft",
+    "opportunities": "opportunity-v0.11-draft",
     # quality-v0.5: staleness floored at 30 minutes. 2 x tf on a 5m series is
     # ten minutes, and a scan cycle is eleven to twelve, so every 5m feed was
     # DEGRADED near the end of every cycle and healed on the next import — the
@@ -204,7 +206,7 @@ OPERATIONAL_EXPECTED = {
     # UNTRADED series halted sizing everywhere — DATA_HEALTH_BLOCKED went from
     # 2.3% of risk facts to 49.3% on the live store. `status` still reports
     # BLOCKED and the per-market gate still refuses those markets.
-    "quality": "quality-v0.8-draft",
+    "quality": "quality-v0.9-draft",
     # listings-v0.1: the venue product sweep, appended one fact per venue per
     # run. Locked from birth — quality's verdict now depends on it, and a
     # version nobody tracks until something reads it leaves its early facts
@@ -245,17 +247,19 @@ OPERATIONAL_EXPECTED = {
     "stock_calendar": "stock-calendar-v0.1-draft",
     "stock_demo": "stock-demo-v0.1-draft",
     "stock_store": "stock-store-v0.1-draft",
-    "shared_account": "shared-account-v0.2-draft",
+    "shared_account": "shared-account-v0.3-draft",
     "shared_profile": "shared-paper-profile-v0.2-draft",
 }
 
 
 def operational_versions():
-    from engine import opportunities, paperbook, shared_account, forwardtrial, stopstudy, zonestudy
+    from engine import opportunities, paperbook, shared_account, forwardtrial, simpletrial, stopstudy, zonestudy
     return {
         "live": live.LIVE_VERSION,
+        "profit_protection": profit_protection.PROFIT_PROTECTION_VERSION,
         "open_interest": open_interest.OPEN_INTEREST_VERSION,
         "forwardtrial": forwardtrial.TRIAL_VERSION,
+        "simpletrial": simpletrial.TRIAL_VERSION,
         "stopstudy": stopstudy.STOP_STUDY_VERSION,
         "zonestudy": zonestudy.ZONE_STUDY_VERSION,
         "paperbook": paperbook.PAPERBOOK_VERSION,
@@ -421,12 +425,12 @@ RETIRED_MANUAL = tuple(v for v in manual.MANUAL_VERSIONS
 #: ignition — are deliberately absent: their output changes silently and
 #: correctly, and a version they do not have cannot strand anything.
 ATR_CONSUMERS = (
-    "abtest", "breakout", "chartread", "execsim", "fvg", "liquidity", "ma",
-    "manual", "momentum", "ranges", "regimeread", "scalein", "setups",
+    "abtest", "breakout", "chartread", "execsim", "execution", "fvg", "liquidity", "ma",
+    "manual", "momentum", "positions", "ranges", "regimeread", "scalein", "setups",
     "structure", "trend", "volatility", "volume", "zones", "shared_account", "forwardtrial", "stopstudy",
     # Imports `swings.compute_atr` and writes facts, so an ATR rule change
     # moves its output without touching a version constant it imports.
-    "zonestudy",
+    "zonestudy", "simpletrial",
 )
 
 
@@ -615,7 +619,7 @@ EXPECTED = {
     # add's setup_id is f"{parent}|ADD{n}" and carries no scale tag, so a
     # scale bump alone leaves two generations of ADD exec facts under one
     # setup_id. That is S37 exactly, which is why these two never split.
-    "exec": "exec-v0.29-draft",
+    "exec": "exec-v0.30-draft",
     # risk-v0.22: the envelope restated in R, sized by mode (paper/shadow 2%,
     # testnet/live 0.25%), gates identical everywhere; DECISIONs record their
     # pct. The v0.21 note above this line claimed "no cascade follows risk" —
@@ -634,7 +638,7 @@ EXPECTED = {
     # now carry a corrected stop fill.
     # risk-v0.29: sizes setup-v0.23 against exec-v0.28 and replays the
     # account from those facts. No sizing rule changed.
-    "risk": "risk-v0.30-draft",
+    "risk": "risk-v0.32-draft",
     # riskpaper-v0.1: the PAPER BOOK's own risk authority, born with this
     # separation. It rules only on setups that are still live, against
     # `paperbook`'s ledger — balance, exposure, reservations, cooldowns and
@@ -646,7 +650,7 @@ EXPECTED = {
     # loss controls are read at the moment of decision, not at the setup's
     # confirmation. All three let the book approve more than it could fund.
     # riskpaper-v0.5: the paper book's half of the risk-v0.29 move.
-    "riskpaper": "riskpaper-v0.6-draft",
+    "riskpaper": "riskpaper-v0.8-draft",
     # scale-v0.22: the add's economics gate prices FUNDING. It was the one
     # estimated_round_trip_cost caller passing neither symbol nor
     # tf_seconds, which is what that function requires before it charges
@@ -654,9 +658,9 @@ EXPECTED = {
     # passed both. setups moved to v0.11 for this exact change and scalein
     # imports MIN_RISK_COST_MULT from it. Understated cost means the gate
     # rejects less, so adds were admitted on economics they do not have.
-    "scale": "scale-v0.23-draft",
+    "scale": "scale-v0.24-draft",
     # cooldown-v0.16: reads exec-v0.28 to decide the re-entry lockout.
-    "cooldown": "cooldown-v0.17-draft",
+    "cooldown": "cooldown-v0.18-draft",
     # breakout-v0.5 / trend-v0.2: both now RECORD the top-down bias block on
     # every setup they emit. No rule changed in either and no trade differs —
     # both policies are ALLOW everywhere — but the payload does, and a payload
@@ -801,7 +805,7 @@ EXPECTED = {
     # volprofile-v0.3: bin indices in Decimal; a close on a bin edge no longer
     # lands one bin low on the recorded fact.
     "volprofile": "volprofile-v0.3-draft",
-    "abtest": "abtest-v0.7",
+    "abtest": "abtest-v0.8",
     "edgestats": "edgestats-v0.4-draft",
     "entrystats": "entrystats-v0.3-draft",
     "factorstats": "factorstats-v0.2-draft",
@@ -832,7 +836,7 @@ EXPECTED = {
     "macro_calendar": "macro-calendar-v0.1-draft",
     "market_context": "market-context-v0.1-draft",
     "strategy_contract": "strategy-contract-v0.1-draft",
-    "settings": "settings-v0.2-draft",
+    "settings": "settings-v0.3-draft",
 }
 
 # Who reads whose facts. Bumping a key REQUIRES considering every value.

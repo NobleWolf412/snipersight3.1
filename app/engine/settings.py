@@ -29,7 +29,7 @@ history; the old baseline and every fact under it are retained.
 import json
 import time
 
-SETTINGS_VERSION = "settings-v0.2-draft"
+SETTINGS_VERSION = "settings-v0.3-draft"
 
 # name -> (class, type, default, description)
 SPEC = {
@@ -45,6 +45,12 @@ SPEC = {
     "strategy_scale_in": ("BEHAVIOURAL", bool, False,
                           "Allow SCALE_IN adds. Off by default: the first-live "
                           "safety contract forbids averaging and pyramiding."),
+    "profit_protection_cost_cover": ("BEHAVIOURAL", bool, False,
+                                     "For new bot trades, after one full closed "
+                                     "setup candle and a +1R move, tighten the "
+                                     "actual stop to cover estimated costs. "
+                                     "Paper and private custody use one rule; "
+                                     "existing trades keep their pinned choice."),
     # Declared but PLANNED — `registry.RANGE_FADE`. The switch exists so the
     # catalogue can render its toggle in a disabled state against a real
     # setting rather than a placeholder, and defaults OFF because the strategy

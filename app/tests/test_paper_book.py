@@ -396,7 +396,7 @@ class TheForwardBook(unittest.TestCase):
         import inspect
         import live
         src = inspect.getsource(live)
-        self.assertLess(src.index("execution.monitor_paper(con)"),
+        self.assertLess(src.index("execution.monitor_paper(con, cutoff=now)"),
                         src.index("riskpaper.run(con)"),
                         "the paper book must settle before it is sized")
         self.assertLess(src.index("riskpaper.run(con)"),

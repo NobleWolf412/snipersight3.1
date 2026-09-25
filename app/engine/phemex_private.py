@@ -24,7 +24,7 @@ from . import automation, phemex
 from .contracts import BrokerExecution, BrokerOrder, ExecutionPlan, OrderKind
 
 
-PHEMEX_PRIVATE_VERSION = "phemex-private-v0.4-draft"
+PHEMEX_PRIVATE_VERSION = "phemex-private-v0.6-draft"
 # v0.4: validate_plan tick-checks the STOP for every order kind (submit sends
 # stopLossRp unconditionally, but only LIMIT entries were checked — an
 # off-tick stop on a MARKET order survived to confirm_attached_protection,
@@ -291,6 +291,8 @@ class PhemexBroker:
                                 else None),
             cumulative_fee=Decimal(str(row.get("cumFeeRv") or
                                        row.get("execFeeRv") or "0")),
+            stop_price=(Decimal(str(row["stopPxRp"]))
+                        if row.get("stopPxRp") not in (None, "") else None),
             raw_code=str(row.get("bizError")) if row.get("bizError") else None,
             version=PHEMEX_PRIVATE_VERSION)
 
@@ -355,7 +357,7 @@ class PhemexBroker:
     def cancel(self, symbol: str, client_order_id: str) -> BrokerOrder:
         result = self._request(
             "DELETE", "/g-orders/cancel",
-            query={"symbol": symbol, "origClOrdID": client_order_id,
+            query={"symbol": symbol, "clOrdID": client_order_id,
                    "posSide": "Merged"})
         return self._order(result.get("data") or {}, fallback_client_id=client_order_id)
 
@@ -386,6 +388,10 @@ class PhemexBroker:
                                timeout_seconds=timeout_seconds)
         return self._order(result.get("data") or {},
                            fallback_client_id=client_order_id)
+
+    def price_tick(self, symbol: str) -> Decimal:
+        """Exact exchange price increment for protective-stop rounding."""
+        return Decimal(str(self._product(symbol)["tick_size"]))
 
     def order_status(self, symbol: str, client_order_id: str,
                      broker_order_id: str | None = None) -> BrokerOrder | None:

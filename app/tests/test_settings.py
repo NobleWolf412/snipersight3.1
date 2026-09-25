@@ -41,6 +41,18 @@ class SettingsCase(unittest.TestCase):
         self.assertIsNotNone(r["baseline"])
         self.assertEqual(self._baselines(), before + 1)
 
+    def test_profit_protection_toggle_is_off_by_default_and_audited(self):
+        self.assertIs(settings.get(self.con, "profit_protection_cost_cover"), False)
+        before = self._baselines()
+        result = settings.set_many(self.con,
+                                   {"profit_protection_cost_cover": True})
+        self.assertEqual(result["behavioural"],
+                         ["profit_protection_cost_cover"])
+        self.assertEqual(self._baselines(), before+1)
+        self.assertIs(settings.get(self.con, "profit_protection_cost_cover"), True)
+        self.assertEqual(settings.history(self.con)[0]["name"],
+                         "profit_protection_cost_cover")
+
     def test_halt_is_operational_and_must_not_reset_the_baseline(self):
         """Halting is how the operator stays safe. If it destroyed the forward
         record, the safety control would punish the caution it exists to allow."""

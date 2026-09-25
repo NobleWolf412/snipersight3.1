@@ -1,4 +1,5 @@
 import sqlite3
+import json
 from decimal import Decimal
 from unittest import mock
 
@@ -283,6 +284,10 @@ def test_paper_entry_uses_shared_maker_then_market_fill_authority():
     ).fetchone()[0]
     assert '"entry_model": "MAKER_THEN_MARKET"' in fill
     assert '"entry_role": "TAKER"' in fill
+    evidence = json.loads(fill)
+    assert evidence["over_plan_risk"] is False
+    assert Decimal(evidence["filled_risk_usd"]) == (
+        paper_plan.intent.quantity * Decimal("2000"))
 
 
 @pytest.mark.parametrize('touch,missing', [(False,False),(True,False),(False,True)])
@@ -445,6 +450,64 @@ def test_private_monitor_turns_partial_fill_into_exact_protected_custody():
     fill_payload = con.execute(
         "SELECT payload FROM position_events WHERE event='FILL'").fetchone()[0]
     assert '"fee":"0.12"' in fill_payload
+
+
+def test_private_monitor_prices_incremental_fills_from_venue_cumulative_vwap():
+    con = memory()
+    private_plan = plan(AutomationMode.TESTNET)
+    execution.enqueue(con, private_plan.intent, plan=private_plan)
+    execution._event(con, private_plan.intent.intent_id, "SUBMITTED", {
+        "broker_order_id": "entry-1", "client_order_id": "entry-client"})
+
+    class Broker:
+        environment = "testnet"
+
+        def __init__(self):
+            self.cumulative = Decimal("0.004")
+            self.average = Decimal("50000")
+            self.fee = Decimal("0.10")
+            self.stop = None
+
+        def order_status(self, symbol, client_order_id, broker_order_id=None):
+            if client_order_id.endswith("-sl"):
+                return self.stop
+            return BrokerOrder(
+                "entry-1", "entry-client", symbol,
+                "Filled" if self.cumulative == Decimal("0.010") else "PartiallyFilled",
+                OrderKind.LIMIT, Decimal("0.010"), self.cumulative,
+                Decimal("50000"), False, 10,
+                average_fill_price=self.average, cumulative_fee=self.fee)
+
+        def submit_protective_stop(self, **kwargs):
+            self.stop = BrokerOrder(
+                "stop-1", kwargs["client_order_id"], kwargs["symbol"],
+                "New", OrderKind.MARKET, kwargs["quantity"], Decimal(0),
+                None, True, 10, stop_price=kwargs["stop"])
+            return self.stop
+
+        def replace(self, symbol, client_order_id, *, quantity, stop,
+                    timeout_seconds=None):
+            self.stop = BrokerOrder(
+                "stop-1", client_order_id, symbol, "New", OrderKind.MARKET,
+                quantity, Decimal(0), None, True, 11, stop_price=stop)
+            return self.stop
+
+    broker = Broker()
+    assert execution.monitor_private(con, broker)["updated"][0]["state"] == "PARTIALLY_FILLED"
+    broker.cumulative = Decimal("0.010")
+    broker.average = Decimal("50012")
+    broker.fee = Decimal("0.25")
+    assert execution.monitor_private(con, broker)["updated"][0]["state"] == "ENTRY_FILLED"
+    fills = [json.loads(row[0]) for row in con.execute(
+        "SELECT payload FROM position_events WHERE event='FILL' ORDER BY id")]
+    assert [(Decimal(f["quantity"]), Decimal(f["price"]), Decimal(f["fee"]))
+            for f in fills] == [
+        (Decimal("0.004"), Decimal("50000"), Decimal("0.10")),
+        (Decimal("0.006"), Decimal("50020"), Decimal("0.15"))]
+    quantity, entry = con.execute(
+        "SELECT quantity,entry FROM managed_positions").fetchone()
+    assert Decimal(quantity) == Decimal("0.010")
+    assert Decimal(entry) == Decimal("50012")
 
 
 def test_operational_evidence_fails_closed_without_reconciliation_or_drills():

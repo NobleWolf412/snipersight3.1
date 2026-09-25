@@ -20,7 +20,7 @@ from .contracts import (DecisionReason, EntryRecommendation, ExecutionDomain,
                         to_wire)
 
 
-OPPORTUNITY_VERSION = "opportunity-v0.10-draft"
+OPPORTUNITY_VERSION = "opportunity-v0.11-draft"
 # v0.10: separate confirmation and entry deadlines; terminal states and
 # existing custody outrank later new-entry rejection. Preserve attempt custody
 # across setup generations so rebuilding cannot offer an already-used attempt.
@@ -270,8 +270,11 @@ def recommend_entry(payload: dict, state: OpportunityState,
             OPPORTUNITY_VERSION, entry_model="MARKET_NEXT_OPEN")
 
     may_cross = str(payload.get("entry_model") or setups.ENTRY_MODEL).upper() == "MAKER_THEN_MARKET"
+    maker_limit = (_decimal(payload["maker_limit"])
+                   if may_cross and payload.get("maker_limit") is not None
+                   else entry)
     return EntryRecommendation(
-        OrderKind.LIMIT, entry, may_cross, expires,
+        OrderKind.LIMIT, maker_limit, may_cross, expires,
         (DecisionReason("STRUCTURE_LIMIT",
                         "Rest the entry at the structure-defined price instead "
                         "of chasing the market."),), OPPORTUNITY_VERSION,

@@ -88,7 +88,7 @@ from .swings import compute_atr
 # v0.4: existing protection resolves before a closed bar can ratchet the stop.
 # Managed stop gaps fill at the adverse open, not an unreachable stop price.
 # Research results using managed/trail exits under earlier tags need rerunning.
-ABTEST_VERSION = "abtest-v0.7"
+ABTEST_VERSION = "abtest-v0.8"
 # v0.7: the swing-v0.11 ATR cascade — the replay computes its own ATR. Analysis-only,
 # writes no facts, and locked for the reason `cycles` is.
 

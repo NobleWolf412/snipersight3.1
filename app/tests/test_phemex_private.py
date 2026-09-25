@@ -107,6 +107,25 @@ def test_replace_preserves_client_identity_and_validates_metadata():
     assert "/g-orders/replace?" in calls[0][1]
 
 
+def test_cancel_uses_the_venue_cancel_identifier_not_replace_identifier():
+    calls = []
+
+    def transport(method, url, headers, body):
+        calls.append((method, url))
+        return {"code": 0, "data": {"orderID": "o-1", "clOrdID": "c-1",
+                "symbol": "BTCUSDT", "ordStatus": "Canceled",
+                "orderQtyRq": "0.010", "cumQtyRq": "0"}}
+
+    broker = phemex_private.PhemexBroker(
+        "key", "secret", transport=transport, products=PRODUCT)
+    canceled = broker.cancel("BTCUSDT", "c-1")
+    assert canceled.client_order_id == "c-1"
+    assert calls[0][0] == "DELETE"
+    assert "/g-orders/cancel?" in calls[0][1]
+    assert "clOrdID=c-1" in calls[0][1]
+    assert "origClOrdID" not in calls[0][1]
+
+
 def test_attached_protection_rejects_opposite_direction():
     broker = phemex_private.PhemexBroker(
         "key", "secret", transport=lambda *args: {}, products=PRODUCT)

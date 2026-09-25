@@ -9,10 +9,10 @@ from decimal import Decimal
 
 from . import costs, execution, execsim, forwardtrial, importer, store, swings
 
-ZONE_STUDY_VERSION = "zone-study-v0.1-draft"
+ZONE_STUDY_VERSION = "zone-study-v0.5-draft"
 # New-cohort dependencies only; existing configs stay frozen and pause.
-DEPENDENCIES = {"exec": "exec-v0.29-draft", "swing": "swing-v0.11-draft",
-                "execution": "execution-core-v0.11-draft", "forwardtrial": "forward-trial-v0.1-draft"}
+DEPENDENCIES = {"exec": "exec-v0.30-draft", "swing": "swing-v0.11-draft",
+                "execution": "execution-core-v0.15-draft", "forwardtrial": "forward-trial-v0.2-draft"}
 MANAGEMENT = {"15m": "5m", "1H": "15m", "4H": "1H"}
 RULES = {"HOLD": "Original stop", "SWING_IDEAL": "Swing trail - candle close",
          "SWING_OBSERVED": "Swing trail - scanner timing", "ZONE_IDEAL": "Defended zone - candle close",

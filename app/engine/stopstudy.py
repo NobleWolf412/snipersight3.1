@@ -9,10 +9,10 @@ from decimal import Decimal
 
 from . import costs, execution, execsim, forwardtrial, importer, store, swings
 
-STOP_STUDY_VERSION = "stop-study-v0.1-draft"
+STOP_STUDY_VERSION = "stop-study-v0.5-draft"
 # New-cohort dependencies only; existing configs stay frozen and pause.
-DEPENDENCIES = {"exec": "exec-v0.29-draft", "swing": "swing-v0.11-draft",
-                "execution": "execution-core-v0.11-draft", "forwardtrial": "forward-trial-v0.1-draft"}
+DEPENDENCIES = {"exec": "exec-v0.30-draft", "swing": "swing-v0.11-draft",
+                "execution": "execution-core-v0.15-draft", "forwardtrial": "forward-trial-v0.2-draft"}
 RULES = {"HOLD": "Original stop", "COST_COVER": "Cover costs after +1R",
          "STRUCTURE": "Follow confirmed swings"}
 
