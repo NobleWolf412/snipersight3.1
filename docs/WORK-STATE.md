@@ -199,7 +199,8 @@ stop-management outcome below remains outstanding and must survive this work.
   three clock-test fixtures were updated for the new collector: 2,137 Python
   tests passed, 13 skipped, 230 subtests passed, then JavaScript, ESLint and
   control-byte checks passed. No running process, account, setting, private
-  order or root store was changed.
+  order or root store was changed. Commit `01afe57` was pushed to draft PR #7;
+  both remote CI checks passed. The branch has not been merged or activated.
 
 - **Remaining after this branch:** SS-004 still misses some 5-minute entry
   deadlines: read-only scanner logs show roughly 141–168 seconds preparing
