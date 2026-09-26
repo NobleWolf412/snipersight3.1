@@ -5,7 +5,7 @@ const AxeBuilder=require('@axe-core/playwright').default;
 test('confirmation cards explain actual conditions and candle progress',async({page},info)=>{
   const now=Math.floor(Date.now()/1000);
   const guide={available:true,state:'CONFIRMING',direction:'SHORT',timeframe:'15m',as_of:now,
-    intended_trade:'Short · Resistance rejection',market_context:'15m structure turning bearish; 4H bullish structure',
+    intended_trade:'Short · Resistance rejection',market_context:'15m turned bearish, no follow-through (last bearish break Mar 9, 2026, 20 bars ago); 4H bullish structure',
     zone_bottom:'3.1105',zone_top:'3.1780',confirmation_boundary:'3.1105',last_price:'3.12',last_closed_at:now-20,
     conditions:['High at or above 3.1105','Close strictly below 3.1105','Close in the bottom 34% of that candle’s range'],
     max_followup_bars:3,completed_followup_bars:1,next_close_at:now+800,confirmation_deadline:now+1700,

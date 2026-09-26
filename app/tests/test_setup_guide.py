@@ -38,7 +38,7 @@ def test_short_rules_progress_and_future_candles(fixture):
     assert g['completed_followup_bars']==1 and len(g['steps'])==3
     assert g['next_close_at']==3600 and g['touch_close']==1800
     assert g['last_closed_at']==2700 and len(g['mini_chart']['bars'])==2
-    assert g['market_context']=='15m structure turning bearish'
+    assert g['market_context']=='15m turned bearish'
     assert 'above 3.1780' in g['skip_if'] and '5%' in g['skip_if']
 
 
@@ -210,3 +210,76 @@ def test_the_note_does_not_claim_nothing_was_graded(fixture):
     the card must not deny it while colouring factors."""
     note = Reader(fixture, 2800).evidence('s')['note']
     assert 'graded' not in note and 'not proof' in note
+
+
+# ------------------------------------------------------ structure wording + age
+
+from setup_guide import structure_words  # noqa: E402
+from engine.regime import REGIME_VERSION  # noqa: E402
+from engine.structure import STRUCTURE_VERSION  # noqa: E402
+
+BEAR_CHOCH = dict(regime='TRANSITION', evidence={'last_break': {
+    'event': 'CHOCH', 'direction': 'BEAR', 'at': 1_741_478_400}})   # 2025-03-09
+
+
+def _reading(phase, bars, moved):
+    return dict(phase=phase, last_break=dict(bars_since=bars, displacement_atr=moved))
+
+
+def test_an_old_bearish_turn_is_not_called_turning():
+    """ADA, September 2026: '1W structure turning bearish' on a weekly that had
+    risen since July. The label had no age and 'turning' read as fresh."""
+    words = structure_words(BEAR_CHOCH, _reading('DRIFT_DOWN', 28, '-1.40'))
+    assert 'turning' not in words
+    assert words == ('turned bearish, no follow-through (last bearish break '
+                     'Mar 9, 2025, 28 bars ago; price has since moved back past it)')
+
+
+def test_each_turn_phase_has_its_own_words():
+    assert structure_words(BEAR_CHOCH, _reading('TURN_DOWN', 3, '0.50')).startswith('fresh turn bearish (')
+    assert structure_words(BEAR_CHOCH, _reading('IMPULSE_DOWN', 5, '4.00')).startswith('turned bearish and ran hard (')
+    assert 'moved back' not in structure_words(BEAR_CHOCH, _reading('IMPULSE_DOWN', 5, '4.00'))
+
+
+def test_trend_keeps_its_label_and_says_when_stretched():
+    bull = dict(regime='BULL_TREND', evidence={'last_break': {'event': 'BOS', 'direction': 'BULL',
+                                                              'at': 1_741_478_400}})
+    assert structure_words(bull, _reading('TREND_UP_EXTENDED', 9, '3.50')) == (
+        'bullish structure, stretched far past its last break (last bullish break Mar 9, 2025, 9 bars ago)')
+
+
+def test_without_a_reading_only_the_recorded_fact_is_described():
+    assert structure_words(BEAR_CHOCH) == 'turned bearish (last bearish break Mar 9, 2025)'
+    assert structure_words(dict(regime='TRANSITION')) == 'structure changed; direction not recorded'
+
+
+def test_guide_reads_the_phase_as_of_the_setup_record(tmp_path):
+    con = store.connect(tmp_path/'phase.db')
+    week = 604800
+    manifest = store.record_manifest(con, 'strategy', dict(
+        version=setups.SETUP_VERSION, confirm_max_bars=3, rejection_fraction='0.66',
+        inputs=dict(zone=zones.ZONE_VERSION, regime=REGIME_VERSION)))
+    for i in range(20):
+        ts = i * week
+        con.execute('INSERT INTO candles VALUES(?,?,?,?,?,?,?,?,?,?)',
+                    ('TESTUSDT', '1W', ts, '1.00', '1.05', '0.95', '1.00', '1', 'fixture', ts + week))
+    brk_at, recorded = 2 * week, 20 * week
+    store.insert_fact(con, symbol='TESTUSDT', tf='1W', kind='structure', market_time=brk_at,
+                      confirmed_at=brk_at + week, algo_version=STRUCTURE_VERSION,
+                      payload=dict(event='CHOCH', direction='BEAR', level='0.90'))
+    store.insert_fact(con, symbol='TESTUSDT', tf='1W', kind='regime', market_time=brk_at,
+                      confirmed_at=brk_at + week, algo_version=REGIME_VERSION,
+                      payload=dict(regime='TRANSITION', evidence={'last_break': {
+                          'event': 'CHOCH', 'direction': 'BEAR', 'at': brk_at}}))
+    store.insert_fact(con, symbol='TESTUSDT', tf='1W', kind='zone', market_time=0, confirmed_at=week,
+                      algo_version=zones.ZONE_VERSION,
+                      payload=dict(zone_id='z', event='CREATED', bottom='1.10', top='1.20'))
+    store.insert_fact(con, symbol='TESTUSDT', tf='1W', kind='setup', market_time=19 * week,
+                      confirmed_at=recorded, algo_version=setups.SETUP_VERSION,
+                      payload=dict(setup_id='w', zone_id='z', direction='SHORT', state='FORMING',
+                                   manifest_hash=manifest))
+    con.commit()
+    g = Reader(con, recorded + week).guide('w')
+    assert g['market_context'] == ('1W turned bearish, no follow-through (last bearish break '
+                                   'Jan 15, 1970, 17 bars ago; price has since moved back past it)')
+    con.close()

@@ -1,8 +1,10 @@
 """Read-only, manifest-pinned explanations. Never decides or places a trade."""
 import json
+import time
 from decimal import Decimal
 
-from engine import costs, htfcontext, importer, setups, store, zones
+from engine import costs, htfcontext, importer, regimeread, setups, store, zones
+from engine.regime import REGIME_VERSION
 from engine.swings import compute_atr
 
 
@@ -24,6 +26,56 @@ def mini_chart(candles, bottom, top, boundary):
                          rising=close>=op))
     return dict(bars=bars, zone_y=y(top), zone_height=str(Decimal(y(bottom))-Decimal(y(top))),
                 boundary_y=y(boundary), last_y=y(candles[-1]['close']))
+
+
+# "1W structure turning bearish" was printed for ADA in September 2026 while the
+# weekly had risen since July: TRANSITION only says the LAST break was a CHoCH,
+# and it stays TRANSITION until the next break, however many bars that takes.
+# "Turning" read as fresh. The phase names direction AND whether it followed
+# through (regimeread), and the break date says how old the claim is.
+_TREND_WORDS = {'BULL_TREND': 'bullish structure', 'BEAR_TREND': 'bearish structure',
+                'WEAKENING_BULL': 'weakening bullish structure',
+                'WEAKENING_BEAR': 'weakening bearish structure',
+                'RANGE': 'mixed structure / range'}
+_TURN_WORDS = {'TURN': 'fresh turn {d}', 'IMPULSE': 'turned {d} and ran hard',
+               'DRIFT': 'turned {d}, no follow-through'}
+_SIDE = {'BULL': 'bullish', 'BEAR': 'bearish'}
+
+
+def structure_words(payload, reading=None):
+    """One timeframe's structure in trader words, with the age of its last break.
+
+    `payload` is the recorded regime fact; `reading` is regimeread's as-of view
+    of the same moment, or None when the recorded regime version is not the one
+    regimeread reads (then only what the fact itself carries is said).
+    """
+    regime = payload.get('regime')
+    brk = (payload.get('evidence') or {}).get('last_break') or {}
+    side = _SIDE.get(brk.get('direction'))
+    phase = (reading or {}).get('phase') or ''
+    if regime == 'TRANSITION':
+        if not side:
+            return 'structure changed; direction not recorded'
+        kind = phase.split('_')[0]
+        text = _TURN_WORDS[kind].format(d=side) if kind in _TURN_WORDS else f'turned {side}'
+    else:
+        text = _TREND_WORDS.get(regime)
+        if not text:
+            return None
+        if phase.endswith('_EXTENDED'):
+            text += ', stretched far past its last break'
+    if brk.get('at') is None:
+        return text
+    detail = [time.strftime('%b %d, %Y', time.gmtime(brk['at'])).replace(' 0', ' ')]
+    last = (reading or {}).get('last_break') or {}
+    if last.get('bars_since') is not None:
+        detail.append(f"{last['bars_since']} bars ago")
+    moved = last.get('displacement_atr')
+    note = ''
+    if moved is not None and Decimal(moved) < 0:
+        note = '; price has since moved back past it'
+    label = f'last {side} break' if side else 'last break'
+    return f"{text} ({label} {', '.join(detail)}{note})"
 
 
 class Reader:
@@ -111,14 +163,8 @@ class Reader:
                 (symbol, timeframe, inputs.get('regime'), updated)).fetchone()
             if not regime:
                 continue
-            p = json.loads(regime[0])
-            words = {'BULL_TREND':'bullish structure', 'BEAR_TREND':'bearish structure',
-                     'WEAKENING_BULL':'weakening bullish structure', 'WEAKENING_BEAR':'weakening bearish structure',
-                     'RANGE':'mixed structure / range'}
-            description = words.get(p.get('regime'))
-            if p.get('regime') == 'TRANSITION':
-                direction = (p.get('evidence', {}).get('last_break') or {}).get('direction')
-                description = {'BULL':'structure turning bullish', 'BEAR':'structure turning bearish'}.get(direction, 'structure changed; direction not recorded')
+            reading = self._reading(symbol, timeframe, updated) if inputs.get('regime') == REGIME_VERSION else None
+            description = structure_words(json.loads(regime[0]), reading)
             if description:
                 context.append(f'{timeframe} {description}')
         result['market_context'] = '; '.join(context) if context else 'Directional structure evidence was not recorded.'
@@ -190,6 +236,22 @@ class Reader:
             htf['stance']['strategy_note'] = 'Reversal trades are counter-trend by design; this is its normal case.'
         out['higher_timeframe'] = htf
         return out
+
+    def _reading(self, symbol, tf, as_of):
+        """regimeread as of the setup's record time, on candles closed by then."""
+        seconds = importer.TF_SECONDS.get(tf)
+        if not seconds:
+            return None
+        cursor = self.con.execute(
+            'SELECT * FROM candles WHERE symbol=? AND tf=? AND open_ts+?<=? ORDER BY open_ts DESC LIMIT 300',
+            (symbol, tf, seconds, as_of))
+        names = [column[0] for column in cursor.description]
+        candles = [dict(zip(names, c)) for c in cursor][::-1]
+        factory = self.con.row_factory   # store.get_facts switches it to Row
+        try:
+            return regimeread.load(self.con, symbol, tf, seconds, candles=candles).at(as_of)
+        finally:
+            self.con.row_factory = factory
 
     def _candles(self, symbol, tf, seconds):
         key = (symbol, tf)
