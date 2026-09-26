@@ -7,9 +7,11 @@ import json
 import time
 from decimal import Decimal
 
-from . import breakout, costs, execsim, importer, store, swings, venues
+from . import breakout, costs, execsim, importer, store, studycohort, swings, venues
 
-TRIAL_VERSION = "forward-trial-v0.2-draft"
+TRIAL_VERSION = "forward-trial-v0.3-draft"
+# v0.3: a bumped TRIAL_VERSION archives the stored cohort and starts a fresh
+# one (`studycohort`). v0.1 had sat PAUSED since exec moved to v0.29.
 # Frozen on purpose, and re-pointed by hand when an input moves. A trial
 # whose stored config names other versions goes PAUSED rather than
 # repricing across the change (`active`), because its record is evidence
@@ -30,8 +32,15 @@ def exists(con):
     return con.execute("SELECT 1 FROM sqlite_master WHERE name='forward_trial'").fetchone() is not None
 
 
+def current(con):
+    """True when the stored trial is this code's cohort (or none exists yet)."""
+    return studycohort.stored_version(con, "forward_trial") in (None, TRIAL_VERSION)
+
+
 def activate(con, now):
-    """Scanner-only, once. Caller holds the cross-process write lock."""
+    """Scanner-only, once per cohort. Caller holds the cross-process write lock."""
+    previous = studycohort.archive_if_superseded(
+        con, "forward_trial", ("forward_trial_events", "forward_trial_checks"), TRIAL_VERSION)
     con.execute("CREATE TABLE IF NOT EXISTS forward_trial (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)")
     con.execute("CREATE TABLE IF NOT EXISTS forward_trial_events (id INTEGER PRIMARY KEY, setup_id TEXT NOT NULL, event TEXT NOT NULL, observed_at INTEGER NOT NULL, payload TEXT NOT NULL, UNIQUE(setup_id,event))")
     con.execute("CREATE TABLE IF NOT EXISTS forward_trial_checks (id INTEGER PRIMARY KEY, checked_at INTEGER NOT NULL, payload TEXT NOT NULL)")
@@ -39,7 +48,7 @@ def activate(con, now):
         "version": TRIAL_VERSION, "dependencies": DEPENDENCIES, "started_at": now,
         "watermark": con.execute("SELECT COALESCE(MAX(id),0) FROM facts").fetchone()[0],
         "starting_balance": str(STARTING_BALANCE), "risk_usd": str(RISK_USD),
-        "max_slots": MAX_SLOTS, "timeframes": ["5m", "15m", "1H"],
+        "max_slots": MAX_SLOTS, "timeframes": ["5m", "15m", "1H"], "previous": previous,
         "cost_profiles": {v.key: costs.profile_for(s).payload() for s, v in
                           [("BTC-USD", venues.venue_for("BTC-USD")),
                            ("BTCUSDT", venues.venue_for("BTCUSDT")),
@@ -283,7 +292,7 @@ def report(con, now=None):
         balance += Decimal(item["pnl_usd"])
         curve.append({"time": item["result"]["at"], "value": str(balance)})
     return {"state": "PAUSED" if status.get("paused") else "COLLECTING", "note": status.get("paused"),
-        "started_at": config["started_at"], "checked_at": check[0] if check else None,
+        "started_at": config["started_at"], "previous": config.get("previous"), "checked_at": check[0] if check else None,
         "starting_balance": config["starting_balance"], "balance": str(balance),
         "pnl_usd": str(balance-Decimal(config["starting_balance"])), "risk_usd": config["risk_usd"],
         "max_slots": config["max_slots"], "curve": curve,
