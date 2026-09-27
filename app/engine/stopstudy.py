@@ -7,12 +7,14 @@ import json
 import time
 from decimal import Decimal
 
-from . import costs, execution, execsim, forwardtrial, importer, store, swings
+from . import costs, execution, execsim, forwardtrial, importer, store, studycohort, swings
 
-STOP_STUDY_VERSION = "stop-study-v0.5-draft"
+STOP_STUDY_VERSION = "stop-study-v0.6-draft"
+# v0.6: a bumped version archives the stored cohort and starts fresh
+# (`studycohort`); v0.1 had sat PAUSED since exec moved to v0.29.
 # New-cohort dependencies only; existing configs stay frozen and pause.
 DEPENDENCIES = {"exec": "exec-v0.30-draft", "swing": "swing-v0.11-draft",
-                "execution": "execution-core-v0.15-draft", "forwardtrial": "forward-trial-v0.2-draft"}
+                "execution": "execution-core-v0.15-draft", "forwardtrial": "forward-trial-v0.3-draft"}
 RULES = {"HOLD": "Original stop", "COST_COVER": "Cover costs after +1R",
          "STRUCTURE": "Follow confirmed swings"}
 
@@ -63,13 +65,14 @@ def _dependencies():
 
 
 def _activate(con, now):
+    previous = studycohort.archive_if_superseded(con, "stop_study", ("stop_study_events", "stop_study_checks"), STOP_STUDY_VERSION)
     con.execute("CREATE TABLE IF NOT EXISTS stop_study(id INTEGER PRIMARY KEY CHECK(id=1),payload TEXT NOT NULL)")
     con.execute("CREATE TABLE IF NOT EXISTS stop_study_events(id INTEGER PRIMARY KEY,trade_key TEXT NOT NULL,event TEXT NOT NULL,observed_at INTEGER NOT NULL,payload TEXT NOT NULL,UNIQUE(trade_key,event))")
     con.execute("CREATE TABLE IF NOT EXISTS stop_study_checks(id INTEGER PRIMARY KEY,checked_at INTEGER NOT NULL,payload TEXT NOT NULL)")
     con.execute("INSERT OR IGNORE INTO stop_study VALUES (1,?)", (_json({
         "version": STOP_STUDY_VERSION, "dependencies": DEPENDENCIES, "started_at": now,
         "outbox_watermark": _maxid(con, "execution_outbox"),
-        "trial_watermark": _maxid(con, "forward_trial_events"),
+        "trial_watermark": _maxid(con, "forward_trial_events"), "previous": previous,
         "profiles": {costs.profile_for(s).version: costs.profile_for(s).payload()
                      for s in ("BTC-USD", "BTCUSDT", "PF_XBTUSD")}}),))
 
@@ -315,6 +318,14 @@ def run(con, now=None):
         raise RuntimeError("Stop study requires its own transaction")
     con.execute("BEGIN IMMEDIATE")
     try:
+        if studycohort.stored_version(con, "stop_study") not in (None, STOP_STUDY_VERSION) and not forwardtrial.current(con):
+            # Wait for the breakout trial's own new cohort. Its restarted
+            # ledger numbers events from 1 again, so a watermark taken from
+            # the old ledger now would skip every new breakout trade.
+            con.execute("INSERT INTO stop_study_checks(checked_at,payload) VALUES (?,?)", (now, _json({
+                "paused": "Restarting after the breakout trial starts its new record.", "notes": {}})))
+            con.commit()
+            return
         _activate(con, now)
         config = json.loads(con.execute("SELECT payload FROM stop_study").fetchone()[0])
         notes = {}
@@ -371,7 +382,7 @@ def report(con, now=None, key=None):
     if check and now-check[0] > 1800:
         paused = "Comparison updates are delayed. The last recorded results are shown."
     return {"state": "PAUSED" if paused else "COLLECTING", "note": paused, "rules": RULES,
-        "started_at": config["started_at"], "checked_at": check[0] if check else None,
+        "started_at": config["started_at"], "previous": config.get("previous"), "checked_at": check[0] if check else None,
         "paired_count": len(paired), "pending_count": sum(i["state"] in ("WAITING", "OPEN") for i in items),
         "excluded_count": sum(i["state"] == "EXCLUDED" for i in items), "totals": totals,
         "items": sorted(items, key=lambda i: i["created_at"], reverse=True)[:100]}

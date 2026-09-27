@@ -7,12 +7,14 @@ import json
 import time
 from decimal import Decimal
 
-from . import costs, execution, execsim, forwardtrial, importer, store, swings
+from . import costs, execution, execsim, forwardtrial, importer, store, studycohort, swings
 
-ZONE_STUDY_VERSION = "zone-study-v0.5-draft"
+ZONE_STUDY_VERSION = "zone-study-v0.6-draft"
+# v0.6: a bumped version archives the stored cohort and starts fresh
+# (`studycohort`); v0.1 had sat PAUSED since exec moved to v0.29.
 # New-cohort dependencies only; existing configs stay frozen and pause.
 DEPENDENCIES = {"exec": "exec-v0.30-draft", "swing": "swing-v0.11-draft",
-                "execution": "execution-core-v0.15-draft", "forwardtrial": "forward-trial-v0.2-draft"}
+                "execution": "execution-core-v0.15-draft", "forwardtrial": "forward-trial-v0.3-draft"}
 MANAGEMENT = {"15m": "5m", "1H": "15m", "4H": "1H"}
 RULES = {"HOLD": "Original stop", "SWING_IDEAL": "Swing trail - candle close",
          "SWING_OBSERVED": "Swing trail - scanner timing", "ZONE_IDEAL": "Defended zone - candle close",
@@ -66,13 +68,14 @@ def _dependencies():
 
 
 def _activate(con, now):
+    previous = studycohort.archive_if_superseded(con, "zone_study", ("zone_study_events", "zone_study_checks"), ZONE_STUDY_VERSION)
     con.execute("CREATE TABLE IF NOT EXISTS zone_study(id INTEGER PRIMARY KEY CHECK(id=1),payload TEXT NOT NULL)")
     con.execute("CREATE TABLE IF NOT EXISTS zone_study_events(id INTEGER PRIMARY KEY,trade_key TEXT NOT NULL,event TEXT NOT NULL,observed_at INTEGER NOT NULL,payload TEXT NOT NULL,UNIQUE(trade_key,event))")
     con.execute("CREATE TABLE IF NOT EXISTS zone_study_checks(id INTEGER PRIMARY KEY,checked_at INTEGER NOT NULL,payload TEXT NOT NULL)")
     con.execute("INSERT OR IGNORE INTO zone_study VALUES (1,?)", (_json({
         "version": ZONE_STUDY_VERSION, "dependencies": DEPENDENCIES, "started_at": now,
         "outbox_watermark": _maxid(con, "execution_outbox"),
-        "trial_watermark": _maxid(con, "forward_trial_events"),
+        "trial_watermark": _maxid(con, "forward_trial_events"), "previous": previous,
         "profiles": {costs.profile_for(s).version: costs.profile_for(s).payload()
                      for s in ("BTC-USD", "BTCUSDT", "PF_XBTUSD")}}),))
 
@@ -374,6 +377,14 @@ def run(con, now=None):
         raise RuntimeError("Zone study requires its own transaction")
     con.execute("BEGIN IMMEDIATE")
     try:
+        if studycohort.stored_version(con, "zone_study") not in (None, ZONE_STUDY_VERSION) and not forwardtrial.current(con):
+            # Wait for the breakout trial's own new cohort. Its restarted
+            # ledger numbers events from 1 again, so a watermark taken from
+            # the old ledger now would skip every new breakout trade.
+            con.execute("INSERT INTO zone_study_checks(checked_at,payload) VALUES (?,?)", (now, _json({
+                "paused": "Restarting after the breakout trial starts its new record.", "notes": {}})))
+            con.commit()
+            return
         _activate(con, now)
         config = json.loads(con.execute("SELECT payload FROM zone_study").fetchone()[0])
         notes = {}
@@ -442,13 +453,13 @@ def report(con, now=None, key=None):
         totals[rule]["never_activated"] = sum(not i["moves"][rule] for i in paired)
         totals[rule]["cut_before_target"] = sum(i["results"]["HOLD"]["outcome"] == "TP" and i["results"][rule]["outcome"] == "SL" for i in paired)
     paused = check_data.get("paused")
-    if not _compatible(config):
+    if not paused and not _compatible(config):
         paused = "The comparison is paused because its simulation rules changed."
 
     if check and now-check[0] > 1800:
         paused = "Comparison updates are delayed. The last recorded results are shown."
     return {"state": "PAUSED" if paused else "COLLECTING", "note": paused, "rules": RULES,
-        "started_at": config["started_at"], "checked_at": check[0] if check else None,
+        "started_at": config["started_at"], "previous": config.get("previous"), "checked_at": check[0] if check else None,
         "paired_count": len(paired), "pending_count": sum(i["state"] in ("WAITING", "OPEN") for i in items),
         "excluded_count": sum(i["state"] == "EXCLUDED" for i in items), "totals": totals, "groups": groups,
         "items": sorted(items, key=lambda i: i["created_at"], reverse=True)[:100]}

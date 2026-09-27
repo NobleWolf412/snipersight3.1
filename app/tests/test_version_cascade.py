@@ -77,14 +77,18 @@ OPERATIONAL_EXPECTED = {
     "live": "live-v0.17-draft",
     "profit_protection": "profit-protection-v0.2-draft",
     "open_interest": "open-interest-v0.1-draft",
-    "stopstudy": "stop-study-v0.5-draft",
+    # stop/zone v0.6, forwardtrial v0.3: a bumped study version archives the
+    # stored cohort under its old name and starts a fresh one (studycohort).
+    # All three had sat PAUSED on 2026-09-15 configs; the operator asked for
+    # a fresh restart on 2026-09-26.
+    "stopstudy": "stop-study-v0.6-draft",
     # Writes its own `zone_study*` ledger and nothing else — no account
     # order, no fact under another engine's tag. Locked for the reason
     # the other studies are: it freezes DEPENDENCIES and pauses rather
     # than repricing across a rule change, so the tag is what says which
     # rules a stored comparison was made under.
-    "zonestudy": "zone-study-v0.5-draft",
-    "forwardtrial": "forward-trial-v0.2-draft",
+    "zonestudy": "zone-study-v0.6-draft",
+    "forwardtrial": "forward-trial-v0.3-draft",
     "simpletrial": "simple-trial-v0.1-draft",
     # Not a fact producer: it reads `paper_positions` and the PAPER outbox and
     # returns an account. Locked anyway, for the reason `agg` is — it sits
