@@ -25,6 +25,18 @@ class _Connection:
 
 
 class LiveClockContract(unittest.TestCase):
+    def setUp(self):
+        # live-v0.18 fetches before it stores; keep both halves off the network.
+        self.fetches = []
+        for target, kw in ((live.importer, dict(
+                                fetch=lambda s, tf, start, end, *, as_of:
+                                self.fetches.append((s, tf, start, end, as_of)))),
+                           (live.funding, dict(fetch_since=lambda c, s: None,
+                                               fetch_history=lambda s, since: [],
+                                               store_history=lambda c, s, **kw: {}))):
+            patcher = patch.multiple(target, **kw)
+            patcher.start()
+            self.addCleanup(patcher.stop)
     def test_trial_feed_survives_removal_and_idle_pass_updates_trial(self):
         calls = []
         with patch.object(live.time, "time", return_value=599), \
@@ -55,7 +67,7 @@ class LiveClockContract(unittest.TestCase):
     def test_cycle_passes_its_opening_clock_to_the_importer(self):
         calls = []
 
-        def backfill(_con, symbol, tf, start, end, *, as_of=None):
+        def backfill(_con, symbol, tf, start, end, *, as_of=None, fetched=None):
             calls.append((symbol, tf, start, end, as_of))
             return {"candles": 0, "gaps": 0}
 
@@ -85,11 +97,12 @@ class LiveClockContract(unittest.TestCase):
             self.assertEqual(live.cycle(_Connection(), Mock()), (0, []))
 
         self.assertEqual(calls, [("TESTUSDT", "5m", 0, 599, 599)])
+        self.assertEqual(self.fetches, [("TESTUSDT", "5m", 0, 599, 599)])
 
     def test_cycle_imports_an_unresolved_trade_after_universe_removal(self):
         calls = []
 
-        def backfill(_con, symbol, tf, start, end, *, as_of=None):
+        def backfill(_con, symbol, tf, start, end, *, as_of=None, fetched=None):
             calls.append((symbol, tf, start, end, as_of))
             return {"candles": 0, "gaps": 0}
 

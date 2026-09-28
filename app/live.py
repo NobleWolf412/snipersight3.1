@@ -22,6 +22,7 @@ import signal
 import sys
 import time
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 
 import notify
@@ -31,7 +32,16 @@ from engine import (automation, autotrader, broker_factory, execution, positions
                     forwardtrial, simpletrial, stopstudy, zonestudy, open_interest, research)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.17-draft"
+LIVE_VERSION = "live-v0.18-draft"
+# v0.18: the entry decision is reached sooner; what it decides is unchanged.
+# Measured 2026-09-28: 302s from pass start to decision against a deadline at
+# the next 5m close, so 248 of 248 decisions since 2026-09-25 skipped new
+# entries and the paper book received no order. Two moves: venue requests are
+# awaited concurrently (94s serial), and the 4H/1W roll-up before the decision
+# covers only markets imported this pass — 206 were rolled up (67s) for 45
+# traded, and a market with no new candles has nothing new to roll up. The
+# rest still roll up every pass, after the decision.
+IMPORT_WORKERS = 8
 # v0.12: register research collection boundaries and collect one public Phemex
 # open-interest snapshot on the scan's fixed opening clock. Failures are
 # recorded and never gate importing, setup qualification, sizing or routing.
@@ -584,12 +594,17 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
             f"PAPER BOOK PIN {len(paper_pins - scan_set)} market(s) with an "
             f"open paper order outside the universe stay on data and exit "
             f"resolution: {', '.join(sorted(paper_pins - scan_set)[:6])}")
-    for i, sym in enumerate(import_symbols, 1):
-        _beat(f"import {sym} ({i}/{len(import_symbols)})")
-        # One symbol's transient venue error must not abort the scan. A single
-        # HTTP 429 killed an entire cycle on 2026-07-29 — every other symbol
-        # went unscanned because one call failed. Skip it and carry on; the next
-        # cycle retries it, and any resulting gap is recorded honestly.
+    # Plan every request on this thread (the store is read here and only
+    # here), wait on the venues concurrently, then write in the original
+    # symbol/timeframe order. v0.18: the serial loop spent 94s of a 302s entry
+    # decision waiting on round trips, and every decision since 2026-09-25
+    # missed its 5-minute entry deadline (248 of 248). Each venue's limiter is
+    # process-global, so this changes how long the scanner waits, never how
+    # fast a venue is asked. Stored rows and their order are unchanged.
+    import_plan: dict[str, list[tuple[str, int]]] = {}
+    funding_since: dict[str, int | None] = {}
+    for sym in import_symbols:
+        jobs = []
         try:
             for tf, gran in importer.native_tfs(sym).items():
                 last = con.execute(
@@ -601,10 +616,43 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
                 # ~2M fabricated gaps per cycle — see ingest.history_floor.
                 start = (last + gran) if last else ingest.history_floor(tf, now)
                 if start < closed_until:
-                    r = importer.backfill(con, sym, tf, start, now, as_of=now)
-                    new_candles += r["candles"]
-                    if r["gaps"]:
-                        log.warning(f"live import {sym} {tf}: {r['gaps']} gaps")
+                    jobs.append((tf, start))
+            funding_since[sym] = funding.fetch_since(con, sym)
+            import_plan[sym] = jobs
+        except Exception as exc:
+            log.warning(f"import skipped {sym}: {type(exc).__name__} {exc}")
+    _beat(f"import fetch ({len(import_plan)} markets)")
+    with ThreadPoolExecutor(max_workers=IMPORT_WORKERS,
+                            thread_name_prefix="import") as pool:
+        candle_jobs = {(sym, tf): pool.submit(importer.fetch, sym, tf, start, now,
+                                              as_of=now)
+                       for sym, jobs in import_plan.items() for tf, start in jobs}
+        funding_jobs = {sym: pool.submit(funding.fetch_history, sym, since)
+                        for sym, since in funding_since.items()}
+        # Beat on the clock, not on completions: a venue that is down makes
+        # every request walk a ~150s retry ladder, so eight stalled workers
+        # can go minutes without one finishing — past the watchdog's 300s
+        # dark-scanner threshold if the beat waited for progress.
+        pending = {*candle_jobs.values(), *funding_jobs.values()}
+        total = len(pending)
+        while pending:
+            _done, pending = wait(pending, timeout=30)
+            _beat(f"import fetch {total - len(pending)}/{total}")
+    for i, (sym, jobs) in enumerate(import_plan.items(), 1):
+        _beat(f"import {sym} ({i}/{len(import_plan)})")
+        # One symbol's transient venue error must not abort the scan. A single
+        # HTTP 429 killed an entire cycle on 2026-07-29 — every other symbol
+        # went unscanned because one call failed. Skip it and carry on; the next
+        # cycle retries it, and any resulting gap is recorded honestly. As
+        # before, a failure stores the timeframes ahead of it and skips the
+        # rest of that symbol, funding included.
+        try:
+            for tf, start in jobs:
+                r = importer.backfill(con, sym, tf, start, now, as_of=now,
+                                      fetched=candle_jobs[(sym, tf)].result())
+                new_candles += r["candles"]
+                if r["gaps"]:
+                    log.warning(f"live import {sym} {tf}: {r['gaps']} gaps")
             # Real funding settlements, on the SAME clock snapshot. Stored
             # rather than fetched at simulate time, because a fact that
             # depends on when it was computed is not replayable — and
@@ -613,10 +661,12 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
             # first sight of a symbol pulls its whole history. Spot, and the
             # reference keys, are refused inside `store_history` by asking
             # `venues` rather than re-deciding here.
-            f = funding.store_history(con, sym, as_of=now)
-            if f.get("conflicts"):
-                log.warning(f"funding {sym}: {f['conflicts']} settlement(s) "
-                            f"re-served with a different rate — stored values kept")
+            if sym in funding_jobs:
+                f = funding.store_history(con, sym, as_of=now,
+                                          served=funding_jobs[sym].result())
+                if f.get("conflicts"):
+                    log.warning(f"funding {sym}: {f['conflicts']} settlement(s) "
+                                f"re-served with a different rate — stored values kept")
         except Exception as exc:
             log.warning(f"import skipped {sym}: {type(exc).__name__} {exc}")
             continue
@@ -727,8 +777,15 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
     # already hold; engines and scanning stay scoped to the admitted set.
     tracked = sorted(set(universe.all_tracked_symbols(con)) | paper_pins
                      | {symbol for symbol, _tf in trial_pins})
-    for i, sym in enumerate(tracked, 1):
-        _beat(f"aggregate {sym} ({i}/{len(tracked)})")
+    # Only a market that was asked for candles this pass can have a new bucket
+    # to roll up, and those are every market the decision reads: the scan
+    # set, the paper book's pins, and the reference feeds. The rest wait
+    # until after the decision (v0.18), and still run every pass.
+    fed = set(import_symbols) | {venues.ref_key(t) for t in venues.REFERENCE}
+    tracked_after_decision = [sym for sym in tracked if sym not in fed]
+    tracked_now = [sym for sym in tracked if sym in fed]
+    for i, sym in enumerate(tracked_now, 1):
+        _beat(f"aggregate {sym} ({i}/{len(tracked_now)})")
         for tf in ("4H", "1W"):
             aggregator.aggregate(con, sym, tf)
 
@@ -860,6 +917,10 @@ def cycle(con, log, beat=None, *, analysis_cache=None) -> tuple[int, list]:
     stages["account_decision_s"] = round(time.monotonic()-dispatch_started, 3)
     stages["decision_after_start_s"] = round(time.monotonic()-started, 3)
     research_started = time.monotonic()
+    for i, sym in enumerate(tracked_after_decision, 1):
+        _beat(f"aggregate {sym} ({i}/{len(tracked_after_decision)})")
+        for tf in ("4H", "1W"):
+            aggregator.aggregate(con, sym, tf)
     # Public research I/O runs only after account monitoring and routing. A
     # slow venue response therefore cannot delay a stop, risk check or order.
     # `now` remains the cycle-opening timestamp, so response timing cannot

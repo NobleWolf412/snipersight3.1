@@ -83,6 +83,35 @@ class StoredSeries(unittest.TestCase):
         self.assertEqual(got[1_003_600], Decimal("-0.0002"))
         self.assertEqual(got[1_007_200], Decimal("0"))
 
+    def test_prefetched_settlements_store_exactly_what_a_fetch_would(self):
+        """live-v0.18 fetches on a worker thread and stores on the cycle's. The
+        split must not change a row, and must ask the venue the same question."""
+        since = funding.fetch_since(self.con, "PF_XBTUSD")
+        with mock.patch.object(funding, "history", return_value=self.rows) as h:
+            served = funding.fetch_history("PF_XBTUSD", since)
+        h.assert_called_once_with("PF_XBTUSD", since_ts=None)
+        with mock.patch.object(funding, "history", side_effect=AssertionError("network")):
+            out = funding.store_history(self.con, "PF_XBTUSD", as_of=2_000_000,
+                                        served=served)
+        self.assertEqual(out["stored"], 3)
+        self.assertEqual(funding.series(self.con, "PF_XBTUSD"), self.rows)
+        with mock.patch.object(funding, "history", side_effect=AssertionError("network")):
+            self.assertEqual(funding.fetch_history("BTC-USD", None), [])
+            self.assertEqual(funding.fetch_history("BTCUSDT@binance-spot", None), [])
+
+    def test_every_funding_request_waits_on_its_venue_limiter(self):
+        """live-v0.18 fetches funding from workers. Unthrottled, eight of them
+        would ride on top of the candle budget the venue limiter protects."""
+        from engine import kraken, phemex
+        body = mock.MagicMock()
+        body.__enter__.return_value.read.return_value = b'{"data": {"rows": []}, "rates": []}'
+        with mock.patch.object(funding.urllib.request, "urlopen", return_value=body), \
+             mock.patch.object(phemex._LIMITER, "acquire") as ph, \
+             mock.patch.object(kraken._LIMITER, "acquire") as kr:
+            funding.phemex_history("BTCUSDT")
+            funding.kraken_history("PF_XBTUSD")
+        self.assertEqual((ph.call_count, kr.call_count), (1, 1))
+
     def test_re_import_is_idempotent(self):
         self._store(); self._store()
         self.assertEqual(

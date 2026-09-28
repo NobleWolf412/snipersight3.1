@@ -106,7 +106,14 @@ def _get(url: str) -> dict:
     number that gets multiplied by a price — a float in the price path, which
     is rule 5. This was harmless while the module only reported; it stops
     being harmless the moment the series is stored and charged from.
+
+    Each call waits on the venue's shared limiter, the same one its candle
+    requests use. That cost nothing while the scanner asked one market at a
+    time; live-v0.18 asks from worker threads, and an unthrottled funding call
+    would ride on top of the candle budget the limiter was sized to protect.
     """
+    from . import kraken, phemex
+    (phemex if url.startswith(_PHEMEX) else kraken)._LIMITER.acquire()
     with urllib.request.urlopen(
             urllib.request.Request(url, headers=_UA), timeout=_TIMEOUT) as r:
         return json.loads(r.read().decode(), parse_float=Decimal)
@@ -218,7 +225,29 @@ def _observed_interval(rows: list[tuple[int, Decimal]], symbol: str) -> int:
     return int(24 * 3600 / per_day) if per_day else 0
 
 
-def store_history(con, symbol: str, *, as_of: int, deep: bool = False) -> dict:
+def fetch_since(con, symbol: str, *, deep: bool = False) -> int | None:
+    """The `since_ts` `store_history` would ask the venue for. Read on the
+    store's thread so `fetch_history` never has to touch the connection."""
+    return None if deep else coverage(con, symbol)[1]
+
+
+def fetch_history(symbol: str, since_ts: int | None) -> list[tuple[int, Decimal]]:
+    """The network half of `store_history`, safe on a worker thread. Returns
+    [] wherever `store_history` would skip without asking the venue, so a
+    prefetch never widens what gets requested."""
+    if venues.is_reference_key(symbol):
+        return []
+    try:
+        v = venues.venue_for(symbol)
+    except ValueError:
+        return []
+    if not v.funding_settlements_per_day:
+        return []
+    return history(symbol, since_ts=since_ts)
+
+
+def store_history(con, symbol: str, *, as_of: int, deep: bool = False,
+                  served: list[tuple[int, Decimal]] | None = None) -> dict:
     """Import this symbol's real funding settlements. Returns what it did.
 
     Append-only and idempotent: INSERT OR IGNORE, never REPLACE. A settlement
@@ -246,7 +275,9 @@ def store_history(con, symbol: str, *, as_of: int, deep: bool = False) -> dict:
     # `since_ts`, so passing the newest stored settlement stops it after one
     # page instead of forty. A deep pass asks for everything.
     since = None if (deep or have_to is None) else have_to
-    rows = [(ts, r) for ts, r in history(symbol, since_ts=since) if ts <= as_of]
+    if served is None:
+        served = history(symbol, since_ts=since)
+    rows = [(ts, r) for ts, r in served if ts <= as_of]
     if not rows:
         return {"stored": 0, "skipped": "venue served nothing"}
 

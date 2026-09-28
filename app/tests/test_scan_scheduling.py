@@ -18,7 +18,8 @@ def book(tmp_path):
     con.close()
 
 
-def run_cycle(con, new_candles, paper_pins=None, *, late=False):
+def run_cycle(con, new_candles, paper_pins=None, *, late=False, tracked=(),
+              fetch_fails=()):
     events = []
     clock = {"now": 100000}
     with ExitStack() as stack:
@@ -27,7 +28,7 @@ def run_cycle(con, new_candles, paper_pins=None, *, late=False):
 
         stub('live.time.time', side_effect=lambda: clock["now"])
         stub('live.universe.scan_symbols', return_value=['BTCUSDT', 'ETHUSDT'])
-        stub('live.universe.all_tracked_symbols', return_value=[])
+        stub('live.universe.all_tracked_symbols', return_value=list(tracked))
         stub('live.execsim.unresolved', return_value={})
         stub('live.execution_rebuild_work', return_value={})
         stub('live.execution.paper_open_symbols', return_value=paper_pins or set())
@@ -37,11 +38,26 @@ def run_cycle(con, new_candles, paper_pins=None, *, late=False):
             stub(f'live.{name}.unresolved', return_value=set())
             stub(f'live.{name}.run', side_effect=lambda *a, label=name: events.append(label))
         stub('live.importer.native_tfs', return_value={'15m': 900})
-        stub('live.importer.backfill', return_value={'candles': new_candles, 'gaps': 0})
+        def fetch(s, tf, start, end, *, as_of):
+            assert as_of == 100000, 'fetch clock moved'
+            events.append(('fetch', s))
+            if s in fetch_fails:
+                raise OSError('venue down')
+            return {'symbol': s, 'tf': tf}
+        stub('live.importer.fetch', side_effect=fetch)
+        def backfill(c, s, tf, start, end, *, as_of, fetched):
+            assert fetched == {'symbol': s, 'tf': tf}, 'wrong prefetch stored'
+            events.append(('store', s))
+            return {'candles': new_candles, 'gaps': 0}
+        stub('live.importer.backfill', side_effect=backfill)
         stub('live.ingest.history_floor', return_value=0)
-        stub('live.funding.store_history', return_value={})
+        stub('live.funding.fetch_since', return_value=None)
+        stub('live.funding.fetch_history', return_value=[])
+        stub('live.funding.store_history', side_effect=lambda c, s, **kw:
+             events.append(('funding', s)) or {})
         stub('live.venues.REFERENCE', new={})
-        stub('live.aggregator.aggregate')
+        stub('live.aggregator.aggregate', side_effect=lambda c, s, tf:
+             events.append(('aggregate', s)) if tf == '4H' else None)
         stub('live.pipeline.run_symbol', side_effect=lambda c, s, **kw:
              events.append(('deferred' if kw.get('deferred') else 'priority', s)) or {'blocked': None})
         def paper_monitor(c, *, cutoff):
@@ -70,7 +86,8 @@ def run_cycle(con, new_candles, paper_pins=None, *, late=False):
 
 
 def test_all_markets_and_fresh_account_precede_dispatch_and_research(book):
-    events = run_cycle(book, new_candles=1)
+    events = [e for e in run_cycle(book, new_candles=1)
+              if not (isinstance(e, tuple) and e[0] in ('fetch', 'store', 'funding', 'aggregate'))]
     assert events[:4] == [('priority', 'BTCUSDT'), ('priority', 'ETHUSDT'),
                           'monitor', 'paper_risk']
     dispatch = events.index('dispatch')
@@ -94,6 +111,35 @@ def test_deadline_miss_keeps_settlement_but_refuses_new_dispatch(book):
 def test_retired_paper_market_refreshes_settlement_inputs_before_monitor(book):
     events = run_cycle(book, new_candles=1, paper_pins={'SOLUSDT'})
     assert events.index(('priority', 'SOLUSDT')) < events.index('monitor')
+
+
+def test_every_venue_wait_precedes_the_first_write_and_writes_keep_their_order(book):
+    # live-v0.18: fetches run concurrently, but the store is written from one
+    # thread in the serial loop's order, each symbol's candles before its funding.
+    events = run_cycle(book, new_candles=1)
+    fetches = [i for i, e in enumerate(events) if e[0] == 'fetch']
+    writes = [e for e in events if isinstance(e, tuple) and e[0] in ('store', 'funding')]
+    assert max(fetches) < events.index(('store', 'BTCUSDT'))
+    assert writes == [('store', 'BTCUSDT'), ('funding', 'BTCUSDT'),
+                      ('store', 'ETHUSDT'), ('funding', 'ETHUSDT')]
+
+
+def test_one_failed_venue_request_skips_only_that_market(book):
+    events = run_cycle(book, new_candles=1, fetch_fails={'BTCUSDT'})
+    assert ('store', 'BTCUSDT') not in events and ('funding', 'BTCUSDT') not in events
+    assert ('store', 'ETHUSDT') in events and ('funding', 'ETHUSDT') in events
+    assert 'dispatch' in events
+
+
+def test_markets_without_new_candles_roll_up_after_the_decision(book):
+    # 206 roll-ups ran ahead of a 45-market decision (67s, 2026-09-28). A
+    # market this pass did not import has no new bucket to roll up.
+    events = run_cycle(book, new_candles=1, tracked=['BTCUSDT', 'ETHUSDT', 'OLDUSDT'])
+    first_priority = events.index(('priority', 'BTCUSDT'))
+    assert events.index(('aggregate', 'BTCUSDT')) < first_priority
+    assert events.index(('aggregate', 'ETHUSDT')) < first_priority
+    assert events.index(('aggregate', 'OLDUSDT')) > events.index('dispatch')
+    assert events.count(('aggregate', 'OLDUSDT')) == 1
 
 
 def test_phase_partition_executes_each_roster_pair_once_in_dependency_order(book):

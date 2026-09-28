@@ -1,5 +1,6 @@
 import json
 import tempfile
+import time
 import unittest
 from decimal import Decimal
 from pathlib import Path
@@ -235,6 +236,61 @@ class TestImporter(EngineStoreCase):
                  store.get_candles(self.con, "BTC-USD", "1H")]
         self.assertEqual(opens, [0],
                          "the importer advanced beyond the cycle's clock")
+
+    def test_prefetched_import_stores_what_a_direct_import_would(self):
+        """live-v0.18 fetches on worker threads and stores on the cycle's. The
+        fetch must carry the same pinned clock, and the split must not change
+        a stored row or the gap record."""
+        rows = [
+            [0, Decimal("9"), Decimal("11"), Decimal("10"), Decimal("10"),
+             Decimal("1")],
+            [3600, Decimal("19"), Decimal("21"), Decimal("20"), Decimal("20"),
+             Decimal("1")],
+        ]
+        with patch("engine.importer._fetch", return_value=rows), \
+             patch("engine.importer.time.time", return_value=7201), \
+             patch("engine.importer.time.sleep"):
+            fetched = importer.fetch("BTC-USD", "1H", 0, 7201, as_of=7199)
+        with patch("engine.importer._fetch", side_effect=AssertionError("network")):
+            r = importer.backfill(self.con, "BTC-USD", "1H", 0, 7201,
+                                  as_of=7199, fetched=fetched)
+            with self.assertRaises(ValueError):
+                importer.backfill(self.con, "ETH-USD", "1H", 0, 7201,
+                                  as_of=7199, fetched=fetched)
+            with self.assertRaises(ValueError):   # another window
+                importer.backfill(self.con, "BTC-USD", "1H", 3600, 7201,
+                                  as_of=7199, fetched=fetched)
+            with self.assertRaises(ValueError):   # another clock
+                importer.backfill(self.con, "BTC-USD", "1H", 0, 7201,
+                                  as_of=3599, fetched=fetched)
+        self.assertEqual((r["candles"], r["gaps"]), (1, 0))
+        self.assertEqual([c["open_ts"] for c in
+                          store.get_candles(self.con, "BTC-USD", "1H")], [0])
+
+    def test_coinbase_pages_share_one_pace_across_threads(self):
+        """live-v0.18 fetches from workers; a per-thread pause would let eight
+        of them ask Coinbase eight times as fast."""
+        import threading
+        inside, peak, lock = [0], [0], threading.Lock()
+
+        def page(*_a):
+            with lock:
+                inside[0] += 1
+                peak[0] = max(peak[0], inside[0])
+            time.sleep(0.01)
+            with lock:
+                inside[0] -= 1
+            return []
+
+        with patch("engine.importer._fetch", side_effect=page), \
+             patch("engine.importer.REQUEST_PAUSE_S", 0):
+            workers = [threading.Thread(target=lambda: list(importer._fetch_rows(
+                "BTC-USD", "1H", 3600, 0, 3600))) for _ in range(6)]
+            for w in workers:
+                w.start()
+            for w in workers:
+                w.join()
+        self.assertEqual(peak[0], 1)
 
     def test_empty_answer_after_listing_acknowledges_the_quiet_window(self):
         """importer-v0.5. A steady-state cycle imports exactly the newest

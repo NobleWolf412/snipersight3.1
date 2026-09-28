@@ -11,6 +11,7 @@ with identical venue values; prices kept as exact decimal strings via
 json parse_float=Decimal so no float ever touches a price.
 """
 import json
+import threading
 import time
 import urllib.request
 from decimal import Decimal
@@ -93,6 +94,7 @@ TF_SECONDS = {"5m": 300, "15m": 900, "1H": 3600, "4H": 14400,
 NATIVE_TFS = {"5m": 300, "15m": 900, "1H": 3600, "1D": 86400}
 MAX_CANDLES_PER_REQ = 300
 REQUEST_PAUSE_S = 0.15
+_COINBASE_PACE = threading.Lock()
 # import_log rows whose range_start predates 2000 are cold-start artefacts:
 # before the pre-listing fix below (2026-07-30) a cold symbol asked for history
 # from 1970 and logged every bucket since as a gap — 6.19bn fabricated entries
@@ -209,21 +211,61 @@ def _fetch_rows(symbol: str, tf: str, gran: int, start_ts: int, end_ts: int):
     cursor = start_ts
     while cursor < end_ts:
         chunk_end = min(cursor + MAX_CANDLES_PER_REQ * gran, end_ts)
-        for t, lo, hi, op, cl, vol in _fetch(symbol, gran, cursor, chunk_end - 1):
+        # The pause is the Coinbase limiter, and a per-thread pause is no
+        # limiter at all once live-v0.18 fetches from workers. Holding the
+        # lock through it keeps the whole process at the serial pace.
+        with _COINBASE_PACE:
+            page = _fetch(symbol, gran, cursor, chunk_end - 1)
+            time.sleep(REQUEST_PAUSE_S)
+        for t, lo, hi, op, cl, vol in page:
             yield (int(t), op, hi, lo, cl, vol)
         cursor = chunk_end
-        time.sleep(REQUEST_PAUSE_S)
+
+
+def fetch(symbol: str, tf: str, start_ts: int, end_ts: int, *,
+          as_of: int | None = None) -> dict:
+    """The network half of `backfill`: no store access, so it is safe on a
+    worker thread. `backfill(con, ..., fetched=fetch(...))` is identical to
+    `backfill(con, ...)`; the split exists so the live cycle can wait on the
+    venues concurrently and still write in one thread, in a fixed order.
+    Serial fetching was 94s of a 302s entry decision on 2026-09-28 — about
+    120 requests each waiting out its own round trip, against a rate limit
+    that allows the lot in ~25s. The limiters are process-global and locked,
+    so concurrency cannot raise the request rate a venue sees.
+    """
+    native = native_tfs(symbol)
+    if tf not in native:
+        raise ValueError(f"{tf} is not a native timeframe for {symbol}; use the aggregator")
+    gran = native[tf]
+    start_ts -= start_ts % gran
+    cutoff = int(time.time()) if as_of is None else int(as_of)
+    end_ts = min(end_ts, cutoff - cutoff % gran)  # never import developing (§5)
+    return {"symbol": symbol, "tf": tf, "start_ts": start_ts, "end_ts": end_ts,
+            "rows": list(_fetch_rows(symbol, tf, gran, start_ts, end_ts))}
 
 
 def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int, *,
-             as_of: int | None = None) -> dict:
+             as_of: int | None = None, fetched: dict | None = None) -> dict:
     """Import [start_ts, end_ts) as knowable at ``as_of``.
 
     Offline callers default to the current clock. A live cycle passes the one
     snapshot its downstream engines and quality use, so a boundary crossed
     while network requests are in flight cannot move only this stage.
+    `fetched` is a prior `fetch()` of exactly these arguments.
     """
+    if fetched is None:
+        fetched = fetch(symbol, tf, start_ts, end_ts, as_of=as_of)
     native = native_tfs(symbol)
+    if tf in native:
+        # The stored range comes from `fetched`, so it must be the range these
+        # arguments describe — a prefetch for another window or clock would
+        # otherwise be stored, and its gaps recorded, without complaint.
+        g = native[tf]
+        cut = int(time.time()) if as_of is None else int(as_of)
+        want = (symbol, tf, start_ts - start_ts % g, min(end_ts, cut - cut % g))
+        got = tuple(fetched[k] for k in ("symbol", "tf", "start_ts", "end_ts"))
+        if got != want and not (as_of is None and got[:3] == want[:3]):
+            raise ValueError(f"prefetch {got} offered for {want}")
     if tf not in native:
         raise ValueError(f"{tf} is not a native timeframe for {symbol}; use the aggregator")
     gran = native[tf]
@@ -238,15 +280,13 @@ def backfill(con, symbol: str, tf: str, start_ts: int, end_ts: int, *,
             src = venues.venue_for(symbol).key
         except ValueError:
             src = "coinbase"
-    start_ts -= start_ts % gran
-    cutoff = int(time.time()) if as_of is None else int(as_of)
-    end_ts = min(end_ts, cutoff - cutoff % gran)  # never import developing (§5)
+    start_ts, end_ts = fetched["start_ts"], fetched["end_ts"]
 
     from .runlog import get_logger
     seen: dict[int, tuple] = {}
     served: set = set()          # every bucket the venue returned, kept or not
     n_bad = 0
-    for t, op, hi, lo, cl, vol in _fetch_rows(symbol, tf, gran, start_ts, end_ts):
+    for t, op, hi, lo, cl, vol in fetched["rows"]:
         if not (start_ts <= t < end_ts):
             continue
         served.add(t)
