@@ -76,7 +76,9 @@ OPERATIONAL_EXPECTED = {
     # schedules research-only detectors after account decisions.
     # v0.18 reaches the entry decision sooner (concurrent venue waits, roll-up
     # of unfed markets after the decision); stored rows are unchanged.
-    "live": "live-v0.18-draft",
+    # v0.19 waits for the next close rather than start a pass that cannot
+    # decide entries before its deadline.
+    "live": "live-v0.19-draft",
     "profit_protection": "profit-protection-v0.2-draft",
     "open_interest": "open-interest-v0.1-draft",
     # stop/zone v0.6, forwardtrial v0.3: a bumped study version archives the

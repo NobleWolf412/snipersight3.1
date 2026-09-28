@@ -32,7 +32,11 @@ from engine import (automation, autotrader, broker_factory, execution, positions
                     forwardtrial, simpletrial, stopstudy, zonestudy, open_interest, research)
 from engine.runlog import get_logger
 
-LIVE_VERSION = "live-v0.18-draft"
+LIVE_VERSION = "live-v0.19-draft"
+# v0.19: a pass that could not reach its entry decision before the deadline
+# waits for the next candle close instead of starting. On v0.18, 2 of 5 passes
+# decided in time (2026-09-28); the three that missed began 82-274s after the
+# close because the previous pass ended there. What a pass decides is unchanged.
 # v0.18: the entry decision is reached sooner; what it decides is unchanged.
 # Measured 2026-09-28: 302s from pass start to decision against a deadline at
 # the next 5m close, so 248 of 248 decisions since 2026-09-25 skipped new
@@ -190,11 +194,30 @@ CANDLE_GRID_S = 300
 # slower than this is not lost — the next heartbeat tick retries within 60s,
 # exactly as before this change.
 CANDLE_FINALIZATION_S = 5
+# The time a pass needs from its start to the entry decision, with margin.
+# Measured on live-v0.18 (2026-09-28, five passes): 208-265s. Passes that
+# began at boundary+6s decided in time; those that began at +82s, +245s and
+# +274s did not, because the previous pass (~16-18 min) ends at an arbitrary
+# point in the 5-minute window. See `start_too_late`.
+DECISION_BUDGET_S = 270
 
 
 def decision_deadline(cycle_cutoff: int) -> int:
     """The next candle boundary; an entry after it belongs to another scan."""
     return cycle_cutoff - cycle_cutoff % CANDLE_GRID_S + CANDLE_GRID_S
+
+
+class _WaitForClose(Exception):
+    """Leave this loop turn without a pass; not a failure."""
+
+
+def start_too_late(now: float, budget: float = DECISION_BUDGET_S) -> bool:
+    """A pass beginning now could not reach its entry decision before
+    `decision_deadline`. Starting it anyway spends the pass on a decision
+    that is discarded, and the next chance is a whole pass (~16 min) later;
+    waiting for the next close costs at most one grid step and reads newer
+    candles, not staler ones."""
+    return decision_deadline(int(now)) - now < budget
 
 
 def next_wake(now: float, poll: float = POLL_SECONDS,
@@ -1211,8 +1234,14 @@ def main():
         except Exception as hb_err:
             log.warning(f"heartbeat write failed: {hb_err}")
 
+    requested = False
     while True:
         t0 = time.monotonic()
+        # The start gate judges when this turn WOKE, not when the universe
+        # refresh and drift check let go of it: next_wake always lands a turn
+        # at boundary+5s, and that turn must run however slow those two are,
+        # or a hung price feed would skip every boundary for the outage.
+        turn_woke = time.time()
         try:
             write_hb("universe")
             refresh_universe(con, log, beat=write_hb)   # hourly (self-throttled)
@@ -1225,6 +1254,20 @@ def main():
             # CANDLE_FINALIZATION_S — measured from production logs, the same
             # way the prior project arrived at its 5s.
             boundary_lag = time.time() % CANDLE_GRID_S
+            # v0.19: wait for the next close rather than start a pass whose
+            # entry decision cannot land in time. A cockpit request and
+            # --once still run at once — someone asked for that pass.
+            if not (requested or args.once) and start_too_late(turn_woke):
+                log.info(f"waiting for the next candle close: a pass begun at "
+                         f"boundary+{turn_woke % CANDLE_GRID_S:.0f}s cannot decide entries "
+                         f"before its deadline")
+                # The universe refresh can leave writes open; do not hold
+                # them across the nap and block the server's writes.
+                con.commit()
+                # "idle", the phase the cockpit and the Check-now reply already
+                # read as between passes — which this is.
+                write_hb("idle")
+                raise _WaitForClose
             n, fired = cycle(con, log, beat=write_hb, analysis_cache=analysis_cache)
             n_cycles += 1
             state.update(cycles=n_cycles, last_new_candles=n,
@@ -1258,6 +1301,8 @@ def main():
             ck = store.checkpoint_wal(con, log)
             log.info(f"WAL checkpoint returned busy={ck.get('busy')} "
                      f"{ck.get('checkpointed')}/{ck.get('frames')} frames")
+        except _WaitForClose:
+            pass
         except Exception as e:
             log.error(f"live cycle failed: {e}")
             # The failure left this connection's transaction OPEN — sqlite3
@@ -1277,7 +1322,8 @@ def main():
         # the next candle boundary, whichever is sooner — see next_wake.
         nap = next_wake(time.time())
         log.info(f"sleeping {nap:.1f}s until the next wake")
-        if nap_until_woken(nap, WAKE_REQUEST):
+        requested = nap_until_woken(nap, WAKE_REQUEST)
+        if requested:
             log.info("woken early: a scan was requested from the cockpit")
         log.info("awake")
     con.close()
