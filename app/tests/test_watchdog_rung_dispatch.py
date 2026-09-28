@@ -135,6 +135,22 @@ class TestWatchdogRungDispatch(unittest.TestCase):
         child.proc.terminate.assert_not_called()
         toast.assert_called_once()             # still noisy — not silenced
 
+    def test_unattributed_facts_with_gaps_does_not_restart(self):
+        """The 2026-09-23..28 loop: this exact pair, one finding each, killed
+        the scanner every ~17 minutes for five days. Facts are insert-only and
+        nothing backfills a producer run, so no restart can clear the count."""
+        report = {"worst_rung": "HALT",
+                  "rung_counts": {"HALT": 2, "SERVE_FLAG": 264,
+                                   "QUARANTINE": 0, "AUTO_DISABLE": 0,
+                                   "SERVE": 0},
+                  "blockers": [{"code": "SEQUENCE_GAPS", "rung": "HALT"},
+                               {"code": "UNATTRIBUTED_CURRENT_FACTS",
+                                "rung": "HALT"}],
+                  "warnings": []}
+        _, child, toast = self._run(report)
+        child.proc.terminate.assert_not_called()
+        toast.assert_called_once()             # still noisy — not silenced
+
     def test_mixed_halt_including_healable_code_still_restarts(self):
         """The exemption is narrow. If any HALT finding names a code the
         scanner CAN heal (a NO_CANDLES the next import will fill, a stale
