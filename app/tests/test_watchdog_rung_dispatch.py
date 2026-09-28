@@ -135,6 +135,22 @@ class TestWatchdogRungDispatch(unittest.TestCase):
         child.proc.terminate.assert_not_called()
         toast.assert_called_once()             # still noisy — not silenced
 
+    def test_unattributed_facts_with_gaps_does_not_restart(self):
+        """The 2026-09-23..28 loop: this exact pair, one finding each, killed
+        the scanner every ~17 minutes for five days. Facts are insert-only and
+        nothing backfills a producer run, so no restart can clear the count."""
+        report = {"worst_rung": "HALT",
+                  "rung_counts": {"HALT": 2, "SERVE_FLAG": 264,
+                                   "QUARANTINE": 0, "AUTO_DISABLE": 0,
+                                   "SERVE": 0},
+                  "blockers": [{"code": "SEQUENCE_GAPS", "rung": "HALT"},
+                               {"code": "UNATTRIBUTED_CURRENT_FACTS",
+                                "rung": "HALT"}],
+                  "warnings": []}
+        _, child, toast = self._run(report)
+        child.proc.terminate.assert_not_called()
+        toast.assert_called_once()             # still noisy — not silenced
+
     def test_mixed_halt_including_healable_code_still_restarts(self):
         """The exemption is narrow. If any HALT finding names a code the
         scanner CAN heal (a NO_CANDLES the next import will fill, a stale
@@ -752,8 +768,9 @@ class TestTakeoverHysteresis(unittest.TestCase):
     def test_grace_covers_the_slowest_measured_cycle(self):
         # 800.6s observed 2026-08-28 (32 markets); 347.1s on 2026-07-30 sized
         # the first value, and a grace under the cycle time is what turned one
-        # HALT into a five-day restart loop.
-        self.assertGreater(watchdog.RESTART_GRACE_SEC, 800,
+        # HALT into a five-day restart loop. It recurred on 2026-09-28 with a
+        # pass killed ~1015s in, still inside the research step.
+        self.assertGreater(watchdog.RESTART_GRACE_SEC, 1015,
                            "the grace window is under a cycle time already seen")
 
 

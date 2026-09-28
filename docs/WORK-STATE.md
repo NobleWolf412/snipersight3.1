@@ -30,7 +30,7 @@ stop-management outcome below remains outstanding and must survive this work.
 | SS-004 | Reduce and measure signal-to-order delay | Audit recommendation | Late-decision guard and recorded intent-to-route timing coded and tested; faster cycle and measured dispatch-time replay comparison remain open |
 | SS-005 | Compare simpler strategy hypotheses using fixed future evidence | Pasted proposal and audit recommendation | Prospective research collector, API and Results card coded and scratch-tested in the isolated branch; no future cohort or account activation yet |
 | SS-007 | Make the Research page understandable without changing research or trading rules | User request, 2026-09-25 | Merged in PR #8, restarted and verified in the running paper app on 2026-09-25; research studies remain subject to their own collection state |
-| SS-008 | Restart the paused breakout trial, stop comparison and zone comparison fresh | User request, 2026-09-26 | Coded and tested on `claude/adoring-gates-du87ct`; takes effect only after merge, pull and scanner restart; not yet observed running |
+| SS-008 | Restart the paused breakout trial, stop comparison and zone comparison fresh | User request, 2026-09-26 | Merged (PR #11) and pulled 2026-09-28; not yet running, because no scanner pass has finished since 2026-09-23 (supervisor restart loop, see below) |
 
 ### SS-008 — fresh restart of the three paused forward studies
 
@@ -46,8 +46,16 @@ so their watermark points into the new trial ledger. Research shows
 "Restarted fresh under updated rules" with the earlier run's start date.
 Research-only: no account, order, setup or routing change.
 
-- **Remaining:** merge, pull, guarded restart; then confirm all three read
-  Collecting with a new start time and the restart note.
+- **Remaining:** merged as PR #11 and pulled 2026-09-28, but still PAUSED:
+  no scanner pass has finished since 2026-09-23 09:21. The watchdog killed the
+  scanner every ~17 minutes over a standing HALT because research made a pass
+  longer than its 900s grace; the studies, audit and "cycle done" never ran,
+  and every pass logged `SCAN DEADLINE MISSED … new_entries_skipped`. Grace
+  raised to 1800s and UNATTRIBUTED_CURRENT_FACTS marked unhealable, so
+  it no longer triggers a restart; the supervisor itself must be restarted (close and rerun
+  `start.bat`) to load it. Then confirm "cycle done" returns and all three
+  studies read Collecting. Speeding up the research step is the real fix and
+  is still open.
 
 ### SS-007 — Research-page clarity
 
