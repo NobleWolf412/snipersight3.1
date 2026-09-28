@@ -112,7 +112,13 @@ UNHEALABLE_HALT_CODES = frozenset({"UNKNOWN_TIMEFRAME", "SEQUENCE_GAPS"})
 # > the slowest cycle measured. 347.1s on 2026-07-30 sized the first value
 # (420); by 2026-08-28 cycles ran 725-800s with 32 markets, and a grace under
 # the cycle time is what turned one HALT into a permanent restart loop.
-RESTART_GRACE_SEC = 900
+# It happened again from 2026-09-23: the research detectors lengthened the
+# pass past 900s, and a standing HALT (SEQUENCE_GAPS with
+# UNATTRIBUTED_CURRENT_FACTS) killed the scanner every ~17 minutes for five
+# days, mid-research, before the studies, the audit or "cycle done". On
+# 2026-09-28 one pass was still in research 816s in and was killed at ~1015s.
+# Twice the old window, so a pass has room to finish and replace the verdict.
+RESTART_GRACE_SEC = 1800
 SERVER_PROBE_TIMEOUT = 15         # generous: the probe is in-memory now
 SERVER_MISSES_BEFORE_TAKEOVER = 3 # one slow answer is not a disappearance
 ERR_LOG_CAP_BYTES = 8 * 1024 * 1024   # a diagnostic must not fill the disk

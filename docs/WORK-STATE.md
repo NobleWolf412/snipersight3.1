@@ -46,8 +46,15 @@ so their watermark points into the new trial ledger. Research shows
 "Restarted fresh under updated rules" with the earlier run's start date.
 Research-only: no account, order, setup or routing change.
 
-- **Remaining:** merge, pull, guarded restart; then confirm all three read
-  Collecting with a new start time and the restart note.
+- **Remaining:** merged as PR #11 and pulled 2026-09-28, but still PAUSED:
+  no scanner pass has finished since 2026-09-23 09:21. The watchdog killed the
+  scanner every ~17 minutes over a standing HALT because research made a pass
+  longer than its 900s grace; the studies, audit and "cycle done" never ran,
+  and every pass logged `SCAN DEADLINE MISSED … new_entries_skipped`. Grace
+  raised to 1800s; the supervisor itself must be restarted (close and rerun
+  `start.bat`) to load it. Then confirm "cycle done" returns and all three
+  studies read Collecting. Speeding up the research step is the real fix and
+  is still open.
 
 ### SS-007 — Research-page clarity
 

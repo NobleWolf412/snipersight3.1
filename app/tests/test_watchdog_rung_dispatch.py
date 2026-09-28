@@ -752,8 +752,9 @@ class TestTakeoverHysteresis(unittest.TestCase):
     def test_grace_covers_the_slowest_measured_cycle(self):
         # 800.6s observed 2026-08-28 (32 markets); 347.1s on 2026-07-30 sized
         # the first value, and a grace under the cycle time is what turned one
-        # HALT into a five-day restart loop.
-        self.assertGreater(watchdog.RESTART_GRACE_SEC, 800,
+        # HALT into a five-day restart loop. It recurred on 2026-09-28 with a
+        # pass killed ~1015s in, still inside the research step.
+        self.assertGreater(watchdog.RESTART_GRACE_SEC, 1015,
                            "the grace window is under a cycle time already seen")
 
 
