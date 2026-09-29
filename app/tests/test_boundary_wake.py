@@ -99,6 +99,89 @@ class NextWakeMath(unittest.TestCase):
             prev = t
 
 
+class LateStartWaitsForTheClose(unittest.TestCase):
+    """live-v0.19. On v0.18 the decision took 208-265s; passes that began at
+    boundary+6s decided in time and those at +82s, +245s and +274s did not
+    (2026-09-28). A doomed pass also costs the next ~16 minutes of chances."""
+
+    B = 1_700_000_100 - (1_700_000_100 % 900)
+
+    def test_a_pass_with_the_full_budget_starts(self):
+        self.assertFalse(live.start_too_late(self.B + live.CANDLE_FINALIZATION_S))
+        self.assertFalse(live.start_too_late(
+            self.B + live.CANDLE_GRID_S - live.DECISION_BUDGET_S))
+
+    def test_the_measured_late_starts_wait(self):
+        for lag in (82, 245, 274):
+            self.assertTrue(live.start_too_late(self.B + lag), f"+{lag}s")
+
+    def test_the_budget_covers_the_slowest_measured_decision(self):
+        self.assertGreaterEqual(live.DECISION_BUDGET_S, 265)
+        self.assertLess(live.DECISION_BUDGET_S, live.CANDLE_GRID_S)
+
+    def _run_loop(self, lags, *, requested_first=False, once=False, drift_s=0,
+                  con=None):
+        """Drive main() for len(lags) turns with everything but the gate
+        stubbed; no store, network or order is touched."""
+        from unittest import mock
+        clock = {"t": 0.0}
+        turns = iter(lags)
+        naps = {"n": 0}
+
+        def next_turn():
+            clock["t"] = self.B + next(turns)
+
+        def nap(_s, _f):
+            naps["n"] += 1
+            if naps["n"] >= len(lags):
+                raise KeyboardInterrupt
+            next_turn()
+            return requested_first and naps["n"] == 1
+
+        next_turn()
+        cycle = mock.Mock(return_value=(0, []))
+        argv = ["live.py"] + (["--once"] if once else [])
+        with mock.patch.object(live.sys, "argv", argv), \
+             mock.patch.object(live.time, "time", side_effect=lambda: clock["t"]), \
+             mock.patch.object(live, "install_exit_forensics"), \
+             mock.patch.object(live, "_exit_note"), \
+             mock.patch.object(live.store, "connect", return_value=con or mock.Mock()), \
+             mock.patch.object(live.store, "checkpoint_wal", return_value={}), \
+             mock.patch.object(live, "refresh_universe"), \
+             mock.patch.object(live, "check_drift", side_effect=lambda *a:
+                               clock.update(t=clock["t"] + drift_s)), \
+             mock.patch.object(live, "cycle", cycle), \
+             mock.patch.object(live, "nap_until_woken", side_effect=nap), \
+             mock.patch.object(live, "WAKE_REQUEST", mock.MagicMock()), \
+             mock.patch.object(live.Path, "write_text"), \
+             mock.patch.object(live.os, "replace"):
+            try:
+                live.main()
+            except KeyboardInterrupt:
+                pass
+        return cycle.call_count
+
+    def test_the_loop_skips_a_late_turn_and_runs_the_next_on_time_one(self):
+        self.assertEqual(self._run_loop([150, 245, 5]), 1)
+
+    def test_a_slow_price_feed_cannot_skip_the_on_time_turn(self):
+        """The gate reads when the turn woke. Measured after a hung drift
+        check instead, every boundary would be skipped for the outage."""
+        self.assertEqual(self._run_loop([5, 5], drift_s=120), 2)
+
+    def test_a_skipped_turn_commits_before_it_naps(self):
+        from unittest import mock
+        con = mock.Mock()
+        self._run_loop([150, 5], con=con)
+        con.commit.assert_called()
+
+    def test_a_cockpit_request_still_runs_at_once(self):
+        self.assertEqual(self._run_loop([5, 150], requested_first=True), 2)
+
+    def test_once_still_runs_at_once(self):
+        self.assertEqual(self._run_loop([200], once=True), 1)
+
+
 class TheLoopWearsIt(unittest.TestCase):
     def test_main_sleeps_through_next_wake(self):
         """The nap must be COMPUTED, never a constant.

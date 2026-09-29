@@ -193,7 +193,8 @@ class AuditPrefixCoverageCase(unittest.TestCase):
     SCANNED = {
         "server.py": ("announce filter", "live loop start", "cycle done"),
         "live.py": ("live loop start", "cycle done", "cycle", "sleeping",
-                    "awake", "woken early", "WAL checkpoint", "announce filter",
+                    "awake", "woken early", "waiting for the next candle close",
+                    "WAL checkpoint", "announce filter",
                     "already announced", "UNIVERSE onboarded", "SETUP FIRED",
                     "import ", "backfill", "history probe", "universe refresh",
                     "drift ", "scan "),
