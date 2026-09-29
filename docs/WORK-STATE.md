@@ -8,6 +8,12 @@ reconstruction of every historical request.
 
 ## Current focus
 
+**2026-09-28 repository cleanup:** SS-009 below records the source audit and
+behavior-preserving cleanup. Earlier trading observations below remain dated;
+this audit did not inspect or activate the operator's account. The audited
+source HEAD is `acc579f` (PR #14 already merged); that does not establish which
+build is running on Windows.
+
 The user requested research-only indicator collection and UI integration across
 Setups, Trade, Results/Signals and Phemex data health. The source implementation
 is present and the independent audit findings have been remediated. Full Python,
@@ -23,6 +29,7 @@ stop-management outcome below remains outstanding and must survive this work.
 
 | ID | Outcome | Request basis | Delivery |
 |---|---|---|---|
+| SS-009 | Audit the production path, remove only proven dead code and establish research boundaries before Strategy Lab work | User's seven-phase cleanup request, 2026-09-28 | Source audit and conservative cleanup verified on `codex/repository-audit-cleanup`; no merge, deployment or account activation |
 | SS-006 | Collect five locked detector hypotheses as point-in-time research and expose their unscored confluence and graded results | User specification, 2026-09-22 | Implemented, verified and activated forward-only; collection is healthy and waiting for future closed trades |
 | SS-001 | Protect established profit by moving the actual paper account stop, with a visible explanation | Repeated user request; user chose a toggle and paper/private rule parity on 2026-09-24 | Off-by-default cost-cover rule, paper stop changes, private testnet amendment, Settings control and journal history coded and scratch-tested in isolated worktree; not activated or account-proven |
 | SS-002 | Correct market-specific data failures blocking the entire account | Defect verified; remediation proposed by the September 21 audit | Candidate-scoped gate coded and scratch-tested in an isolated worktree; not activated or account-proven |
@@ -31,6 +38,36 @@ stop-management outcome below remains outstanding and must survive this work.
 | SS-005 | Compare simpler strategy hypotheses using fixed future evidence | Pasted proposal and audit recommendation | Prospective research collector, API and Results card coded and scratch-tested in the isolated branch; no future cohort or account activation yet |
 | SS-007 | Make the Research page understandable without changing research or trading rules | User request, 2026-09-25 | Merged in PR #8, restarted and verified in the running paper app on 2026-09-25; research studies remain subject to their own collection state |
 | SS-008 | Restart the paused breakout trial, stop comparison and zone comparison fresh | User request, 2026-09-26 | Merged (PR #11) and pulled 2026-09-28; not yet running, because no scanner pass has finished since 2026-09-23 (supervisor restart loop, see below) |
+
+### SS-009 — repository audit and conservative cleanup
+
+- **Scope:** preserve trading behavior; classify tracked files, prove removals,
+  document authority and reserve a research boundary without implementing it.
+- **Delivered:** [architecture](PRODUCTION-ARCHITECTURE.md),
+  [858-path inventory](REPOSITORY-INVENTORY.md),
+  [audit/evidence](REPOSITORY-AUDIT-2026-09-28.md), AGENTS policies and corrected
+  startup/source documentation. No complete module was proven dead; only
+  three unreachable terminal-state branches were removed. Historical reference
+  documents are policy-quarantined in place; supported code remains reachable.
+- **Verification:** baseline and final Python suites each passed 2,149 tests
+  and 230 subtests, with 20 skips (Windows or missing recorded facts). All 40
+  JavaScript suites and lint passed. Lifecycle equivalence passed 715 cases;
+  96-path OpenAPI document is unchanged; scratch Uvicorn startup and 42 linked
+  default/classic assets passed. Executable AST comparison allows only the
+  proven dead branches; other Python edits are comments/docstrings.
+- **Review:** independent backend/frontend source audits retained intentional
+  domains/compatibility paths. Final architecture review corrections applied.
+- **Delivery boundary:** cleanup committed locally as `3969b6e` on
+  `codex/repository-audit-cleanup`. Automatic approval review blocked the GitHub
+  push pending explicit publication permission. The user granted that permission
+  on 2026-09-28, including opening a draft PR. Publication uses the connected
+  GitHub integration because command-line Git lacks push credentials. Remote
+  commit/PR identity is supplied in the handoff; the reviewed file tree is
+  preserved. No production process, account, strategy, setting or version
+  changed; permission does not include merging or deployment.
+- **Remaining:** Windows/private venue/real account checks were not run;
+  research scheduling separation, classic retirement and stale graph refresh
+  require separate work. Do not close SS-001 through SS-008 from this audit.
 
 ### SS-008 — fresh restart of the three paused forward studies
 

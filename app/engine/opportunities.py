@@ -229,12 +229,6 @@ def lifecycle(setup_state: str, risk_fact: dict | None = None,
         return OpportunityState.READY
     if state in ("FORMING", "CONFIRMING"):
         return OpportunityState.FORMING
-    if state == "CANCELLED":
-        return OpportunityState.CANCELLED
-    if state == "EXPIRED":
-        return OpportunityState.EXPIRED
-    if state == "REJECTED":
-        return OpportunityState.REJECTED
     return OpportunityState.WATCHING
 
 

@@ -149,6 +149,10 @@ RANGE_FADE = Strategy(
         "definition, not on the strategy.",
 )
 
+# The historical `gap` copy below predates scheduled regrade.maybe_run.
+# Current research wiring is documented in docs/PRODUCTION-ARCHITECTURE.md.
+# Retained verbatim because catalogue copy is an API/UI payload; changing
+# that payload is outside this behavior-preserving cleanup.
 BREAKOUT_RETEST = Strategy(
     key="breakout_retest", name="Breakout Retest", setting="strategy_breakout_retest",
     horizon="intraday", status="measured",

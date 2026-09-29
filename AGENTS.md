@@ -14,6 +14,64 @@ anything.
 Do not duplicate the notebook here. Two copies drift, and this codebase treats
 a document that misdescribes the code as worse than no document.
 
+## AUTHORITATIVE PRODUCTION PATH
+
+`app/start.bat` → `app/watchdog.py` → `app/live.py:main/cycle` →
+`engine/importer.py` and venue adapters → `engine/aggregator.py` →
+`engine/pipeline.py:run_symbol` → structure/zone/liquidity/regime facts →
+`engine/setups.py` playbooks and confirmation → paper settlement and
+`engine/riskpaper.py` → `engine/autotrader.py` → `engine/execution.py`.
+The scanner then completes deferred research, replay risk, audit and alert
+queueing. The watchdog delivers queued alerts through `app/notify.py`.
+
+- `engine/registry.py` owns playbook metadata; `engine/setups.py` owns
+  pullback/reversal evaluation, setup generation, confirmation and rejection.
+- `engine/opportunities.py` projects domain-specific candidate/account state.
+  `engine/lifecycle.py` instead manages private entry/protective orders.
+- `engine/risk.py` owns shared sizing/admission math and replay risk;
+  `engine/riskpaper.py` owns actual paper-book risk. Do not merge their books.
+- `engine/broker_factory.py` and `engine/phemex_private.py` own private exchange
+  integration. Mainnet routing remains build-locked; source is not activation.
+- `app/server.py` includes `app/ui_api.py` and serves the default
+  `app/static/cockpit.html`; `cockpit/app.js` and `cockpit/state.js` own its UI
+  and request state. `/classic` deliberately retains `shell.html`/`ssdata.js`.
+
+See [the architecture map](docs/PRODUCTION-ARCHITECTURE.md) for data/indicator,
+HTF, API, research and support ownership. Check source when wiring changes.
+
+## LEGACY CODE POLICY
+
+Legacy/archived code is NOT an implementation reference unless explicitly
+requested. Historical plans, reports and generated navigation do not supersede
+current source. Check imports, dynamic registries, configuration, routes,
+frontend strings/assets, subprocess/CLI entrypoints, tests and documentation
+before calling anything dead. A missing static import is insufficient.
+
+Keep uncertain removals in place with an explicit review record, or quarantine
+on an isolated branch before relocation. Prefer Git history over archive
+copies. Any physical archive must be excluded from imports, builds and runtime
+discovery. Preserve supported compatibility paths until explicitly retired.
+The [cleanup audit](docs/REPOSITORY-AUDIT-2026-09-28.md) records retained items
+and the evidence required before future removal.
+
+## PLAYBOOK POLICY
+
+Playbooks are production trading logic. Research may READ and TEST them but
+must not automatically overwrite them. A research-modified strategy initially
+exists as a candidate and requires explicit promotion into production, with
+the existing version cascade and safety contracts. Cleanup must not change
+thresholds, scoring, confirmation, rejection, risk, alerts or exchange behavior.
+
+## RESEARCH BOUNDARY
+
+Reserve `research/` conceptually for backtesting, experiments, optimization,
+walk-forward testing and future TraderDev/TradingKit integration. Do not create
+those systems merely to satisfy this boundary. Existing research modules and
+scheduled collectors remain in place and are mapped in the architecture guide.
+Production scanner decisions and experimental state must stay separate;
+sharing verified calculation helpers never permits sharing account state or
+automatic strategy promotion.
+
 ## Working contract
 
 - Lead with the outcome and explain it in trader-readable language.

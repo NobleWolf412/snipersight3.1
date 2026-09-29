@@ -1,135 +1,94 @@
-# SniperSight
+# SniperSight 3.1
 
-A deterministic, explainable market-structure trading platform for crypto across
-**three venues** — Coinbase spot, Phemex perps, Kraken perps.
-Paper-trading only — **no live order execution anywhere in this codebase**.
+A deterministic market-structure platform for Coinbase spot, Phemex perpetuals
+and Kraken perpetuals. Paper execution and guarded private Phemex integration
+are implemented. **Mainnet routing is build-locked** in
+`app/engine/automation.py`; source presence is not account activation.
 
-## What it does
+Start with [AGENTS.md](AGENTS.md) and the
+[authoritative architecture](docs/PRODUCTION-ARCHITECTURE.md). The
+[cleanup audit](docs/REPOSITORY-AUDIT-2026-09-28.md) records classification,
+removal evidence, verification and retained compatibility paths.
 
-Maps market structure objectively, detects setups, sizes them through a risk
-authority, and paper-trades them with full accounting — every decision recorded
-as an append-only, versioned, reproducible fact. **1.9M facts** over **743k
-candles**, 78 tracked symbols, 19 in the live scan universe.
+## Current system
 
-- **Data spine** — Coinbase, Phemex and Kraken importers (closed candles only),
-  OHLC integrity validation, aggregator (4H/1W built from lower timeframes).
-- **Venue abstraction** — venue is derived from the symbol (`BTC-USD` → spot,
-  `BTCUSDT` → Phemex perp, `PF_XBTUSD` → Kraken perp), never globally selected.
-  Each carries its own fees, funding schedule, short permission, leverage cap and
-  ISOLATED liquidation model.
-- **Fact engines** — swings (tiered, composite-scored), structure (BOS/CHoCH),
-  zones (supply/demand lifecycle + strength), liquidity (pools/sweeps), regime,
-  ranges, and four indicator engines (ma, momentum, volatility, volume) that are
-  recorded but **not yet consumed** — nothing may read them until `factorstats`
-  has graded them.
-- **Strategy layer** — pullback / reversal / scale-in playbooks, fee-aware
-  gating, cooldowns against re-entry, explainable rationale on every signal.
-- **Risk authority** (§9) — position sizing, exposure caps, venue-derived
-  leverage cap, liquidation-safety gate, daily-loss kill switch. Strategies
-  request; the authority approves / reduces / rejects.
-- **Execution sim** — paper fills with fees, slippage and funding, R-multiple
-  accounting.
-- **Edge statistics** — bootstrap confidence intervals on expectancy
-  (`edgestats`), five-axis factor grading with redundancy detection
-  (`factorstats`), fill-rate and adverse-selection probes (`entrystats`), and a
-  2×2 replay harness (`abtest`).
-- **Operator paper book** — trades armed by hand from the chart ticket, recorded
-  under their own version so they can never reach the graded strategy record.
-- **Dynamic universe** — top pairs by live volume, liquidity + history gated,
-  point-in-time so a backtest cannot use tomorrow's listing.
-- **Nested cycle satellite** — observational only; never consumed by any trading
-  engine.
-- **Five-surface UI** — COMMAND, CHART (draggable levels + order ticket),
-  RESULTS, RULES, DIAGNOSTICS, plus a LEARN surface and a 40-term
-  glossary.
+- `app/live.py` runs the scanner under `app/watchdog.py` supervision.
+- `app/engine/pipeline.py` owns the shared per-symbol engine roster and loop.
+- `app/engine/setups.py` owns pullback/reversal evaluation, confirmation,
+  setup generation and rejection; `registry.py` owns catalogue metadata.
+- Research replay, actual bot paper orders and manual trades have distinct
+  state. `riskpaper.py` owns actual paper-book risk; `risk.py` supplies shared
+  sizing/admission math and the separate replay risk pass.
+- `execution.py`, `positions.py`, `broker_factory.py` and `phemex_private.py`
+  implement guarded account/private execution. Mainnet remains build-locked.
+- `/` serves the static JavaScript cockpit, using `ui_api.py` read models and
+  existing `server.py` action APIs. `/classic` retains the earlier shell as a
+  supported UI rollback. There is no React runtime or frontend build step.
+- Existing research collectors, forward studies, replay and grading tools
+  remain in place. Collection does not promote a strategy into production.
+- The scanner queues alerts; the watchdog delivers configured local toast,
+  ntfy or generic JSON webhook notifications. Destinations are off until
+  configured; direct Telegram Bot API support is not implemented here.
 
-## Design principles
-
-Same data + same algorithm version → same facts, every time. Nothing repaints.
-Every fact carries market-time, confirmed-time, and algorithm version. A rule
-change means a new version, never an edit to an old one. Rejections are as
-auditable as approvals. No uncalibrated "mystery score." Decimal end to end; no
-float touches a price. See `sources/ss3_v0.1.txt` for the product constitution
-and `docs/PROGRAM-PLAN.md` §6 for the full convention list.
+Facts are append-only, versioned and causal; prices use Decimal. Closed candles
+and confirmation time determine what a decision could know. See
+[sources/ss3_v0.1.txt](sources/ss3_v0.1.txt) for the product constitution and
+[CLAUDE.md](CLAUDE.md) for durable conventions and operational traps.
 
 ## Run
 
-```
+From the supported Windows workspace:
+
+```text
 cd app
-python -m pip install fastapi uvicorn
-python backfill.py            # seeds BTC-USD/ETH-USD history; the scanner onboards the rest
-start.bat                     # watchdog: live scanner + API server + browser
+python -m pip install fastapi uvicorn feedparser tzdata
+python backfill.py
+start.bat
 ```
 
-Then open http://localhost:8422.
+Backfill seeds history; the scanner onboards further eligible markets. Open
+http://localhost:8422. For an isolated API check, run from `app/`:
+`python -m uvicorn server:app --port 8422`. Do not point verification at an
+operator's store or call live write/restart endpoints as tests.
 
-To begin a clean forward paper record without deleting candle history or audit
-facts, run this from `app/`:
-
-```
-python reset_baseline.py
-```
-
-There is no UI control for it. This section used to say "use **NEW BASELINE** in
-the wallet card" — there is no wallet card, the string `wallet` appears nowhere
-in `static/`, and nothing in the UI calls `/api/baseline/reset`. Documenting a
-control that does not exist is worse than documenting none, because the reader
-spends their time hunting for it. The endpoint is built and unwired; if it ever
-gets a button, this paragraph changes back.
-
-The active baseline scopes wallet equity, positions, performance, setup
-telemetry, orders, and execution results. Reprocessing history cannot repopulate
-pre-baseline losses into the current paper record.
-
-## Status
-
-Engine complete and measuring itself honestly. Live execution is gated behind a
-proven forward record and **does not exist in this code** — there is no
-order-placement function anywhere, and `live_enabled` is a hard-coded literal
-rather than a setting.
-
-**No strategy currently clears zero.** REVERSAL sits at +0.15 R with a
-confidence interval through zero. That figure was +0.27 R until the execution
-simulator was found handing out free entries on crossed orders — two thirds of
-the book's apparent edge was an artefact, and removing it is the correct outcome
-for an audit and the uncomfortable one for the operator. The remaining edge is
-something to test forward, not something to trust.
-
-Older validation reports are not comparable across engine generations. See
-`docs/HARDENING.md` for the venue and execution contract, `docs/PROGRAM-PLAN.md`
-for where the work actually stands, and `app/BUILDLOG.md` for why every decision
-was made.
+`python reset_baseline.py` is an explicit operator action to begin a new
+forward paper record without deleting candle history. It is not a setup or
+verification step. Historical versions and unresolved orders may still have
+legitimate consumers; do not delete them based on age.
 
 ## Verify
 
-```
-cd app
+On Windows use `scripts/preflight.ps1` and `scripts/check.ps1`. Core checks in
+an isolated Linux/macOS checkout, from `app/`:
+
+```sh
+python -m pip install fastapi uvicorn pytest httpx feedparser tzdata
 python -m compileall -q .
-python -m unittest discover -s tests -v
-for f in tests/*.js; do node "$f"; done
+python -m pytest tests -q
+for f in tests/test_*.js; do node "$f" || exit 1; done
+npm ci
+npm run lint
 ```
 
-The full python suite plus every JavaScript suite. (No count here on purpose —
-the suite grows daily and a hardcoded number was stale within a day of being
-written; the commands above report the real one. The JS line used to name two
-files by hand and had already fallen behind by eight.) The JS suites are not
-extras: `ticket-math.js` decides how big a trade is, and it is what proves the
-order ticket and the engine agree about where a position liquidates.
+Inspect protected-action stubs and use scratch stores before running suites.
+Use pytest: unittest discovery omits bare pytest functions. JavaScript suites
+check source contracts, not rendered behavior. `npm run test:browser` uses the
+scratch-only preview harness; first verify port 8437 is not another server.
+See `scripts/check.ps1` for the additional source encoding/control-byte gate.
 
-## Layout
+## Navigation
 
-- `app/engine/` — fact engines and the trading path. `pipeline.py` declares the
-  per-symbol run order and is imported by every runner; `venues.py` is the only
-  thing that knows what a market allows; `store.py` is the append-only fact store.
-- `app/server.py` — FastAPI over the fact store. Mostly read paths, plus a small
-  number of operator actions (scan, settings, credentials, arm, restart).
-- `app/static/` — the five-surface UI.
-- `app/tests/` — deterministic engine tests, including
-  `test_version_cascade.py`, the lockfile that fails when an engine version
-  moves without its consumers.
-- `app/engine/quality.py` — fail-closed market-data and A-to-Z workflow audits.
-- `app/BUILDLOG.md` — append-only build journal (every decision, including the
-  duds and the retractions).
-- `docs/` — plans, specs and contracts. `PROGRAM-PLAN.md` is canonical for
-  forward work.
-- `sources/` — product constitution and design blueprints.
+- [Production architecture](docs/PRODUCTION-ARCHITECTURE.md): source ownership,
+  execution order, lifecycle and research boundaries.
+- [Repository inventory](docs/REPOSITORY-INVENTORY.md): every tracked baseline
+  path classified with reference evidence.
+- [Work state](docs/WORK-STATE.md): dated open outcomes and handoff status.
+- [Hardening](docs/HARDENING.md) and
+  [autonomy operations](docs/AUTONOMY-OPERATIONS.md): existing contracts.
+- `app/tests/`: engine, API, UI and version-cascade verification.
+- `app/BUILDLOG.md`: historical decisions, including corrections/retractions.
+- `graphify-out/wiki/`: generated navigation; check its build commit before use.
+
+Historical plans and past account measurements are not current implementation
+or performance guarantees. Future research may test production playbooks but
+must write candidate strategies and require explicit production promotion.
