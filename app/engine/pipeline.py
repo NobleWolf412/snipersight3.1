@@ -65,8 +65,9 @@ DESCRIPTIVE = (swings, structure, zones, liquidity, regime, ranges,
 # produces an exec fact, and `edgestats` grades exec facts. As wired, these two
 # accumulate candidates that cannot become outcomes. Re-grading them needs
 # `abtest.by_strategy`, which accepts an arbitrary setup version and replays it
-# through the real entry/exit/costing — it exists, it is not wired to anything,
-# and nothing runs it on a schedule.
+# through the real entry/exit/costing. That was unwired at the dated inspection
+# above; live.cycle now schedules regrade.maybe_run, which calls by_strategy.
+# Those separate research outcomes do not promote these engines into trading.
 #
 # The figures once quoted here (breakout n=55, -0.076 R, CI [-0.545, +0.426])
 # came from a harness run no committed script reproduces, and the store cannot

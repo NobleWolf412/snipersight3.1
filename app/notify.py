@@ -35,8 +35,8 @@ file keeps a delivery retry from ever looking like a research record.
 
 REMOTE DELIVERY IS OFF UNTIL CONFIGURED. Sending trade alerts anywhere off this
 machine publishes the operator's positions to a third party; that is their
-decision to make, not a default to inherit. With no config file the only sink
-is the local toast, and everything else is recorded and waits.
+decision to make, not a default to inherit. Local toast is also off by default
+(see toast_enabled); destinations require configuration.
 """
 import json
 import os

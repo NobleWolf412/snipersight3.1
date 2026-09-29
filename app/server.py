@@ -1,5 +1,8 @@
-"""SniperSight API server — read-only over the fact store (§3: UI reads facts,
-never derives them). Serves the chart UI at / and JSON at /api/*.
+"""SniperSight API server — authoritative read models and operator actions.
+
+The UI reads server-owned values (§3); this server is not read-only. Explicit
+actions mutate account/process state, and manual open/live GET handlers can
+settle paper orders. Serves the cockpit at / and JSON at /api/*.
 
 Run: uvicorn server:app --port 8422
 """

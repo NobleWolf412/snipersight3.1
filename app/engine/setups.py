@@ -1,10 +1,12 @@
-"""Setup detector — pullback playbook. algo setup-v0.1-draft.
+"""Production pullback/reversal setup detector; SETUP_VERSION pins behavior.
 
 The strategy layer consumes ONLY confirmed facts through the same as_of
 semantics as the chart (§3: no layer skipping — this engine never looks at
 candles to form an opinion, only to measure ATR/volume at the trigger bar).
 
-Draft playbook (user's regime->strategy mapping; versioned):
+Historical v0.1 sketch below explains the original bracket. Current playbook,
+confirmation, veto and policy functions/constants below are authoritative;
+the sketch is not a second strategy specification.
 - LONG:  regime BULL_TREND at touch time + price touches a DEMAND zone.
 - SHORT: regime BEAR_TREND at touch time + price touches a SUPPLY zone.
 - Entry = zone edge nearest price (top of demand / bottom of supply).
@@ -15,7 +17,8 @@ Draft playbook (user's regime->strategy mapping; versioned):
 - Gate  = R:R >= 1.5 or the setup is never emitted.
 - Rank  = deterministic confluence score 0-100 (NOT a probability, §25):
   base 50 + sweep-nearby 20 + touch-bar volume 15 + R:R >= 2.5 15.
-- Lifecycle: VALIDATED at zone touch; EXPIRED when the zone breaks.
+- Current lifecycle: zone touch starts CONFIRMING; closed-candle confirmation
+  and the remaining gates are required before VALIDATED. See run/confirms.
 Every setup carries a plain-language WHY assembled from the facts it used (§8).
 """
 import json

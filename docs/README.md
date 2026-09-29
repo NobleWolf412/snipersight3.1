@@ -1,7 +1,9 @@
 # docs/ — what each file is and whether it is current
 
-One of these is load-bearing; the rest are plans, specs and audits kept as
-the record of decisions. Nothing in here moves — too many files in `app/` and
+Use [PRODUCTION-ARCHITECTURE.md](PRODUCTION-ARCHITECTURE.md) for source ownership
+and [REPOSITORY-AUDIT-2026-09-28.md](REPOSITORY-AUDIT-2026-09-28.md) for cleanup
+evidence and retained items. Other plans, specs and audits record decisions.
+Nothing in here moves — too many files in `app/` and
 in these docs cite each other by path.
 
 **The conventions are not in here.** They live in `CLAUDE.md`, the file that is
@@ -25,9 +27,10 @@ comments citing `§6` mean that list.
   §6 keeps the parallelisation rules — what agents can and cannot do in
   parallel here.
 
-Every file below carries its own status in its first lines. **That header is
-the authority, not this list** — a hand-maintained index of what is current
-goes stale exactly as fast as the things it indexes.
+Historical plans and reports below are retained in place for provenance and
+link stability. They are not implementation references unless explicitly
+requested. Their headers and this index are dated evidence; verify claims
+against source before acting on them.
 
 ## Specs (built or gated, kept as the record)
 
@@ -35,9 +38,9 @@ goes stale exactly as fast as the things it indexes.
   explanatory layer. §1.1–1.5 built and measured; §1.6 rejected by its own
   gate.
 - [SPEC-persistence-retention.md](SPEC-persistence-retention.md) — retention
-  policy, proposed; deliberately no deletion implemented.
+  policy proposal/history; current maintenance is implemented in `app/prune.py`.
 - [SPEC-log-retention.md](SPEC-log-retention.md) — `data/engine.log` retention,
-  proposed; nothing implemented. The log is unmanaged and 98.5% duplicate.
+  proposal/history; inspect current `runlog.py` and watchdog rotation handling.
 
 ## Plans
 
